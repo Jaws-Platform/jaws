@@ -9,6 +9,7 @@ the network: modules and providers were fetched when the image was built.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -379,6 +380,16 @@ def default_stack_dir(kind: str = "site") -> Path:
     return image if image.is_dir() else LOCAL_STACKS_ROOT / kind
 
 
+def _console_debug(logger: Logger) -> bool:
+    """Whether a console handler (not the debug log file) shows debug records."""
+    return any(
+        isinstance(h, logging.StreamHandler)
+        and not isinstance(h, logging.FileHandler)
+        and h.level <= logging.DEBUG
+        for h in logger.handlers
+    )
+
+
 def default_plugin_dir() -> Path | None:
     if ENV_PLUGIN_DIR in os.environ:
         value = os.environ[ENV_PLUGIN_DIR]
@@ -462,7 +473,15 @@ class Terraform:
             raise RunError(f"{self.stack_name} stack not found at {self.stack_dir}")
         self.check_version()
         self.workdir = Path(tempfile.mkdtemp(prefix="jwall-engineering-sites-"))
-        shutil.copytree(self.stack_dir, self.workdir, dirs_exist_ok=True, symlinks=True)
+        # A local `terraform init` leaves .terraform (provider binaries, hundreds of MB)
+        # in the stack directory; the copy re-initialises, so it never needs it.
+        shutil.copytree(
+            self.stack_dir,
+            self.workdir,
+            dirs_exist_ok=True,
+            symlinks=True,
+            ignore=shutil.ignore_patterns(".terraform"),
+        )
         tfvars = (
             self.tfvars_override
             if self.tfvars_override is not None
@@ -483,10 +502,9 @@ class Terraform:
     def cleanup(self, failed: bool) -> None:
         if self.workdir is None:
             return
-        keep = failed and (
-            os.environ.get(ENV_KEEP_WORKDIR) == "1"
-            or self.logger.getEffectiveLevel() <= 10  # DEBUG
-        )
+        # The logger itself is always at DEBUG (the debug log file), so ask the console:
+        # keep the copy only when the user asked for debug output or JES_KEEP_WORKDIR=1.
+        keep = failed and (os.environ.get(ENV_KEEP_WORKDIR) == "1" or _console_debug(self.logger))
         if keep:
             self.logger.warning("keeping working directory %s for inspection", self.workdir)
             return

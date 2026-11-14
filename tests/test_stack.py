@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -231,6 +232,73 @@ def _terraform(site: Site, settings: Settings, logger: logging.Logger) -> Terraf
     return Terraform(
         site, settings, logger, stack_dir=REPO_ROOT / "stacks" / "site", plugin_dir=None
     )
+
+
+def _debug_file_logger(console_level: int) -> logging.Logger:
+    """A logger shaped like the CLI's: DEBUG overall (for the debug log file), the
+    console at `console_level`."""
+    logger = logging.getLogger(f"keep-workdir-{console_level}")
+    logger.handlers.clear()
+    logger.setLevel(logging.DEBUG)
+    console = logging.StreamHandler()
+    console.setLevel(console_level)
+    logger.addHandler(console)
+    logger.addHandler(logging.NullHandler())
+    return logger
+
+
+@pytest.mark.parametrize(
+    ("console_level", "keep_env", "kept"),
+    [
+        (logging.INFO, None, False),  # the debug log file alone must not keep it
+        (logging.DEBUG, None, True),  # debug output on the console keeps it
+        (logging.INFO, "1", True),  # so does JES_KEEP_WORKDIR=1
+    ],
+)
+def test_a_failed_run_keeps_its_workdir_only_when_asked(
+    guitar: Site,
+    settings: Settings,
+    fake_terraform: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    console_level: int,
+    keep_env: str | None,
+    kept: bool,
+) -> None:
+    if keep_env is None:
+        monkeypatch.delenv("JES_KEEP_WORKDIR", raising=False)
+    else:
+        monkeypatch.setenv("JES_KEEP_WORKDIR", keep_env)
+    terraform = _terraform(guitar, settings, _debug_file_logger(console_level))
+    workdir = terraform.prepare()
+    terraform.cleanup(failed=True)
+    try:
+        assert workdir.exists() is kept
+    finally:
+        if workdir.exists():
+            shutil.rmtree(workdir)
+
+
+def test_prepare_does_not_copy_a_local_terraform_directory(
+    guitar: Site,
+    settings: Settings,
+    logger: logging.Logger,
+    fake_terraform: Path,
+    tmp_path: Path,
+) -> None:
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    (stack / "main.tf").write_text("# stack\n")
+    (stack / ".terraform" / "providers").mkdir(parents=True)
+    (stack / ".terraform" / "providers" / "huge-binary").write_bytes(b"x" * 1024)
+    (stack / ".terraform.lock.hcl").write_text("# lock\n")
+    terraform = Terraform(guitar, settings, logger, stack_dir=stack, plugin_dir=None)
+    workdir = terraform.prepare()
+    try:
+        assert (workdir / "main.tf").is_file()
+        assert (workdir / ".terraform.lock.hcl").is_file()
+        assert not (workdir / ".terraform").exists()
+    finally:
+        terraform.cleanup(failed=False)
 
 
 def test_prepare_writes_inputs_into_a_copy(
