@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.21.0...v0.21.1) (2026-11-14)
+
+
+### Bug Fixes
+
+* share one Databricks readiness deadline and refuse placeholder config before enabling ([#104](https://github.com/jwallace145/jwall-engineering-infra/issues/104)) ([05f080f](https://github.com/jwallace145/jwall-engineering-infra/commit/05f080fec019c5933b4c701cd03d34363227e155))
+
 ## [0.21.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.20.0...v0.21.0) (2026-11-14)
 
 
