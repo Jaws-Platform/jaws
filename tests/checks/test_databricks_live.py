@@ -268,7 +268,8 @@ def test_live005_checks_the_users_from_the_project_file(
 def test_live005_rejects_placeholder_emails_without_calling_the_api(
     databricks: Project, live: Settings
 ) -> None:
-    result = _run("DBX-LIVE-005", databricks, live, None, None)
+    project, s = _members(live, databricks, "owner@example.com")
+    result = _run("DBX-LIVE-005", project, s, None, None)
     assert result.outcome is Outcome.FAIL
     assert "replace the placeholder email" in (result.remediation or "")
     assert "owner@example.com" in (result.remediation or "")

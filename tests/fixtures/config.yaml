@@ -106,23 +106,23 @@ projects:
       compute_policies: [small-interactive, jobs]
       cost_center: cc-0000
       vpc_cidr: 10.40.0.0/16
-      admins: [owner@example.com] # replace with the owner's email
+      admins: [jimmy.wallace145@gmail.com]
 
 # Databricks workspaces (projects with a `databricks` entry above). The account
 # stack uses a service principal whose client secret lives in SSM at
 # `secret_parameter` (never in this file). Reviewed here; a project's own file
 # cannot widen the compute policies or pick its own network range.
 databricks:
-  # Placeholders (the nil UUID) until the owner creates the service principal and
-  # sets the secret; then replace both IDs and flip `enabled` to true. The foundation's
-  # Databricks resources and the `live` checks wait for `enabled: true` and real IDs.
+  # The account and the infra service principal (its application/client ID; the
+  # secret is in SSM). Flip `enabled` to true once the one-time setup is done: the
+  # foundation's Databricks resources and the `live` checks wait for it.
   enabled: false
-  account_id: 00000000-0000-0000-0000-000000000000
-  client_id: 00000000-0000-0000-0000-000000000000
+  account_id: 64826090-46b0-471f-b2d6-f3e7490b992c
+  client_id: 59a6c509-4d02-4622-b907-d42da61b2119
   secret_parameter: /jwall-engineering/databricks/client-secret
   metastore_name: jwall-engineering-us-east-1
-  # Replace the placeholder with the owner's email.
-  metastore_admins: [owner@example.com]
+  # The service principal is always added too (by client_id), so list people only.
+  metastore_admins: [jimmy.wallace145@gmail.com]
   # The project whose workspace enables the metastore-wide system schemas (the foundation
   # owns the metastore itself); it needs its projects.<name>.databricks entry above.
   governance_project: databricks-poc

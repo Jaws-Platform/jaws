@@ -79,8 +79,9 @@ def test_the_secret_is_masked_before_it_is_used_and_stays_in_the_step(tmp_path: 
     assert lines[0] == f"::add-mask::{SENTINEL}"
     assert SENTINEL not in "\n".join(lines[1:])
     assert f"DATABRICKS_CLIENT_SECRET={SENTINEL}" in environment.splitlines()
-    assert "DATABRICKS_ACCOUNT_ID=00000000-0000-0000-0000-000000000000" in environment
-    assert "DATABRICKS_CLIENT_ID=00000000-0000-0000-0000-000000000000" in environment
+    databricks = _yaml(REPO_ROOT / "config.yaml")["databricks"]
+    assert f"DATABRICKS_ACCOUNT_ID={databricks['account_id']}" in environment
+    assert f"DATABRICKS_CLIENT_ID={databricks['client_id']}" in environment
     assert "_dbx_" not in environment  # its own variables are unset
     # Nothing reaches GITHUB_ENV or GITHUB_OUTPUT, so no later step sees it.
     assert github_env.read_text() == ""

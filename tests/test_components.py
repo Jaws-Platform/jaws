@@ -781,5 +781,8 @@ def test_workspace_users_must_not_repeat(tmp_path: Path, settings: Settings) -> 
 def test_a_workspace_user_who_is_also_an_admin_is_refused(
     tmp_path: Path, settings: Settings
 ) -> None:
+    guard = settings.projects["databricks-poc"].databricks
+    assert guard is not None
+    admin = guard.admins[0].upper()  # the overlap check ignores case
     with pytest.raises(ConfigError, match=r"admins are set centrally.*config\.yaml"):
-        _load(tmp_path, _workspace_raw(users=["Owner@example.com"]), settings)
+        _load(tmp_path, _workspace_raw(users=[admin]), settings)
