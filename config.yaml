@@ -116,7 +116,7 @@ databricks:
   # The account and the infra service principal (its application/client ID; the
   # secret is in SSM). Flip `enabled` to true once the one-time setup is done: the
   # foundation's Databricks resources and the `live` checks wait for it.
-  enabled: false
+  enabled: true
   account_id: 64826090-46b0-471f-b2d6-f3e7490b992c
   client_id: 59a6c509-4d02-4622-b907-d42da61b2119
   secret_parameter: /jwall-engineering/databricks/client-secret

@@ -146,9 +146,9 @@ def _aft(
 
 
 def test_every_between_and_after_check_skips_when_disabled(
-    databricks: Project, settings: Settings
+    databricks: Project, disabled: Settings
 ) -> None:
-    assert settings.databricks is not None and not settings.databricks.enabled
+    settings = disabled
     for stage, count in ((Stage.BETWEEN, 4), (Stage.AFTER, 4)):
         checks = registered(stage, "databricks")
         assert len(checks) == count
@@ -486,11 +486,11 @@ def test_a_workspace_that_never_became_ready_skips_the_url_and_admin_checks(
 
 
 def test_the_readiness_checks_still_skip_with_the_setup_hint_while_disabled(
-    databricks: Project, settings: Settings
+    databricks: Project, disabled: Settings
 ) -> None:
     dbx = FakeDatabricks()
     dbx.account_outputs = OUTPUTS
-    ctx = CheckContext(databricks, settings, logging.getLogger("t"), None, dbx)
+    ctx = CheckContext(databricks, disabled, logging.getLogger("t"), None, dbx)
     for result in run_stage(Stage.BETWEEN, ctx):
         assert result.outcome is Outcome.SKIP
         assert result.remediation == SKIP_HINT

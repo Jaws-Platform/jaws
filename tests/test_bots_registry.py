@@ -470,8 +470,8 @@ def test_databricks_account_resources_wait_for_enabled() -> None:
     assert "bucket_name = local.databricks.audit_bucket" in audit
     # The foundation never creates the secret: the owner sets it with the CLI.
     assert "aws_ssm_parameter" not in text
-    # Disabled today: the foundation plan has no Databricks resources.
-    assert yaml_config()["databricks"]["enabled"] is False
+    # Enabled: the foundation plan creates the metastore and the audit log delivery.
+    assert yaml_config()["databricks"]["enabled"] is True
 
 
 def yaml_config() -> dict[str, Any]:

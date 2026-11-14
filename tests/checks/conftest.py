@@ -24,3 +24,11 @@ def databricks(settings: Settings) -> Project:
     return Project.from_config(
         load_site_config(FIXTURES / "bots" / "databricks-poc.yaml"), settings
     )
+
+
+@pytest.fixture
+def disabled(settings: Settings) -> Settings:
+    """The config with `databricks.enabled: false`, for the checks' skip paths."""
+    assert settings.databricks is not None
+    section = settings.databricks.model_copy(update={"enabled": False})
+    return settings.model_copy(update={"databricks": section})

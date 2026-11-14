@@ -103,8 +103,8 @@ def _account(**kwargs: Any) -> FakeDatabricks:
 # -- every live check skips until enabled ------------------------------------------
 
 
-def test_every_live_check_skips_when_disabled(databricks: Project, settings: Settings) -> None:
-    assert settings.databricks is not None and not settings.databricks.enabled
+def test_every_live_check_skips_when_disabled(databricks: Project, disabled: Settings) -> None:
+    settings = disabled
     checks = registered(Stage.LIVE, "databricks")
     assert len(checks) == 10
     for entry in checks:

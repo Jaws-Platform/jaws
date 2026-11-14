@@ -191,17 +191,38 @@ def test_the_registry_script_reads_databricks_tf(tmp_path: Path) -> None:
 
 
 @needs_yq
-def test_the_setup_job_outputs_no_projects_while_disabled(tmp_path: Path) -> None:
+@pytest.mark.parametrize("enabled", [True, False])
+def test_the_setup_job_outputs_the_enabled_flag_and_the_registry(
+    tmp_path: Path, enabled: bool
+) -> None:
+    """Run in a copy of the repo with `databricks.enabled` set, so both values are covered."""
     steps = _steps("ci.yml", "databricks-projects")
     step = steps[_index(steps, lambda s: s.get("id") == "list")]
+    root = tmp_path / "repo"
+    shutil.copytree(REPO_ROOT / "scripts", root / "scripts")
+    (root / "foundation").mkdir()
+    shutil.copy(REPO_ROOT / "foundation" / "databricks.tf", root / "foundation")
+    config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
+    config["databricks"]["enabled"] = enabled
+    (root / "config.yaml").write_text(yaml.safe_dump(config))
     output = tmp_path / "out"
     subprocess.run(
         ["bash", "-e", "-c", step["run"]],
-        cwd=REPO_ROOT,
+        cwd=root,
         env={**os.environ, "GITHUB_OUTPUT": str(output)},
         check=True,
     )
-    assert output.read_text().splitlines() == ["enabled=false", "projects=[]"]
+    registry = subprocess.run(
+        ["scripts/databricks-projects.sh"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert output.read_text().splitlines() == [
+        f"enabled={str(enabled).lower()}",
+        f"projects={registry}",
+    ]
 
 
 # --- the plan job ------------------------------------------------------------
