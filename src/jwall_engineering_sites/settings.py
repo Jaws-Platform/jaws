@@ -323,6 +323,31 @@ class DatabricksSection(_Section):
         parse_duration(value)
         return value
 
+    @model_validator(mode="after")
+    def _filled_in_once_enabled(self) -> DatabricksSection:
+        """Once enabled, no placeholder may remain: the foundation would make the
+        @example.com addresses metastore admins (its plan refuses the same)."""
+        if not self.enabled:
+            return self
+        ids = {
+            "account_id": "the Databricks account ID",
+            "client_id": "the service principal's application (client) ID",
+        }
+        problems = [
+            f"databricks.{name} is still the nil UUID placeholder; fill in {what}"
+            for name, what in ids.items()
+            if getattr(self, name).lower() == PLACEHOLDER_UUID
+        ]
+        admins = [e for e in self.metastore_admins if e.lower().endswith("@example.com")]
+        if admins:
+            problems.append(
+                f"databricks.metastore_admins still holds the placeholder {', '.join(admins)}; "
+                "replace it with the owner's real email (an account user)"
+            )
+        if problems:
+            raise ValueError("; ".join(problems) + " (or set databricks.enabled back to false)")
+        return self
+
     @property
     def readiness_timeout_seconds(self) -> int:
         return parse_duration(self.readiness_timeout)

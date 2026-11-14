@@ -41,7 +41,10 @@ pointer back here.
    the `owner@example.com` placeholders with real emails in
    `databricks.metastore_admins` and in each project's
    `projects.<name>.databricks.admins` and `users`. Every member must also
-   exist as an account user in the console (`DBX-LIVE-005`).
+   exist as an account user in the console (`DBX-LIVE-005`). Once
+   `databricks.enabled` is true, a nil-UUID ID or an `@example.com` metastore
+   admin left in config.yaml stops the CLI from loading it and fails the
+   foundation plan, so fill them in before flipping it.
 4. **Store the secret.** From the owner's shell with AWS credentials:
 
    ```sh
@@ -428,9 +431,12 @@ foundation first (it creates the metastore once `databricks.enabled` is true).
 
 `DBX-LIVE-005`. A member email in `projects.<name>.databricks.admins` or
 `users` is a placeholder (`@example.com`) or is not an account user. Replace
-it with a real email, or add the user in the account console. It also fails
-while `databricks.metastore_admins` still holds a placeholder: replace it with
-the owner's real email before the foundation makes it the metastore admin.
+it with a real email, or add the user in the account console. A placeholder in
+`databricks.metastore_admins` (or a nil-UUID `account_id`/`client_id`) is
+refused earlier, before anything uses it: with `databricks.enabled: true`,
+config.yaml does not load, and the foundation plan fails on a precondition
+naming the field, so the foundation never makes a placeholder the metastore
+admin.
 
 ### Bucket names
 

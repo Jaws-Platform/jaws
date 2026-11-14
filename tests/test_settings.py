@@ -455,3 +455,48 @@ def test_member_emails_must_look_like_emails(tmp_path: Path) -> None:
     raw["projects"]["databricks-poc"]["databricks"]["admins"] = ["not-an-email"]
     with pytest.raises(ConfigError, match="not-an-email"):
         _load_raw(tmp_path, raw)
+
+
+# -- placeholders once Databricks is enabled -------------------------------------------
+
+REAL_ACCOUNT = "11111111-1111-1111-1111-111111111111"
+REAL_CLIENT = "22222222-2222-2222-2222-222222222222"
+REAL_ADMIN = "owner@jwall-engineering.test"
+
+
+def _enabled(**overrides: Any) -> dict[str, Any]:
+    raw = _databricks_raw()
+    raw["databricks"].update(
+        enabled=True, account_id=REAL_ACCOUNT, client_id=REAL_CLIENT, metastore_admins=[REAL_ADMIN]
+    )
+    raw["databricks"].update(overrides)
+    return raw
+
+
+def test_an_enabled_section_with_real_values_loads(tmp_path: Path) -> None:
+    section = _load_raw(tmp_path, _enabled()).databricks
+    assert section is not None and section.enabled and not section.has_placeholder_ids
+
+
+def test_the_placeholders_are_valid_while_disabled(settings: Settings) -> None:
+    section = settings.databricks
+    assert section is not None and not section.enabled
+    assert section.has_placeholder_ids
+    assert any(e.endswith("@example.com") for e in section.metastore_admins)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "field"),
+    [
+        ({"account_id": "00000000-0000-0000-0000-000000000000"}, "databricks.account_id"),
+        ({"client_id": "00000000-0000-0000-0000-000000000000"}, "databricks.client_id"),
+        ({"metastore_admins": [REAL_ADMIN, "Owner@Example.com"]}, "databricks.metastore_admins"),
+    ],
+    ids=["account_id", "client_id", "metastore_admins"],
+)
+def test_an_enabled_section_refuses_placeholders(
+    tmp_path: Path, overrides: dict[str, Any], field: str
+) -> None:
+    with pytest.raises(ConfigError, match=field) as raised:
+        _load_raw(tmp_path, _enabled(**overrides))
+    assert "databricks.enabled" in str(raised.value)
