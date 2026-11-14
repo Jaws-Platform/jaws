@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.21.1...v0.22.0) (2026-11-14)
+
+
+### Features
+
+* let a Databricks project list its workspace users in its own file ([#106](https://github.com/jwallace145/jwall-engineering-infra/issues/106)) ([8f06be3](https://github.com/jwallace145/jwall-engineering-infra/commit/8f06be332d894d10adf48b478a35c520c19274aa))
+
 ## [0.21.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.21.0...v0.21.1) (2026-11-14)
 
 
