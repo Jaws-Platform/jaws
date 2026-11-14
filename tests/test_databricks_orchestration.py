@@ -95,6 +95,8 @@ def loaded() -> Iterator[MagicMock]:
 
             def make(stage: Stage, number: int) -> framework.CheckFn:
                 def fn(ctx: CheckContext) -> Iterable[CheckResult]:
+                    # Apply keeps the full readiness budget.
+                    assert ctx.max_wait_seconds is None
                     if stage in (Stage.BETWEEN, Stage.AFTER):
                         assert ctx.databricks is not None
                         assert ctx.databricks.account_outputs == ACCOUNT_OUTPUTS

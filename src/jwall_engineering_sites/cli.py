@@ -1628,6 +1628,9 @@ def databricks_doctor(
                 logger=run.logger,
                 session=None if current is Stage.CONFIG else session,
                 databricks=None if current is Stage.CONFIG else clients,
+                # Doctor reports the current state: the readiness checks try once each
+                # instead of waiting out databricks.readiness_timeout as apply does.
+                max_wait_seconds=0,
             )
             results += run_stage(current, context)
         checks_render.write_json(results, run.artifacts / "checks.json")

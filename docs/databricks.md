@@ -41,7 +41,10 @@ pointer back here.
    the `owner@example.com` placeholders with real emails in
    `databricks.metastore_admins` and in each project's
    `projects.<name>.databricks.admins` and `users`. Every member must also
-   exist as an account user in the console (`DBX-LIVE-005`).
+   exist as an account user in the console (`DBX-LIVE-005`). Once
+   `databricks.enabled` is true, a nil-UUID ID or an `@example.com` metastore
+   admin left in config.yaml stops the CLI from loading it and fails the
+   foundation plan, so fill them in before flipping it.
 4. **Store the secret.** From the owner's shell with AWS credentials:
 
    ```sh
@@ -72,7 +75,10 @@ pointer back here.
    plan creates the metastore (owned by an account group holding the service
    principal and the metastore admins), audit log delivery to
    `jwall-engineering-databricks-audit-logs`, and the CI roles' access to the
-   secret and the event log.
+   secret and the event log. It also adds
+   `terraform_data.databricks_config_filled_in[0]`, the placeholder guard: its
+   preconditions fail the plan if a nil-UUID ID or an `@example.com`
+   metastore admin is still in config.yaml.
 7. **Deployment-name prefix (optional).** `databricks.deployment_name_prefix`
    is `null`, so Databricks picks each workspace URL. Databricks only accepts
    a deployment name once it has configured a prefix for the account. If it
@@ -169,13 +175,17 @@ stops the run with exit code 3.
    the Databricks network, credential and storage configurations, the
    workspace, the metastore assignment, and the workspace's account groups
    `<project>-workspace-admins` and `<project>-workspace-users`.
-4. **Readiness wait**: `DBX-BTW-*`. Polls every 15 seconds, each check for up
-   to `databricks.readiness_timeout` (20 minutes), until the workspace is
-   `RUNNING`, the workspace URL answers an authenticated call (connection
-   errors, 401/403, 429 and 5xx are retried), and the service principal is a
-   workspace admin (the assignment is listed and an admin-only read works);
-   then checks once that the metastore is assigned. A timeout fails with the
-   last state seen.
+4. **Readiness wait**: `DBX-BTW-*`. Polls every 15 seconds until the
+   workspace is `RUNNING` (`DBX-BTW-001`), the workspace URL answers an
+   authenticated call (`DBX-BTW-002`; connection errors, 401/403, 429 and 5xx
+   are retried), and the service principal is a workspace admin
+   (`DBX-BTW-003`; the assignment is listed and an admin-only read works);
+   then checks once that the metastore is assigned (`DBX-BTW-004`). The three
+   polling checks share **one** deadline, `databricks.readiness_timeout`
+   (20 minutes) for the whole stage, not one each, and `DBX-BTW-002` and
+   `DBX-BTW-003` are skipped ("the workspace never became ready") when
+   `DBX-BTW-001` did not pass, so a broken workspace holds the run for one
+   budget at most. A timeout fails with the last state seen.
 5. **Workspace stack**: planned again with the account's outputs, and applied.
    It creates the catalog bucket, the Unity Catalog role, the storage
    credential, the external location, the catalog (isolated, bound to this
@@ -235,9 +245,13 @@ workflow with the project and `action: doctor` (it changes nothing). It reports 
 credential cannot be loaded it reports `DBX-DOC-002` and skips the live,
 between and after stages; if the account stack's state cannot be read it
 reports `DBX-DOC-001` and skips between and after; if the account stack has no
-outputs yet it skips those stages with a notice. `checks.json` is written
-either way. The exit code is 3 if any `error` check failed; warnings do not
-fail it. While `databricks.enabled` is false, the live checks SKIP.
+outputs yet it skips those stages with a notice. It does not wait: the
+readiness checks (`DBX-BTW-001` to `003`) make one attempt each and report the
+current state, where `apply` would poll for up to
+`databricks.readiness_timeout`.
+`checks.json` is written either way. The exit code is 3 if any `error` check
+failed; warnings do not fail it. While `databricks.enabled` is false, the live
+checks SKIP.
 
 ## Bucket and prefix layout
 
@@ -422,9 +436,12 @@ foundation first (it creates the metastore once `databricks.enabled` is true).
 
 `DBX-LIVE-005`. A member email in `projects.<name>.databricks.admins` or
 `users` is a placeholder (`@example.com`) or is not an account user. Replace
-it with a real email, or add the user in the account console. It also fails
-while `databricks.metastore_admins` still holds a placeholder: replace it with
-the owner's real email before the foundation makes it the metastore admin.
+it with a real email, or add the user in the account console. A placeholder in
+`databricks.metastore_admins` (or a nil-UUID `account_id`/`client_id`) is
+refused earlier, before anything uses it: with `databricks.enabled: true`,
+config.yaml does not load, and the foundation plan fails on a precondition
+naming the field, so the foundation never makes a placeholder the metastore
+admin.
 
 ### Bucket names
 
@@ -444,7 +461,13 @@ zone fail to start.
 at the largest node type) can need more vCPUs than the account's *Running
 On-Demand Standard instances* quota. Request an increase, or lower
 `num_workers` in the policy. It compares the quota with the policy, not with
-current usage.
+current usage. The CI roles may read the quota (`servicequotas:GetServiceQuota`
+in the `databricks/read` policy, from library 0.19.0), and the Databricks plan
+and apply jobs run the CLI with `uv` from a checkout with all of botocore, so
+in CI the check reads the quota. It SKIPs when the role in use is refused that
+read (apply the foundation at 0.19.0 or later), or when the CLI runs from the
+container image, which prunes botocore's service models and does not keep
+service-quotas.
 
 ### NAT AMI
 
@@ -462,17 +485,24 @@ prefix is set or the workspace is already ours.
 
 `DBX-BTW-001`, `DBX-BTW-002`. The workspace does not exist, is in a terminal
 state (the message gives Databricks' status text), was still provisioning
-after `databricks.readiness_timeout`, or its URL did not answer an
-authenticated call. The account stack stays applied. Fix the cause named,
-raise `readiness_timeout` if provisioning is just slow, and re-run `apply`; it
-waits again. See also [DBX-WORKSPACE-FAILED](#dbx-workspace-failed).
+when the readiness budget ran out, or its URL did not answer an
+authenticated call. `DBX-BTW-001` to `003` share one budget,
+`databricks.readiness_timeout`, for the whole stage, so a check that runs
+after a slow one gets only what is left; when `DBX-BTW-001` fails, `DBX-BTW-002`
+and `003` are skipped with "the workspace never became ready (DBX-BTW-001)":
+fix BTW-001 first. In `doctor` each makes a single attempt (it reports the
+current state and does not wait). The account stack stays applied. Fix the
+cause named, raise `readiness_timeout` if provisioning is just slow, and re-run
+`apply`; it waits again. See also [DBX-WORKSPACE-FAILED](#dbx-workspace-failed).
 
 ### Workspace admin
 
 `DBX-BTW-003`. The group `<project>-workspace-admins` does not hold ADMIN on
 the workspace, or does but the service principal cannot yet read admin
-settings (the assignment is not yet effective). Re-run `apply`; the account
-stack assigns the group after the metastore assignment.
+settings (the assignment is not yet effective) when the shared readiness
+budget ran out (in `doctor`: on its single attempt). Skipped when
+`DBX-BTW-001` failed. Re-run `apply`; the account stack assigns the group
+after the metastore assignment.
 
 ### Metastore assignment
 

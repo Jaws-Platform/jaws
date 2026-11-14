@@ -377,9 +377,14 @@ def test_live008_fails_without_headroom(databricks: Project, live: Settings, aws
     assert "num_workers" in (result.remediation or "")
 
 
-QUOTA_SKIP = (
-    "quota check needs servicequotas:GetServiceQuota, not granted to the CI roles yet "
-    "(planned library change)"
+QUOTA_DENIED = (
+    "quota check needs servicequotas:GetServiceQuota: the role in use was refused it; the "
+    "CI roles' databricks/read policy grants it from library 0.19.0, so apply the "
+    "foundation at that version (or check the role's policy)"
+)
+QUOTA_NO_MODEL = (
+    "quota check needs the service-quotas API model, which this build of the tool does "
+    "not ship (the image keeps only the botocore models it uses)"
 )
 
 
@@ -393,7 +398,7 @@ def test_live008_skips_when_the_quota_read_is_denied(
     session = OverlaySession(aws, **{"service-quotas": SimpleNamespace(get_service_quota=denied)})
     result = _run("DBX-LIVE-008", databricks, live, session)
     assert result.outcome is Outcome.SKIP
-    assert result.remediation == QUOTA_SKIP
+    assert result.remediation == QUOTA_DENIED
 
 
 @pytest.mark.parametrize(
@@ -414,7 +419,7 @@ def test_live008_skips_when_the_service_model_is_missing(
 
     result = _run("DBX-LIVE-008", databricks, live, Pruned(aws))
     assert result.outcome is Outcome.SKIP
-    assert result.remediation == QUOTA_SKIP
+    assert result.remediation == QUOTA_NO_MODEL
 
 
 def test_live008_other_quota_errors_still_fail(

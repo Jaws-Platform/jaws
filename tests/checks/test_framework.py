@@ -249,3 +249,122 @@ def test_non_check_result_item_becomes_fail(
 def test_bad_kinds_rejected(kinds: frozenset[str]) -> None:
     with pytest.raises(ValueError, match="kinds"):
         check("DBX-CFG-001", "t", Stage.CONFIG, kinds)
+
+
+# -- requirements and the stage-scoped state ------------------------------------------
+
+
+def _outcome(check_id: str, outcome: Outcome) -> CheckResult:
+    return CheckResult(check_id, "t", outcome, Severity.ERROR, {}, None, None)
+
+
+@pytest.mark.parametrize("first", [Outcome.FAIL, None], ids=["failed", "absent"])
+def test_a_check_skips_when_its_requirement_did_not_pass(
+    bot: Project, settings: Settings, logger: logging.Logger, first: Outcome | None
+) -> None:
+    ran: list[str] = []
+    if first is not None:
+        outcome = first
+
+        @check("BOT-CFG-001", "Ready", Stage.CONFIG, ALL)
+        def ready(ctx: CheckContext) -> Iterable[CheckResult]:
+            yield _outcome("BOT-CFG-001", outcome)
+
+    @check(
+        "BOT-CFG-002",
+        "Answers",
+        Stage.CONFIG,
+        ALL,
+        runbook="docs/x.md#answers",
+        requires={"BOT-CFG-001": "the thing never became ready"},
+    )
+    def answers(ctx: CheckContext) -> Iterable[CheckResult]:
+        ran.append("BOT-CFG-002")
+        yield _passing("BOT-CFG-002")
+
+    results = run_stage(Stage.CONFIG, _ctx(bot, settings, logger))
+    assert ran == []
+    skipped = results[-1]
+    assert (skipped.check_id, skipped.title, skipped.outcome) == (
+        "BOT-CFG-002",
+        "Answers",
+        Outcome.SKIP,
+    )
+    assert skipped.remediation == "skipped: the thing never became ready (BOT-CFG-001)"
+    assert skipped.runbook == "docs/x.md#answers"
+    raise_on_errors(results[1:])  # a skip never fails the run
+
+
+def test_a_crashed_requirement_skips_its_dependents(
+    bot: Project, settings: Settings, logger: logging.Logger
+) -> None:
+    @check("BOT-CFG-001", "Ready", Stage.CONFIG, ALL)
+    def ready(ctx: CheckContext) -> Iterable[CheckResult]:
+        raise RuntimeError("boom")
+        yield  # pragma: no cover
+
+    @check("BOT-CFG-002", "Answers", Stage.CONFIG, ALL, requires={"BOT-CFG-001": "not ready"})
+    def answers(ctx: CheckContext) -> Iterable[CheckResult]:
+        yield _passing("BOT-CFG-002")
+
+    outcomes = [r.outcome for r in run_stage(Stage.CONFIG, _ctx(bot, settings, logger))]
+    assert outcomes == [Outcome.FAIL, Outcome.SKIP]
+
+
+@pytest.mark.parametrize("first", [Outcome.PASS, Outcome.SKIP])
+def test_a_check_runs_when_its_requirement_passed_or_skipped(
+    bot: Project, settings: Settings, logger: logging.Logger, first: Outcome
+) -> None:
+    """A skipped requirement (not applicable yet) leaves the dependent to its own gates."""
+
+    @check("BOT-CFG-001", "Ready", Stage.CONFIG, ALL)
+    def ready(ctx: CheckContext) -> Iterable[CheckResult]:
+        yield _outcome("BOT-CFG-001", first)
+
+    @check("BOT-CFG-002", "Answers", Stage.CONFIG, ALL, requires={"BOT-CFG-001": "not ready"})
+    def answers(ctx: CheckContext) -> Iterable[CheckResult]:
+        yield _passing("BOT-CFG-002")
+
+    results = run_stage(Stage.CONFIG, _ctx(bot, settings, logger))
+    assert results[-1].outcome is Outcome.PASS
+
+
+def test_a_requirement_must_be_a_well_formed_check_id() -> None:
+    with pytest.raises(ValueError, match="requires"):
+        check("BOT-CFG-002", "t", Stage.CONFIG, ALL, requires={"nope": "x"})
+
+
+def test_a_requirement_must_sort_before_the_check() -> None:
+    with pytest.raises(ValueError, match="requires"):
+        check("BOT-CFG-002", "t", Stage.CONFIG, ALL, requires={"BOT-CFG-003": "x"})
+
+
+def test_stage_state_is_shared_within_one_run_and_fresh_for_the_next(
+    bot: Project, settings: Settings, logger: logging.Logger
+) -> None:
+    seen: list[dict[str, object]] = []
+
+    @check("BOT-CFG-001", "First", Stage.CONFIG, ALL)
+    def first(ctx: CheckContext) -> Iterable[CheckResult]:
+        ctx.stage_state.setdefault("runs", 0)
+        seen.append(ctx.stage_state)
+        yield _passing("BOT-CFG-001")
+
+    @check("BOT-CFG-002", "Second", Stage.CONFIG, ALL)
+    def second(ctx: CheckContext) -> Iterable[CheckResult]:
+        seen.append(ctx.stage_state)
+        yield _passing("BOT-CFG-002")
+
+    ctx = _ctx(bot, settings, logger)
+    run_stage(Stage.CONFIG, ctx)
+    run_stage(Stage.CONFIG, ctx)
+    assert seen[0] is seen[1]
+    assert seen[2] is seen[3]
+    assert seen[0] is not seen[2]
+    assert ctx.stage_state == {}  # the caller's context is untouched
+
+
+def test_max_wait_defaults_to_the_configured_budget(
+    bot: Project, settings: Settings, logger: logging.Logger
+) -> None:
+    assert _ctx(bot, settings, logger).max_wait_seconds is None

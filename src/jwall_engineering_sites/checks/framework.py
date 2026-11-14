@@ -5,6 +5,11 @@ project kinds. Adding one is one decorated function; the orchestrator calls
 `run_stage` and renders the results. The framework is generic: kinds are plain
 strings and nothing here imports a provider.
 
+A check may declare `requires={other_id: reason}`: when that check FAILed (or did not
+run) in the same `run_stage` call, the dependent SKIPs with the reason instead of
+running. Checks of one `run_stage` call share `ctx.stage_state` (e.g. one deadline), and
+`ctx.max_wait_seconds` caps how long they may poll in total (0: one attempt each).
+
 The registry is module-global, filled at import time. Tests isolate it with
 `isolated_registry()` (the checks tests do so in an autouse fixture).
 """
@@ -14,7 +19,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from logging import Logger
 from typing import TYPE_CHECKING, Any, Protocol
@@ -74,6 +79,13 @@ class CheckContext:
     logger: Logger
     session: boto3.session.Session | None  # None at CONFIG
     databricks: DatabricksApi | None  # None at CONFIG
+    #: The most the stage's checks may wait in total, in seconds. None: the configured
+    #: budget (e.g. databricks.readiness_timeout); 0: one attempt each, no waiting
+    #: (`databricks doctor` diagnoses the current state).
+    max_wait_seconds: float | None = None
+    #: Shared by the checks of one `run_stage` call (e.g. one deadline); `run_stage`
+    #: gives every call a fresh one, so nothing carries over between stages or runs.
+    stage_state: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
 
 
 CheckFn = Callable[[CheckContext], Iterable[CheckResult]]
@@ -92,6 +104,8 @@ class RegisteredCheck:
     severity: Severity
     runbook: str | None
     fn: CheckFn
+    #: (check id, reason): skip this check when that one FAILed or did not run (`run_stage`).
+    requires: tuple[tuple[str, str], ...] = ()
 
 
 _REGISTRY: dict[str, RegisteredCheck] = {}
@@ -116,10 +130,22 @@ def check(
     kinds: frozenset[str],
     severity: Severity = Severity.ERROR,
     runbook: str | None = None,
+    requires: Mapping[str, str] | None = None,
 ) -> Callable[[CheckFn], CheckFn]:
-    """Register a check. A malformed or duplicate id raises when the decorator is applied."""
+    """Register a check. A malformed or duplicate id raises when the decorator is applied.
+
+    `requires` maps the ids of checks this one depends on to the reason a dependent
+    skips, e.g. `{"DBX-BTW-001": "the workspace never became ready"}`. A requirement
+    must sort before the check (checks run in id order).
+    """
     if not _ID.fullmatch(check_id):
         raise ValueError(f"check id {check_id!r} must match {_ID.pattern}")
+    for required in requires or {}:
+        if not _ID.fullmatch(required) or required >= check_id:
+            raise ValueError(
+                f"check {check_id} requires {required!r}: a requirement must be a check id "
+                "that sorts before it"
+            )
     if not kinds or not kinds <= KINDS:
         raise ValueError(
             f"check kinds {sorted(kinds)} must be a non-empty subset of {sorted(KINDS)}"
@@ -128,7 +154,9 @@ def check(
     def register(fn: CheckFn) -> CheckFn:
         if check_id in _REGISTRY:
             raise ValueError(f"check id {check_id} is already registered")
-        _REGISTRY[check_id] = RegisteredCheck(check_id, title, stage, kinds, severity, runbook, fn)
+        _REGISTRY[check_id] = RegisteredCheck(
+            check_id, title, stage, kinds, severity, runbook, fn, tuple((requires or {}).items())
+        )
         return fn
 
     return register
@@ -147,10 +175,28 @@ def run_stage(stage: Stage, ctx: CheckContext) -> list[CheckResult]:
 
     A check that raises becomes a FAIL result with `facts["error"]` (the exception's type;
     its message and traceback go to the debug log); one broken
-    check never stops the others.
+    check never stops the others. A check whose requirement FAILed or did not run SKIPs
+    (a SKIPped requirement leaves the dependent to its own gates). The checks share one
+    fresh `stage_state` for this call.
     """
+    ctx = replace(ctx, stage_state={})
     results: list[CheckResult] = []
     for registered_check in registered(stage, ctx.project.config.kind):
+        unmet = _unmet_requirement(registered_check, results)
+        if unmet is not None:
+            required, reason = unmet
+            results.append(
+                CheckResult(
+                    check_id=registered_check.check_id,
+                    title=registered_check.title,
+                    outcome=Outcome.SKIP,
+                    severity=registered_check.severity,
+                    facts={"requires": required},
+                    remediation=f"skipped: {reason} ({required})",
+                    runbook=registered_check.runbook,
+                )
+            )
+            continue
         try:
             # Items yielded before an exception are kept on purpose; the crash FAIL follows them.
             for item in registered_check.fn(ctx):
@@ -173,6 +219,17 @@ def run_stage(stage: Stage, ctx: CheckContext) -> list[CheckResult]:
                 )
             )
     return results
+
+
+def _unmet_requirement(
+    registered_check: RegisteredCheck, results: Sequence[CheckResult]
+) -> tuple[str, str] | None:
+    """The first requirement that FAILed or produced no result in this run, if any."""
+    for required, reason in registered_check.requires:
+        outcomes = {r.outcome for r in results if r.check_id == required}
+        if not outcomes or Outcome.FAIL in outcomes:
+            return required, reason
+    return None
 
 
 def raise_on_errors(results: Sequence[CheckResult]) -> None:

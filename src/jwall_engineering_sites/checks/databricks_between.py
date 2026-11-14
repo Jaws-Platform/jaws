@@ -1,7 +1,12 @@
 """Databricks `between` checks: readiness waits after the account stack, before the workspace stack.
 
 They read `ctx.databricks.account_outputs` (the account stack's outputs). Every
-check SKIPs until `databricks.enabled` is true, like the live checks. No
+check SKIPs until `databricks.enabled` is true, like the live checks.
+
+DBX-BTW-001 to 003 poll against ONE deadline per stage run (`databricks.readiness_timeout`
+in total, kept in `ctx.stage_state`), and 002 and 003 SKIP when 001 did not pass, so a
+broken workspace holds an apply for one budget at most. With `ctx.max_wait_seconds` 0
+(`databricks doctor`) each makes a single attempt. DBX-BTW-004 is a single call. No
 failure message carries the client secret or an SDK exception's text.
 Registered at import; `checks.load_builtin_checks()` imports this module.
 """
@@ -51,11 +56,20 @@ _PROPAGATING = (
 
 
 class _Deadline:
-    """The readiness budget (databricks.readiness_timeout) for one check's polling."""
+    """The readiness budget (databricks.readiness_timeout) the polling checks share."""
 
     def __init__(self, ctx: CheckContext) -> None:
-        self.timeout = _section(ctx).readiness_timeout_seconds
-        self.label = _section(ctx).readiness_timeout
+        section = _section(ctx)
+        self.timeout: float = section.readiness_timeout_seconds
+        #: How a failure says how long it waited ("... still PROVISIONING <label>").
+        self.label = f"within the shared {section.readiness_timeout} readiness budget"
+        if ctx.max_wait_seconds is not None and ctx.max_wait_seconds < self.timeout:
+            self.timeout = max(ctx.max_wait_seconds, 0)
+            self.label = (
+                "on a single attempt (`databricks doctor` does not wait)"
+                if self.timeout == 0
+                else f"within {self.timeout:g}s"
+            )
         self._start = _clock()
 
     def wait(self) -> bool:
@@ -64,6 +78,21 @@ class _Deadline:
             return False
         _sleep(POLL_SECONDS)
         return True
+
+
+_DEADLINE_KEY = "databricks_between.readiness_deadline"
+
+
+def _deadline(ctx: CheckContext) -> _Deadline:
+    """The stage run's one deadline: created by the first check that polls, shared after."""
+    deadline = ctx.stage_state.get(_DEADLINE_KEY)
+    if not isinstance(deadline, _Deadline):
+        deadline = ctx.stage_state[_DEADLINE_KEY] = _Deadline(ctx)
+    return deadline
+
+
+#: BTW-002 and 003 need a RUNNING workspace; polling them after BTW-001 failed only waits.
+_NEEDS_RUNNING = {"DBX-BTW-001": "the workspace never became ready"}
 
 
 def _propagating(exc: BaseException) -> bool:
@@ -98,7 +127,7 @@ def workspace_client(ctx: CheckContext) -> Any:
 @_live(BTW_001, needs_ids=True, stage=Stage.BETWEEN)
 def workspace_running(ctx: CheckContext) -> Iterable[CheckResult]:
     workspace_id = int(outputs(ctx)["workspace_id"])
-    deadline = _Deadline(ctx)
+    deadline = _deadline(ctx)
     workspaces = _account(ctx).workspaces
     while True:
         try:
@@ -108,7 +137,7 @@ def workspace_running(ctx: CheckContext) -> Iterable[CheckResult]:
             if deadline.wait():
                 continue
             yield BTW_001.failed(
-                f"workspace {workspace_id} still did not exist in the account after "
+                f"workspace {workspace_id} still did not exist in the account "
                 f"{deadline.label}: the account stack creates it, so re-run apply",
                 workspace_id=str(workspace_id),
             )
@@ -129,7 +158,7 @@ def workspace_running(ctx: CheckContext) -> Iterable[CheckResult]:
             return
         if not deadline.wait():
             yield BTW_001.failed(
-                f"the workspace was still {label} after "
+                f"the workspace was still {label} "
                 f"{deadline.label}: {message or 'no status message'}. "
                 "Re-running apply waits again; raise databricks.readiness_timeout in "
                 "config.yaml if provisioning is just slow",
@@ -139,10 +168,10 @@ def workspace_running(ctx: CheckContext) -> Iterable[CheckResult]:
             return
 
 
-@_live(BTW_002, needs_ids=True, stage=Stage.BETWEEN, workspace_level=True)
+@_live(BTW_002, needs_ids=True, stage=Stage.BETWEEN, workspace_level=True, requires=_NEEDS_RUNNING)
 def workspace_answers(ctx: CheckContext) -> Iterable[CheckResult]:
     host = str(outputs(ctx)["workspace_url"])
-    deadline = _Deadline(ctx)
+    deadline = _deadline(ctx)
     client = workspace_client(ctx)
     while True:
         try:
@@ -150,7 +179,7 @@ def workspace_answers(ctx: CheckContext) -> Iterable[CheckResult]:
         except (DatabricksError, OSError, ValueError) as exc:  # keep the type only
             if _propagating(exc) and deadline.wait():
                 continue
-            waited = f" after {deadline.label}" if _propagating(exc) else ""
+            waited = f" {deadline.label}" if _propagating(exc) else ""
             yield BTW_002.failed(
                 f"{host} did not answer an authenticated call{waited} (last error "
                 f"{type(exc).__name__}): the workspace may still be starting, or the service "
@@ -163,13 +192,13 @@ def workspace_answers(ctx: CheckContext) -> Iterable[CheckResult]:
         return
 
 
-@_live(BTW_003, needs_ids=True, stage=Stage.BETWEEN, workspace_level=True)
+@_live(BTW_003, needs_ids=True, stage=Stage.BETWEEN, workspace_level=True, requires=_NEEDS_RUNNING)
 def principal_is_workspace_admin(ctx: CheckContext) -> Iterable[CheckResult]:
     """The admin group holds ADMIN on the workspace (account level, authoritative) and an
     admin-only workspace read works (the service principal's rights are effective)."""
     out = outputs(ctx)
     workspace_id, admin_group = int(out["workspace_id"]), str(out["admin_group_name"])
-    deadline = _Deadline(ctx)
+    deadline = _deadline(ctx)
     account, client = _account(ctx), workspace_client(ctx)
     while True:
         held = any(
@@ -183,7 +212,7 @@ def principal_is_workspace_admin(ctx: CheckContext) -> Iterable[CheckResult]:
                 continue
             yield BTW_003.failed(
                 f"the group {admin_group} still did not hold ADMIN on workspace {workspace_id} "
-                f"after {deadline.label}: the account stack assigns it (after the metastore "
+                f"{deadline.label}: the account stack assigns it (after the metastore "
                 "assignment); re-run apply",
                 admin_group=admin_group,
             )
@@ -195,7 +224,7 @@ def principal_is_workspace_admin(ctx: CheckContext) -> Iterable[CheckResult]:
                 continue
             yield BTW_003.failed(
                 f"{admin_group} holds ADMIN but the service principal still could not read "
-                f"admin settings after {deadline.label}: the admin assignment is not yet "
+                f"admin settings {deadline.label}: the admin assignment is not yet "
                 "effective; re-run apply (propagation)",
                 admin_group=admin_group,
                 error="PermissionDenied",

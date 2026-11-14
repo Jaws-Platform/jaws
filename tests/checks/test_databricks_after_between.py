@@ -39,6 +39,7 @@ from jwall_engineering_sites.checks.framework import (
     Severity,
     Stage,
     registered,
+    run_stage,
 )
 from jwall_engineering_sites.databricks_names import derived_names
 from jwall_engineering_sites.project import Project
@@ -413,6 +414,134 @@ def test_workspace_level_api_failure_names_workspace_permissions(
     assert result.remediation is not None
     assert "workspace permissions" in result.remediation
     assert "account_id" not in result.remediation
+
+
+# -- the BETWEEN stage as a whole ------------------------------------------------------
+
+
+def _stage(
+    databricks: Project, live: Settings, dbx: FakeDatabricks, max_wait: float | None = None
+) -> dict[str, CheckResult]:
+    dbx.account_outputs = OUTPUTS
+    ctx = CheckContext(
+        databricks, live, logging.getLogger("t"), None, dbx, max_wait_seconds=max_wait
+    )
+    return {r.check_id: r for r in run_stage(Stage.BETWEEN, ctx)}
+
+
+def _never_ready_workspace() -> FakeWorkspace:
+    workspace = FakeWorkspace(me_error=ConnectionError("down"))
+    workspace.workspace_conf.get_status = _scripted(  # type: ignore[method-assign]
+        PermissionDenied("not yet")
+    )
+    return workspace
+
+
+def test_the_readiness_checks_share_one_budget(
+    databricks: Project, live: Settings, clock: Clock
+) -> None:
+    """BTW-001 uses most of the budget; BTW-002 and 003 get what is left, not 20m each."""
+    assert live.databricks is not None
+    budget = live.databricks.readiness_timeout_seconds
+    polls = budget // 15 - 2
+    states = [workspace_in(WorkspaceStatus.PROVISIONING, "creating")] * polls
+    account = FakeAccount(
+        workspace_states=[*states, workspace_in(WorkspaceStatus.RUNNING)],
+        assignments=[group_assignment(ADMIN_GROUP, WorkspacePermission.ADMIN)],
+    )
+    results = _stage(databricks, live, FakeDatabricks(account, _never_ready_workspace()))
+    assert results["DBX-BTW-001"].outcome is Outcome.PASS
+    assert results["DBX-BTW-002"].outcome is Outcome.FAIL
+    assert results["DBX-BTW-003"].outcome is Outcome.FAIL
+    assert clock.now <= budget
+    assert len(clock.sleeps) == budget // 15
+
+
+def test_the_shared_budget_is_named_in_the_failure(
+    databricks: Project, live: Settings, clock: Clock
+) -> None:
+    results = _stage(databricks, live, FakeDatabricks(workspace=_never_ready_workspace()))
+    remediation = results["DBX-BTW-002"].remediation
+    assert remediation is not None and "shared 20m readiness budget" in remediation
+
+
+def test_a_workspace_that_never_became_ready_skips_the_url_and_admin_checks(
+    databricks: Project, live: Settings, clock: Clock
+) -> None:
+    account = FakeAccount(
+        workspace_states=[workspace_in(WorkspaceStatus.FAILED, "invalid credentials")]
+    )
+    dbx = FakeDatabricks(account, _never_ready_workspace())
+    results = _stage(databricks, live, dbx)
+    assert results["DBX-BTW-001"].outcome is Outcome.FAIL
+    for check_id in ("DBX-BTW-002", "DBX-BTW-003"):
+        assert results[check_id].outcome is Outcome.SKIP
+        assert (
+            results[check_id].remediation
+            == "skipped: the workspace never became ready (DBX-BTW-001)"
+        )
+    assert clock.sleeps == []
+    assert dbx.hosts == []  # no workspace client was even built
+    assert results["DBX-BTW-004"].outcome is Outcome.FAIL  # still a single call
+
+
+def test_the_readiness_checks_still_skip_with_the_setup_hint_while_disabled(
+    databricks: Project, settings: Settings
+) -> None:
+    dbx = FakeDatabricks()
+    dbx.account_outputs = OUTPUTS
+    ctx = CheckContext(databricks, settings, logging.getLogger("t"), None, dbx)
+    for result in run_stage(Stage.BETWEEN, ctx):
+        assert result.outcome is Outcome.SKIP
+        assert result.remediation == SKIP_HINT
+
+
+def test_doctor_does_not_wait_for_the_workspace(
+    databricks: Project, live: Settings, clock: Clock
+) -> None:
+    """max_wait_seconds=0: BTW-001 reports the current state after one call."""
+    account = FakeAccount(workspace_states=[workspace_in(WorkspaceStatus.PROVISIONING, "creating")])
+    dbx = FakeDatabricks(account)
+    results = _stage(databricks, live, dbx, max_wait=0)
+    assert results["DBX-BTW-001"].outcome is Outcome.FAIL
+    remediation = results["DBX-BTW-001"].remediation
+    assert remediation is not None and "does not wait" in remediation
+    assert dbx.account.workspaces.gets == 1
+    assert clock.sleeps == []
+
+
+def test_doctor_makes_one_attempt_per_readiness_check(
+    databricks: Project, live: Settings, clock: Clock
+) -> None:
+    """With the workspace RUNNING, BTW-002 and 003 still try once each."""
+    calls: dict[str, int] = {"me": 0, "assignments": 0, "conf": 0}
+
+    def me(**_: Any) -> Any:
+        calls["me"] += 1
+        raise ConnectionError("down")
+
+    def assignments(workspace_id: int) -> Any:
+        calls["assignments"] += 1
+        return iter([group_assignment(ADMIN_GROUP, WorkspacePermission.ADMIN)])
+
+    def conf(keys: str) -> Any:
+        calls["conf"] += 1
+        raise PermissionDenied("not yet")
+
+    workspace = FakeWorkspace()
+    workspace.current_user.me = me  # type: ignore[method-assign]
+    workspace.workspace_conf.get_status = conf  # type: ignore[method-assign]
+    dbx = FakeDatabricks(FakeAccount(), workspace)
+    dbx.account.workspace_assignment.list = assignments
+    results = _stage(databricks, live, dbx, max_wait=0)
+    assert [results[c].outcome for c in ("DBX-BTW-001", "DBX-BTW-002", "DBX-BTW-003")] == [
+        Outcome.PASS,
+        Outcome.FAIL,
+        Outcome.FAIL,
+    ]
+    assert dbx.account.workspaces.gets == 1
+    assert calls == {"me": 1, "assignments": 1, "conf": 1}
+    assert clock.sleeps == []
 
 
 # -- DBX-BTW-004 -----------------------------------------------------------------------

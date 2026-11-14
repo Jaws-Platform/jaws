@@ -61,10 +61,45 @@ locals {
   }
 }
 
+# The config.yaml placeholders must be filled in before `enabled` turns the
+# account resources on: the metastore module would make the @example.com
+# addresses its admins, and the nil UUID is no account or service principal.
+# A failed precondition fails the plan, so nothing is applied. Not planned
+# while disabled (the placeholders are expected then). The CLI's settings
+# validation refuses the same config.yaml.
+locals {
+  databricks_nil_uuid = "00000000-0000-0000-0000-000000000000"
+  databricks_placeholder_admins = [
+    for email in local.databricks.metastore_admins : email
+    if endswith(lower(email), "@example.com")
+  ]
+}
+
+resource "terraform_data" "databricks_config_filled_in" {
+  count = local.databricks_enabled ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = lower(local.databricks.account_id) != local.databricks_nil_uuid
+      error_message = "config.yaml databricks.account_id is still the nil UUID placeholder: fill in the Databricks account ID (or set databricks.enabled back to false)."
+    }
+
+    precondition {
+      condition     = lower(local.databricks.client_id) != local.databricks_nil_uuid
+      error_message = "config.yaml databricks.client_id is still the nil UUID placeholder: fill in the service principal's application (client) ID (or set databricks.enabled back to false)."
+    }
+
+    precondition {
+      condition     = length(local.databricks_placeholder_admins) == 0
+      error_message = "config.yaml databricks.metastore_admins still holds the placeholder ${join(", ", local.databricks_placeholder_admins)}: replace it with the owner's real email (an account user) before the foundation makes it a metastore admin."
+    }
+  }
+}
+
 module "databricks_metastore" {
   count     = local.databricks_enabled ? 1 : 0
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-metastore"
-  version   = "0.18.1"
+  version   = "0.19.0"
   providers = { databricks = databricks.account }
 
   name                             = local.databricks.metastore_name
@@ -75,7 +110,7 @@ module "databricks_metastore" {
 module "databricks_audit_logs" {
   count     = local.databricks_enabled ? 1 : 0
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-audit-logs"
-  version   = "0.18.1"
+  version   = "0.19.0"
   providers = { aws = aws, databricks = databricks.account }
 
   account_id  = local.databricks.account_id
@@ -85,7 +120,7 @@ module "databricks_audit_logs" {
 module "databricks_ci_plan" {
   for_each = local.databricks_projects
   source   = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version  = "0.18.1"
+  version  = "0.19.0"
 
   project           = each.key
   repository        = local.context.repository
@@ -104,7 +139,7 @@ module "databricks_ci_plan" {
 module "databricks_ci_apply" {
   for_each = local.databricks_projects
   source   = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version  = "0.18.1"
+  version  = "0.19.0"
 
   project           = each.key
   repository        = local.context.repository

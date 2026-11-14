@@ -8,7 +8,7 @@ Registered at import; `checks.load_builtin_checks()` imports this module.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from botocore.exceptions import BotoCoreError, ClientError, DataNotFoundError, UnknownServiceError
@@ -30,9 +30,17 @@ SKIP_HINT = (
 _PLACEHOLDER_HINT = "fill in config.yaml databricks.account_id/client_id (not the nil UUID)"
 #: EC2 "Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances", in vCPUs.
 _STANDARD_VCPU_QUOTA = "L-1216C47A"
-_QUOTA_NOT_GRANTED = (
-    "quota check needs servicequotas:GetServiceQuota, not granted to the CI roles yet "
-    "(planned library change)"
+#: The CI roles' databricks/read policy grants servicequotas:GetServiceQuota on this quota
+#: from library 0.19.0; a SKIP means the role in use lacks it, or (from the image) the
+#: service-quotas model is missing.
+_QUOTA_DENIED = (
+    "quota check needs servicequotas:GetServiceQuota: the role in use was refused it; the "
+    "CI roles' databricks/read policy grants it from library 0.19.0, so apply the "
+    "foundation at that version (or check the role's policy)"
+)
+_QUOTA_NO_MODEL = (
+    "quota check needs the service-quotas API model, which this build of the tool does "
+    "not ship (the image keeps only the botocore models it uses)"
 )
 
 LIVE_001 = Meta("DBX-LIVE-001", "The Databricks client secret is in SSM", "credentials")
@@ -66,10 +74,12 @@ def _live(
     needs_ids: bool = False,
     stage: Stage = Stage.LIVE,
     workspace_level: bool = False,
+    requires: Mapping[str, str] | None = None,
 ) -> Callable[[CheckFn], CheckFn]:
     """Register a check (LIVE unless `stage` says otherwise; the BETWEEN and AFTER modules reuse
     this) that SKIPs until Databricks is enabled (and, with `needs_ids`,
-    until `account_id`/`client_id` are real)."""
+    until `account_id`/`client_id` are real). `requires` is the framework's: the check
+    SKIPs when one it depends on failed."""
 
     def wrap(fn: CheckFn) -> CheckFn:
         def guarded(ctx: CheckContext) -> Iterable[CheckResult]:
@@ -112,7 +122,9 @@ def _live(
             yield from results
 
         guarded.__doc__ = fn.__doc__
-        return check(meta.check_id, meta.title, stage, _DBX, meta.severity, meta.runbook)(guarded)
+        return check(meta.check_id, meta.title, stage, _DBX, meta.severity, meta.runbook, requires)(
+            guarded
+        )
 
     return wrap
 
@@ -226,8 +238,8 @@ def members_exist(ctx: CheckContext) -> Iterable[CheckResult]:
         raise ConfigError(f"add projects.{ctx.project.project}.databricks to config.yaml")
     emails = [*approved.admins, *approved.users]
     field = f"projects.{ctx.project.project}.databricks.admins/users"
-    # The foundation makes these the metastore admins once enabled; a placeholder there
-    # would hand the metastore to nobody.
+    # The foundation makes these the metastore admins once enabled. Settings validation
+    # and the foundation plan refuse a placeholder first; this is the last line.
     admins = [e for e in _section(ctx).metastore_admins if e.lower().endswith("@example.com")]
     if admins:
         yield LIVE_005.failed(
@@ -362,12 +374,15 @@ def vcpu_headroom(ctx: CheckContext) -> Iterable[CheckResult]:
             )["Quota"]["Value"]
         )
     except (UnknownServiceError, DataNotFoundError):
-        # The image prunes botocore's service models; service-quotas is not among them.
-        yield LIVE_008.skipped(_QUOTA_NOT_GRANTED, needed_vcpus=str(worst))
+        # Only the container image lacks the model: it prunes botocore's service models and
+        # service-quotas is not among those it keeps. The Databricks plan and apply jobs run
+        # the CLI with `uv` from a checkout (full botocore), so there the quota is read; this
+        # SKIP is the safety net for a run from the image.
+        yield LIVE_008.skipped(_QUOTA_NO_MODEL, needed_vcpus=str(worst))
         return
     except ClientError as exc:
         if exc.response.get("Error", {}).get("Code") in ("AccessDenied", "AccessDeniedException"):
-            yield LIVE_008.skipped(_QUOTA_NOT_GRANTED, needed_vcpus=str(worst))
+            yield LIVE_008.skipped(_QUOTA_DENIED, needed_vcpus=str(worst))
             return
         raise
     facts = {"needed_vcpus": str(worst), "quota_vcpus": str(int(quota)), "policy": worst_policy}
