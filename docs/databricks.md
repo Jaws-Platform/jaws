@@ -40,8 +40,10 @@ pointer back here.
    service principal's application (client) ID. Neither is a secret. Replace
    the `owner@example.com` placeholders with real emails in
    `databricks.metastore_admins` and in each project's
-   `projects.<name>.databricks.admins` and `users`. Every member must also
-   exist as an account user in the console (`DBX-LIVE-005`). Once
+   `projects.<name>.databricks.admins`. Workspace users are not listed here: the
+   project lists them in its own file (see [The project file](#the-project-file)).
+   Every admin and user must also exist as an account user in the console
+   (`DBX-LIVE-005`). Once
    `databricks.enabled` is true, a nil-UUID ID or an `@example.com` metastore
    admin left in config.yaml stops the CLI from loading it and fails the
    foundation plan, so fill them in before flipping it.
@@ -95,7 +97,8 @@ In this order:
 1. In `config.yaml`, add `projects.<name>.databricks` with `compute_policies`
    (a subset of `databricks.compute_policies`), `cost_center`, a `vpc_cidr`
    (a /16 to /20, no overlap with another project or the bot VPC `10.0.0.0/16`),
-   `admins` (at least one email) and `users`.
+   and `admins` (at least one email). Workspace users go in the project's own
+   file, not here.
 2. In `foundation/databricks.tf`, add the project to `local.databricks_projects`
    with its repository and repository ID. The release that applies it creates
    the project's `jwall-engineering-<name>-ci-plan` and `-ci-apply` roles
@@ -128,17 +131,34 @@ tags:
 components:
   - kind: databricks-workspace
     compute_policies: [small-interactive, jobs]
+    users: [user@example.com]           # workspace users, by email; optional
     # deployment_name: databricks-poc   # optional; needs databricks.deployment_name_prefix
 ```
 
 The file names only what the project asks for. The network range, cost center
-and members are central (`projects.<name>.databricks` in `config.yaml`); a
+and workspace admins are central (`projects.<name>.databricks` in `config.yaml`); a
 project cannot widen a compute policy, add a node type or pick its own range.
 `compute_policies` must be kebab-case, must not repeat, and must be a subset
 of the project's approved list. The CLI adds `ManagedBy`, `CostCenter` and
 `Workspace` to the tags itself. The state is `project=<name>/env=prod/` in the
 shared bucket, one file per stack:
 `<name>-prod-account.tfstate` and `<name>-prod-workspace.tfstate`.
+
+### Users and admins
+
+`users` is a list of email addresses (lowercased on load, no duplicates, each
+a plausible email). The team edits it in its own repository, so membership
+changes need no change or release here. The Databricks plan and apply
+workflows read the project file from the repository's default branch on every
+run, so a change takes effect on the next plan/apply after it is merged. Each
+user must already be an account user in the console (`DBX-LIVE-005` checks).
+
+Workspace **admins** stay central, in `projects.<name>.databricks.admins` in
+`config.yaml`, because an admin can change cluster policies, entitlements and
+grants, which is exactly what the central guardrails bound. Listing an admin's
+email under `users` is refused (admins are set centrally in `config.yaml`), and
+a `users` key under `projects.<name>.databricks` in `config.yaml` no longer
+loads: move it to the project file.
 
 ## What `plan` shows
 
@@ -434,8 +454,9 @@ foundation first (it creates the metastore once `databricks.enabled` is true).
 
 ### Workspace members
 
-`DBX-LIVE-005`. A member email in `projects.<name>.databricks.admins` or
-`users` is a placeholder (`@example.com`) or is not an account user. Replace
+`DBX-LIVE-005`. A member email in `projects.<name>.databricks.admins`
+(`config.yaml`) or in `users` of the project's `databricks-workspace`
+component is a placeholder (`@example.com`) or is not an account user. Replace
 it with a real email, or add the user in the account console. A placeholder in
 `databricks.metastore_admins` (or a nil-UUID `account_id`/`client_id`) is
 refused earlier, before anything uses it: with `databricks.enabled: true`,

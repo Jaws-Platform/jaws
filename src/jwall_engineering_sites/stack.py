@@ -291,7 +291,7 @@ def _databricks_account_tfvars(project: Project, settings: Settings) -> dict[str
             project.project, section.deployment_name_prefix, project.databricks.deployment_name
         ),
         "admin_user_names": list(approved.admins),
-        "user_names": list(approved.users),
+        "user_names": list(project.databricks.users),
         "service_principal_application_id": section.client_id,
         "account_id": section.account_id,
     }

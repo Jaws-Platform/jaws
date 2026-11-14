@@ -348,7 +348,16 @@ def test_databricks_section_parses(settings: Settings) -> None:
     assert poc.compute_policies == ("small-interactive", "jobs")
     assert poc.cost_center == "cc-0000"
     assert poc.vpc_cidr == "10.40.0.0/16"
-    assert poc.users == ()
+    assert poc.admins == ("owner@example.com",)
+
+
+def test_users_in_config_yaml_are_refused_with_the_migration_message(tmp_path: Path) -> None:
+    raw = _databricks_raw()
+    raw["projects"]["databricks-poc"]["databricks"]["users"] = ["a@corp.test"]
+    with pytest.raises(
+        ConfigError, match=r"own jwall-engineering-sites\.yaml.*databricks-workspace"
+    ):
+        _load_raw(tmp_path, raw)
 
 
 def test_real_ids_are_not_placeholders(tmp_path: Path) -> None:

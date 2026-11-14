@@ -71,7 +71,15 @@ def _databricks_problems(config: SiteConfig, approved: ProjectGuardrails) -> lis
             "range, admins and compute policies there (reviewed in jwall-engineering-infra)"
         )
         return problems
+    admins = {admin.lower() for admin in approved.databricks.admins}
     for workspace in workspaces:
+        for email in workspace.users:
+            if email in admins:
+                problems.append(
+                    f"{email} is listed in users but is a workspace admin; admins are set "
+                    f"centrally in projects.{project}.databricks.admins in config.yaml, so "
+                    "remove it from users"
+                )
         for policy in workspace.compute_policies:
             if policy not in approved.databricks.compute_policies:
                 problems.append(

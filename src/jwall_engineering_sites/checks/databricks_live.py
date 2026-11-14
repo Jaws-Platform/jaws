@@ -236,8 +236,8 @@ def members_exist(ctx: CheckContext) -> Iterable[CheckResult]:
     approved = ctx.project.databricks_approved
     if approved is None:
         raise ConfigError(f"add projects.{ctx.project.project}.databricks to config.yaml")
-    emails = [*approved.admins, *approved.users]
-    field = f"projects.{ctx.project.project}.databricks.admins/users"
+    users = ctx.project.databricks.users
+    emails = [*approved.admins, *users]
     # The foundation makes these the metastore admins once enabled. Settings validation
     # and the foundation plan refuse a placeholder first; this is the last line.
     admins = [e for e in _section(ctx).metastore_admins if e.lower().endswith("@example.com")]
@@ -248,13 +248,17 @@ def members_exist(ctx: CheckContext) -> Iterable[CheckResult]:
             placeholders=", ".join(admins),
         )
         return
-    placeholders = [e for e in emails if e.lower().endswith("@example.com")]
-    if placeholders:
-        yield LIVE_005.failed(
-            f"replace the placeholder email {', '.join(placeholders)} in {field} in config.yaml",
-            placeholders=", ".join(placeholders),
-        )
-        return
+    for where, group in (
+        (f"projects.{ctx.project.project}.databricks.admins in config.yaml", approved.admins),
+        ("users in the project's jwall-engineering-sites.yaml", users),
+    ):
+        placeholders = [e for e in group if e.lower().endswith("@example.com")]
+        if placeholders:
+            yield LIVE_005.failed(
+                f"replace the placeholder email {', '.join(placeholders)} in {where}",
+                placeholders=", ".join(placeholders),
+            )
+            return
     if _section(ctx).has_placeholder_ids:
         yield LIVE_005.skipped(f"{_PLACEHOLDER_HINT}; DBX-LIVE-002 reports this")
         return
@@ -263,7 +267,8 @@ def members_exist(ctx: CheckContext) -> Iterable[CheckResult]:
     if missing:
         yield LIVE_005.failed(
             f"add {', '.join(missing)} as account users in the account console, or remove them "
-            f"from {field} in config.yaml",
+            f"from projects.{ctx.project.project}.databricks.admins in config.yaml or from "
+            "users in the project's jwall-engineering-sites.yaml",
             missing=", ".join(missing),
         )
         return
