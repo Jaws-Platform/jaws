@@ -325,7 +325,7 @@ def _second_project(raw: dict[str, Any], name: str, cidr: str) -> None:
 def test_databricks_section_parses(settings: Settings) -> None:
     section = settings.databricks
     assert section is not None
-    assert section.enabled is False
+    assert section.enabled is True
     assert section.has_placeholder_ids is False  # the real IDs are filled in
     assert section.secret_parameter == "/jwall-engineering/databricks/client-secret"
     assert section.metastore_name == "jwall-engineering-us-east-1"
