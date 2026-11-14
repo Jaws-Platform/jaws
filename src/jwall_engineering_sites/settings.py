@@ -245,9 +245,20 @@ class DatabricksProject(_Section):
     cost_center: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
     #: Allocated centrally so IP capacity is owned here and overlaps are checkable.
     vpc_cidr: str
-    #: Workspace members, by email.
+    #: Workspace admins, by email. Central because admins can change cluster policies,
+    #: entitlements and grants; plain users are listed in the project's own file.
     admins: tuple[str, ...] = Field(min_length=1)
-    users: tuple[str, ...] = ()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _users_moved(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "users" in data:
+            raise ValueError(
+                "`users` no longer lives in config.yaml: list the workspace users in the "
+                "project's own jwall-engineering-sites.yaml, under the databricks-workspace "
+                "component (users: [name@example.com]); only admins are set here"
+            )
+        return data
 
     @field_validator("vpc_cidr")
     @classmethod
@@ -260,7 +271,7 @@ class DatabricksProject(_Section):
             raise ValueError(f"vpc_cidr {value!r} must be between /16 and /20")
         return value
 
-    @field_validator("admins", "users")
+    @field_validator("admins")
     @classmethod
     def _emails(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         return _check_emails(value)

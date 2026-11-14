@@ -9,6 +9,7 @@ the network: modules and providers were fetched when the image was built.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -291,7 +292,7 @@ def _databricks_account_tfvars(project: Project, settings: Settings) -> dict[str
             project.project, section.deployment_name_prefix, project.databricks.deployment_name
         ),
         "admin_user_names": list(approved.admins),
-        "user_names": list(approved.users),
+        "user_names": list(project.databricks.users),
         "service_principal_application_id": section.client_id,
         "account_id": section.account_id,
     }
@@ -379,6 +380,21 @@ def default_stack_dir(kind: str = "site") -> Path:
     return image if image.is_dir() else LOCAL_STACKS_ROOT / kind
 
 
+def _skip_provider_binaries(directory: str, names: list[str]) -> set[str]:
+    """copytree ignore: drop `.terraform/providers`, keep everything else."""
+    return {"providers"} if Path(directory).name == ".terraform" and "providers" in names else set()
+
+
+def _console_debug(logger: Logger) -> bool:
+    """Whether a console handler (not the debug log file) shows debug records."""
+    return any(
+        isinstance(h, logging.StreamHandler)
+        and not isinstance(h, logging.FileHandler)
+        and h.level <= logging.DEBUG
+        for h in logger.handlers
+    )
+
+
 def default_plugin_dir() -> Path | None:
     if ENV_PLUGIN_DIR in os.environ:
         value = os.environ[ENV_PLUGIN_DIR]
@@ -462,7 +478,16 @@ class Terraform:
             raise RunError(f"{self.stack_name} stack not found at {self.stack_dir}")
         self.check_version()
         self.workdir = Path(tempfile.mkdtemp(prefix="jwall-engineering-sites-"))
-        shutil.copytree(self.stack_dir, self.workdir, dirs_exist_ok=True, symlinks=True)
+        # Keep .terraform/modules (the image vendors them so run-time init is offline),
+        # but not .terraform/providers: a local `terraform init` leaves hundreds of MB of
+        # provider binaries there, and init takes providers from the plugin mirror or cache.
+        shutil.copytree(
+            self.stack_dir,
+            self.workdir,
+            dirs_exist_ok=True,
+            symlinks=True,
+            ignore=_skip_provider_binaries,
+        )
         tfvars = (
             self.tfvars_override
             if self.tfvars_override is not None
@@ -483,10 +508,9 @@ class Terraform:
     def cleanup(self, failed: bool) -> None:
         if self.workdir is None:
             return
-        keep = failed and (
-            os.environ.get(ENV_KEEP_WORKDIR) == "1"
-            or self.logger.getEffectiveLevel() <= 10  # DEBUG
-        )
+        # The logger itself is always at DEBUG (the debug log file), so ask the console:
+        # keep the copy only when the user asked for debug output or JES_KEEP_WORKDIR=1.
+        keep = failed and (os.environ.get(ENV_KEEP_WORKDIR) == "1" or _console_debug(self.logger))
         if keep:
             self.logger.warning("keeping working directory %s for inspection", self.workdir)
             return

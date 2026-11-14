@@ -107,7 +107,6 @@ projects:
       cost_center: cc-0000
       vpc_cidr: 10.40.0.0/16
       admins: [owner@example.com] # replace with the owner's email
-      users: []
 
 # Databricks workspaces (projects with a `databricks` entry above). The account
 # stack uses a service principal whose client secret lives in SSM at

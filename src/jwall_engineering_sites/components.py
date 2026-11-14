@@ -27,6 +27,9 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+_USER_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
 def _relative_path(value: str) -> str:
     path = PurePosixPath(value)
     if path.is_absolute() or ".." in path.parts or value in ("", "."):
@@ -396,8 +399,9 @@ class Dataset(_Model):
 
 
 class DatabricksWorkspace(_Model):
-    """A Databricks workspace. The VPC range, cost center and members are central
-    (`projects.<name>.databricks` in config.yaml); this names only what the project asks for."""
+    """A Databricks workspace. The VPC range, cost center and admins are central
+    (`projects.<name>.databricks` in config.yaml); this names what the project asks for,
+    including its workspace users."""
 
     kind: Literal["databricks-workspace"]
     #: Cluster policies, by name, from the `databricks.compute_policies` config.yaml defines;
@@ -405,6 +409,21 @@ class DatabricksWorkspace(_Model):
     compute_policies: tuple[str, ...]
     #: The workspace's deployment name (its URL prefix); derived from the project when left out.
     deployment_name: str | None = Field(default=None, pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")
+    #: Workspace users, by email: membership is the team's to change from its own repo.
+    #: Admins stay central (`projects.<name>.databricks.admins` in config.yaml).
+    users: tuple[str, ...] = ()
+
+    @field_validator("users")
+    @classmethod
+    def _users(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        emails = tuple(email.strip().lower() for email in value)
+        for email in emails:
+            if not _USER_EMAIL.match(email):
+                raise ValueError(f"users: {email!r} is not an email address")
+        repeated = sorted({email for email in emails if emails.count(email) > 1})
+        if repeated:
+            raise ValueError(f"users must not repeat an email: {', '.join(repeated)}")
+        return emails
 
     @field_validator("compute_policies")
     @classmethod

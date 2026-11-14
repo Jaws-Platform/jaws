@@ -211,11 +211,12 @@ def test_live004_fails_when_the_foundation_is_not_applied(
 # -- DBX-LIVE-005 ----------------------------------------------------------------
 
 
-def _members(live: Settings, databricks: Project, *emails: str) -> Settings:
+def _members(live: Settings, databricks: Project, *emails: str) -> tuple[Project, Settings]:
+    """The first email is the central admin; the rest are users in the project file."""
     guard = live.projects["databricks-poc"]
     assert guard.databricks is not None
-    new = guard.databricks.model_copy(update={"admins": emails[:1], "users": emails[1:]})
-    return live.model_copy(
+    new = guard.databricks.model_copy(update={"admins": emails[:1]})
+    settings = live.model_copy(
         update={
             "projects": {
                 **live.projects,
@@ -223,30 +224,45 @@ def _members(live: Settings, databricks: Project, *emails: str) -> Settings:
             }
         }
     )
-
-
-def _project(project: Project, settings: Settings) -> Project:
-    return project.model_copy(
-        update={"databricks_approved": settings.projects[project.project].databricks}
+    component = databricks.databricks.model_copy(update={"users": emails[1:]})
+    project = databricks.model_copy(
+        update={
+            "databricks_approved": new,
+            "config": databricks.config.model_copy(update={"components": [component]}),
+        }
     )
+    return project, settings
 
 
 def test_live005_passes_when_every_member_is_an_account_user(
     databricks: Project, live: Settings
 ) -> None:
-    s = _members(live, databricks, "a@corp.test", "b@corp.test")
+    project, s = _members(live, databricks, "a@corp.test", "b@corp.test")
     api = _account(users=[user("A@corp.test"), user("b@corp.test")])
-    assert _run("DBX-LIVE-005", _project(databricks, s), s, None, api).outcome is Outcome.PASS
+    assert _run("DBX-LIVE-005", project, s, None, api).outcome is Outcome.PASS
 
 
 def test_live005_names_each_missing_member(databricks: Project, live: Settings) -> None:
-    s = _members(live, databricks, "a@corp.test", "b@corp.test", "c@corp.test")
+    project, s = _members(live, databricks, "a@corp.test", "b@corp.test", "c@corp.test")
     api = _account(users=[user("a@corp.test")])
-    result = _run("DBX-LIVE-005", _project(databricks, s), s, None, api)
+    result = _run("DBX-LIVE-005", project, s, None, api)
     assert result.outcome is Outcome.FAIL
     assert "b@corp.test" in (result.remediation or "")
     assert "c@corp.test" in (result.remediation or "")
     assert "a@corp.test" not in (result.remediation or "")
+
+
+def test_live005_checks_the_users_from_the_project_file(
+    databricks: Project, live: Settings
+) -> None:
+    project, s = _members(live, databricks, "a@corp.test", "member@corp.test")
+    assert project.databricks.users == ("member@corp.test",)
+    api = _account(users=[user("a@corp.test")])
+    result = _run("DBX-LIVE-005", project, s, None, api)
+    assert result.outcome is Outcome.FAIL
+    assert "member@corp.test" in (result.remediation or "")
+    api = _account(users=[user("a@corp.test"), user("member@corp.test")])
+    assert _run("DBX-LIVE-005", project, s, None, api).outcome is Outcome.PASS
 
 
 def test_live005_rejects_placeholder_emails_without_calling_the_api(
@@ -258,12 +274,24 @@ def test_live005_rejects_placeholder_emails_without_calling_the_api(
     assert "owner@example.com" in (result.remediation or "")
 
 
+def test_live005_rejects_a_placeholder_user_in_the_project_file(
+    databricks: Project, live: Settings
+) -> None:
+    project, s = _members(live, databricks, "a@corp.test", "user@example.com")
+    result = _run("DBX-LIVE-005", project, s, None, None)
+    assert result.outcome is Outcome.FAIL
+    assert "user@example.com" in (result.remediation or "")
+    assert "jwall-engineering-sites.yaml" in (result.remediation or "")
+
+
 def test_live005_rejects_placeholder_metastore_admins(databricks: Project, live: Settings) -> None:
     assert live.databricks is not None
     section = live.databricks.model_copy(update={"metastore_admins": ("owner@example.com",)})
-    s = _members(live.model_copy(update={"databricks": section}), databricks, "a@corp.test")
+    project, s = _members(
+        live.model_copy(update={"databricks": section}), databricks, "a@corp.test"
+    )
     api = _account(users=[user("a@corp.test")])
-    result = _run("DBX-LIVE-005", _project(databricks, s), s, None, api)
+    result = _run("DBX-LIVE-005", project, s, None, api)
     assert result.outcome is Outcome.FAIL
     assert "databricks.metastore_admins" in (result.remediation or "")
     assert "owner@example.com" in (result.remediation or "")

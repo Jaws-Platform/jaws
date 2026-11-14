@@ -740,3 +740,46 @@ def test_organization_tag_is_still_checked_for_databricks(
     raw["tags"]["Organization"] = "someone-else"
     with pytest.raises(ConfigError, match="Organization"):
         _load(tmp_path, raw, settings)
+
+
+DATABRICKS_FILE = FIXTURES / "bots" / "databricks-poc.yaml"
+
+
+def _workspace_raw(**changes: Any) -> dict[str, Any]:
+    raw: dict[str, Any] = yaml.safe_load(DATABRICKS_FILE.read_text())
+    raw["components"][0].update(changes)
+    return raw
+
+
+def test_workspace_users_load(tmp_path: Path, settings: Settings) -> None:
+    project = _load(tmp_path, _workspace_raw(), settings)
+    assert project.databricks.users == ("user@example.com",)
+
+
+def test_workspace_users_default_to_none(tmp_path: Path, settings: Settings) -> None:
+    raw = _workspace_raw()
+    del raw["components"][0]["users"]
+    assert _load(tmp_path, raw, settings).databricks.users == ()
+
+
+def test_workspace_users_are_lowercased(tmp_path: Path, settings: Settings) -> None:
+    project = _load(tmp_path, _workspace_raw(users=["Ann@Corp.test"]), settings)
+    assert project.databricks.users == ("ann@corp.test",)
+
+
+@pytest.mark.parametrize("bad", ["not-an-email", "a@b", "a b@corp.test", ""])
+def test_workspace_users_must_be_emails(tmp_path: Path, settings: Settings, bad: str) -> None:
+    with pytest.raises(ConfigError, match="not an email address"):
+        _load(tmp_path, _workspace_raw(users=[bad]), settings)
+
+
+def test_workspace_users_must_not_repeat(tmp_path: Path, settings: Settings) -> None:
+    with pytest.raises(ConfigError, match="must not repeat"):
+        _load(tmp_path, _workspace_raw(users=["a@corp.test", "A@corp.test"]), settings)
+
+
+def test_a_workspace_user_who_is_also_an_admin_is_refused(
+    tmp_path: Path, settings: Settings
+) -> None:
+    with pytest.raises(ConfigError, match=r"admins are set centrally.*config\.yaml"):
+        _load(tmp_path, _workspace_raw(users=["Owner@example.com"]), settings)

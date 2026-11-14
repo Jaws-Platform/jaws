@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -231,6 +232,81 @@ def _terraform(site: Site, settings: Settings, logger: logging.Logger) -> Terraf
     return Terraform(
         site, settings, logger, stack_dir=REPO_ROOT / "stacks" / "site", plugin_dir=None
     )
+
+
+def _debug_file_logger(console_level: int) -> logging.Logger:
+    """A logger shaped like the CLI's: DEBUG overall (for the debug log file), the
+    console at `console_level`."""
+    logger = logging.getLogger(f"keep-workdir-{console_level}")
+    logger.handlers.clear()
+    logger.setLevel(logging.DEBUG)
+    console = logging.StreamHandler()
+    console.setLevel(console_level)
+    logger.addHandler(console)
+    logger.addHandler(logging.NullHandler())
+    return logger
+
+
+@pytest.mark.parametrize(
+    ("console_level", "keep_env", "kept"),
+    [
+        (logging.INFO, None, False),  # the debug log file alone must not keep it
+        (logging.DEBUG, None, True),  # debug output on the console keeps it
+        (logging.INFO, "1", True),  # so does JES_KEEP_WORKDIR=1
+    ],
+)
+def test_a_failed_run_keeps_its_workdir_only_when_asked(
+    guitar: Site,
+    settings: Settings,
+    fake_terraform: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    console_level: int,
+    keep_env: str | None,
+    kept: bool,
+) -> None:
+    if keep_env is None:
+        monkeypatch.delenv("JES_KEEP_WORKDIR", raising=False)
+    else:
+        monkeypatch.setenv("JES_KEEP_WORKDIR", keep_env)
+    terraform = _terraform(guitar, settings, _debug_file_logger(console_level))
+    workdir = terraform.prepare()
+    terraform.cleanup(failed=True)
+    try:
+        assert workdir.exists() is kept
+    finally:
+        if workdir.exists():
+            shutil.rmtree(workdir)
+
+
+def test_prepare_copies_vendored_modules_but_not_provider_binaries(
+    guitar: Site,
+    settings: Settings,
+    logger: logging.Logger,
+    fake_terraform: Path,
+    tmp_path: Path,
+) -> None:
+    """The image keeps each stack's .terraform/modules so run-time init is offline;
+    a local init leaves .terraform/providers (hundreds of MB), which init never reads
+    from the copy (providers come from the plugin mirror or the cache)."""
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    (stack / "main.tf").write_text("# stack\n")
+    (stack / ".terraform" / "modules" / "network").mkdir(parents=True)
+    (stack / ".terraform" / "modules" / "modules.json").write_text("{}\n")
+    (stack / ".terraform" / "modules" / "network" / "main.tf").write_text("# module\n")
+    (stack / ".terraform" / "providers" / "registry").mkdir(parents=True)
+    (stack / ".terraform" / "providers" / "registry" / "huge-binary").write_bytes(b"x" * 1024)
+    (stack / ".terraform.lock.hcl").write_text("# lock\n")
+    terraform = Terraform(guitar, settings, logger, stack_dir=stack, plugin_dir=None)
+    workdir = terraform.prepare()
+    try:
+        assert (workdir / "main.tf").is_file()
+        assert (workdir / ".terraform.lock.hcl").is_file()
+        assert (workdir / ".terraform" / "modules" / "modules.json").is_file()
+        assert (workdir / ".terraform" / "modules" / "network" / "main.tf").is_file()
+        assert not (workdir / ".terraform" / "providers").exists()
+    finally:
+        terraform.cleanup(failed=False)
 
 
 def test_prepare_writes_inputs_into_a_copy(
@@ -843,7 +919,7 @@ def test_databricks_account_tfvars(databricks: Project, settings: Settings) -> N
         "metastore_name": "jwall-engineering-us-east-1",
         "deployment_name": None,  # no prefix configured: Databricks picks the URL
         "admin_user_names": ["owner@example.com"],
-        "user_names": [],
+        "user_names": ["user@example.com"],  # the project file's users, not config.yaml
         "service_principal_application_id": settings.databricks.client_id,
         "account_id": settings.databricks.account_id,
     }
