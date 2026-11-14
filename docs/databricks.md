@@ -75,7 +75,10 @@ pointer back here.
    plan creates the metastore (owned by an account group holding the service
    principal and the metastore admins), audit log delivery to
    `jwall-engineering-databricks-audit-logs`, and the CI roles' access to the
-   secret and the event log.
+   secret and the event log. It also adds
+   `terraform_data.databricks_config_filled_in[0]`, the placeholder guard: its
+   preconditions fail the plan if a nil-UUID ID or an `@example.com`
+   metastore admin is still in config.yaml.
 7. **Deployment-name prefix (optional).** `databricks.deployment_name_prefix`
    is `null`, so Databricks picks each workspace URL. Databricks only accepts
    a deployment name once it has configured a prefix for the account. If it
@@ -244,9 +247,11 @@ between and after stages; if the account stack's state cannot be read it
 reports `DBX-DOC-001` and skips between and after; if the account stack has no
 outputs yet it skips those stages with a notice. It does not wait: the
 readiness checks (`DBX-BTW-001` to `003`) make one attempt each and report the
-current state, where `apply` would poll for up to `databricks.readiness_timeout`.
-`checks.json` is written either way. The exit code is 3 if any `error` check failed; warnings do not
-fail it. While `databricks.enabled` is false, the live checks SKIP.
+current state, where `apply` would poll for up to
+`databricks.readiness_timeout`.
+`checks.json` is written either way. The exit code is 3 if any `error` check
+failed; warnings do not fail it. While `databricks.enabled` is false, the live
+checks SKIP.
 
 ## Bucket and prefix layout
 
@@ -457,9 +462,12 @@ at the largest node type) can need more vCPUs than the account's *Running
 On-Demand Standard instances* quota. Request an increase, or lower
 `num_workers` in the policy. It compares the quota with the policy, not with
 current usage. The CI roles may read the quota (`servicequotas:GetServiceQuota`
-in the `databricks/read` policy, from library 0.19.0). It SKIPs when the role
-in use is refused that read (apply the foundation at 0.19.0 or later) or when
-the tool's build has no service-quotas API model.
+in the `databricks/read` policy, from library 0.19.0), and the Databricks plan
+and apply jobs run the CLI with `uv` from a checkout with all of botocore, so
+in CI the check reads the quota. It SKIPs when the role in use is refused that
+read (apply the foundation at 0.19.0 or later), or when the CLI runs from the
+container image, which prunes botocore's service models and does not keep
+service-quotas.
 
 ### NAT AMI
 

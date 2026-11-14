@@ -31,7 +31,8 @@ _PLACEHOLDER_HINT = "fill in config.yaml databricks.account_id/client_id (not th
 #: EC2 "Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances", in vCPUs.
 _STANDARD_VCPU_QUOTA = "L-1216C47A"
 #: The CI roles' databricks/read policy grants servicequotas:GetServiceQuota on this quota
-#: from library 0.19.0; a SKIP means the role in use lacks it or the SDK model is missing.
+#: from library 0.19.0; a SKIP means the role in use lacks it, or (from the image) the
+#: service-quotas model is missing.
 _QUOTA_DENIED = (
     "quota check needs servicequotas:GetServiceQuota: the role in use was refused it; the "
     "CI roles' databricks/read policy grants it from library 0.19.0, so apply the "
@@ -373,7 +374,10 @@ def vcpu_headroom(ctx: CheckContext) -> Iterable[CheckResult]:
             )["Quota"]["Value"]
         )
     except (UnknownServiceError, DataNotFoundError):
-        # The image prunes botocore's service models; service-quotas is not among them.
+        # Only the container image lacks the model: it prunes botocore's service models and
+        # service-quotas is not among those it keeps. The Databricks plan and apply jobs run
+        # the CLI with `uv` from a checkout (full botocore), so there the quota is read; this
+        # SKIP is the safety net for a run from the image.
         yield LIVE_008.skipped(_QUOTA_NO_MODEL, needed_vcpus=str(worst))
         return
     except ClientError as exc:
