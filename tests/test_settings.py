@@ -326,7 +326,7 @@ def test_databricks_section_parses(settings: Settings) -> None:
     section = settings.databricks
     assert section is not None
     assert section.enabled is False
-    assert section.has_placeholder_ids is True
+    assert section.has_placeholder_ids is False  # the real IDs are filled in
     assert section.secret_parameter == "/jwall-engineering/databricks/client-secret"
     assert section.metastore_name == "jwall-engineering-us-east-1"
     assert section.governance_project == "databricks-poc"
@@ -348,7 +348,7 @@ def test_databricks_section_parses(settings: Settings) -> None:
     assert poc.compute_policies == ("small-interactive", "jobs")
     assert poc.cost_center == "cc-0000"
     assert poc.vpc_cidr == "10.40.0.0/16"
-    assert poc.admins == ("owner@example.com",)
+    assert poc.admins == ("jimmy.wallace145@gmail.com",)
 
 
 def test_users_in_config_yaml_are_refused_with_the_migration_message(tmp_path: Path) -> None:
@@ -487,8 +487,12 @@ def test_an_enabled_section_with_real_values_loads(tmp_path: Path) -> None:
     assert section is not None and section.enabled and not section.has_placeholder_ids
 
 
-def test_the_placeholders_are_valid_while_disabled(settings: Settings) -> None:
-    section = settings.databricks
+def test_the_placeholders_are_valid_while_disabled(tmp_path: Path) -> None:
+    nil = "00000000-0000-0000-0000-000000000000"
+    raw = _enabled(
+        enabled=False, account_id=nil, client_id=nil, metastore_admins=["owner@example.com"]
+    )
+    section = _load_raw(tmp_path, raw).databricks
     assert section is not None and not section.enabled
     assert section.has_placeholder_ids
     assert any(e.endswith("@example.com") for e in section.metastore_admins)
