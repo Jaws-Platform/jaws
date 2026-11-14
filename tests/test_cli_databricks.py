@@ -118,6 +118,8 @@ def test_doctor_runs_all_read_only_stages(
     assert config_ctx.session is None and config_ctx.databricks is None
     assert live_ctx.session is not None and live_ctx.databricks is not None
     assert between_ctx.databricks is not None
+    # Doctor diagnoses the current state: no check polls (one attempt each).
+    assert {c.max_wait_seconds for _, c in recorded} == {0}
     assert seen[Stage.LIVE] is None
     assert seen[Stage.BETWEEN] == {"workspace_id": 42, "workspace_url": "u"}
     assert seen[Stage.AFTER] == seen[Stage.BETWEEN]

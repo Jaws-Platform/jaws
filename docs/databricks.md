@@ -169,13 +169,17 @@ stops the run with exit code 3.
    the Databricks network, credential and storage configurations, the
    workspace, the metastore assignment, and the workspace's account groups
    `<project>-workspace-admins` and `<project>-workspace-users`.
-4. **Readiness wait**: `DBX-BTW-*`. Polls every 15 seconds, each check for up
-   to `databricks.readiness_timeout` (20 minutes), until the workspace is
-   `RUNNING`, the workspace URL answers an authenticated call (connection
-   errors, 401/403, 429 and 5xx are retried), and the service principal is a
-   workspace admin (the assignment is listed and an admin-only read works);
-   then checks once that the metastore is assigned. A timeout fails with the
-   last state seen.
+4. **Readiness wait**: `DBX-BTW-*`. Polls every 15 seconds until the
+   workspace is `RUNNING` (`DBX-BTW-001`), the workspace URL answers an
+   authenticated call (`DBX-BTW-002`; connection errors, 401/403, 429 and 5xx
+   are retried), and the service principal is a workspace admin
+   (`DBX-BTW-003`; the assignment is listed and an admin-only read works);
+   then checks once that the metastore is assigned (`DBX-BTW-004`). The three
+   polling checks share **one** deadline, `databricks.readiness_timeout`
+   (20 minutes) for the whole stage, not one each, and `DBX-BTW-002` and
+   `DBX-BTW-003` are skipped ("the workspace never became ready") when
+   `DBX-BTW-001` did not pass, so a broken workspace holds the run for one
+   budget at most. A timeout fails with the last state seen.
 5. **Workspace stack**: planned again with the account's outputs, and applied.
    It creates the catalog bucket, the Unity Catalog role, the storage
    credential, the external location, the catalog (isolated, bound to this
@@ -235,8 +239,10 @@ workflow with the project and `action: doctor` (it changes nothing). It reports 
 credential cannot be loaded it reports `DBX-DOC-002` and skips the live,
 between and after stages; if the account stack's state cannot be read it
 reports `DBX-DOC-001` and skips between and after; if the account stack has no
-outputs yet it skips those stages with a notice. `checks.json` is written
-either way. The exit code is 3 if any `error` check failed; warnings do not
+outputs yet it skips those stages with a notice. It does not wait: the
+readiness checks (`DBX-BTW-001` to `003`) make one attempt each and report the
+current state, where `apply` would poll for up to `databricks.readiness_timeout`.
+`checks.json` is written either way. The exit code is 3 if any `error` check failed; warnings do not
 fail it. While `databricks.enabled` is false, the live checks SKIP.
 
 ## Bucket and prefix layout
@@ -462,17 +468,24 @@ prefix is set or the workspace is already ours.
 
 `DBX-BTW-001`, `DBX-BTW-002`. The workspace does not exist, is in a terminal
 state (the message gives Databricks' status text), was still provisioning
-after `databricks.readiness_timeout`, or its URL did not answer an
-authenticated call. The account stack stays applied. Fix the cause named,
-raise `readiness_timeout` if provisioning is just slow, and re-run `apply`; it
-waits again. See also [DBX-WORKSPACE-FAILED](#dbx-workspace-failed).
+when the readiness budget ran out, or its URL did not answer an
+authenticated call. `DBX-BTW-001` to `003` share one budget,
+`databricks.readiness_timeout`, for the whole stage, so a check that runs
+after a slow one gets only what is left; when `DBX-BTW-001` fails, `DBX-BTW-002`
+and `003` are skipped with "the workspace never became ready (DBX-BTW-001)":
+fix BTW-001 first. In `doctor` each makes a single attempt (it reports the
+current state and does not wait). The account stack stays applied. Fix the
+cause named, raise `readiness_timeout` if provisioning is just slow, and re-run
+`apply`; it waits again. See also [DBX-WORKSPACE-FAILED](#dbx-workspace-failed).
 
 ### Workspace admin
 
 `DBX-BTW-003`. The group `<project>-workspace-admins` does not hold ADMIN on
 the workspace, or does but the service principal cannot yet read admin
-settings (the assignment is not yet effective). Re-run `apply`; the account
-stack assigns the group after the metastore assignment.
+settings (the assignment is not yet effective) when the shared readiness
+budget ran out (in `doctor`: on its single attempt). Skipped when
+`DBX-BTW-001` failed. Re-run `apply`; the account stack assigns the group
+after the metastore assignment.
 
 ### Metastore assignment
 

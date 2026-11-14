@@ -8,7 +8,7 @@ Registered at import; `checks.load_builtin_checks()` imports this module.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from botocore.exceptions import BotoCoreError, ClientError, DataNotFoundError, UnknownServiceError
@@ -66,10 +66,12 @@ def _live(
     needs_ids: bool = False,
     stage: Stage = Stage.LIVE,
     workspace_level: bool = False,
+    requires: Mapping[str, str] | None = None,
 ) -> Callable[[CheckFn], CheckFn]:
     """Register a check (LIVE unless `stage` says otherwise; the BETWEEN and AFTER modules reuse
     this) that SKIPs until Databricks is enabled (and, with `needs_ids`,
-    until `account_id`/`client_id` are real)."""
+    until `account_id`/`client_id` are real). `requires` is the framework's: the check
+    SKIPs when one it depends on failed."""
 
     def wrap(fn: CheckFn) -> CheckFn:
         def guarded(ctx: CheckContext) -> Iterable[CheckResult]:
@@ -112,7 +114,9 @@ def _live(
             yield from results
 
         guarded.__doc__ = fn.__doc__
-        return check(meta.check_id, meta.title, stage, _DBX, meta.severity, meta.runbook)(guarded)
+        return check(meta.check_id, meta.title, stage, _DBX, meta.severity, meta.runbook, requires)(
+            guarded
+        )
 
     return wrap
 
