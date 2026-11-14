@@ -456,7 +456,10 @@ zone fail to start.
 at the largest node type) can need more vCPUs than the account's *Running
 On-Demand Standard instances* quota. Request an increase, or lower
 `num_workers` in the policy. It compares the quota with the policy, not with
-current usage.
+current usage. The CI roles may read the quota (`servicequotas:GetServiceQuota`
+in the `databricks/read` policy, from library 0.19.0). It SKIPs when the role
+in use is refused that read (apply the foundation at 0.19.0 or later) or when
+the tool's build has no service-quotas API model.
 
 ### NAT AMI
 
