@@ -380,6 +380,11 @@ def default_stack_dir(kind: str = "site") -> Path:
     return image if image.is_dir() else LOCAL_STACKS_ROOT / kind
 
 
+def _skip_provider_binaries(directory: str, names: list[str]) -> set[str]:
+    """copytree ignore: drop `.terraform/providers`, keep everything else."""
+    return {"providers"} if Path(directory).name == ".terraform" and "providers" in names else set()
+
+
 def _console_debug(logger: Logger) -> bool:
     """Whether a console handler (not the debug log file) shows debug records."""
     return any(
@@ -473,14 +478,15 @@ class Terraform:
             raise RunError(f"{self.stack_name} stack not found at {self.stack_dir}")
         self.check_version()
         self.workdir = Path(tempfile.mkdtemp(prefix="jwall-engineering-sites-"))
-        # A local `terraform init` leaves .terraform (provider binaries, hundreds of MB)
-        # in the stack directory; the copy re-initialises, so it never needs it.
+        # Keep .terraform/modules (the image vendors them so run-time init is offline),
+        # but not .terraform/providers: a local `terraform init` leaves hundreds of MB of
+        # provider binaries there, and init takes providers from the plugin mirror or cache.
         shutil.copytree(
             self.stack_dir,
             self.workdir,
             dirs_exist_ok=True,
             symlinks=True,
-            ignore=shutil.ignore_patterns(".terraform"),
+            ignore=_skip_provider_binaries,
         )
         tfvars = (
             self.tfvars_override

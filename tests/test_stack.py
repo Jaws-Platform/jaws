@@ -278,25 +278,33 @@ def test_a_failed_run_keeps_its_workdir_only_when_asked(
             shutil.rmtree(workdir)
 
 
-def test_prepare_does_not_copy_a_local_terraform_directory(
+def test_prepare_copies_vendored_modules_but_not_provider_binaries(
     guitar: Site,
     settings: Settings,
     logger: logging.Logger,
     fake_terraform: Path,
     tmp_path: Path,
 ) -> None:
+    """The image keeps each stack's .terraform/modules so run-time init is offline;
+    a local init leaves .terraform/providers (hundreds of MB), which init never reads
+    from the copy (providers come from the plugin mirror or the cache)."""
     stack = tmp_path / "stack"
     stack.mkdir()
     (stack / "main.tf").write_text("# stack\n")
-    (stack / ".terraform" / "providers").mkdir(parents=True)
-    (stack / ".terraform" / "providers" / "huge-binary").write_bytes(b"x" * 1024)
+    (stack / ".terraform" / "modules" / "network").mkdir(parents=True)
+    (stack / ".terraform" / "modules" / "modules.json").write_text("{}\n")
+    (stack / ".terraform" / "modules" / "network" / "main.tf").write_text("# module\n")
+    (stack / ".terraform" / "providers" / "registry").mkdir(parents=True)
+    (stack / ".terraform" / "providers" / "registry" / "huge-binary").write_bytes(b"x" * 1024)
     (stack / ".terraform.lock.hcl").write_text("# lock\n")
     terraform = Terraform(guitar, settings, logger, stack_dir=stack, plugin_dir=None)
     workdir = terraform.prepare()
     try:
         assert (workdir / "main.tf").is_file()
         assert (workdir / ".terraform.lock.hcl").is_file()
-        assert not (workdir / ".terraform").exists()
+        assert (workdir / ".terraform" / "modules" / "modules.json").is_file()
+        assert (workdir / ".terraform" / "modules" / "network" / "main.tf").is_file()
+        assert not (workdir / ".terraform" / "providers").exists()
     finally:
         terraform.cleanup(failed=False)
 
