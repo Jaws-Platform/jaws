@@ -117,3 +117,13 @@ variable "account_id" {
   description = "Databricks account ID (databricks.account_id in config.yaml), also the cross-account role's external ID. The provider reads the same ID from DATABRICKS_ACCOUNT_ID."
   type        = string
 }
+
+variable "read_only_datasets" {
+  description = "Shared datasets the workspace consumes, by share name: bucket, prefix and the share role the foundation registers them with (config.yaml `projects.<producer>.datasets.<bucket>.databricks_share` listing this project). Passed to the workspace module's S3 endpoint policy."
+  type = map(object({
+    bucket   = string
+    prefix   = string
+    role_arn = string
+  }))
+  default = {}
+}

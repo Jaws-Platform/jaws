@@ -181,6 +181,24 @@ def _retention_problems(dataset: Dataset, retention: DatasetRetention) -> list[s
             f"{where}: versioning {dataset.versioning} must equal the "
             f"{retention.versioning} approved in config.yaml"
         )
+    # No consumers means the producer has not consented yet: config.yaml may
+    # already approve the share (the foundation registers it), but the share
+    # role is not a reader, so nothing can read. Once the producer lists
+    # consumers they must be exactly the approved ones: the one role reads for
+    # every consumer, so a subset would still let the others in.
+    share = retention.databricks_share
+    approved_consumers = share.consumers if share else ()
+    if dataset.consumers and dataset.consumers != approved_consumers:
+        problems.append(
+            f"{where}: consumers {list(dataset.consumers)} must equal the "
+            f"{list(approved_consumers)} approved in config.yaml "
+            "(databricks_share.consumers), or be empty to share with nobody yet"
+        )
+    if dataset.consumers and share is not None and dataset.prefix != share.prefix:
+        problems.append(
+            f"{where}: prefix {dataset.prefix!r} must equal the {share.prefix!r} that "
+            "config.yaml shares (databricks_share.prefix)"
+        )
     if retention.write_once and "task-runner" in dataset.writers:
         problems.append(
             f"{where}: writers: [task-runner] grants PutObject on the whole prefix, which "

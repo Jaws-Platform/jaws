@@ -91,4 +91,8 @@ module "workspace" {
   admin_user_names                 = var.admin_user_names
   user_names                       = var.user_names
   service_principal_application_id = var.service_principal_application_id
+
+  # Shared datasets this workspace consumes (config.yaml databricks_share):
+  # each lets its share role through the S3 endpoint, read-only.
+  read_only_datasets = var.read_only_datasets
 }

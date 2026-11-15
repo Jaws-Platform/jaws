@@ -16,7 +16,7 @@ parts the first live apply must confirm are listed under
 Contents: [setup](#one-time-setup), [onboarding a project](#onboarding-a-project),
 [the project file](#the-project-file), [plan](#what-plan-shows),
 [apply](#what-apply-does), [destroy](#destroy), [doctor](#doctor),
-[layout](#bucket-and-prefix-layout), [tags](#tags-on-every-resource),
+[shared datasets](#shared-datasets), [layout](#bucket-and-prefix-layout), [tags](#tags-on-every-resource),
 [compute policies](#central-compute-policies), [costs](#costs),
 [known gaps](#known-gaps), [runbook](#runbook).
 
@@ -278,6 +278,72 @@ current state, where `apply` would poll for up to
 failed; warnings do not fail it. While `databricks.enabled` is false, the live
 checks SKIP.
 
+## Shared datasets
+
+A dataset bucket (a `dataset` component of another project) can be read,
+read-only, by any number of Databricks workspace projects. Unity Catalog
+refuses overlapping external locations in a metastore, and every workspace
+shares one, so a dataset prefix is registered **once**, by the foundation, and
+every consumer is bound to that one location.
+
+```yaml
+# config.yaml, on the producer's approved dataset (reviewed here)
+projects:
+  rusty-chess:
+    datasets:
+      jwall-engineering-rusty-chess-nnue:
+        databricks_share:
+          prefix: data/
+          consumers: [braveheart]
+```
+
+```yaml
+# the producer's jwall-engineering-sites.yaml (its consent)
+  - kind: dataset
+    name: nnue
+    bucket: jwall-engineering-rusty-chess-nnue
+    prefix: data/
+    consumers: [braveheart]
+```
+
+- **The host.** The foundation owns `jwall-engineering-shared`, a serverless
+  workspace with no VPC, NAT, buckets, catalog or users; only the metastore
+  admin group is assigned to it. Shared objects are created through it, so no
+  project owns them. It has no standing AWS cost.
+- **What the foundation creates per share** (`databricks-shared-dataset`): the
+  share role `jwall-engineering-<bucket without the organization>-databricks-share`
+  (for example `jwall-engineering-rusty-chess-nnue-databricks-share`), a
+  read-only storage credential, and one read-only external location
+  `jwall-engineering-<name>` at `s3://<bucket>/<prefix>`, bound to the host and
+  to each consumer, with `READ_FILES` for `<consumer>-workspace-users`. The
+  metastore admin group owns them.
+- **Who grants access.** The share role has no S3 read permission of its own.
+  It reads only because the producer's bucket policy names it as a reader: the
+  CLI adds it to the dataset's `readers` once the producer's file lists the
+  consumers. Removing `consumers` from the producer's file revokes every
+  consumer at once.
+- **The consumer's endpoint.** Each consumer's account stack passes the share
+  to its workspace's S3 endpoint policy (`read_only_datasets`): only the
+  share role, only read actions, only under the prefix.
+- **Checks.** config.yaml refuses a consumer that is not a Databricks workspace
+  project, a repeated consumer and a malformed prefix. The producer's
+  `consumers` must be empty (not shared yet) or exactly the approved ones, with
+  the approved prefix: one role reads for every consumer, so a subset would
+  still let the others in.
+
+**Order.** A consumer's workspace must exist before a share names it (the
+foundation looks up `<consumer>-prod` and its plan fails with a message naming
+the missing one). Then: a pull request here approves the share; its release
+registers the location (reads are still denied); the producer lists
+`consumers` and its release (or a bot apply) adds the reader; each consumer's
+**Databricks apply** adds the endpoint statement. Consumers read
+`s3://<bucket>/<prefix>` with `spark.read`, `dbutils.fs.ls` or a volume an
+admin creates on the location.
+
+**Rebuilding the foundation from nothing** takes two applies: the host first,
+with no `databricks_share` in config.yaml (the shared datasets' provider needs
+the host's URL), then the shares.
+
 ## Bucket and prefix layout
 
 | Bucket | Prefix | Holds |
@@ -381,6 +447,9 @@ larger Arm instance type if egress needs grow.
   the catalog bucket's policy or the role's trust policy. The policies deny
   object reads and writes to them, but not their own reconfiguration.
 - **To confirm on the first live apply:**
+  - that a shared dataset's location, created through the serverless host, can be
+    bound to classic consumer workspaces, and that consumers read through it while
+    its storage credential is bound to the host only;
   - metastore auto-assignment: whether Databricks assigns the new workspace to
     the region's metastore itself, so `databricks_metastore_assignment` fails
     "already assigned" (see [DBX-METASTORE-ALREADY-ASSIGNED](#dbx-metastore-already-assigned));
