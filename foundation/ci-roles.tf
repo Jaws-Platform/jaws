@@ -36,7 +36,7 @@ locals {
       hosted_zone_arn  = module.zone.arn
     }
 
-    # The sites CLI image this repo publishes on release.
+    # The infra CLI image this repo publishes on release.
     ecr = {
       repository_arn = local.sites_image_repository_arn
     }

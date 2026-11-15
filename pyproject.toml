@@ -4,7 +4,7 @@ name = "jwall-engineering-sites"
 # Release Please. Keeping it out of pyproject.toml keeps it out of uv.lock, so
 # a release PR does not invalidate the lock.
 dynamic = ["version"]
-description = "Provisions and publishes the jwall.engineering sites from one YAML file per site, wrapping Terraform and S3."
+description = "Provisions jwall.engineering infrastructure (sites, bots, research projects and Databricks workspaces) with Terraform, from one YAML file per project."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.13"

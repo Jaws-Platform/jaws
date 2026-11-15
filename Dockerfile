@@ -1,4 +1,4 @@
-# jwall-engineering-sites: the CLI, a pinned Terraform, the site and bot stacks
+# jwall-engineering-sites (JWall Engineering Infra): the CLI, a pinned Terraform, the site and bot stacks
 # with their modules and providers vendored, and config.yaml. Only the S3 backend touches
 # the network at run time.
 #
@@ -76,7 +76,7 @@ FROM python:${PYTHON_VERSION}-alpine
 ARG TERRAFORM_VERSION
 LABEL org.opencontainers.image.title="jwall-engineering-sites" \
       org.opencontainers.image.source="https://github.com/jwallace145/jwall-engineering-infra" \
-      org.opencontainers.image.description="Provisions and publishes the jwall.engineering sites" \
+      org.opencontainers.image.description="Provisions jwall.engineering infrastructure (sites, bots, research projects and Databricks workspaces) with Terraform" \
       terraform.version="${TERRAFORM_VERSION}"
 # No git at run time: the library modules are already in the image. No pip
 # either: the virtual environment is complete and nothing installs at run time.
