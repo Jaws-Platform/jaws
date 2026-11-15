@@ -406,7 +406,8 @@ jobs:
       matrix:
         # One entry per bot in foundation/bots.tf (a test keeps them in sync).
         include:
-          - { project: rusty-chess, repository: jwallace145/braveheart }
+          - { project: rusty-chess, repository: Braveheart-Chess/braveheart }
+          - { project: braveheart, repository: Braveheart-Chess/braveheart }
     steps:
       - uses: actions/checkout@v7
       - name: Check out the bot's project file (its default branch)
@@ -435,15 +436,36 @@ jobs:
           organization=$(yq -r .context.organization config.yaml)
           [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" && "$organization" != null ]] || { echo "::error::config.yaml has no aws.account_id or context.organization"; exit 1; }
           echo "arn=arn:aws:iam::${account}:role/${organization}-${PROJECT}-ci-plan" >> "$GITHUB_OUTPUT"
+      # Two registry entries can share one repository while a project is being
+      # renamed, and its file names only one of them. The other entry's plan is
+      # skipped, loudly: its stack is applied from another ref (Bot apply, consumer-ref).
+      - name: Skip the plan when the project file names another project
+        id: file
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: |
+          named=$(yq -r .project .consumer/jwall-engineering-sites.yaml)
+          if [ "$named" = "$PROJECT" ]; then
+            echo "matches=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "matches=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::the project file names '$named', not '$PROJECT'; the bot plan for $PROJECT is skipped"
+          {
+            echo "## Bot plan skipped"
+            echo
+            echo "The project file on the repository's default branch names \`$named\`, not \`$PROJECT\`."
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: aws-actions/configure-aws-credentials@v6
         id: assume
+        if: steps.file.outputs.matches == 'true'
         continue-on-error: true # the role does not exist until the foundation apply
         with:
           role-to-assume: ${{ steps.role.outputs.arn }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: gha-bot-plan-${{ matrix.project }}-pr-${{ github.event.pull_request.number }}
       - name: Skip the plan until the bot's roles exist
-        if: steps.assume.outcome != 'success'
+        if: steps.file.outputs.matches == 'true' && steps.assume.outcome != 'success'
         env:
           ROLE: ${{ steps.role.outputs.arn }}
         run: |

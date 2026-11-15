@@ -98,11 +98,19 @@ projects:
     instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge, g6.xlarge, g6.2xlarge, g6e.xlarge]
     task_profiles: [cpu, gpu, sprt, match, datagen, relabel]
     datasets:
-      # No `databricks_share` yet: the dataset is shared with the
-      # braveheart-databricks workspace (docs/databricks.md, "Shared datasets")
-      # once the workspace is rebuilt under that name.
       jwall-engineering-rusty-chess-nnue: {}
     # max_run_cost_usd: 80 # optional per-project override of tasks.max_run_cost_usd
+  braveheart:
+    # The chess engine under its new name: the same guardrails as rusty-chess,
+    # which leaves this file once its data is copied to the buckets below and
+    # its stack is destroyed.
+    instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge, g6.xlarge, g6.2xlarge, g6e.xlarge]
+    task_profiles: [cpu, gpu, sprt, match, datagen, relabel]
+    datasets:
+      # No `databricks_share` yet: the dataset is shared with the
+      # braveheart-databricks workspace (docs/databricks.md, "Shared datasets")
+      # once the data is here.
+      jwall-engineering-braveheart-nnue: {}
   databricks-poc:
     # A Databricks workspace project. `vpc_cidr` is allocated here so IP capacity is
     # central (/16 to /20; no overlap with another project or the bot VPC 10.0.0.0/16).

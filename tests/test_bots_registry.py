@@ -11,13 +11,21 @@ from tests.conftest import FIXTURES, REPO_ROOT
 
 BOTS_TF = REPO_ROOT / "foundation" / "bots.tf"
 _ENTRY = re.compile(
-    r'^\s+([a-z0-9-]+)\s*=\s*\{\s*repository\s*=\s*"([^"]+)",\s*repository_id\s*=\s*"(\d+)"\s*\}',
+    r'^\s+([a-z0-9-]+)\s*=\s*\{\s*repository\s*=\s*"([^"]+)",\s*repository_id\s*=\s*"(\d+)"'
+    r'(?:,\s*owner_id\s*=\s*"(\d+)")?\s*\}',
     re.MULTILINE,
 )
+#: The Braveheart-Chess organisation: gh api orgs/Braveheart-Chess --jq .id
+BRAVEHEART_CHESS = "356866252"
 
 
 def registry() -> dict[str, tuple[str, str]]:
     return {m[0]: (m[1], m[2]) for m in _ENTRY.findall(BOTS_TF.read_text())}
+
+
+def owners() -> dict[str, str]:
+    """Each registered project's `owner_id`, "" when it has none (this account's)."""
+    return {m[0]: m[3] for m in _ENTRY.findall(BOTS_TF.read_text())}
 
 
 def project_file(project: str) -> dict[str, Any]:
@@ -30,8 +38,58 @@ def project_file(project: str) -> dict[str, Any]:
     return raw
 
 
-def test_registry_lists_rusty_chess() -> None:
-    assert registry()["rusty-chess"] == ("jwallace145/braveheart", "1435162673")
+def test_registry_lists_the_engine_under_both_names() -> None:
+    # One repository, two projects, while rusty-chess is renamed to braveheart.
+    assert registry()["rusty-chess"] == ("Braveheart-Chess/braveheart", "1435162673")
+    assert registry()["braveheart"] == ("Braveheart-Chess/braveheart", "1435162673")
+
+
+def test_a_repository_outside_this_account_names_its_owner() -> None:
+    """The release and task roles trust `repo:<owner>@<owner_id>/...`: a repository
+    in an organisation is refused unless its entry carries the organisation's ID."""
+    assert owners()["rusty-chess"] == owners()["braveheart"] == BRAVEHEART_CHESS
+    for project, (repository, _) in registry().items():
+        outside = not repository.startswith("jwallace145/")
+        assert bool(owners()[project]) == outside, project
+    text = BOTS_TF.read_text()
+    release, task = _module("bot_ci_release"), _module("bot_ci_task")
+    assert "owner_id          = try(each.value.owner_id, local.github_owner_id)" in release
+    assert "owner_id          = try(local.bots[each.key].owner_id, local.github_owner_id)" in task
+    # The plan and apply roles are assumed from this repository, whoever owns the bot's.
+    for name in ("bot_ci_plan", "bot_ci_apply"):
+        assert "owner_id          = local.github.owner_id" in _module(name)
+    assert text.count("owner_id =") == len(registry())
+
+
+def test_bot_apply_reads_the_project_file_from_a_ref_and_refuses_another_project() -> None:
+    apply: dict[Any, Any] = _yaml(".github/workflows/bot-apply.yml")
+    ref = apply[True]["workflow_dispatch"]["inputs"]["consumer-ref"]
+    assert ref["required"] is False and ref["default"] == ""
+    steps = apply["jobs"]["apply"]["steps"]
+    checkout = next(s for s in steps if s.get("with", {}).get("path") == ".consumer")
+    assert checkout["with"]["ref"] == "${{ inputs.consumer-ref }}"
+    names = [s.get("name", "") for s in steps]
+    refuse = names.index("Refuse a project file that names another project")
+    run = next(
+        i for i, s in enumerate(steps) if "uv run jwall-engineering-sites" in s.get("run", "")
+    )
+    assert refuse < run
+    assert "exit 1" in steps[refuse]["run"]
+
+
+def test_bot_plan_skips_an_entry_the_project_file_does_not_name() -> None:
+    ci: dict[Any, Any] = _yaml(".github/workflows/ci.yml")
+    steps = ci["jobs"]["bot-plan"]["steps"]
+    by_id = {s["id"]: s for s in steps if "id" in s}
+    assert "matches=false" in by_id["file"]["run"] and "::warning::" in by_id["file"]["run"]
+    assert by_id["assume"]["if"] == "steps.file.outputs.matches == 'true'"
+    ids = [s.get("id") for s in steps]
+    assert ids.index("file") < ids.index("assume")
+    # A skipped assume is not "the roles do not exist yet".
+    notice = next(s for s in steps if s.get("name") == "Skip the plan until the bot's roles exist")
+    assert notice["if"] == (
+        "steps.file.outputs.matches == 'true' && steps.assume.outcome != 'success'"
+    )
 
 
 def test_registry_matches_each_projects_file() -> None:
@@ -120,7 +178,8 @@ def test_bot_plan_runs_without_a_variable_and_skips_until_roles_exist() -> None:
     assert "if" not in job, "no repository variable gates the job any more"
     steps = {s.get("id"): s for s in job["steps"] if "id" in s}
     assert steps["assume"]["continue-on-error"] is True
-    gated = [s for s in job["steps"] if "jwall-engineering-sites" in str(s.get("run", ""))]
+    # The steps that run the CLI (not the one that only reads the project file's name).
+    gated = [s for s in job["steps"] if "uv run jwall-engineering-sites" in str(s.get("run", ""))]
     assert gated and all("steps.assume.outcome == 'success'" in s["if"] for s in gated)
 
 

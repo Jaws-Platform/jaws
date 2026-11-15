@@ -340,7 +340,15 @@ release role ([docs/research-projects.md](docs/research-projects.md)):
 
 | Key | Repository |
 | --- | --- |
-| `rusty-chess` | `jwallace145/braveheart` |
+| `rusty-chess` | `Braveheart-Chess/braveheart` |
+| `braveheart` | `Braveheart-Chess/braveheart` |
+
+`rusty-chess` and `braveheart` are one repository under its old and new project
+name. Both are registered while the project is renamed; `rusty-chess` is
+removed once its data is copied and its stack is destroyed. An entry for a
+repository outside this account also carries `owner_id`, the numeric ID of the
+organisation that owns it, because the release and task roles trust GitHub's
+`repo:<owner>@<owner_id>/<name>@<repository_id>` subject.
 
 Each entry gets three roles (two for a research project), and a fourth when
 the project lists `instance_types` under `projects` in `config.yaml` (a
