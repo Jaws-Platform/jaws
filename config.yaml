@@ -16,7 +16,7 @@ terraform:
 
 library:
   source: jwallace145/jwall-engineering/aws
-  version: 0.19.2 # the one module pin the whole fleet shares (sites and bots)
+  version: 0.20.0 # the one module pin the whole fleet shares (sites and bots)
 
 state:
   bucket: jwall-engineering-tfstate
@@ -123,9 +123,6 @@ databricks:
   metastore_name: jwall-engineering-us-east-1
   # The service principal is always added too (by client_id), so list people only.
   metastore_admins: [jimmy.wallace145@gmail.com]
-  # The project whose workspace enables the metastore-wide system schemas (the foundation
-  # owns the metastore itself); it needs its projects.<name>.databricks entry above.
-  governance_project: databricks-poc
   # Pinned Amazon Linux 2023 arm64 image for the NAT instance, by its Amazon image name.
   nat_ami: al2023-ami-2023.12.20261026.1-kernel-6.18-arm64
   # Set to the prefix Databricks configured for this account to get <prefix>-<project>

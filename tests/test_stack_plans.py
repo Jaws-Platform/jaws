@@ -49,8 +49,6 @@ def test_the_databricks_cases_plan_both_stacks_of_one_project() -> None:
     account = rendered["databricks-account"]["databricks_poc"]
     workspace = rendered["databricks-workspace"]["databricks_poc"]
     assert account["project"] == workspace["project"] == "databricks-poc"
-    # The governance project: the workspace stack's plan enables system schemas.
-    assert workspace["governance_project"] == workspace["project"]
 
 
 def test_no_test_file_sits_in_a_stack_the_image_copies() -> None:

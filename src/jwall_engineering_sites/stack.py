@@ -336,7 +336,6 @@ def _databricks_workspace_tfvars(
         **{key: account_outputs[key] for key in _ACCOUNT_OUTPUTS},
         "compute_policies": policies,
         "fixed_tags": tags,
-        "governance_project": section.governance_project,
         "apply_role_arn": f"arn:aws:iam::{account}:role/{project.role_name('apply')}",
         "management_role_arns": [f"arn:aws:iam::{account}:role/{project.role_name('plan')}"],
         "catalog_tags": {"Project": tags["Project"], "Owner": tags["Owner"]},

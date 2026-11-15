@@ -55,25 +55,7 @@ run "plans_the_catalog_and_workspace_config" {
   command = plan
 
   assert {
-    condition     = var.project == var.governance_project
-    error_message = "the sample is the governance project, so the plan covers the system schemas"
-  }
-
-  assert {
     condition     = toset(keys(var.compute_policies)) == toset(["jobs", "small-interactive"])
     error_message = "the project's two compute policies reach the module"
-  }
-}
-
-run "plans_a_workspace_that_is_not_the_governance_one" {
-  command = plan
-
-  variables {
-    governance_project = "another-project"
-  }
-
-  assert {
-    condition     = var.project != var.governance_project
-    error_message = "another project's workspace leaves the system schemas alone"
   }
 }

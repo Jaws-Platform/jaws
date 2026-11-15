@@ -98,7 +98,7 @@ resource "terraform_data" "databricks_config_filled_in" {
 module "databricks_metastore" {
   count     = local.databricks_enabled ? 1 : 0
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-metastore"
-  version   = "0.19.2"
+  version   = "0.20.0"
   providers = { databricks = databricks.account }
 
   name                             = local.databricks.metastore_name
@@ -109,7 +109,7 @@ module "databricks_metastore" {
 module "databricks_audit_logs" {
   count     = local.databricks_enabled ? 1 : 0
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-audit-logs"
-  version   = "0.19.2"
+  version   = "0.20.0"
   providers = { aws = aws, databricks = databricks.account }
 
   account_id  = local.databricks.account_id
@@ -119,7 +119,7 @@ module "databricks_audit_logs" {
 module "databricks_ci_plan" {
   for_each = local.databricks_projects
   source   = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version  = "0.19.2"
+  version  = "0.20.0"
 
   project           = each.key
   repository        = local.context.repository
@@ -138,7 +138,7 @@ module "databricks_ci_plan" {
 module "databricks_ci_apply" {
   for_each = local.databricks_projects
   source   = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version  = "0.19.2"
+  version  = "0.20.0"
 
   project           = each.key
   repository        = local.context.repository
