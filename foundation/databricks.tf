@@ -139,6 +139,78 @@ module "databricks_shared_host" {
   })
 }
 
+# ------------------------------------------------------- shared datasets
+
+# Dataset buckets shared, read-only, with Databricks workspace projects
+# (config.yaml projects.<producer>.datasets.<bucket>.databricks_share). Each gets
+# one read-only external location, registered once through the host and bound
+# to every consumer: Unity Catalog refuses overlapping locations in a
+# metastore. The share role reads only because the producer's bucket policy
+# names it as a reader (the CLI adds it to the producer's readers), so the
+# project that owns the data grants access. Names match settings.py
+# (share_name, share_role_name).
+locals {
+  databricks_shares = local.databricks_enabled ? {
+    for share in flatten([
+      for producer, guardrails in local.tool_config.projects : [
+        for bucket, retention in try(guardrails.datasets, {}) : {
+          name      = trimprefix(bucket, "${local.context.organization}-")
+          producer  = producer
+          bucket    = bucket
+          prefix    = retention.databricks_share.prefix
+          consumers = sort(retention.databricks_share.consumers)
+        } if try(retention.databricks_share, null) != null
+      ]
+    ]) : share.name => share
+  } : {}
+
+  # Workspaces are named <project>-<environment>, environment prod.
+  databricks_share_consumers = distinct(flatten([for s in values(local.databricks_shares) : s.consumers]))
+}
+
+data "databricks_mws_workspaces" "all" {
+  count    = length(local.databricks_shares) > 0 ? 1 : 0
+  provider = databricks.account
+}
+
+# A consumer must exist before a share names it: its workspace ID is looked up
+# by name, and binding to a workspace that does not exist would fail anyway.
+resource "terraform_data" "databricks_share_consumers_exist" {
+  count = length(local.databricks_shares) > 0 ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition = alltrue([
+        for c in local.databricks_share_consumers : contains(keys(data.databricks_mws_workspaces.all[0].ids), "${c}-prod")
+      ])
+      error_message = "A databricks_share consumer has no workspace yet: ${join(", ", [for c in local.databricks_share_consumers : c if !contains(keys(data.databricks_mws_workspaces.all[0].ids), "${c}-prod")])}. Run the Databricks apply for it first, then this release."
+    }
+  }
+}
+
+module "databricks_shared_dataset" {
+  for_each  = local.databricks_shares
+  source    = "jwallace145/jwall-engineering/aws//modules/databricks-shared-dataset"
+  version   = "0.21.0"
+  providers = { aws = aws, databricks = databricks.shared }
+
+  name_root         = local.context.organization
+  name              = each.key
+  bucket            = each.value.bucket
+  prefix            = each.value.prefix
+  host_workspace_id = module.databricks_shared_host[0].workspace_id
+  owner_group_name  = module.databricks_metastore[0].admin_group_name
+
+  consumers = {
+    for c in each.value.consumers : c => {
+      workspace_id     = data.databricks_mws_workspaces.all[0].ids["${c}-prod"]
+      users_group_name = "${c}-workspace-users"
+    }
+  }
+
+  depends_on = [terraform_data.databricks_share_consumers_exist]
+}
+
 module "databricks_ci_plan" {
   for_each = local.databricks_projects
   source   = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"

@@ -75,3 +75,14 @@ output "databricks_shared_host" {
     workspace_url = module.databricks_shared_host[0].workspace_url
   } : null
 }
+
+output "databricks_shared_datasets" {
+  description = "Each shared dataset's external location, URL and share role, by share name."
+  value = {
+    for name, m in module.databricks_shared_dataset : name => {
+      external_location = m.external_location_name
+      url               = m.url
+      role_arn          = m.role_arn
+    }
+  }
+}

@@ -877,6 +877,7 @@ ACCOUNT_TFVARS_KEYS = {
     "user_names",
     "service_principal_application_id",
     "account_id",
+    "read_only_datasets",
 }
 
 WORKSPACE_TFVARS_KEYS = {
@@ -921,6 +922,7 @@ def test_databricks_account_tfvars(databricks: Project, settings: Settings) -> N
         "user_names": ["user@example.com"],  # the project file's users, not config.yaml
         "service_principal_application_id": settings.databricks.client_id,
         "account_id": settings.databricks.account_id,
+        "read_only_datasets": {},  # databricks-poc consumes no shared dataset
     }
     assert tfvars["tags"]["CostCenter"] == "cc-0000"
     assert tfvars["tags"]["Workspace"] == "databricks-poc-prod"

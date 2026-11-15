@@ -354,6 +354,11 @@ class Dataset(_Model):
     #: Sub-prefixes of `prefix` whose objects expire, by days. Must equal the
     #: values config.yaml approves for the bucket.
     expire_prefixes: dict[str, int] = {}
+    #: Databricks workspace projects that may read the prefix, read-only, through
+    #: one shared Unity Catalog location the foundation registers. Must equal
+    #: `databricks_share.consumers` approved in config.yaml for the bucket; the
+    #: share's role is then added to the bucket policy's readers.
+    consumers: tuple[str, ...] = ()
 
     @field_validator("expire_prefixes")
     @classmethod
@@ -388,6 +393,17 @@ class Dataset(_Model):
                 "and '-', ending in '/' and without a leading '/', e.g. data/"
             )
         return value
+
+    @field_validator("consumers")
+    @classmethod
+    def _consumers(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for name in value:
+            if not re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", name):
+                raise ValueError(f"consumers: {name!r} is not a kebab-case project name")
+        repeated = sorted({c for c in value if value.count(c) > 1})
+        if repeated:
+            raise ValueError(f"consumers must not repeat a project: {', '.join(repeated)}")
+        return tuple(sorted(value))
 
     @field_validator("readers")
     @classmethod

@@ -26,6 +26,7 @@ components:
     # versioning: true                         # optional; config.yaml must approve it
     # expire_noncurrent_days: 90               # optional; needs versioning; config.yaml must approve it
     # expire_prefixes: { tmp/: 30 }            # optional; sub-prefix -> days; config.yaml must approve it
+    # consumers: [braveheart]                # optional: Databricks workspaces that may read it; config.yaml must approve it
 ```
 
 | Field | Meaning |
@@ -38,6 +39,7 @@ components:
 | `transition_days` | Days before objects move to S3 Intelligent-Tiering. The default is 0, which means at the next daily lifecycle run. |
 | `versioning` | Keep prior versions of overwritten or deleted objects. The default is `false`. |
 | `expire_noncurrent_days` | Days before noncurrent versions expire. Needs `versioning: true`. |
+| `consumers` | Databricks workspace projects that may read the prefix, read-only, through one shared Unity Catalog location ([Shared datasets](databricks.md#shared-datasets)). Must equal `databricks_share.consumers` approved for the bucket in `config.yaml`, or be left out to share with nobody yet. Listing them adds the share role to `readers`. |
 | `expire_prefixes` | Sub-prefixes of `prefix` whose current objects expire, in days, such as `{tmp/: 30}`. |
 
 `versioning`, `expire_noncurrent_days` and `expire_prefixes` must equal what
