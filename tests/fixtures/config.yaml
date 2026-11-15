@@ -107,7 +107,7 @@ projects:
           prefix: data/
           consumers: [braveheart-databricks]
     # max_run_cost_usd: 80 # optional per-project override of tasks.max_run_cost_usd
-  braveheart-lichess-bot:
+  braveheart-bot:
     # Braveheart's Lichess bot (Braveheart-Chess/braveheart-lichess-bot): a container
     # image and a lichess-bot only, running a pinned release of the engine's
     # repository. No task runner and no datasets, so nothing to allow here.
