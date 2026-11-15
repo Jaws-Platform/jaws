@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.30.0...v0.30.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* **bots:** register the Lichess bot as braveheart-bot so its apply policy fits IAM's size limit ([#141](https://github.com/jwallace145/jwall-engineering-infra/issues/141)) ([cf1d0eb](https://github.com/jwallace145/jwall-engineering-infra/commit/cf1d0eb4f147c0043d0a4bce4d41bb14871b7111))
+
 ## [0.30.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.29.0...v0.30.0) (2026-11-15)
 
 
