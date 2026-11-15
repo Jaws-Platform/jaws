@@ -7,11 +7,16 @@ Usage Report to parse and nothing to deploy: the command is read-only and
 runs from the owner's shell.
 
 ```sh
-jwall-engineering-sites cost report --project rusty-chess   # one project, by component
-jwall-engineering-sites cost report --project rusty-chess --by profile  # task spend by profile, not workflow
+jwall-engineering-sites cost report --project braveheart   # one project, by component
+jwall-engineering-sites cost report --project braveheart --by profile  # task spend by profile, not workflow
 jwall-engineering-sites cost report                         # every project, then the untagged spend
 jwall-engineering-sites cost report --months 6              # 1-13 calendar months, this one included (default 3)
 ```
+
+Cost Explorer groups by the `Project` tag as it was when the money was spent.
+The chess engine's project was `rusty-chess` until 2026-11-15, so its spend
+before then is under `--project rusty-chess` and its spend since is under
+`--project braveheart`; neither report shows the other's months.
 
 ## What it shows
 
@@ -23,7 +28,7 @@ instead (`cpu`, `gpu`, `train`, ...). `--by workflow` is the default, and
 `--by` needs `--project`. A research project reports the same way.
 
 ```text
-rusty-chess by component  2026-08  2026-09  2026-10*
+braveheart by component   2026-08  2026-09  2026-10*
 task-runner: Datagen            —   $22.00    $41.30
 task-runner: SPRT          $18.20   $25.10    $30.40
 task-runner: Train              —    $1.80    $14.60

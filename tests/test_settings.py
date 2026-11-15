@@ -176,8 +176,8 @@ def test_task_limits_and_default_ceiling(settings: Settings) -> None:
     assert settings.tasks.max_run_cost_usd == 50
 
 
-def test_rusty_chess_guardrails_match_the_previous_lists(settings: Settings) -> None:
-    guardrails = settings.projects["rusty-chess"]
+def test_braveheart_guardrails_match_the_previous_lists(settings: Settings) -> None:
+    guardrails = settings.projects["braveheart"]
     assert guardrails.instance_types == (
         "c8a.xlarge",
         "c8a.8xlarge",
@@ -187,8 +187,8 @@ def test_rusty_chess_guardrails_match_the_previous_lists(settings: Settings) -> 
         "g6e.xlarge",
     )
     assert guardrails.task_profiles == ("cpu", "gpu", "sprt", "match", "datagen", "relabel")
-    assert list(guardrails.datasets) == ["jwall-engineering-rusty-chess-nnue"]
-    retention = guardrails.datasets["jwall-engineering-rusty-chess-nnue"]
+    assert list(guardrails.datasets) == ["jwall-engineering-braveheart-nnue"]
+    retention = guardrails.datasets["jwall-engineering-braveheart-nnue"]
     assert retention.write_once == ()
     assert retention.expire_prefixes == {}
     assert retention.expire_noncurrent_days is None
@@ -197,13 +197,13 @@ def test_rusty_chess_guardrails_match_the_previous_lists(settings: Settings) -> 
 
 
 def test_run_cost_ceiling_defaults_and_overrides(settings: Settings) -> None:
-    assert settings.run_cost_ceiling("rusty-chess") == 50
+    assert settings.run_cost_ceiling("braveheart") == 50
     assert settings.run_cost_ceiling("not-registered") == 50
     raised = settings.model_copy(
         update={"projects": {"big": ProjectGuardrails(max_run_cost_usd=80)}}
     )
     assert raised.run_cost_ceiling("big") == 80
-    assert raised.run_cost_ceiling("rusty-chess") == 50
+    assert raised.run_cost_ceiling("braveheart") == 50
 
 
 def _with_projects(tmp_path: Path, projects: dict[str, object]) -> Path:
@@ -281,7 +281,7 @@ def test_central_retention_must_name_the_dataset_prefix(
 
 
 def test_an_empty_central_entry_needs_no_prefix(settings: Settings) -> None:
-    entry = settings.projects["rusty-chess"].datasets["jwall-engineering-rusty-chess-nnue"]
+    entry = settings.projects["braveheart"].datasets["jwall-engineering-braveheart-nnue"]
     assert entry.prefix is None
 
 

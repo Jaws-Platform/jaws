@@ -572,7 +572,7 @@ class SharedDataset(_Section):
 
     producer: str
     bucket: str
-    #: `<bucket>` without `<organization>-`, for example `rusty-chess-nnue`.
+    #: `<bucket>` without `<organization>-`, for example `braveheart-nnue`.
     name: str
     prefix: str
     consumers: tuple[str, ...]

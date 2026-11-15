@@ -287,7 +287,7 @@ def test_sync_summary() -> None:
 
 def test_bot_plan_comment_names_the_manual_apply_when_destructive() -> None:
     comment = plan_comment(
-        PLAN_CHANGES, PLAN_WITH_DESTROY, 60000, "rusty-chess", PROVENANCE, applied_by="Bot apply"
+        PLAN_CHANGES, PLAN_WITH_DESTROY, 60000, "braveheart", PROVENANCE, applied_by="Bot apply"
     )
     assert "Merging this pull request will" not in comment
     assert "The next **Bot apply** would destroy or replace" in comment
@@ -296,7 +296,7 @@ def test_bot_plan_comment_names_the_manual_apply_when_destructive() -> None:
 
 def test_bot_plan_comment_names_the_manual_apply_for_changes() -> None:
     comment = plan_comment(
-        PLAN_CHANGES, PLAN_ADD_ONLY, 60000, "rusty-chess", PROVENANCE, applied_by="Bot apply"
+        PLAN_CHANGES, PLAN_ADD_ONLY, 60000, "braveheart", PROVENANCE, applied_by="Bot apply"
     )
     assert "Merging this pull request will" not in comment
     assert "The next **Bot apply** would change" in comment
@@ -307,7 +307,7 @@ def test_bot_plan_comment_no_changes() -> None:
         PLAN_NO_CHANGES,
         PLAN_NO_CHANGES_TEXT,
         60000,
-        "rusty-chess",
+        "braveheart",
         PROVENANCE,
         applied_by="Bot apply",
     )

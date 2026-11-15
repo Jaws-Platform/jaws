@@ -23,7 +23,7 @@ name: Remote task
 #     sprt:
 #       uses: jwallace145/jwall-engineering-infra/.github/workflows/remote-task.yml@vX.Y.Z
 #       with:
-#         project: rusty-chess
+#         project: braveheart
 #         script: scripts/sprt.sh
 #         args: '["--games", "2000"]'   # a JSON array of strings
 #         artifact: sprt-results     # also the task id; keep it distinct per matrix leg

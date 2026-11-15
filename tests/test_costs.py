@@ -85,7 +85,7 @@ def test_the_period_stays_inside_cost_explorers_history(months: int) -> None:
 
 def test_a_project_report_filters_on_the_project_and_groups_by_component_and_workflow() -> None:
     ce = FakeCE([])
-    costs.project_table(_any(ce), "rusty-chess", START, END)
+    costs.project_table(_any(ce), "braveheart", START, END)
     assert ce.requests == [
         {
             "TimePeriod": {"Start": "2026-08-01", "End": "2026-10-31"},
@@ -93,7 +93,7 @@ def test_a_project_report_filters_on_the_project_and_groups_by_component_and_wor
             "Metrics": ["UnblendedCost"],
             "GroupBy": [{"Type": "TAG", "Key": "Component"}, {"Type": "TAG", "Key": "Workflow"}],
             "Filter": {
-                "Tags": {"Key": "Project", "Values": ["rusty-chess"], "MatchOptions": ["EQUALS"]}
+                "Tags": {"Key": "Project", "Values": ["braveheart"], "MatchOptions": ["EQUALS"]}
             },
         }
     ]
@@ -101,13 +101,13 @@ def test_a_project_report_filters_on_the_project_and_groups_by_component_and_wor
 
 def test_a_project_report_by_profile_groups_by_component_and_profile() -> None:
     ce = FakeCE([])
-    costs.project_table(_any(ce), "rusty-chess", START, END, by="profile")
+    costs.project_table(_any(ce), "braveheart", START, END, by="profile")
     (request,) = ce.requests
     assert request["GroupBy"] == [
         {"Type": "TAG", "Key": "Component"},
         {"Type": "TAG", "Key": "Profile"},
     ]
-    assert request["Filter"]["Tags"]["Values"] == ["rusty-chess"]
+    assert request["Filter"]["Tags"]["Values"] == ["braveheart"]
 
 
 def test_task_spend_by_profile_is_labelled_with_the_profile_value() -> None:
@@ -124,7 +124,7 @@ def test_task_spend_by_profile_is_labelled_with_the_profile_value() -> None:
             )
         ]
     )
-    table = costs.project_table(_any(ce), "rusty-chess", START, END, by="profile")
+    table = costs.project_table(_any(ce), "braveheart", START, END, by="profile")
     assert {label: row["2026-10"] for label, row in table.rows.items()} == {
         "task-runner: gpu": Decimal("14.60"),
         "task-runner: cpu": Decimal("41.30"),
@@ -157,7 +157,7 @@ def test_every_page_is_read() -> None:
         ([_month(AUG, [_group(["Component$dataset", "Workflow$"], "1.00")])], "token-1"),
         [_month(SEP, [_group(["Component$dataset", "Workflow$"], "2.00")])],
     )
-    table = costs.project_table(_any(ce), "rusty-chess", START, END)
+    table = costs.project_table(_any(ce), "braveheart", START, END)
     assert "NextPageToken" not in ce.requests[0]
     assert ce.requests[1]["NextPageToken"] == "token-1"
     assert len(ce.requests) == 2
@@ -193,7 +193,7 @@ def test_task_spend_is_split_by_workflow_and_untagged_components_are_named() -> 
             )
         ]
     )
-    table = costs.project_table(_any(ce), "rusty-chess", START, END)
+    table = costs.project_table(_any(ce), "braveheart", START, END)
     assert table.months == ("2026-08", "2026-09", "2026-10")
     assert table.estimated == {"2026-10"}
     assert {label: row["2026-10"] for label, row in table.rows.items()} == {
@@ -209,13 +209,13 @@ def test_spend_with_no_project_is_one_untagged_row() -> None:
     ce = FakeCE(
         [
             _month(AUG, [_group(["Project$"], "47.90")]),
-            _month(OCT, [_group(["Project$"], "34.02"), _group(["Project$rusty-chess"], "4.07")]),
+            _month(OCT, [_group(["Project$"], "34.02"), _group(["Project$braveheart"], "4.07")]),
         ]
     )
     table = costs.account_table(_any(ce), START, END)
     assert table.rows == {
         "(untagged)": {"2026-08": Decimal("47.90"), "2026-10": Decimal("34.02")},
-        "rusty-chess": {"2026-10": Decimal("4.07")},
+        "braveheart": {"2026-10": Decimal("4.07")},
     }
 
 
@@ -290,7 +290,7 @@ def test_no_notes_when_nothing_is_hidden_or_estimated() -> None:
 @pytest.fixture
 def ce(monkeypatch: pytest.MonkeyPatch, bot_workspace: Path) -> FakeCE:
     fake = FakeCE(
-        [_month(OCT, [_group(["Project$"], "34.02"), _group(["Project$rusty-chess"], "4.07")])],
+        [_month(OCT, [_group(["Project$"], "34.02"), _group(["Project$braveheart"], "4.07")])],
         [_month(OCT, [_group(["Tax", "USE2-BoxUsage"], "0.94")])],
     )
 
@@ -308,7 +308,7 @@ def test_cost_report_prints_the_account_and_its_untagged_spend(ce: FakeCE) -> No
     with _as_role(OWNER):
         result = CliRunner().invoke(cli.app, ["cost", "report", "--months", "2"])
     assert result.exit_code == 0, result.output
-    assert "account by project" in result.output and "rusty-chess" in result.output
+    assert "account by project" in result.output and "braveheart" in result.output
     assert "(untagged) by service and usage type" in result.output
     assert "Tax: USE2-BoxUsage" in result.output
     assert len(ce.requests) == 2
@@ -318,14 +318,14 @@ def test_cost_report_prints_the_account_and_its_untagged_spend(ce: FakeCE) -> No
 def test_cost_report_for_one_project(ce: FakeCE) -> None:
     ce.responses = [[_month(OCT, [_group(["Component$dataset", "Workflow$"], "0.16")])]]
     with _as_role(OWNER):
-        result = CliRunner().invoke(cli.app, ["cost", "report", "--project", "rusty-chess"])
+        result = CliRunner().invoke(cli.app, ["cost", "report", "--project", "braveheart"])
     assert result.exit_code == 0, result.output
-    assert "rusty-chess by component" in result.output and "$0.16" in result.output
+    assert "braveheart by component" in result.output and "$0.16" in result.output
     (request,) = ce.requests
-    assert request["Filter"]["Tags"]["Values"] == ["rusty-chess"]
+    assert request["Filter"]["Tags"]["Values"] == ["braveheart"]
 
 
-@pytest.mark.parametrize("args", [["--project", "Rusty Chess"], ["--months", "14"]])
+@pytest.mark.parametrize("args", [["--project", "Not Kebab"], ["--months", "14"]])
 def test_cost_report_rejects_bad_options(ce: FakeCE, args: list[str]) -> None:
     with _as_role(OWNER):
         result = CliRunner().invoke(cli.app, ["cost", "report", *args])
@@ -337,7 +337,7 @@ def test_cost_report_needs_no_ci_role(ce: FakeCE) -> None:
     """Any credentials that can read Cost Explorer will do: the owner's own."""
     ce.responses = []
     with patch("jwall_engineering_sites.aws.caller_identity", return_value=("1", OWNER)):
-        result = CliRunner().invoke(cli.app, ["cost", "report", "--project", "rusty-chess"])
+        result = CliRunner().invoke(cli.app, ["cost", "report", "--project", "braveheart"])
     assert result.exit_code == 0, result.output
 
 
@@ -345,7 +345,7 @@ def test_cost_report_by_profile_for_one_project(ce: FakeCE) -> None:
     ce.responses = [[_month(OCT, [_group(["Component$task-runner", "Profile$gpu"], "3.00")])]]
     with _as_role(OWNER):
         result = CliRunner().invoke(
-            cli.app, ["cost", "report", "--project", "rusty-chess", "--by", "profile"]
+            cli.app, ["cost", "report", "--project", "braveheart", "--by", "profile"]
         )
     assert result.exit_code == 0, result.output
     assert "task-runner: gpu" in result.output
@@ -354,7 +354,7 @@ def test_cost_report_by_profile_for_one_project(ce: FakeCE) -> None:
 
 
 @pytest.mark.parametrize(
-    "args", [["--by", "profile"], ["--project", "rusty-chess", "--by", "nonsense"]]
+    "args", [["--by", "profile"], ["--project", "braveheart", "--by", "nonsense"]]
 )
 def test_cost_report_by_needs_a_project_and_a_known_split(ce: FakeCE, args: list[str]) -> None:
     with _as_role(OWNER):

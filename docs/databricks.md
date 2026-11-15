@@ -310,9 +310,9 @@ every consumer is bound to that one location.
 ```yaml
 # config.yaml, on the producer's approved dataset (reviewed here)
 projects:
-  rusty-chess:
+  braveheart:
     datasets:
-      jwall-engineering-rusty-chess-nnue:
+      jwall-engineering-braveheart-nnue:
         databricks_share:
           prefix: data/
           consumers: [braveheart-databricks]
@@ -322,7 +322,7 @@ projects:
 # the producer's jwall-engineering-sites.yaml (its consent)
   - kind: dataset
     name: nnue
-    bucket: jwall-engineering-rusty-chess-nnue
+    bucket: jwall-engineering-braveheart-nnue
     prefix: data/
     consumers: [braveheart-databricks]
 ```
@@ -333,7 +333,7 @@ projects:
   project owns them. It has no standing AWS cost.
 - **What the foundation creates per share** (`databricks-shared-dataset`): the
   share role `jwall-engineering-<bucket without the organization>-databricks-share`
-  (for example `jwall-engineering-rusty-chess-nnue-databricks-share`), a
+  (for example `jwall-engineering-braveheart-nnue-databricks-share`), a
   read-only storage credential, and one read-only external location
   `jwall-engineering-<name>` at `s3://<bucket>/<prefix>`, bound to the host and
   to each consumer, with `READ_FILES` for `<consumer>-workspace-users`. The

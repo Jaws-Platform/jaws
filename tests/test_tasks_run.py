@@ -38,12 +38,12 @@ HOSTILE = "; rm -rf / $(reboot) `id` 'quoted' \"double\"\nTASK_RUNNER_EOF"
 
 def _gpu_script(bot: Project, **overrides: Any) -> str:
     spec = _gpu_spec(bot, scratch="instance-store", **overrides)
-    return tasks.task_script(spec, "jwall-engineering-rusty-chess-tasks", "tasks/")
+    return tasks.task_script(spec, "jwall-engineering-braveheart-tasks", "tasks/")
 
 
 def _script(bot: Project, **overrides: Any) -> str:
     return tasks.task_script(
-        _spec(bot, **overrides), "jwall-engineering-rusty-chess-tasks", "tasks/"
+        _spec(bot, **overrides), "jwall-engineering-braveheart-tasks", "tasks/"
     )
 
 
@@ -141,7 +141,7 @@ def test_the_task_region_is_quoted_and_the_default_region_left_alone(bot: Projec
 @pytest.mark.parametrize("gpu", [False, True])
 def test_the_rendered_commands_stay_under_the_budget(bot: Project, gpu: bool) -> None:
     spec = _gpu_spec(bot, scratch="instance-store") if gpu else _spec(bot, args=("--games", "200"))
-    commands = tasks.task_commands(spec, "jwall-engineering-rusty-chess-tasks", "tasks/")
+    commands = tasks.task_commands(spec, "jwall-engineering-braveheart-tasks", "tasks/")
     assert len(json.dumps(commands)) < tasks.SSM_COMMANDS_BUDGET
 
 
@@ -278,7 +278,7 @@ def test_the_environment_block_records_the_scratch(bot: Project) -> None:
 
 def test_a_gpu_task_checks_the_driver_before_it_runs(bot: Project) -> None:
     script = _gpu_spec(bot)
-    text = tasks.task_script(script, "jwall-engineering-rusty-chess-tasks", "tasks/")
+    text = tasks.task_script(script, "jwall-engineering-braveheart-tasks", "tasks/")
     assert 'echo "profile=gpu"' in text
     assert "/usr/local/cuda/bin" in text
     check = text.index("if ! nvidia-smi; then")
@@ -295,7 +295,7 @@ def test_commands_carry_the_script_encoded(bot: Project) -> None:
     assert base64.b64decode(encoded).decode() == tasks.task_script(spec, "bucket", "tasks/")
 
 
-DEST = "s3://jwall-engineering-rusty-chess-tasks/tasks/AROAEXAMPLE:i-0abc/"
+DEST = "s3://jwall-engineering-braveheart-tasks/tasks/AROAEXAMPLE:i-0abc/"
 
 
 def _run_tail(
@@ -405,7 +405,7 @@ def test_script_writes_only_under_its_own_prefix(bot: Project) -> None:
     script = _script(bot)
     uid = script.index("aws sts get-caller-identity --query UserId --output text")
     assert uid < script.index("status=0")
-    assert 'dest="s3://jwall-engineering-rusty-chess-tasks/tasks/${uid}/"' in script
+    assert 'dest="s3://jwall-engineering-braveheart-tasks/tasks/${uid}/"' in script
 
 
 def test_setup_is_judged_by_the_ready_file(bot: Project) -> None:
@@ -465,14 +465,14 @@ class FakeSSM:
 
 def test_send(bot: Project) -> None:
     ssm: Any = FakeSSM()
-    command_id = tasks.send(ssm, "i-1", ["echo hi"], "/jwall-engineering/rusty-chess/tasks", 6)
+    command_id = tasks.send(ssm, "i-1", ["echo hi"], "/jwall-engineering/braveheart/tasks", 6)
     assert command_id == "cmd-1"
     (call,) = ssm.sent
     assert call["InstanceIds"] == ["i-1"]
     assert call["DocumentName"] == "AWS-RunShellScript"
     assert call["Parameters"] == {"commands": ["echo hi"], "executionTimeout": ["21600"]}
     assert call["CloudWatchOutputConfig"] == {
-        "CloudWatchLogGroupName": "/jwall-engineering/rusty-chess/tasks",
+        "CloudWatchLogGroupName": "/jwall-engineering/braveheart/tasks",
         "CloudWatchOutputEnabled": True,
     }
 
@@ -845,7 +845,7 @@ def test_run_task_gpu_profile_uses_its_template_and_budget(
     session: Any = FakeSession()
     code = tasks.run_task(session, _gpu_spec(bot), tmp_path / "out", LOG, write=lambda _: None)
     assert code == 0
-    assert seen == {"budget": (4, 4), "template": "jwall-engineering-rusty-chess-task-gpu"}
+    assert seen == {"budget": (4, 4), "template": "jwall-engineering-braveheart-task-gpu"}
     assert rec.terminated == ["i-1"]
 
 

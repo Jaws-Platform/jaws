@@ -14,7 +14,7 @@ from jwall_engineering_sites.kinds.lichess_bot import entrypoint
 TEMPLATE: dict[str, Any] = {
     "token": "LICHESS_TOKEN_PLACEHOLDER",
     "url": "https://lichess.org/",
-    "engine": {"dir": "./engines/", "name": "rusty-chess", "protocol": "uci",
+    "engine": {"dir": "./engines/", "name": "braveheart", "protocol": "uci",
                "uci_options": {"Hash": 16}},
     "quit_after_all_games_finish": False,
     "pgn_directory": "game_records",
@@ -23,7 +23,7 @@ TEMPLATE: dict[str, Any] = {
 
 ENV = {
     "LICHESS_TOKEN": "lip_secret",
-    "ENGINE_BINARY": "rusty-chess",
+    "ENGINE_BINARY": "braveheart",
     "ENGINE_HASH_MB": "128",
     "ENGINE_MOVE_OVERHEAD_MS": "500",
 }
@@ -36,7 +36,7 @@ def test_token_and_engine_options_are_set() -> None:
     assert config["token"] == "lip_secret"
     assert config["engine"]["uci_options"] == {"Hash": 128, "Move Overhead": 500}
     assert config["engine"]["dir"] == "/opt/engine"
-    assert config["engine"]["name"] == "rusty-chess"
+    assert config["engine"]["name"] == "braveheart"
     assert config["challenge"] == {"concurrency": 1}
     assert TEMPLATE["token"] == "LICHESS_TOKEN_PLACEHOLDER", "the template is not mutated"
 

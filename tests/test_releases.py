@@ -15,7 +15,7 @@ from jwall_engineering_sites import releases
 from jwall_engineering_sites.errors import PreflightError, RunError
 from jwall_engineering_sites.project import Project
 
-ASSET = "rusty-chess-v0.14.0-x86_64-unknown-linux-gnu.tar.gz"
+ASSET = "braveheart-v0.14.0-x86_64-unknown-linux-gnu.tar.gz"
 
 
 def _release(tag: str, draft: bool = False, prerelease: bool = False) -> dict[str, object]:
@@ -24,7 +24,7 @@ def _release(tag: str, draft: bool = False, prerelease: bool = False) -> dict[st
         "draft": draft,
         "prerelease": prerelease,
         "assets": [
-            {"name": f"rusty-chess-{tag}.tar.gz", "browser_download_url": f"https://x/{tag}.tgz"}
+            {"name": f"braveheart-{tag}.tar.gz", "browser_download_url": f"https://x/{tag}.tgz"}
         ],
     }
 
@@ -52,7 +52,7 @@ def test_list_releases_filters_and_sorts() -> None:
     ]
     found = releases.list_releases("Braveheart-Chess/braveheart", fetch=_fetch_json(payload))
     assert [r.tag for r in found] == ["v0.14.1", "v0.14.0", "v0.9.2"]
-    assert found[0].assets == {"rusty-chess-v0.14.1.tar.gz": "https://x/v0.14.1.tgz"}
+    assert found[0].assets == {"braveheart-v0.14.1.tar.gz": "https://x/v0.14.1.tgz"}
 
 
 def test_list_releases_sorts_numerically() -> None:
@@ -142,54 +142,54 @@ def _tarball(path: Path, members: list[tuple[str, bytes | None, str | None]]) ->
     return path
 
 
-DIR = "rusty-chess-v0.14.0-x86_64-unknown-linux-gnu"
+DIR = "braveheart-v0.14.0-x86_64-unknown-linux-gnu"
 
 
 def test_extract_binary_ok(tmp_path: Path) -> None:
     archive = _tarball(
         tmp_path / ASSET,
         [
-            (f"{DIR}/rusty-chess", b"\x7fELF", None),
+            (f"{DIR}/braveheart", b"\x7fELF", None),
             (f"{DIR}/LICENSE", b"MIT", None),
             (f"{DIR}/README.md", b"#", None),
         ],
     )
     dest = tmp_path / "out"
-    binary = releases.extract_binary(archive, "rusty-chess", dest)
-    assert binary == dest / "rusty-chess"
+    binary = releases.extract_binary(archive, "braveheart", dest)
+    assert binary == dest / "braveheart"
     assert binary.read_bytes() == b"\x7fELF"
     assert binary.stat().st_mode & 0o777 == 0o755
-    assert sorted(p.name for p in dest.iterdir()) == ["rusty-chess"]
+    assert sorted(p.name for p in dest.iterdir()) == ["braveheart"]
 
 
 def test_extract_rejects_symlink(tmp_path: Path) -> None:
-    archive = _tarball(tmp_path / ASSET, [(f"{DIR}/rusty-chess", None, "/bin/sh")])
+    archive = _tarball(tmp_path / ASSET, [(f"{DIR}/braveheart", None, "/bin/sh")])
     with pytest.raises(RunError, match="regular file"):
-        releases.extract_binary(archive, "rusty-chess", tmp_path / "out")
+        releases.extract_binary(archive, "braveheart", tmp_path / "out")
 
 
 def test_extract_rejects_path_traversal(tmp_path: Path) -> None:
     archive = _tarball(
         tmp_path / ASSET,
-        [(f"{DIR}/rusty-chess", b"x", None), ("../escape", b"x", None)],
+        [(f"{DIR}/braveheart", b"x", None), ("../escape", b"x", None)],
     )
     with pytest.raises(RunError, match="unsafe member"):
-        releases.extract_binary(archive, "rusty-chess", tmp_path / "out")
+        releases.extract_binary(archive, "braveheart", tmp_path / "out")
 
 
 def test_extract_rejects_missing_binary(tmp_path: Path) -> None:
     archive = _tarball(tmp_path / ASSET, [(f"{DIR}/LICENSE", b"MIT", None)])
-    with pytest.raises(RunError, match="no rusty-chess"):
-        releases.extract_binary(archive, "rusty-chess", tmp_path / "out")
+    with pytest.raises(RunError, match="no braveheart"):
+        releases.extract_binary(archive, "braveheart", tmp_path / "out")
 
 
 def test_extract_rejects_two_binaries(tmp_path: Path) -> None:
     archive = _tarball(
         tmp_path / ASSET,
-        [(f"{DIR}/rusty-chess", b"a", None), ("other/rusty-chess", b"b", None)],
+        [(f"{DIR}/braveheart", b"a", None), ("other/braveheart", b"b", None)],
     )
     with pytest.raises(RunError, match="more than one"):
-        releases.extract_binary(archive, "rusty-chess", tmp_path / "out")
+        releases.extract_binary(archive, "braveheart", tmp_path / "out")
 
 
 def test_download_writes_the_bytes(tmp_path: Path) -> None:
@@ -205,8 +205,8 @@ def test_download_writes_the_bytes(tmp_path: Path) -> None:
 
 TAG_URL = "https://api.github.com/repos/Braveheart-Chess/braveheart/releases/tags/v0.17.0"
 NAMES = (
-    "rusty-chess-v0.17.0-x86_64-unknown-linux-gnu.tar.gz",
-    "rusty-chess-v0.17.0-x86_64-unknown-linux-gnu.tar.gz.sha256",
+    "braveheart-v0.17.0-x86_64-unknown-linux-gnu.tar.gz",
+    "braveheart-v0.17.0-x86_64-unknown-linux-gnu.tar.gz.sha256",
 )
 
 
@@ -257,7 +257,7 @@ def test_wait_for_assets_gives_up_naming_what_is_missing() -> None:
     clock = iter(range(0, 100_000, 60))
     with pytest.raises(
         PreflightError,
-        match=r"still has no rusty-chess-v0\.17\.0-x86_64-unknown-linux-gnu\.tar\.gz after 30m",
+        match=r"still has no braveheart-v0\.17\.0-x86_64-unknown-linux-gnu\.tar\.gz after 30m",
     ):
         releases.wait_for_assets(
             "Braveheart-Chess/braveheart", "v0.17.0", NAMES, 1800, logging.getLogger("t"),
