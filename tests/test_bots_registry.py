@@ -44,7 +44,11 @@ def project_file(project: str) -> dict[str, Any]:
 
 
 def test_registry_lists_braveheart() -> None:
-    assert registry() == {"braveheart": ("Braveheart-Chess/braveheart", "1435162673")}
+    assert registry() == {
+        "braveheart": ("Braveheart-Chess/braveheart", "1435162673"),
+        # The engine's Lichess bot, deployed from its own repository since 2026-11-15.
+        "braveheart-lichess-bot": ("Braveheart-Chess/braveheart-lichess-bot", "1459279608"),
+    }
     # The engine's project was `rusty-chess` until 2026-11-15; the old name is gone.
     assert "rusty-chess" not in BOTS_TF.read_text()
 
