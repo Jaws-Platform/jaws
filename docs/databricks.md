@@ -267,7 +267,11 @@ prints what it deletes and refuses without `--yes`. The order matters:
    stops and says so (see [account-state](#account-state)).
 3. **Destroy the account stack**: the workspace, VPC, subnets, endpoints,
    security group, NAT instance, root bucket and its contents, the roles, the
-   account groups and the metastore assignment.
+   account groups and the metastore assignment. Databricks reports the
+   workspace deleted before it has detached its network and storage
+   configuration, so deleting those can be refused at first; `destroy` waits a
+   minute and tries again, up to five times in all
+   ([DBX-WORKSPACE-DETACHING](#dbx-workspace-detaching)).
 
 It deletes the workspace and everything in it (clusters, notebooks, jobs) and
 the catalog's data. It keeps the metastore, the event log and the client
@@ -683,6 +687,15 @@ The workspace entered `FAILED`: Databricks accepted a credential, storage or
 network configuration it cannot use. Fix the cause named and re-run `apply`.
 The provider deletes the failed workspace itself; only if the error also
 reports a delete failure, remove it by hand in the account console first.
+
+### DBX-WORKSPACE-DETACHING
+
+`destroy` only. Terraform deleted the workspace and went on to its network and
+storage configuration, and Databricks refused: `Cannot delete a network while
+it is attached to a workspace`. Databricks reports the workspace deleted before
+it has detached them. `destroy` waits a minute and tries again, up to five
+times in all, so this is reported only when the workspace took longer than
+that. Wait a few minutes and re-run `destroy`; it continues where it stopped.
 
 ### DBX-NO-EGRESS
 
