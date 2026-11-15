@@ -15,6 +15,8 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
+_GITHUB_REPOSITORY = r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?/[A-Za-z0-9._-]+$"
+_RELEASE_TAG = r"^v\d+\.\d+\.\d+$"
 _PARAMETER = re.compile(r"^/[a-z0-9-]+(/[a-z0-9-]+)+$")
 
 RetentionDays = Literal[
@@ -38,11 +40,20 @@ def _relative_path(value: str) -> str:
 
 
 class ArtifactSection(_Model):
-    """The release assets the image ships: a tarball, its checksum, the binary inside."""
+    """The release assets the image ships: a tarball, its checksum, the binary inside.
+
+    `repository` names the repository whose releases hold the assets, when the
+    engine is released somewhere other than the project's own repository (a bot
+    repository running another repository's engine). `version` pins the
+    release the image ships; it is required with `lichess-bot.track: pinned`
+    and refused otherwise.
+    """
 
     asset: str
     checksum: str
     binary: str
+    repository: str | None = Field(default=None, pattern=_GITHUB_REPOSITORY)
+    version: str | None = Field(default=None, pattern=_RELEASE_TAG)
 
     @field_validator("asset", "checksum")
     @classmethod
@@ -94,7 +105,10 @@ class LogsSection(_Model):
 
 class LichessBot(_Model):
     kind: Literal["lichess-bot"]
-    track: Literal["latest-release"] = "latest-release"
+    #: latest-release: every newly published release is rolled out.
+    #: pinned: exactly container-image.artifact.version, re-rolled whenever the
+    #: pin or the config changes.
+    track: Literal["latest-release", "pinned"] = "latest-release"
     instance_type: str = Field(default="t3.micro", pattern=r"^[a-z0-9]+\.[a-z0-9]+$")
     config: str
     lichess_user: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{2,30}$")

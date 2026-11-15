@@ -239,3 +239,33 @@ def test_send_reconcile_wraps_client_errors() -> None:
 
     with pytest.raises(RunError, match="InvalidInstanceId"):
         rollout.send_reconcile(SSM(), "i-1")  # type: ignore[arg-type]
+
+
+def test_a_plan_tag_defaults_to_its_version() -> None:
+    plan = rollout.decide(None, RELEASES, set(), None, "latest-release")
+    assert plan.tag == plan.version == "v0.15.0"
+
+
+def test_decide_pinned_builds_pushes_and_deploys_a_missing_tag() -> None:
+    plan = rollout.decide_pinned("v0.13.0", "v0.13.0-abcd1234", set(), "v0.12.0-00000000")
+    assert (plan.version, plan.tag) == ("v0.13.0", "v0.13.0-abcd1234")
+    assert (plan.build, plan.push, plan.deploy) == (True, True, True)
+
+
+def test_decide_pinned_deploys_a_built_tag_that_is_not_running() -> None:
+    plan = rollout.decide_pinned("v0.13.0", "v0.13.0-abcd1234", {"v0.13.0-abcd1234"}, None)
+    assert (plan.build, plan.push, plan.deploy) == (False, False, True)
+    assert "running: nothing" in plan.reason
+
+
+def test_decide_pinned_is_idempotent() -> None:
+    tag = "v0.13.0-abcd1234"
+    plan = rollout.decide_pinned("v0.13.0", tag, {tag}, tag)
+    assert (plan.build, plan.push, plan.deploy) == (False, False, False)
+    assert "already running" in plan.reason
+
+
+def test_decide_pinned_deploys_a_new_config_of_the_same_release() -> None:
+    old, new = "v0.13.0-abcd1234", "v0.13.0-99999999"
+    plan = rollout.decide_pinned("v0.13.0", new, {old}, old)
+    assert (plan.build, plan.push, plan.deploy) == (True, True, True)

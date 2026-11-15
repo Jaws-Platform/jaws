@@ -2,6 +2,8 @@
 
 `decide` is pure: given the releases, the tags already in ECR and the version
 running, which version to ship and whether to build, push and deploy.
+`decide_pinned` is its counterpart for a `track: pinned` bot, which ships one
+release under a tag that also names its config.
 
 A deploy writes the desired version, marks the status `pending:<version>`,
 and asks the instance to reconcile through Run Command. The command only
@@ -35,11 +37,18 @@ TRIGGER_GRACE_SECONDS = 30
 
 @dataclass(frozen=True)
 class Plan:
+    #: The engine release to build from.
     version: str
     build: bool
     push: bool
     deploy: bool
     reason: str
+    #: The image tag to push and deploy: `version`, unless the bot is pinned.
+    tag: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.tag:
+            object.__setattr__(self, "tag", self.version)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -79,6 +88,24 @@ def decide(
             + f" (running: {running or 'nothing'})"
         )
     return Plan(version=version, build=missing, push=missing, deploy=deploy, reason=reason)
+
+
+def decide_pinned(version: str, tag: str, present_tags: set[str], running: str | None) -> Plan:
+    """A pinned bot: build and push `tag` if it is missing, deploy it unless it runs.
+
+    Unlike `decide`, the pinned release is always the one deployed, whether or
+    not a newer release exists: the pin is the decision."""
+    missing = tag not in present_tags
+    deploy = running != tag
+    if missing:
+        reason = f"{tag} (release {version}) is not in the repository yet; build and push it"
+    else:
+        reason = f"{tag} (release {version}) is already built"
+    if deploy:
+        reason += f", then deploy it (running: {running or 'nothing'})"
+    else:
+        reason += " and already running"
+    return Plan(version=version, build=missing, push=missing, deploy=deploy, reason=reason, tag=tag)
 
 
 def send_reconcile(ssm: SSMClient, instance_id: str, restart: bool = False) -> str:

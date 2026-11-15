@@ -5,7 +5,10 @@ permanently as a Lichess bot with one file, `jwall-engineering-sites.yaml`,
 plus its existing lichess-bot config and a short release workflow. The tool
 builds an image from each release, pushes it to ECR under the release tag,
 and rolls the bot to it on one EC2 instance without ever interrupting a game.
-The first consumer is [Braveheart](https://github.com/Braveheart-Chess/braveheart) (formerly rusty-chess-v2).
+The first consumer is [Braveheart](https://github.com/Braveheart-Chess/braveheart) (formerly
+rusty-chess-v2), whose bot now lives in its own repository,
+[braveheart-lichess-bot](https://github.com/Braveheart-Chess/braveheart-lichess-bot),
+with the engine pinned (see [A bot repository that pins its engine](#a-bot-repository-that-pins-its-engine)).
 
 What you get:
 
@@ -73,8 +76,10 @@ A file is either a site (`domain` and `site`) or a bot project
 | `container-image.artifact.asset` | file name with `{version}` | The release asset that holds the binary. `{version}` is the release tag. |
 | `container-image.artifact.checksum` | file name with `{version}` | Its `sha256sum` file. The build stops if the digest differs. |
 | `container-image.artifact.binary` | file name | The engine inside the tarball's top directory. |
+| `container-image.artifact.repository` | `owner/repo`, the project's `repository` | Where the engine's releases are published, when that is not this repository. See [A bot repository that pins its engine](#a-bot-repository-that-pins-its-engine). |
+| `container-image.artifact.version` | `vX.Y.Z`, none | The release to ship. Required with `track: pinned`, refused otherwise. |
 | `container-image.dockerfile` | relative path, none | Replace the harness Dockerfile. Rarely needed. |
-| `lichess-bot.track` | `latest-release` | Every newly published release is rolled out. |
+| `lichess-bot.track` | `latest-release` \| `pinned`, `latest-release` | `latest-release`: every newly published release is rolled out. `pinned`: exactly `container-image.artifact.version`, rolled out again whenever the pin or the config changes. |
 | `lichess-bot.instance_type` | `t3.micro` | EC2 instance type. Changing it replaces the instance. |
 | `lichess-bot.config` | relative `.yml` path | Your lichess-bot config. It must contain the token as `LICHESS_TOKEN_PLACEHOLDER`. |
 | `lichess-bot.lichess_user` | Lichess user name, none | Shown by `bot status` and written into every game record. |
@@ -90,9 +95,57 @@ What the image enforces in your config, whatever it says:
 - **The engine** is the release binary.
 - **`quit_after_all_games_finish: true`.** One SIGINT then lets the game in progress finish, and the rollouts depend on that.
 - **One PGN per game** in the directory the instance ships from.
+- **`__VERSION__`** in any string of the config, such as a chat greeting, becomes
+  the engine release (`v0.54.0`). lichess-bot itself only substitutes `{me}` and
+  `{opponent}`.
 - **Only advertised UCI options are set.** v0.14.0 has no `Move Overhead`, so it is left out with a warning.
 
 Everything else in the config, including matchmaking, stays yours.
+
+## A bot repository that pins its engine
+
+The engine and the bot can live in different repositories: the engine
+repository publishes releases, and a bot repository owns the lichess-bot
+config, the project file and the deployment. The bot repository's file names
+the engine's repository and pins one release:
+
+```yaml
+project: braveheart-lichess-bot
+repository: Braveheart-Chess/braveheart-lichess-bot
+
+components:
+  - kind: container-image
+    artifact:
+      repository: Braveheart-Chess/braveheart   # the engine's releases
+      version: v0.54.0                          # the release the bot plays
+      asset: braveheart-{version}-x86_64-unknown-linux-gnu.tar.gz
+      checksum: braveheart-{version}-x86_64-unknown-linux-gnu.tar.gz.sha256
+      binary: braveheart
+
+  - kind: lichess-bot
+    track: pinned
+    config: config.yml
+    # ...
+```
+
+- **The image tag names the release and the config**: `v0.54.0-3f9c2a1b`, where
+  the suffix is the first 8 hex digits of the SHA-256 of the config (and of a
+  replacement Dockerfile, if the file names one). A config change is a new image
+  even when the engine is unchanged, and the same pin and config give the same
+  tag, so re-running a release changes nothing. The tag is also the records'
+  `engine=` partition, so a game is filed under the release and the config that
+  played it; `engine_version` in the sidecar is that tag too.
+- **The release that ships is the pin**, never the newest engine release.
+  `bot build`, `push`, `deploy` and `reconcile` default to it and refuse any
+  other `--version`. To ship another release, change the pin.
+- **A rollout is the bot repository's release.** The caller workflow runs on the
+  bot repository's own `release: published`, so the release role trusts that
+  repository's `v*` tags, and the engine repository needs no workflow, role or
+  file for the bot. `container-release.yml` sees `track: pinned` and lets the
+  pin decide instead of the caller's release tag. With Release Please there, a
+  pin bump or a config change reaches the bot when its release PR is merged.
+- The engine's own releases deploy nothing. Its binary is still verified
+  against the release's `.sha256` and smoke-tested before the push.
 
 ## Names the tool derives
 

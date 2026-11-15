@@ -172,6 +172,17 @@ class Project(BaseModel):
         return f"{self.organization}-{self.project}"
 
     @property
+    def release_repository(self) -> str:
+        """Where the engine's releases are published: the artifact's own
+        repository when the file names one, else the project's."""
+        return self.image.artifact.repository or self.config.repository
+
+    @property
+    def pinned_version(self) -> str | None:
+        """The release a `track: pinned` bot ships; None when it follows every release."""
+        return self.image.artifact.version if self.bot.track == "pinned" else None
+
+    @property
     def image_repository(self) -> str:
         return f"{self.organization}-{self.project}"
 

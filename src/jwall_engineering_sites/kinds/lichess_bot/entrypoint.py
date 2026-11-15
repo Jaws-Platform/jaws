@@ -15,6 +15,9 @@ What it enforces, whatever the template says:
     rejects unknown options, and older engine releases lack Move Overhead;
   - quit_after_all_games_finish: true, so one SIGINT lets the game in
     progress finish before lichess-bot exits (graceful rollouts depend on it);
+  - every `__VERSION__` in a string of the template (the chat greetings, say)
+    becomes the engine release, ENGINE_VERSION; lichess-bot itself only
+    substitutes {me} and {opponent};
   - one PGN per game in /opt/lichess-bot/game_records (the instance ships
     them to S3 from there).
 """
@@ -37,6 +40,7 @@ ENGINE_DIR = Path("/opt/engine")
 LICHESS_BOT = "lichess-bot.py"
 RECORDS_DIR = "/opt/lichess-bot/game_records"
 EXIT_CONFIG = 64
+VERSION_TOKEN = "__VERSION__"
 
 
 def warn(message: str) -> None:
@@ -64,10 +68,26 @@ def engine_options(binary: Path, timeout: float = 15.0) -> set[str]:
     return names
 
 
+def fill_version(value: Any, version: str) -> Any:
+    """`value` with every VERSION_TOKEN in its strings replaced by `version`."""
+    if isinstance(value, str):
+        return value.replace(VERSION_TOKEN, version)
+    if isinstance(value, dict):
+        return {key: fill_version(item, version) for key, item in value.items()}
+    if isinstance(value, list):
+        return [fill_version(item, version) for item in value]
+    return value
+
+
 def render_config(
     template: Mapping[str, Any], env: Mapping[str, str], options: set[str]
 ) -> dict[str, Any]:
     config: dict[str, Any] = copy.deepcopy(dict(template))
+    version = env.get("ENGINE_VERSION", "")
+    if version:
+        config = fill_version(config, version)
+    elif VERSION_TOKEN in repr(config):
+        warn(f"ENGINE_VERSION is not set; {VERSION_TOKEN} stays as it is in the config")
     token = env.get("LICHESS_TOKEN", "")
     if not token:
         warn("LICHESS_TOKEN is not set; the instance reads it from SSM at container start")

@@ -4,11 +4,18 @@
 `<image_repository>:<tag>`. `push` logs in to ECR, retags it with the
 registry and pushes. Tags are immutable in the repository; callers check
 `tag_exists` first so an existing tag is refused with a clear message.
+
+The tag is the engine release (`v0.54.0`) for a bot that follows every
+release. A `track: pinned` bot owns its config, which changes without a new
+engine release, so its tag also carries the first 8 hex digits of the
+config's SHA-256 (`v0.54.0-3f9c2a1b`): a new config is a new image, and the
+same pin and config are the same tag, so a re-run changes nothing.
 """
 
 from __future__ import annotations
 
 import base64
+import hashlib
 import re
 import shutil
 import subprocess
@@ -29,6 +36,29 @@ PLACEHOLDER = "LICHESS_TOKEN_PLACEHOLDER"
 KIND_PACKAGE = "jwall_engineering_sites.kinds.lichess_bot"
 PLATFORMS = {"x86_64": "linux/amd64", "arm64": "linux/arm64"}
 _NODES = re.compile(r"^Nodes searched\s*:?\s*(\d+)", re.MULTILINE)
+#: Hex digits of the config digest in a pinned bot's tag.
+CONFIG_DIGEST_LENGTH = 8
+
+
+def config_digest(project: Project, consumer_root: Path) -> str:
+    """SHA-256 of what a pinned bot's image takes from its repository: the
+    lichess-bot config, and a replacement Dockerfile when the file names one."""
+    digest = hashlib.sha256()
+    paths = [project.bot.config, *([project.image.dockerfile] if project.image.dockerfile else [])]
+    for relative in paths:
+        path = consumer_root / relative
+        if not path.is_file():
+            raise PreflightError(f"{relative} not found in the repository")
+        digest.update(relative.encode() + b"\0" + path.read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
+def image_tag(project: Project, version: str, consumer_root: Path) -> str:
+    """The image tag for engine release `version`: the version itself, or for a
+    pinned bot the version and its config digest."""
+    if project.pinned_version is None:
+        return version
+    return f"{version}-{config_digest(project, consumer_root)[:CONFIG_DIGEST_LENGTH]}"
 
 
 def local_tag(project: Project, tag: str) -> str:
@@ -87,7 +117,16 @@ def prepare_context(
     return workdir
 
 
-def build(context: Path, project: Project, tag: str, logger: Logger, docker: str = "docker") -> str:
+def build(
+    context: Path,
+    project: Project,
+    tag: str,
+    logger: Logger,
+    docker: str = "docker",
+    engine_version: str | None = None,
+) -> str:
+    """`engine_version` is the engine release inside the image; it defaults to
+    `tag`, which is the release itself unless the bot is pinned."""
     name = local_tag(project, tag)
     _docker(
         [
@@ -98,6 +137,10 @@ def build(context: Path, project: Project, tag: str, logger: Logger, docker: str
             f"ENGINE_BINARY={project.image.artifact.binary}",
             "--build-arg",
             f"VERSION={tag}",
+            "--build-arg",
+            f"ENGINE_VERSION={engine_version or tag}",
+            "--build-arg",
+            f"ENGINE_REPOSITORY=https://github.com/{project.release_repository}",
             "--build-arg",
             f"SOURCE_REPOSITORY=https://github.com/{project.config.repository}",
             "--tag",
