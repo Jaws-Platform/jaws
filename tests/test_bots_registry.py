@@ -47,10 +47,26 @@ def test_registry_lists_braveheart() -> None:
     assert registry() == {
         "braveheart": ("Braveheart-Chess/braveheart", "1435162673"),
         # The engine's Lichess bot, deployed from its own repository since 2026-11-15.
-        "braveheart-lichess-bot": ("Braveheart-Chess/braveheart-lichess-bot", "1459279608"),
+        "braveheart-bot": ("Braveheart-Chess/braveheart-lichess-bot", "1459279608"),
     }
     # The engine's project was `rusty-chess` until 2026-11-15; the old name is gone.
     assert "rusty-chess" not in BOTS_TF.read_text()
+
+
+#: The longest project key whose apply role's container/manage policy fits IAM's
+#: 6,144-character cap on a managed policy. That policy names the project in 17
+#: ARNs and is 6,043 characters for the 10-character `braveheart`, so each extra
+#: character costs 17: 15 characters make about 6,128. `braveheart-lichess-bot`
+#: (22) failed the v0.30.0 foundation apply with LimitExceeded.
+MAX_PROJECT_KEY = 15
+
+
+def test_registered_projects_fit_the_apply_policy_size() -> None:
+    for project in registry():
+        assert len(project) <= MAX_PROJECT_KEY, (
+            f"{project} is {len(project)} characters; its ci-apply container/manage policy "
+            f"would exceed IAM's 6,144-character limit (keep keys to {MAX_PROJECT_KEY})"
+        )
 
 
 def test_a_repository_outside_this_account_names_its_owner() -> None:

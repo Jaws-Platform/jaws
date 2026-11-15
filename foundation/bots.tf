@@ -29,9 +29,13 @@ locals {
   #                outside this account (an organisation's); without it the
   #                release and task roles trust local.github_owner_id.
   # One line per entry, `repository` first (the workflows read this block).
+  #
+  # A key is at most 15 characters: it is repeated in the ARNs of the apply
+  # role's container/manage policy, which IAM caps at 6,144 characters, and at
+  # 15 that policy is about 6,130 (tests/test_bots_registry.py checks).
   bots = {
-    braveheart             = { repository = "Braveheart-Chess/braveheart", repository_id = "1435162673", owner_id = "356866252" }
-    braveheart-lichess-bot = { repository = "Braveheart-Chess/braveheart-lichess-bot", repository_id = "1459279608", owner_id = "356866252" }
+    braveheart     = { repository = "Braveheart-Chess/braveheart", repository_id = "1435162673", owner_id = "356866252" }
+    braveheart-bot = { repository = "Braveheart-Chess/braveheart-lichess-bot", repository_id = "1459279608", owner_id = "356866252" }
   }
 
   # The entries of `bots` without a bot or an image (kind research): their plan

@@ -4,7 +4,7 @@
 # state, CI roles) is derived by the tool. Fields and behaviour:
 # https://github.com/jwallace145/jwall-engineering-infra/blob/main/docs/lichess-bot.md
 version: 1
-project: braveheart-lichess-bot
+project: braveheart-bot
 repository: Braveheart-Chess/braveheart-lichess-bot
 
 # The tags every resource carries (through the provider's default_tags), plus
@@ -12,7 +12,7 @@ repository: Braveheart-Chess/braveheart-lichess-bot
 # Project, Repository and Environment=prod are cross-checked.
 tags:
   Organization: jwall-engineering
-  Project: braveheart-lichess-bot
+  Project: braveheart-bot
   Environment: prod
   Repository: Braveheart-Chess/braveheart-lichess-bot
   Owner: jwallace145
@@ -46,11 +46,11 @@ components:
     config: config.yml              # lichess-bot config with LICHESS_TOKEN_PLACEHOLDER
     lichess_user: jwallace145       # the bot account, for the profile URL in `bot status`
     secrets:
-      LICHESS_TOKEN: /jwall-engineering/braveheart-lichess-bot/lichess-token
+      LICHESS_TOKEN: /jwall-engineering/braveheart-bot/lichess-token
     engine:
       hash_mb: 256                  # UCI Hash; c8a.medium has 2 GiB
       move_overhead_ms: 500         # UCI Move Overhead (lichess-bot's own move_overhead stays in config.yml)
     records:
-      s3: true                      # sync game_records/ to s3://jwall-engineering-braveheart-lichess-bot-records/records/
+      s3: true                      # sync game_records/ to s3://jwall-engineering-braveheart-bot-records/records/
     logs:
       retention_days: 30
