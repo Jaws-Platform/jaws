@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.28.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.28.0...v0.28.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* **databricks:** give the destroy's wait its own seam so its tests stop catching subprocess sleeps ([#134](https://github.com/jwallace145/jwall-engineering-infra/issues/134)) ([4cea57e](https://github.com/jwallace145/jwall-engineering-infra/commit/4cea57e57cebb7f2abe70ff73bc70856191905d6))
+* **databricks:** wait out a deleted workspace that is still attached before destroying its network ([#132](https://github.com/jwallace145/jwall-engineering-infra/issues/132)) ([cfdf673](https://github.com/jwallace145/jwall-engineering-infra/commit/cfdf6730245c15eb8c775a8b413e5e6fb4c2c43f))
+
 ## [0.28.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.27.0...v0.28.0) (2026-11-15)
 
 
