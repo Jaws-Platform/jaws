@@ -67,3 +67,11 @@ output "bots" {
     }
   }
 }
+
+output "databricks_shared_host" {
+  description = "The shared-objects host workspace (null while databricks.enabled is false): the workspace-level provider host of stacks/databricks-shared."
+  value = local.databricks_enabled ? {
+    workspace_id  = module.databricks_shared_host[0].workspace_id
+    workspace_url = module.databricks_shared_host[0].workspace_url
+  } : null
+}
