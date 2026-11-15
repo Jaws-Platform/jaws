@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.3](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.23.2...v0.23.3) (2026-11-15)
+
+
+### Bug Fixes
+
+* **deps:** pin the module library at 0.20.0 for the workspace stack's first-apply fixes ([#116](https://github.com/jwallace145/jwall-engineering-infra/issues/116)) ([46d3434](https://github.com/jwallace145/jwall-engineering-infra/commit/46d3434aa6a25c19a38907609d3e9bebf2526ac2))
+
 ## [0.23.2](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.23.1...v0.23.2) (2026-11-15)
 
 
