@@ -26,7 +26,7 @@ components:
     # versioning: true                         # optional; config.yaml must approve it
     # expire_noncurrent_days: 90               # optional; needs versioning; config.yaml must approve it
     # expire_prefixes: { tmp/: 30 }            # optional; sub-prefix -> days; config.yaml must approve it
-    # consumers: [braveheart]                # optional: Databricks workspaces that may read it; config.yaml must approve it
+    # consumers: [braveheart-databricks]       # optional: Databricks workspaces that may read it; config.yaml must approve it
 ```
 
 | Field | Meaning |
