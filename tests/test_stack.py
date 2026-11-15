@@ -98,7 +98,7 @@ def _declared(stack: str) -> set[str]:
 def test_render_tfvars_for_bot(bot: Project, settings: Settings) -> None:
     assert render_tfvars(bot, settings) == {
         "project": "rusty-chess",
-        "repository": "jwallace145/braveheart",
+        "repository": "Braveheart-Chess/braveheart",
         "tags": dict(bot.config.tags),
         "bot_enabled": True,
         "instance_type": "t3.micro",

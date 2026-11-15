@@ -15,11 +15,20 @@ on:
         type: choice
         options:
           - rusty-chess
+          - braveheart
       destroy:
         description: Destroy the stack instead (the records, dataset and task results buckets and the secret are kept).
         required: false
         type: boolean
         default: false
+      consumer-ref:
+        description: >-
+          A branch, tag or commit of the bot's repository to read its project file
+          from. Empty reads its default branch. For a file that is not on the
+          default branch (yet, or any more): a project being renamed.
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: bot-apply-${{ inputs.project }}
@@ -49,10 +58,11 @@ jobs:
           repository=$(sed -n "s/^ *${PROJECT} *= *{ *repository *= *\"\([^\"]*\)\".*/\1/p" foundation/bots.tf)
           test -n "$repository" || { echo "::error::$PROJECT is not in foundation/bots.tf"; exit 1; }
           echo "repository=$repository" >> "$GITHUB_OUTPUT"
-      - name: Check out the bot's project file (its default branch)
+      - name: Check out the bot's project file (its default branch, or consumer-ref)
         uses: actions/checkout@v7
         with:
           repository: ${{ steps.bot.outputs.repository }}
+          ref: ${{ inputs.consumer-ref }}
           path: .consumer
           sparse-checkout: |
             jwall-engineering-sites.yaml
@@ -80,6 +90,15 @@ jobs:
           role-to-assume: ${{ steps.role.outputs.arn }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: gha-bot-apply-${{ inputs.project }}-${{ github.run_id }}
+      - name: Refuse a project file that names another project
+        env:
+          PROJECT: ${{ inputs.project }}
+        run: |
+          named=$(yq -r .project .consumer/jwall-engineering-sites.yaml)
+          if [ "$named" != "$PROJECT" ]; then
+            echo "::error::the project file names '$named', not '$PROJECT'; pass consumer-ref for a ref whose file names $PROJECT"
+            exit 1
+          fi
       - name: jwall-engineering-sites ${{ inputs.destroy && 'destroy' || 'apply' }}
         env:
           JES_STACKS_ROOT: ${{ github.workspace }}/stacks

@@ -289,6 +289,15 @@ It is applied by hand with the **Bot apply** workflow (`workflow_dispatch`,
 `prod` environment), and its plan comment says what the next Bot apply would
 do.
 
+**Applying from another ref.** Bot apply reads the project file from the bot
+repository's default branch. Its `consumer-ref` input names a branch, tag or
+commit to read it from instead. That is for a project being renamed: two
+registry entries share one repository, whose file can name only one of them.
+The new project is applied from the branch that renames the file, and the old
+one is destroyed from a tag that still has the old file. Bot apply refuses a
+file that names a project other than the one chosen, and the `Bot plan` job
+skips an entry the default branch's file does not name, with a warning.
+
 A change to the instance's image, instance type or user data **replaces the
 instance** and ends the game in progress. That includes a library bump that
 changes the on-instance scripts. Read the plan comment and run the apply
@@ -386,9 +395,10 @@ from `aws.account_id` and `context.organization` in this tool's
 `config.yaml` and the project name.
 
 1. **Register the bot.**
-   - Add it to `foundation/bots.tf` (repository and `repository_id`), to the
-     `Bot plan` matrix in `ci.yml`, and to the `Bot apply` choices. A test
-     keeps the three in sync.
+   - Add it to `foundation/bots.tf` (repository and `repository_id`, and
+     `owner_id` when the repository belongs to an organisation and not to this
+     account), to the `Bot plan` matrix in `ci.yml`, and to the `Bot apply`
+     choices. A test keeps the three in sync.
    - Merge, then release this repository. The foundation apply creates the
      three CI roles; until then, bot plans are skipped with a notice.
 2. **Prepare the bot repository.** On its default branch, commit the project

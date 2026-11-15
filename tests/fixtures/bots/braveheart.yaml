@@ -1,0 +1,132 @@
+# jwall-engineering-sites project file: runs this repository's GitHub releases
+# as a permanent Lichess bot. Everything else (region, account, VPC, AMI, names,
+# state, CI roles) is derived by the tool. Fields and behaviour:
+# https://github.com/jwallace145/jwall-engineering-infra/blob/main/docs/lichess-bot.md
+version: 1
+project: braveheart
+repository: Braveheart-Chess/braveheart
+
+# The six tags every resource carries (through the provider's default_tags).
+# Project, Repository, Environment=prod and ManagedBy=terraform are cross-checked.
+tags:
+  Organization: jwall-engineering
+  Project: braveheart
+  Environment: prod
+  Repository: Braveheart-Chess/braveheart
+  ManagedBy: terraform
+  Owner: jwallace145
+
+components:
+  - kind: container-image
+    architecture: x86_64            # x86_64 | arm64; must match the release asset
+    artifact:                       # the release asset the image ships (never a rebuild)
+      asset: braveheart-{version}-x86_64-unknown-linux-gnu.tar.gz
+      checksum: braveheart-{version}-x86_64-unknown-linux-gnu.tar.gz.sha256
+      binary: braveheart
+    # dockerfile: docker/Dockerfile # optional: replace the harness-owned Dockerfile
+
+  - kind: lichess-bot
+    track: latest-release           # every published vX.Y.Z release is rolled out
+    # A whole, unshared, fast core: the engine is single-threaded and its
+    # strength is that core's speed (doubling nodes per second is worth
+    # roughly 50-80 Elo at a clock). Never a burstable type: the bot searches
+    # almost continuously, and a t3 in standard credit mode is held to 10% of
+    # a core once its credits run out, within hours. c8a.medium is one AMD
+    # Zen 5 core at 4.5 GHz with SMT off, about $39/month on demand; it runs
+    # the x86-64-v3 release asset as-is.
+    instance_type: c8a.medium
+    config: lichess/config.yml      # lichess-bot config with LICHESS_TOKEN_PLACEHOLDER
+    lichess_user: rusty-chess-bot   # optional: for the profile URL in `bot status`
+    secrets:
+      LICHESS_TOKEN: /jwall-engineering/braveheart/lichess-token
+    engine:
+      hash_mb: 256                  # UCI Hash; c8a.medium has 2 GiB
+      move_overhead_ms: 500         # UCI Move Overhead (lichess-bot's own move_overhead stays in config.yml)
+    records:
+      s3: true                      # sync game_records/ to s3://jwall-engineering-braveheart-records/records/
+    logs:
+      retention_days: 30
+
+  # Remote CI tasks (SPRT, matches) on dedicated, ephemeral EC2 instances,
+  # through jwall-engineering-infra's remote-task.yml: a 64-core spot box by
+  # default, capped at 58% of on demand, on demand only as a launch fallback.
+  # https://github.com/jwallace145/jwall-engineering-infra/blob/main/docs/remote-tasks.md
+  - kind: task-runner
+    instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge]  # whole Zen 5 cores, SMT off; the launch role's allow-list
+    default_instance_type: c8a.16xlarge  # 64 cores, the bot's core: concurrency 60
+    market: spot                    # spot | on-demand
+    max_price_fraction: 0.58        # about $2.00/h for c8a.16xlarge; spot ran $0.93-1.39 in Oct 2026
+    on_demand_fallback: true        # at launch only, after spot fails in every zone
+    spot_wait_minutes: 5
+    max_hours: 6                    # 1-6; GitHub stops a job at six hours anyway
+    max_vcpus: 256                  # four c8a.16xlarge, the account spot quota: three datagen tasks plus an SPRT leg
+    slot_wait_minutes: 30
+    results_days: 7                 # task outputs expire from S3 after this
+    log_retention_days: 14
+    # GPU tasks (NNUE training, ci/train-task.sh): their own instance types,
+    # image, budget and dataset grants; a caller that names no profile gets
+    # the fields above as the default `cpu` profile. Exactly these values: the
+    # tool's foundation registers this profile, and the launch role allows
+    # nothing else. Contract: jwall-engineering-infra's docs/remote-tasks.md,
+    # "Task profiles: GPU tasks".
+    profiles:
+      gpu:
+        instance_types: [g6.xlarge, g6.2xlarge, g6e.xlarge]  # NVIDIA L4, L4, L40S
+        default_instance_type: g6.xlarge  # 4 vCPUs; the account's G and VT quota (5) fits one
+        market: on-demand           # G and VT spot quota is 0
+        max_hours: 6
+        max_vcpus: 4                # the gpu profile's own budget; never waits on SPRTs
+        image: deep-learning-gpu    # pinned in the tool's config.yaml: NVIDIA driver + CUDA
+        root_volume_gb: 200         # gp3; SCRATCH_DIR lives on it
+        whole_cores: false          # G types run two threads per core
+        gpu: true                   # setup waits for nvidia-smi; env block records GPU/driver/CUDA
+        datasets:
+          nnue: { read: [selfplay/], write: [nets/] }  # data/selfplay/* in, data/nets/* out
+      # One profile per workflow, so each kind of work has its own market, budget
+      # and dataset access here rather than in the workflow. Registered in
+      # jwall-engineering-infra's foundation/bots.tf, which bounds what this
+      # file can start. Contract: its docs/remote-tasks.md, "Workflow profiles".
+      sprt:
+        instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge]
+        default_instance_type: c8a.16xlarge
+        market: on-demand           # both legs gate; a reclamation leaves no verdict
+        max_hours: 6
+        max_vcpus: 128              # both legs at once
+      match:
+        instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge]
+        default_instance_type: c8a.16xlarge
+        market: on-demand
+        max_hours: 6
+        max_vcpus: 64
+      datagen:
+        instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge]
+        default_instance_type: c8a.16xlarge
+        market: spot                # an interruption only loses the shards in progress
+        max_price_fraction: 0.58
+        on_demand_fallback: true
+        max_hours: 6
+        max_vcpus: 192              # three tasks at once
+        datasets:
+          nnue: { write: [selfplay/] }
+      relabel:
+        instance_types: [c8a.16xlarge]
+        default_instance_type: c8a.16xlarge
+        market: spot                # no capacity fails the run; rerun it later rather than pay on demand
+        max_price_fraction: 0.58
+        on_demand_fallback: false
+        spot_wait_minutes: 30
+        max_hours: 6
+        max_vcpus: 192
+        datasets:
+          nnue: { read: [selfplay/], write: [selfplay/relabel/] }
+
+  # NNUE training data: a kept-forever, append-only S3 bucket. Task instances
+  # (ci/datagen-task.sh) may add objects under the prefix, never read or
+  # delete them; the Datagen workflow reads bucket and prefix from here.
+  # Layout: docs/datagen.md. Fields and access:
+  # https://github.com/jwallace145/jwall-engineering-infra/blob/main/docs/datasets.md
+  - kind: dataset
+    name: nnue
+    bucket: jwall-engineering-braveheart-nnue  # <Organization>-<project>-<name>
+    prefix: data/                   # everything the project writes lives under it
+    writers: [task-runner]          # the task instances: PutObject under the prefix only
