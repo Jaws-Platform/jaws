@@ -26,12 +26,7 @@ NNUE_ROLE = "arn:aws:iam::650503560686:role/jwall-engineering-braveheart-nnue-da
 
 
 def _raw() -> dict[str, Any]:
-    """config.yaml with the nnue dataset shared: the real file approves no share
-    yet (test_config_yaml_approves_no_share_yet), so the tests add one."""
     raw: dict[str, Any] = yaml.safe_load((FIXTURES / "config.yaml").read_text())
-    raw["projects"]["braveheart"]["datasets"][NNUE] = {
-        "databricks_share": {"prefix": "data/", "consumers": ["braveheart-databricks"]}
-    }
     return raw
 
 
@@ -57,22 +52,10 @@ def _bot_file(tmp_path: Path, consumers: list[str] | None, prefix: str = "data/"
     return path
 
 
-@pytest.fixture
-def settings(tmp_path: Path) -> Settings:
-    """The tool configuration with the nnue share approved (overrides conftest's)."""
-    return _load(tmp_path, _raw())
-
-
 # --- config.yaml ------------------------------------------------------------
 
 
-def test_config_yaml_approves_no_share_yet() -> None:
-    # The share returns once the braveheart-databricks workspace exists: the
-    # foundation refuses a share whose consumer has no workspace.
-    assert load_settings(FIXTURES / "config.yaml", environ={}).databricks_shares() == []
-
-
-def test_an_approved_share_names_its_producer_bucket_and_role(settings: Settings) -> None:
+def test_the_nnue_share_is_approved_for_braveheart_databricks(settings: Settings) -> None:
     (share,) = settings.databricks_shares()
     assert share.producer == "braveheart"
     assert share.bucket == NNUE
