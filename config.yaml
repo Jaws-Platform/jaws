@@ -98,10 +98,14 @@ projects:
     instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge, g6.xlarge, g6.2xlarge, g6e.xlarge]
     task_profiles: [cpu, gpu, sprt, match, datagen, relabel]
     datasets:
-      # No `databricks_share` yet: the dataset is shared with the
-      # braveheart-databricks workspace (docs/databricks.md, "Shared datasets")
-      # in a change of its own.
-      jwall-engineering-braveheart-nnue: {}
+      jwall-engineering-braveheart-nnue:
+        # Shared, read-only, with Databricks workspaces: the foundation registers
+        # one external location through the shared-objects host, bound to each
+        # consumer. Nothing can read until the producer's file lists the same
+        # consumers on its dataset (which adds the share role to its readers).
+        databricks_share:
+          prefix: data/
+          consumers: [braveheart-databricks]
     # max_run_cost_usd: 80 # optional per-project override of tasks.max_run_cost_usd
   databricks-poc:
     # A Databricks workspace project. `vpc_cidr` is allocated here so IP capacity is
