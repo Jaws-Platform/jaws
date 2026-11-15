@@ -36,7 +36,7 @@ def test_every_tested_stack_exists() -> None:
 
 def test_the_cases_cover_a_bot_a_research_project_and_a_dataset_alone() -> None:
     rendered = cases(_settings())["bot"]
-    assert rendered["rusty_chess"]["bot_enabled"] is True
+    assert rendered["braveheart"]["bot_enabled"] is True
     assert rendered["math_prover"]["bot_enabled"] is False
     assert rendered["math_prover"]["task_runner_enabled"] is True
     assert rendered["dataset_only"]["bot_enabled"] is False

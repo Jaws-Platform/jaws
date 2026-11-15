@@ -18,16 +18,16 @@ run "plans_a_bot_with_its_tasks_and_dataset" {
 
   assert {
     condition     = length(module.network) == 1 && length(module.tasks) == 1 && length(module.task_results) == 1
-    error_message = "rusty-chess has a network, a task runner and a results bucket"
+    error_message = "braveheart has a network, a task runner and a results bucket"
   }
 
   assert {
     condition     = keys(module.datasets) == ["nnue"]
-    error_message = "rusty-chess has the nnue dataset"
+    error_message = "braveheart has the nnue dataset"
   }
 
   assert {
     condition     = toset(keys(module.task_profiles)) == toset(["datagen", "gpu", "match", "relabel", "sprt"])
-    error_message = "rusty-chess has one launch template per task profile"
+    error_message = "braveheart has one launch template per task profile"
   }
 }

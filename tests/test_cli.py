@@ -26,8 +26,8 @@ APPLY_ROLE = (
     "arn:aws:sts::650503560686:assumed-role/jwall-engineering-guitar-knowledge-base-ci-apply/s"
 )
 BUCKET = "jwall-engineering-guitar-knowledge-base"
-BOT_PLAN_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-rusty-chess-ci-plan/s"
-BOT_APPLY_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-rusty-chess-ci-apply/s"
+BOT_PLAN_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-braveheart-ci-plan/s"
+BOT_APPLY_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-braveheart-ci-apply/s"
 
 
 def _as_role(arn: str) -> AbstractContextManager[Any]:
@@ -232,10 +232,10 @@ def test_plan_bot_uses_the_bot_stack(
     calls = fake_terraform.read_text()
     assert "init -input=false -no-color -backend-config=backend.hcl -reconfigure" in calls
     tfvars = json.loads((tmp_path / "rendered.tfvars.json").read_text())
-    assert tfvars["project"] == "rusty-chess"
+    assert tfvars["project"] == "braveheart"
     assert "records_enabled" in tfvars
     comment = (bot_workspace / ".jwall-engineering-sites" / "plan-comment.md").read_text()
-    assert "rusty-chess" in comment
+    assert "braveheart" in comment
 
 
 def test_plan_bot_refuses_the_site_role(bot_workspace: Path, fake_terraform: Path) -> None:
@@ -294,7 +294,7 @@ def test_destroy_releases_the_task_results_bucket_from_state_first(
     rm = calls.index("state rm -lock-timeout=120s module.task_results")
     destroy = next(i for i, c in enumerate(calls) if c.startswith("destroy "))
     assert rm < destroy
-    assert "jwall-engineering-rusty-chess-tasks" in result.output
+    assert "jwall-engineering-braveheart-tasks" in result.output
 
 
 def test_destroy_refuses_while_task_instances_run(
@@ -306,7 +306,7 @@ def test_destroy_refuses_while_task_instances_run(
         instance = ec2.run_instances(
             ImageId=image_id, MinCount=1, MaxCount=1, InstanceType="c8a.xlarge",
             TagSpecifications=[{"ResourceType": "instance", "Tags": [
-                {"Key": "Project", "Value": "rusty-chess"}, {"Key": "Purpose", "Value": "ci-task"},
+                {"Key": "Project", "Value": "braveheart"}, {"Key": "Purpose", "Value": "ci-task"},
             ]}],
         )["Instances"][0]["InstanceId"]  # fmt: skip
         result = runner.invoke(cli.app, ["destroy", "--yes"])
@@ -334,9 +334,9 @@ def test_destroy_refuses_sites(workspace: Path, fake_terraform: Path) -> None:
 
 
 BOT_RELEASE_ROLE = (
-    "arn:aws:sts::650503560686:assumed-role/jwall-engineering-rusty-chess-ci-release/s"
+    "arn:aws:sts::650503560686:assumed-role/jwall-engineering-braveheart-ci-release/s"
 )
-TOKEN_PARAM = "/jwall-engineering/rusty-chess/lichess-token"
+TOKEN_PARAM = "/jwall-engineering/braveheart/lichess-token"
 
 
 def test_secrets_set_prompts_hidden(bot_workspace: Path) -> None:
@@ -375,7 +375,7 @@ def test_secrets_check_exit_codes(bot_workspace: Path) -> None:
 def test_bot_status_output(bot_workspace: Path) -> None:
     with mock_aws(), _as_role(BOT_PLAN_ROLE):
         boto3.client("ssm", region_name="us-east-1").put_parameter(
-            Name="/jwall-engineering/rusty-chess/bot/status", Value="ok", Type="String"
+            Name="/jwall-engineering/braveheart/bot/status", Value="ok", Type="String"
         )
         result = runner.invoke(cli.app, ["bot", "status"])
     assert result.exit_code == 0, result.output
@@ -398,7 +398,7 @@ def test_bot_status_refuses_other_roles(bot_workspace: Path) -> None:
 def test_bot_logs_prints_events(bot_workspace: Path) -> None:
     with mock_aws(), _as_role(BOT_PLAN_ROLE):
         logs = boto3.client("logs", region_name="us-east-1")
-        group = "/jwall-engineering/rusty-chess/bot"
+        group = "/jwall-engineering/braveheart/bot"
         logs.create_log_group(logGroupName=group)
         logs.create_log_stream(logGroupName=group, logStreamName="app-v0.14.0")
         import time
@@ -424,16 +424,16 @@ from jwall_engineering_sites import image as image_module  # noqa: E402
 from jwall_engineering_sites import releases as releases_module  # noqa: E402
 from jwall_engineering_sites import rollout as rollout_module  # noqa: E402
 
-REPO = "jwall-engineering-rusty-chess"
+REPO = "jwall-engineering-braveheart"
 API_RELEASES = "https://api.github.com/repos/Braveheart-Chess/braveheart/releases?per_page=100"
-LINUX = "rusty-chess-{v}-x86_64-unknown-linux-gnu.tar.gz"
+LINUX = "braveheart-{v}-x86_64-unknown-linux-gnu.tar.gz"
 
 
 def _tarball(version: str) -> bytes:
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
         data = b"\x7fELF fake engine"
-        info = tarfile.TarInfo(f"rusty-chess-{version}-x86_64-unknown-linux-gnu/rusty-chess")
+        info = tarfile.TarInfo(f"braveheart-{version}-x86_64-unknown-linux-gnu/braveheart")
         info.size, info.mode = len(data), 0o755
         tar.addfile(info, io.BytesIO(data))
     return buffer.getvalue()
@@ -504,7 +504,7 @@ def _bot_instance() -> str:
             {
                 "ResourceType": "instance",
                 "Tags": [
-                    {"Key": "Project", "Value": "rusty-chess"},
+                    {"Key": "Project", "Value": "braveheart"},
                     {"Key": "Component", "Value": "container-instance"},
                 ],
             }
@@ -517,7 +517,7 @@ def _bot_instance() -> str:
 def _param(name: str) -> str | None:
     try:
         value: str = boto3.client("ssm", region_name="us-east-1").get_parameter(
-            Name=f"/jwall-engineering/rusty-chess/bot/{name}"
+            Name=f"/jwall-engineering/braveheart/bot/{name}"
         )["Parameter"]["Value"]
     except Exception:
         return None
@@ -526,7 +526,7 @@ def _param(name: str) -> str | None:
 
 def _put_param(name: str, value: str) -> None:
     boto3.client("ssm", region_name="us-east-1").put_parameter(
-        Name=f"/jwall-engineering/rusty-chess/bot/{name}",
+        Name=f"/jwall-engineering/braveheart/bot/{name}",
         Value=value,
         Type="String",
         Overwrite=True,
@@ -599,7 +599,7 @@ def test_bot_deploy_without_instance_exits_3(bot_workspace: Path) -> None:
         _ecr_with("v0.14.0")
         result = runner.invoke(cli.app, ["bot", "deploy", "--version", "v0.14.0"])
     assert result.exit_code == 3
-    assert "tag:Project=rusty-chess" in result.output
+    assert "tag:Project=braveheart" in result.output
 
 
 def test_bot_deploy_refuses_a_tag_not_in_ecr(bot_workspace: Path) -> None:
@@ -1023,8 +1023,8 @@ def test_destroy_research_refuses_while_tasks_run(
 def test_destroy_bot_releases_its_dataset_buckets_too(
     bot_workspace: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """rusty-chess has a dataset: its prevent_destroy would reject the whole plan."""
-    state = _dataset_state("nnue", "jwall-engineering-rusty-chess-task-datagen")
+    """braveheart has a dataset: its prevent_destroy would reject the whole plan."""
+    state = _dataset_state("nnue", "jwall-engineering-braveheart-task-datagen")
     monkeypatch.setenv(
         "FAKE_TF_STATE_LIST",
         " ".join(["module.records[0].aws_s3_bucket.this", *state["buckets"], *state["grants"]]),
@@ -1037,6 +1037,6 @@ def test_destroy_bot_releases_its_dataset_buckets_too(
     assert calls.index(TF_RM + "module.records") < destroy
     released = [c for c in calls if c.startswith(TF_RM) and c != TF_RM + "module.records"]
     _assert_releases_only_the_buckets([*released, calls[destroy]], state)
-    summary = next(line for line in result.output.splitlines() if "destroyed rusty-chess" in line)
-    assert "jwall-engineering-rusty-chess-nnue" in summary
+    summary = next(line for line in result.output.splitlines() if "destroyed braveheart" in line)
+    assert "jwall-engineering-braveheart-nnue" in summary
     assert "records bucket" in summary and "secret" in summary

@@ -97,13 +97,13 @@ def _declared(stack: str) -> set[str]:
 
 def test_render_tfvars_for_bot(bot: Project, settings: Settings) -> None:
     assert render_tfvars(bot, settings) == {
-        "project": "rusty-chess",
+        "project": "braveheart",
         "repository": "Braveheart-Chess/braveheart",
         "tags": dict(bot.config.tags),
         "bot_enabled": True,
         "instance_type": "t3.micro",
         "architecture": "x86_64",
-        "secret_parameters": {"LICHESS_TOKEN": "/jwall-engineering/rusty-chess/lichess-token"},
+        "secret_parameters": {"LICHESS_TOKEN": "/jwall-engineering/braveheart/lichess-token"},
         "container_environment": {"ENGINE_HASH_MB": "128", "ENGINE_MOVE_OVERHEAD_MS": "500"},
         "bot_name": "rusty-chess-bot",
         "records_enabled": True,
@@ -197,7 +197,7 @@ def test_render_tfvars_for_bot(bot: Project, settings: Settings) -> None:
         "datasets": [
             {
                 "name": "nnue",
-                "bucket": "jwall-engineering-rusty-chess-nnue",
+                "bucket": "jwall-engineering-braveheart-nnue",
                 "prefix": "data/",
                 "writers": ["task-runner"],
                 "readers": [],
@@ -552,15 +552,15 @@ def _strip_new_keys(tfvars: dict[str, Any]) -> dict[str, Any]:
     return old
 
 
-def test_rusty_chess_tfvars_are_unchanged(bot: Project, settings: Settings) -> None:
-    """The rusty-chess fixture's inputs are what they were before gating, plus new keys
+def test_braveheart_tfvars_are_unchanged(bot: Project, settings: Settings) -> None:
+    """The braveheart fixture's inputs are what they were before gating, plus new keys
     at their defaults. The fixture is a sample, not the live bot's file.
 
     The snapshot was rendered by the code before this change (commit 76187b0). It
     holds the pinned AMIs and Rust toolchain from config.yaml, so regenerate it when
     `bot.amis`, `tasks.images` or `tasks.rust_toolchain` is bumped.
     """
-    snapshot = json.loads((FIXTURES / "bots" / "rusty-chess.tfvars.json").read_text())
+    snapshot = json.loads((FIXTURES / "bots" / "braveheart.tfvars.json").read_text())
     tfvars = render_tfvars(bot, settings)
     assert _strip_new_keys(tfvars) == snapshot
 

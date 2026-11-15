@@ -29,13 +29,8 @@ locals {
   #                outside this account (an organisation's); without it the
   #                release and task roles trust local.github_owner_id.
   # One line per entry, `repository` first (the workflows read this block).
-  #
-  # braveheart and rusty-chess are the same repository while the project moves
-  # from the old name to the new one: both stacks exist until the data is
-  # copied and the old one is destroyed, then rusty-chess leaves this list.
   bots = {
-    rusty-chess = { repository = "Braveheart-Chess/braveheart", repository_id = "1435162673", owner_id = "356866252" }
-    braveheart  = { repository = "Braveheart-Chess/braveheart", repository_id = "1435162673", owner_id = "356866252" }
+    braveheart = { repository = "Braveheart-Chess/braveheart", repository_id = "1435162673", owner_id = "356866252" }
   }
 
   # The entries of `bots` without a bot or an image (kind research): their plan

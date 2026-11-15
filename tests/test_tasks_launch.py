@@ -109,7 +109,7 @@ def test_task_tags(bot: Project) -> None:
         "Component": "task-runner",
         "Purpose": "ci-task",
         "Profile": "cpu",
-        "Name": "jwall-engineering-rusty-chess-task-123-1-sprt-0",
+        "Name": "jwall-engineering-braveheart-task-123-1-sprt-0",
         "Workflow": "SPRT",
         "RunId": "123-1",
         "TaskId": "sprt-0",
@@ -508,14 +508,14 @@ def test_running_tasks_ignores_the_bot_and_other_projects() -> None:
         ec2 = boto3.client("ec2", region_name=REGION)
         task = _ec2_instance(
             ec2,
-            {"Project": "rusty-chess", "Purpose": "ci-task", "RunId": "9-1", "TaskId": "a",
+            {"Project": "braveheart", "Purpose": "ci-task", "RunId": "9-1", "TaskId": "a",
              "MaxLifetimeHours": "6"},
         )  # fmt: skip
-        _ec2_instance(ec2, {"Project": "rusty-chess", "Component": "container-instance"})
+        _ec2_instance(ec2, {"Project": "braveheart", "Component": "container-instance"})
         _ec2_instance(ec2, {"Project": "other", "Purpose": "ci-task"})
-        stopped = _ec2_instance(ec2, {"Project": "rusty-chess", "Purpose": "ci-task"})
+        stopped = _ec2_instance(ec2, {"Project": "braveheart", "Purpose": "ci-task"})
         ec2.terminate_instances(InstanceIds=[stopped])
-        running = tasks.running_tasks(ec2, "rusty-chess")
+        running = tasks.running_tasks(ec2, "braveheart")
     assert [t.id for t in running] == [task]
     assert (running[0].run_id, running[0].task_id, running[0].max_hours) == ("9-1", "a", 6)
     assert running[0].type == "c8a.xlarge"
@@ -527,9 +527,9 @@ def test_public_subnets_sorted_by_zone() -> None:
         vpc = ec2.create_vpc(CidrBlock="10.0.0.0/16")["Vpc"]["VpcId"]
         ids = {}
         for cidr, zone, public, project in [
-            ("10.0.2.0/24", "us-east-1b", True, "rusty-chess"),
-            ("10.0.1.0/24", "us-east-1a", True, "rusty-chess"),
-            ("10.0.3.0/24", "us-east-1c", False, "rusty-chess"),
+            ("10.0.2.0/24", "us-east-1b", True, "braveheart"),
+            ("10.0.1.0/24", "us-east-1a", True, "braveheart"),
+            ("10.0.3.0/24", "us-east-1c", False, "braveheart"),
             ("10.0.4.0/24", "us-east-1d", True, "other"),
         ]:
             subnet = ec2.create_subnet(VpcId=vpc, CidrBlock=cidr, AvailabilityZone=zone)["Subnet"]
@@ -541,7 +541,7 @@ def test_public_subnets_sorted_by_zone() -> None:
                     SubnetId=subnet["SubnetId"], MapPublicIpOnLaunch={"Value": True}
                 )
             ids[zone] = subnet["SubnetId"]
-        subnets = tasks.public_subnets(ec2, "rusty-chess")
+        subnets = tasks.public_subnets(ec2, "braveheart")
     assert [(s.id, s.zone) for s in subnets] == [
         (ids["us-east-1a"], "us-east-1a"),
         (ids["us-east-1b"], "us-east-1b"),

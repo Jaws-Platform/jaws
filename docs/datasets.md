@@ -18,7 +18,7 @@ components:
   # ...container-image, lichess-bot, task-runner...
   - kind: dataset
     name: nnue                                 # kebab-case; not records or tasks
-    bucket: jwall-engineering-rusty-chess-nnue # <Organization>-<project>-<name>
+    bucket: jwall-engineering-braveheart-nnue # <Organization>-<project>-<name>
     prefix: data/                              # everything the project writes lives under it
     writers: [task-runner]                     # optional: who may add objects
     # readers: [arn:aws:iam::123456789012:role/trainer]  # optional
@@ -66,7 +66,7 @@ module, in the bot stack.
   stops `PutObject` replacing a key. Prefixes that `config.yaml` lists under
   `write_once` are enforced: see [Write-once prefixes](#write-once-prefixes).
 - **Versioning is off unless the project turns it on** (and `config.yaml`
-  approves it). The rusty-chess bucket has it off, because it would only store
+  approves it). The braveheart bucket has it off, because it would only store
   an accidental re-upload twice. When it is on:
   - S3 advises waiting 15 minutes after enabling versioning before writing.
   - `expire_prefixes` only adds delete markers on a versioned bucket; the data
@@ -135,7 +135,7 @@ downloading and uploading again.
 The instances write with the AWS CLI and the instance role's credentials:
 
 ```sh
-aws s3 cp --only-show-errors FILE s3://jwall-engineering-rusty-chess-nnue/data/selfplay/v1/...
+aws s3 cp --only-show-errors FILE s3://jwall-engineering-braveheart-nnue/data/selfplay/v1/...
 ```
 
 ## Reading the data
@@ -144,7 +144,7 @@ Run these from your machine with the admin profile:
 
 ```sh
 export AWS_PROFILE=prog-strength-admin
-B=s3://jwall-engineering-rusty-chess-nnue/data
+B=s3://jwall-engineering-braveheart-nnue/data
 
 # Generations and runs
 aws s3 ls "$B/selfplay/v1/"
@@ -174,7 +174,7 @@ profiles:
       nnue: { read: [selfplay/], write: [nets/] }
 ```
 
-So for rusty-chess:
+So for braveheart:
 
 | Prefix | Cpu task instances | Gpu task instances |
 |---|---|---|

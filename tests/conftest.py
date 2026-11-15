@@ -64,7 +64,7 @@ def guitar(settings: Settings) -> Site:
 
 @pytest.fixture
 def bot(settings: Settings) -> Project:
-    return Project.from_config(load_site_config(FIXTURES / "bots" / "rusty-chess.yaml"), settings)
+    return Project.from_config(load_site_config(FIXTURES / "bots" / "braveheart.yaml"), settings)
 
 
 @pytest.fixture
@@ -135,14 +135,14 @@ def dist(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def bot_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """A working directory holding the rusty-chess bot file, its lichess config and config.yaml."""
+    """A working directory holding the braveheart bot file, its lichess config and config.yaml."""
     root = tmp_path / "bot-workspace"
     (root / "lichess").mkdir(parents=True)
-    shutil.copy(FIXTURES / "bots" / "rusty-chess.yaml", root / "jwall-engineering-sites.yaml")
+    shutil.copy(FIXTURES / "bots" / "braveheart.yaml", root / "jwall-engineering-sites.yaml")
     shutil.copy(FIXTURES / "config.yaml", root / "config.yaml")
     (root / "lichess" / "config.yml").write_text(
         "token: LICHESS_TOKEN_PLACEHOLDER\nurl: https://lichess.org/\n"
-        "engine:\n  dir: ./engines/\n  name: rusty-chess\n  protocol: uci\n"
+        "engine:\n  dir: ./engines/\n  name: braveheart\n  protocol: uci\n"
         "  uci_options:\n    Hash: 16\n"
     )
     monkeypatch.chdir(root)

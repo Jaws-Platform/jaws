@@ -32,11 +32,11 @@ tasks:
   max_run_cost_usd: 50
 
 projects:
-  rusty-chess:
+  braveheart:
     instance_types: [c8a.xlarge, ...]
     task_profiles: [cpu, gpu, sprt, match, datagen, relabel]
     datasets:
-      jwall-engineering-rusty-chess-nnue: {}
+      jwall-engineering-braveheart-nnue: {}
 ```
 
 `foundation/bots.tf` reads `projects` for the launch role's allow-lists and
@@ -364,7 +364,7 @@ Encryption stays SSE-S3.
   `--max-hours` lowers the estimate. Root volume and public IPv4 (cents an
   hour) are excluded.
 - **A Pricing API failure refuses the launch.** After three attempts the
-  command exits 3 with `outcome = no-price`. This also reaches rusty-chess at
+  command exits 3 with `outcome = no-price`. This also reaches braveheart at
   its next pin bump: before, its spot path launched without a cap when the
   Pricing API failed.
 - **The instance-type allow-list is the hard limit on hourly cost.** The
@@ -383,7 +383,7 @@ Pricing API on 2026-11-02, us-east-1:
 | `g6e.4xlarge` | 1 L40S, 45 GiB | 16 | 600 GB | 3.004 | $18.03 |
 | `g6e.12xlarge` | 4 L40S, 179 GiB | 48 | 3800 GB | 10.493 | $62.96 (blocked at 6 h; allowed at 4 h, $41.97) |
 
-Every current rusty-chess type is under the ceiling; the largest,
+Every current braveheart type is under the ceiling; the largest,
 `c8a.16xlarge`, is about $20.70 over six hours. Spend per workflow or profile:
 `cost report --project <name> [--by profile]` ([costs.md](costs.md)).
 
@@ -504,7 +504,7 @@ lifecycle configuration, which is why retention is approved in `config.yaml`.
   `scripts/test-stack-plans.sh`, against a mock provider. That is a plan with no
   AWS behind it, so it says nothing about IAM or what AWS accepts.
 - **`moved` blocks** (`module.image` to `module.image[0]`, and the others) are
-  proven by the CI **Bot plan** for rusty-chess, which must show no create or
+  proven by the CI **Bot plan** for braveheart, which must show no create or
   destroy.
 - **The write-once IAM** was proven in a live test on 2026-11-03 with a
   temporary bucket and role, both deleted: new keys succeed, existing keys

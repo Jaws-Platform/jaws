@@ -40,7 +40,7 @@ def _instance(ec2: Any, project: str, component: str = "container-instance") -> 
 def test_put_and_check_secret() -> None:
     with mock_aws():
         ssm = boto3.client("ssm", region_name=REGION)
-        name = "/jwall-engineering/rusty-chess/lichess-token"
+        name = "/jwall-engineering/braveheart/lichess-token"
         assert botlib.secret_exists(ssm, name) is False
         botlib.put_secret(ssm, name, "lip_x")
         assert botlib.secret_exists(ssm, name) is True
@@ -63,9 +63,9 @@ def test_get_and_put_parameters() -> None:
 def test_find_instance_by_tags() -> None:
     with mock_aws():
         ec2 = boto3.client("ec2", region_name=REGION)
-        instance_id = _instance(ec2, "rusty-chess")
+        instance_id = _instance(ec2, "braveheart")
         _instance(ec2, "other-project")
-        found = botlib.find_instance(ec2, "rusty-chess")
+        found = botlib.find_instance(ec2, "braveheart")
         assert found is not None
         assert found.id == instance_id
         assert found.state == "running"
@@ -74,25 +74,25 @@ def test_find_instance_by_tags() -> None:
 def test_find_instance_none() -> None:
     with mock_aws():
         ec2 = boto3.client("ec2", region_name=REGION)
-        assert botlib.find_instance(ec2, "rusty-chess") is None
+        assert botlib.find_instance(ec2, "braveheart") is None
 
 
 def test_find_instance_ambiguous() -> None:
     with mock_aws():
         ec2 = boto3.client("ec2", region_name=REGION)
-        _instance(ec2, "rusty-chess")
-        _instance(ec2, "rusty-chess")
+        _instance(ec2, "braveheart")
+        _instance(ec2, "braveheart")
         with pytest.raises(PreflightError, match="2 instances"):
-            botlib.find_instance(ec2, "rusty-chess")
+            botlib.find_instance(ec2, "braveheart")
 
 
 def test_find_instance_ignores_terminated() -> None:
     with mock_aws():
         ec2 = boto3.client("ec2", region_name=REGION)
-        old = _instance(ec2, "rusty-chess")
+        old = _instance(ec2, "braveheart")
         ec2.terminate_instances(InstanceIds=[old])
-        new = _instance(ec2, "rusty-chess")
-        found = botlib.find_instance(ec2, "rusty-chess")
+        new = _instance(ec2, "braveheart")
+        found = botlib.find_instance(ec2, "braveheart")
         assert found is not None and found.id == new
 
 
@@ -100,7 +100,7 @@ def test_status_reads_everything(bot: Project) -> None:
     with mock_aws():
         session = boto3.session.Session(region_name=REGION)
         ec2, ssm = session.client("ec2"), session.client("ssm")
-        instance_id = _instance(ec2, "rusty-chess")
+        instance_id = _instance(ec2, "braveheart")
         for name, value in (
             ("desired-version", "v0.14.0"),
             ("running-version", "v0.13.0"),
@@ -148,7 +148,7 @@ def test_tail_logs_pages_and_follows() -> None:
     lines = list(
         botlib.tail_logs(
             Logs(),  # type: ignore[arg-type]
-            "/jwall-engineering/rusty-chess/bot",
+            "/jwall-engineering/braveheart/bot",
             since_seconds=600,
             follow=True,
             logger=logging.getLogger("t"),

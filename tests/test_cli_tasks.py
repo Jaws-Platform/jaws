@@ -15,7 +15,7 @@ from jwall_engineering_sites import cli, tasks
 from tests.test_cli import BOT_PLAN_ROLE, RESEARCH_PLAN_ROLE, _as_role
 
 runner = CliRunner()
-TASK_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-rusty-chess-ci-task/s"
+TASK_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-braveheart-ci-task/s"
 RESEARCH_TASK_ROLE = (
     "arn:aws:sts::650503560686:assumed-role/jwall-engineering-math-prover-ci-task/s"
 )

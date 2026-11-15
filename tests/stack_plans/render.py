@@ -54,7 +54,7 @@ def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
     """Each test file's inputs: by stack (its directory under stacks/), then by case name."""
     research = with_guardrails(settings, "math-prover", MATH_PROVER_GUARDRAILS)
     bots = {
-        "rusty_chess": (_file("rusty-chess"), settings),
+        "braveheart": (_file("braveheart"), settings),
         "math_prover": (_file("math-prover"), research),
         "dataset_only": (_dataset_only(), research),
     }

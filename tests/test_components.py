@@ -14,7 +14,7 @@ from jwall_engineering_sites.settings import Settings
 from jwall_engineering_sites.site import load_site_config
 from tests.conftest import FIXTURES
 
-BOT_FILE = FIXTURES / "bots" / "rusty-chess.yaml"
+BOT_FILE = FIXTURES / "bots" / "braveheart.yaml"
 
 
 def _raw() -> dict[str, Any]:
@@ -40,22 +40,22 @@ def _load(tmp_path: Path, raw: dict[str, Any], settings: Settings) -> Project:
 
 def test_bot_fixture_loads(bot: Project) -> None:
     assert bot.kind == "bot"
-    assert bot.project == "rusty-chess"
-    assert bot.image_repository == "jwall-engineering-rusty-chess"
-    assert bot.bot_name == "jwall-engineering-rusty-chess-bot"
-    assert bot.records_bucket == "jwall-engineering-rusty-chess-records"
-    assert bot.vpc_name == "jwall-engineering-rusty-chess"
-    assert bot.log_group == "/jwall-engineering/rusty-chess/bot"
-    assert bot.parameter_prefix == "/jwall-engineering/rusty-chess/bot"
-    assert bot.parameter("desired-version") == "/jwall-engineering/rusty-chess/bot/desired-version"
-    assert bot.state_key == "project=rusty-chess/env=prod/rusty-chess-prod.tfstate"
-    assert bot.role_name("release") == "jwall-engineering-rusty-chess-ci-release"
-    assert bot.role_name("apply") == "jwall-engineering-rusty-chess-ci-apply"
+    assert bot.project == "braveheart"
+    assert bot.image_repository == "jwall-engineering-braveheart"
+    assert bot.bot_name == "jwall-engineering-braveheart-bot"
+    assert bot.records_bucket == "jwall-engineering-braveheart-records"
+    assert bot.vpc_name == "jwall-engineering-braveheart"
+    assert bot.log_group == "/jwall-engineering/braveheart/bot"
+    assert bot.parameter_prefix == "/jwall-engineering/braveheart/bot"
+    assert bot.parameter("desired-version") == "/jwall-engineering/braveheart/bot/desired-version"
+    assert bot.state_key == "project=braveheart/env=prod/braveheart-prod.tfstate"
+    assert bot.role_name("release") == "jwall-engineering-braveheart-ci-release"
+    assert bot.role_name("apply") == "jwall-engineering-braveheart-ci-apply"
     assert bot.profile_url == "https://lichess.org/@/rusty-chess-bot"
     assert bot.bot.engine.hash_mb == 128
     assert bot.bot.engine.move_overhead_ms == 500
-    assert bot.bot.secrets == {"LICHESS_TOKEN": "/jwall-engineering/rusty-chess/lichess-token"}
-    assert bot.image.artifact.binary == "rusty-chess"
+    assert bot.bot.secrets == {"LICHESS_TOKEN": "/jwall-engineering/braveheart/lichess-token"}
+    assert bot.image.artifact.binary == "braveheart"
     assert bot.image.architecture == "x86_64"
     assert bot.zone_id is None
 
@@ -84,20 +84,20 @@ def test_unknown_field_fails(tmp_path: Path, settings: Settings) -> None:
 def test_secret_outside_project_path_fails(tmp_path: Path, settings: Settings) -> None:
     raw = _raw()
     _bot(raw)["secrets"] = {"LICHESS_TOKEN": "/other/token"}
-    with pytest.raises(ConfigError, match="must start with /jwall-engineering/rusty-chess/"):
+    with pytest.raises(ConfigError, match="must start with /jwall-engineering/braveheart/"):
         _load(tmp_path, raw, settings)
 
 
 def test_secret_under_bot_prefix_fails(tmp_path: Path, settings: Settings) -> None:
     raw = _raw()
-    _bot(raw)["secrets"] = {"LICHESS_TOKEN": "/jwall-engineering/rusty-chess/bot/token"}
+    _bot(raw)["secrets"] = {"LICHESS_TOKEN": "/jwall-engineering/braveheart/bot/token"}
     with pytest.raises(ConfigError, match="bot/"):
         _load(tmp_path, raw, settings)
 
 
 def test_missing_lichess_token_fails(tmp_path: Path, settings: Settings) -> None:
     raw = _raw()
-    _bot(raw)["secrets"] = {"OTHER": "/jwall-engineering/rusty-chess/other"}
+    _bot(raw)["secrets"] = {"OTHER": "/jwall-engineering/braveheart/other"}
     with pytest.raises(ConfigError, match="LICHESS_TOKEN"):
         _load(tmp_path, raw, settings)
 
@@ -134,14 +134,14 @@ def test_site_without_site_section_fails(tmp_path: Path, settings: Settings) -> 
 
 def test_asset_needs_version_placeholder(tmp_path: Path, settings: Settings) -> None:
     raw = _raw()
-    _image(raw)["artifact"]["asset"] = "rusty-chess-linux.tar.gz"
+    _image(raw)["artifact"]["asset"] = "braveheart-linux.tar.gz"
     with pytest.raises(ConfigError, match=r"\{version\}"):
         _load(tmp_path, raw, settings)
 
 
 def test_binary_is_one_path_component(tmp_path: Path, settings: Settings) -> None:
     raw = _raw()
-    _image(raw)["artifact"]["binary"] = "../rusty-chess"
+    _image(raw)["artifact"]["binary"] = "../braveheart"
     with pytest.raises(ConfigError, match="binary"):
         _load(tmp_path, raw, settings)
 
@@ -163,7 +163,7 @@ def test_bad_retention_fails(tmp_path: Path, settings: Settings) -> None:
 def test_bot_tags_are_cross_checked(tmp_path: Path, settings: Settings) -> None:
     raw = _raw()
     raw["tags"]["Project"] = "other"
-    with pytest.raises(ConfigError, match="Project must be 'rusty-chess'"):
+    with pytest.raises(ConfigError, match="Project must be 'braveheart'"):
         _load(tmp_path, raw, settings)
 
 
@@ -196,12 +196,12 @@ def test_task_runner_loads_and_names_derive(bot: Project) -> None:
     )
     assert (runner.spot_wait_minutes, runner.max_vcpus, runner.slot_wait_minutes) == (5, 192, 30)
     assert (runner.max_hours, runner.results_days, runner.log_retention_days) == (6, 7, 14)
-    assert bot.task_name == "jwall-engineering-rusty-chess-task"
-    assert bot.task_template == "jwall-engineering-rusty-chess-task"
-    assert bot.task_log_group == "/jwall-engineering/rusty-chess/tasks"
-    assert bot.task_bucket == "jwall-engineering-rusty-chess-tasks"
+    assert bot.task_name == "jwall-engineering-braveheart-task"
+    assert bot.task_template == "jwall-engineering-braveheart-task"
+    assert bot.task_log_group == "/jwall-engineering/braveheart/tasks"
+    assert bot.task_bucket == "jwall-engineering-braveheart-tasks"
     assert bot.task_prefix == "tasks/"
-    assert bot.role_name("task") == "jwall-engineering-rusty-chess-ci-task"
+    assert bot.role_name("task") == "jwall-engineering-braveheart-ci-task"
 
 
 def test_task_runner_defaults(tmp_path: Path, settings: Settings) -> None:
@@ -289,12 +289,12 @@ def _dataset(raw: dict[str, Any]) -> dict[str, Any]:
 def test_dataset_loads(bot: Project) -> None:
     (dataset,) = bot.datasets
     assert dataset.name == "nnue"
-    assert dataset.bucket == "jwall-engineering-rusty-chess-nnue"
+    assert dataset.bucket == "jwall-engineering-braveheart-nnue"
     assert dataset.prefix == "data/"
     assert dataset.writers == ("task-runner",)
     assert dataset.readers == ()
     assert dataset.transition_days == 0
-    assert bot.dataset_bucket("nnue") == "jwall-engineering-rusty-chess-nnue"
+    assert bot.dataset_bucket("nnue") == "jwall-engineering-braveheart-nnue"
 
 
 def test_project_without_dataset_loads(tmp_path: Path, settings: Settings) -> None:
@@ -309,7 +309,7 @@ def test_project_without_dataset_loads(tmp_path: Path, settings: Settings) -> No
 def test_dataset_bucket_must_be_the_derived_name(tmp_path: Path, settings: Settings) -> None:
     raw = _raw()
     _dataset(raw)["bucket"] = "my-own-bucket"
-    with pytest.raises(ConfigError, match="jwall-engineering-rusty-chess-nnue"):
+    with pytest.raises(ConfigError, match="jwall-engineering-braveheart-nnue"):
         _load(tmp_path, raw, settings)
 
 
@@ -340,7 +340,7 @@ def test_dataset_name_shape_and_reserved_names(
 ) -> None:
     raw = _raw()
     _dataset(raw)["name"] = bad
-    _dataset(raw)["bucket"] = f"jwall-engineering-rusty-chess-{bad}"
+    _dataset(raw)["bucket"] = f"jwall-engineering-braveheart-{bad}"
     with pytest.raises(ConfigError, match="name"):
         _load(tmp_path, raw, settings)
 
@@ -408,8 +408,8 @@ def test_the_gpu_profile_loads(bot: Project) -> None:
     )  # fmt: skip
     assert gpu.datasets["nnue"].read == ("selfplay/",)
     assert gpu.datasets["nnue"].write == ("nets/",)
-    assert bot.profile_task_name("gpu") == "jwall-engineering-rusty-chess-task-gpu"
-    assert bot.profile_task_name("cpu") == "jwall-engineering-rusty-chess-task"
+    assert bot.profile_task_name("gpu") == "jwall-engineering-braveheart-task-gpu"
+    assert bot.profile_task_name("cpu") == "jwall-engineering-braveheart-task"
 
 
 def test_the_cpu_profile_is_the_task_runners_own_fields(bot: Project) -> None:
@@ -467,7 +467,7 @@ def test_the_workflow_profiles_dataset_grants(bot: Project) -> None:
 
 
 def test_scratch_defaults_to_the_instance_store_for_gpu_profiles_only(bot: Project) -> None:
-    """The rusty-chess file sets no `scratch`: gpu reads from the NVMe, cpu stays put."""
+    """The braveheart file sets no `scratch`: gpu reads from the NVMe, cpu stays put."""
     runner = bot.task_runner
     assert runner is not None
     assert runner.profile("gpu").scratch == "instance-store"

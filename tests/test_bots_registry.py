@@ -38,16 +38,16 @@ def project_file(project: str) -> dict[str, Any]:
     return raw
 
 
-def test_registry_lists_the_engine_under_both_names() -> None:
-    # One repository, two projects, while rusty-chess is renamed to braveheart.
-    assert registry()["rusty-chess"] == ("Braveheart-Chess/braveheart", "1435162673")
-    assert registry()["braveheart"] == ("Braveheart-Chess/braveheart", "1435162673")
+def test_registry_lists_braveheart() -> None:
+    assert registry() == {"braveheart": ("Braveheart-Chess/braveheart", "1435162673")}
+    # The engine's project was `rusty-chess` until 2026-11-15; the old name is gone.
+    assert "rusty-chess" not in BOTS_TF.read_text()
 
 
 def test_a_repository_outside_this_account_names_its_owner() -> None:
     """The release and task roles trust `repo:<owner>@<owner_id>/...`: a repository
     in an organisation is refused unless its entry carries the organisation's ID."""
-    assert owners()["rusty-chess"] == owners()["braveheart"] == BRAVEHEART_CHESS
+    assert owners()["braveheart"] == BRAVEHEART_CHESS
     for project, (repository, _) in registry().items():
         outside = not repository.startswith("jwallace145/")
         assert bool(owners()[project]) == outside, project
@@ -271,7 +271,7 @@ def _instance_types(runner: dict[str, Any]) -> list[str]:
 
 def test_task_instance_types_match_the_project_files() -> None:
     expected = {project: _instance_types(runner) for project, runner in _task_runners().items()}
-    assert "rusty-chess" in expected
+    assert "braveheart" in expected
     assert _task_types() == expected
     assert set(_task_types()) <= set(registry())
 
@@ -284,7 +284,7 @@ def test_task_profiles_match_the_project_files() -> None:
     expected = {
         project: ["cpu", *runner.get("profiles", {})] for project, runner in _task_runners().items()
     }
-    assert "rusty-chess" in expected
+    assert "braveheart" in expected
     assert _task_profiles() == expected
     assert set(_task_profiles()) == set(_task_types())
 
@@ -305,7 +305,7 @@ def test_dataset_buckets_match_the_project_files() -> None:
         buckets = [c["bucket"] for c in components if c["kind"] == "dataset"]
         if buckets:
             expected[project] = buckets
-    assert "rusty-chess" in expected
+    assert "braveheart" in expected
     assert _bot_datasets() == expected
     assert set(_bot_datasets()) <= set(registry())
 
@@ -364,7 +364,7 @@ def test_foundation_gives_research_projects_no_release_role() -> None:
 
 def test_foundation_gives_research_projects_compute_and_bots_container() -> None:
     plan, apply = _module("bot_ci_plan"), _module("bot_ci_apply")
-    # Same order as before research existed: reordering would churn rusty-chess's attachments.
+    # Same order as before research existed: reordering would churn braveheart's attachments.
     assert _policies(plan) == ["tfstate/read", "container/read", "task/read"]
     assert _research_policies(plan) == ["tfstate/read", "compute/read", "task/read"]
     assert _policies(apply) == [

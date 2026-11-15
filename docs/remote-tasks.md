@@ -82,7 +82,7 @@ jobs:
       matrix: { mode: [timed, nodes] }
     uses: jwallace145/jwall-engineering-infra/.github/workflows/remote-task.yml@vX.Y.Z
     with:
-      project: rusty-chess
+      project: braveheart
       script: ci/strength-task.sh
       args: '["--mode", "${{ matrix.mode }}"]'  # a JSON array of strings
       artifact: sprt-${{ matrix.mode }}        # the uploaded $OUT_DIR; also names the task
@@ -240,7 +240,7 @@ jobs:
   train:
     uses: jwallace145/jwall-engineering-infra/.github/workflows/remote-task.yml@vX.Y.Z
     with:
-      project: rusty-chess
+      project: braveheart
       profile: gpu
       script: ci/train-task.sh
       args: '["--lambda", "0.5"]'
@@ -295,7 +295,7 @@ So each kind of workflow can have its own market, budget and dataset access:
           nnue: { read: [selfplay/], write: [selfplay/relabel/] }
 ```
 
-rusty-chess has one per workflow:
+braveheart has one per workflow:
 
 | Profile | Workflow | Market | `max_vcpus` | Dataset access (under `data/`) |
 |---|---|---|--:|---|
@@ -366,7 +366,7 @@ GPU task also runs `nvidia-smi` before it starts and exits 1 if it fails.
 **Data in, nets out.** The `datasets` grants become an inline policy on the
 profile's instance role: `GetObject` under each `read` sub-prefix,
 `PutObject` under each `write` one, and `ListBucket` limited to them. For
-rusty-chess that is: read `data/selfplay/*`, write `data/nets/*`, and nothing
+braveheart that is: read `data/selfplay/*`, write `data/nets/*`, and nothing
 else in the bucket. The cpu task role stays write-only. A training task
 writes `data/nets/<net id>/{net.nnue, training.json, log.txt, checkpoints/}`
 and puts only the small files in `OUT_DIR`. See [datasets](datasets.md).
@@ -408,7 +408,7 @@ worst-case cost: $11.17 (g6e.xlarge on-demand $1.861/h x 6 h); ceiling $50.00
 - **Price unavailable:** after three attempts, exit 3 with `outcome =
   no-price`, and nothing is launched. The check fails closed. Before the
   ceiling existed, a spot launch went ahead without a price cap when the
-  Pricing API failed, so rusty-chess sees this change at its next pin bump,
+  Pricing API failed, so braveheart sees this change at its next pin bump,
   as it does the ceiling itself.
 - **The allow-list is the hard limit on hourly cost.** The ceiling is a CLI
   check, and the launch role can be used to call AWS directly, so review a new

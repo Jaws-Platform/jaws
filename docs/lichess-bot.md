@@ -5,7 +5,7 @@ permanently as a Lichess bot with one file, `jwall-engineering-sites.yaml`,
 plus its existing lichess-bot config and a short release workflow. The tool
 builds an image from each release, pushes it to ECR under the release tag,
 and rolls the bot to it on one EC2 instance without ever interrupting a game.
-The first consumer is [Braveheart](https://github.com/jwallace145/braveheart) (formerly rusty-chess-v2).
+The first consumer is [Braveheart](https://github.com/Braveheart-Chess/braveheart) (formerly rusty-chess-v2).
 
 What you get:
 
@@ -25,23 +25,23 @@ At the repository root:
 
 ```yaml
 version: 1
-project: rusty-chess
-repository: jwallace145/braveheart
+project: braveheart
+repository: Braveheart-Chess/braveheart
 
 tags:
   Organization: jwall-engineering
-  Project: rusty-chess
+  Project: braveheart
   Environment: prod
-  Repository: jwallace145/braveheart
+  Repository: Braveheart-Chess/braveheart
   Owner: jwallace145
 
 components:
   - kind: container-image
     architecture: x86_64
     artifact:
-      asset: rusty-chess-{version}-x86_64-unknown-linux-gnu.tar.gz
-      checksum: rusty-chess-{version}-x86_64-unknown-linux-gnu.tar.gz.sha256
-      binary: rusty-chess
+      asset: braveheart-{version}-x86_64-unknown-linux-gnu.tar.gz
+      checksum: braveheart-{version}-x86_64-unknown-linux-gnu.tar.gz.sha256
+      binary: braveheart
     # dockerfile: docker/Dockerfile
 
   - kind: lichess-bot
@@ -50,7 +50,7 @@ components:
     config: lichess/config.yml
     lichess_user: rusty-chess-bot
     secrets:
-      LICHESS_TOKEN: /jwall-engineering/rusty-chess/lichess-token
+      LICHESS_TOKEN: /jwall-engineering/braveheart/lichess-token
     engine:
       hash_mb: 128
       move_overhead_ms: 500
@@ -118,7 +118,7 @@ Everything else in the config, including matchmaking, stays yours.
      this usually takes under a minute; it gives up after `bot.asset_wait`
      in `config.yaml`, 30 minutes by default;
    - downloads them and verifies the checksum;
-   - builds the image and runs `rusty-chess bench --depth 6` inside it;
+   - builds the image and runs `braveheart bench --depth 6` inside it;
    - pushes the image under the tag;
    - writes the desired version and the status `pending:vX.Y.Z`;
    - asks the instance, through SSM Run Command, to reconcile.
@@ -249,7 +249,7 @@ jobs:
   release:
     uses: jwallace145/jwall-engineering-infra/.github/workflows/container-release.yml@vX.Y.Z
     with:
-      project: rusty-chess
+      project: braveheart
     permissions:
       contents: read
       id-token: write

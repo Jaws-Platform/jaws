@@ -21,15 +21,15 @@ from jwall_engineering_sites.stack import _bot_tfvars, _read_only_datasets
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPO_ROOT = Path(__file__).resolve().parent.parent
-NNUE = "jwall-engineering-rusty-chess-nnue"
-NNUE_ROLE = "arn:aws:iam::650503560686:role/jwall-engineering-rusty-chess-nnue-databricks-share"
+NNUE = "jwall-engineering-braveheart-nnue"
+NNUE_ROLE = "arn:aws:iam::650503560686:role/jwall-engineering-braveheart-nnue-databricks-share"
 
 
 def _raw() -> dict[str, Any]:
     """config.yaml with the nnue dataset shared: the real file approves no share
     yet (test_config_yaml_approves_no_share_yet), so the tests add one."""
     raw: dict[str, Any] = yaml.safe_load((FIXTURES / "config.yaml").read_text())
-    raw["projects"]["rusty-chess"]["datasets"][NNUE] = {
+    raw["projects"]["braveheart"]["datasets"][NNUE] = {
         "databricks_share": {"prefix": "data/", "consumers": ["braveheart-databricks"]}
     }
     return raw
@@ -42,12 +42,12 @@ def _load(tmp_path: Path, raw: dict[str, Any]) -> Settings:
 
 
 def _share(raw: dict[str, Any]) -> dict[str, Any]:
-    share: dict[str, Any] = raw["projects"]["rusty-chess"]["datasets"][NNUE]["databricks_share"]
+    share: dict[str, Any] = raw["projects"]["braveheart"]["datasets"][NNUE]["databricks_share"]
     return share
 
 
 def _bot_file(tmp_path: Path, consumers: list[str] | None, prefix: str = "data/") -> Path:
-    data: dict[str, Any] = yaml.safe_load((FIXTURES / "bots" / "rusty-chess.yaml").read_text())
+    data: dict[str, Any] = yaml.safe_load((FIXTURES / "bots" / "braveheart.yaml").read_text())
     dataset = next(c for c in data["components"] if c["kind"] == "dataset")
     dataset["prefix"] = prefix
     if consumers is not None:
@@ -74,9 +74,9 @@ def test_config_yaml_approves_no_share_yet() -> None:
 
 def test_an_approved_share_names_its_producer_bucket_and_role(settings: Settings) -> None:
     (share,) = settings.databricks_shares()
-    assert share.producer == "rusty-chess"
+    assert share.producer == "braveheart"
     assert share.bucket == NNUE
-    assert share.name == "rusty-chess-nnue"
+    assert share.name == "braveheart-nnue"
     assert share.prefix == "data/"
     assert share.consumers == ("braveheart-databricks",)
     assert share.role_arn == NNUE_ROLE
@@ -84,8 +84,8 @@ def test_an_approved_share_names_its_producer_bucket_and_role(settings: Settings
 
 def test_a_consumer_must_be_a_databricks_workspace_project(tmp_path: Path) -> None:
     raw = _raw()
-    _share(raw)["consumers"] = ["braveheart-databricks", "rusty-chess-bot"]
-    with pytest.raises(ConfigError, match=r"rusty-chess-bot.*not a Databricks workspace project"):
+    _share(raw)["consumers"] = ["braveheart-databricks", "braveheart"]
+    with pytest.raises(ConfigError, match=r"braveheart.*not a Databricks workspace project"):
         _load(tmp_path, raw)
 
 
@@ -121,7 +121,7 @@ def test_share_role_fits_iam() -> None:
     assert len(share_role_name("jwall-engineering", NNUE)) <= 64
     assert (
         share_role_name("jwall-engineering", NNUE)
-        == "jwall-engineering-rusty-chess-nnue-databricks-share"
+        == "jwall-engineering-braveheart-nnue-databricks-share"
     )
 
 
@@ -159,7 +159,7 @@ def test_producer_listing_a_subset_fails(tmp_path: Path) -> None:
 
 def test_producer_sharing_an_unapproved_dataset_fails(tmp_path: Path) -> None:
     raw = _raw()
-    del raw["projects"]["rusty-chess"]["datasets"][NNUE]["databricks_share"]
+    del raw["projects"]["braveheart"]["datasets"][NNUE]["databricks_share"]
     settings = _load(tmp_path, raw)
     config = load_site_config(_bot_file(tmp_path, ["braveheart-databricks"]))
     assert any("approved in config.yaml" in p for p in guardrails.check(config, settings))
@@ -191,7 +191,7 @@ def test_not_yet_consenting_producer_names_no_reader(tmp_path: Path, settings: S
 
 def test_the_consumer_endpoint_gets_the_share(settings: Settings) -> None:
     assert _read_only_datasets("braveheart-databricks", settings) == {
-        "rusty-chess-nnue": {"bucket": NNUE, "prefix": "data/", "role_arn": NNUE_ROLE}
+        "braveheart-nnue": {"bucket": NNUE, "prefix": "data/", "role_arn": NNUE_ROLE}
     }
 
 

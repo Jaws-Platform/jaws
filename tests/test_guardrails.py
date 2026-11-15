@@ -22,8 +22,8 @@ from jwall_engineering_sites.settings import (
 from jwall_engineering_sites.site import SiteConfig, load_site_config
 from tests.conftest import FIXTURES, with_guardrails
 
-BOT_FILE = FIXTURES / "bots" / "rusty-chess.yaml"
-BUCKET = "jwall-engineering-rusty-chess-nnue"
+BOT_FILE = FIXTURES / "bots" / "braveheart.yaml"
+BUCKET = "jwall-engineering-braveheart-nnue"
 
 
 def _raw() -> dict[str, Any]:
@@ -50,10 +50,10 @@ def _central(settings: Settings, **retention: Any) -> Settings:
         retention.setdefault("prefix", "data/")
     if retention.get("expire_noncurrent_days") is not None:
         retention.setdefault("prefix", "data/")
-    entry = settings.projects["rusty-chess"]
+    entry = settings.projects["braveheart"]
     return with_guardrails(
         settings,
-        "rusty-chess",
+        "braveheart",
         entry.model_copy(update={"datasets": {BUCKET: DatasetRetention(**retention)}}),
     )
 
@@ -62,14 +62,14 @@ def _problems(raw: dict[str, Any], settings: Settings) -> list[str]:
     return guardrails.check(_config(raw), settings)
 
 
-def test_the_rusty_chess_fixture_is_within_its_guardrails(settings: Settings) -> None:
+def test_the_braveheart_fixture_is_within_its_guardrails(settings: Settings) -> None:
     assert _problems(_raw(), settings) == []
 
 
 def test_project_without_an_entry_is_refused(settings: Settings) -> None:
     bare = settings.model_copy(update={"projects": {}})
     (problem,) = _problems(_raw(), bare)
-    assert "rusty-chess" in problem and "config.yaml" in problem
+    assert "braveheart" in problem and "config.yaml" in problem
 
 
 def test_a_missing_entry_fails_at_load(settings: Settings) -> None:
@@ -79,7 +79,7 @@ def test_a_missing_entry_fails_at_load(settings: Settings) -> None:
 
 
 def test_a_violation_fails_at_load(settings: Settings) -> None:
-    narrow = with_guardrails(settings, "rusty-chess", ProjectGuardrails())
+    narrow = with_guardrails(settings, "braveheart", ProjectGuardrails())
     with pytest.raises(ConfigError, match=r"c8a\.xlarge.*config\.yaml"):
         Project.from_config(load_site_config(BOT_FILE), narrow)
 
@@ -90,7 +90,7 @@ def test_other_project_names_need_their_own_entry(settings: Settings) -> None:
     raw["tags"]["Project"] = "other"
     dataset = _component(raw, "dataset")
     dataset["bucket"] = "jwall-engineering-other-nnue"
-    other = settings.projects["rusty-chess"].model_copy(
+    other = settings.projects["braveheart"].model_copy(
         update={"datasets": {"jwall-engineering-other-nnue": DatasetRetention()}}
     )
     assert _problems(raw, settings) != []  # no entry for "other" yet
@@ -114,8 +114,8 @@ def test_cpu_instance_type_outside_the_list_is_refused(settings: Settings) -> No
 
 def test_a_cpu_default_outside_the_list_is_refused(settings: Settings) -> None:
     raw = _raw()
-    narrow = settings.projects["rusty-chess"].model_copy(update={"instance_types": ("c8a.xlarge",)})
-    problems = _problems(raw, with_guardrails(settings, "rusty-chess", narrow))
+    narrow = settings.projects["braveheart"].model_copy(update={"instance_types": ("c8a.xlarge",)})
+    problems = _problems(raw, with_guardrails(settings, "braveheart", narrow))
     _assert_unlisted_type(problems, "c8a.16xlarge")
 
 
@@ -136,15 +136,15 @@ def test_an_unlisted_profile_name_is_refused(settings: Settings) -> None:
 
 
 def test_the_cpu_profile_must_be_listed_too(settings: Settings) -> None:
-    entry = settings.projects["rusty-chess"]
+    entry = settings.projects["braveheart"]
     no_cpu = entry.model_copy(update={"task_profiles": ("gpu",)})
-    problems = _problems(_raw(), with_guardrails(settings, "rusty-chess", no_cpu))
+    problems = _problems(_raw(), with_guardrails(settings, "braveheart", no_cpu))
     assert any("cpu" in p and "task_profiles" in p for p in problems)
 
 
 def test_an_unlisted_dataset_bucket_is_refused(settings: Settings) -> None:
-    entry = settings.projects["rusty-chess"].model_copy(update={"datasets": {}})
-    (problem,) = _problems(_raw(), with_guardrails(settings, "rusty-chess", entry))
+    entry = settings.projects["braveheart"].model_copy(update={"datasets": {}})
+    (problem,) = _problems(_raw(), with_guardrails(settings, "braveheart", entry))
     assert BUCKET in problem and "config.yaml" in problem
 
 

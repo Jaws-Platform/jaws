@@ -6,7 +6,7 @@ case "$1" in
   build) echo "built" ;;
   run)
     if [ "${FAKE_DOCKER_BENCH_FAIL:-0}" = "1" ]; then echo "panic: illegal instruction" >&2; exit 132; fi
-    # The real `rusty-chess bench` summary (v0.14.0): aligned, space before the colon.
+    # The real `braveheart bench` summary (v0.14.0): aligned, space before the colon.
     echo "==========================="
     echo "Positions       : 50"
     echo "Depth           : 6"

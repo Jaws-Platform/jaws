@@ -183,7 +183,7 @@ def test_a_research_file_is_neither_a_site_nor_a_bot() -> None:
     config = load_site_config(FIXTURES / "bots" / "math-prover.yaml")
     assert config.kind == "research"
     assert config.domain is None and config.site is None
-    assert load_site_config(FIXTURES / "bots" / "rusty-chess.yaml").kind == "bot"
+    assert load_site_config(FIXTURES / "bots" / "braveheart.yaml").kind == "bot"
 
 
 def test_site_commands_refuse_a_research_project(settings: Settings) -> None:
