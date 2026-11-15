@@ -1,0 +1,56 @@
+# jwall-engineering-sites project file: runs the Braveheart engine as a
+# permanent Lichess bot, deployed from this repository. The engine release it
+# plays is pinned below; everything else (region, account, VPC, AMI, names,
+# state, CI roles) is derived by the tool. Fields and behaviour:
+# https://github.com/jwallace145/jwall-engineering-infra/blob/main/docs/lichess-bot.md
+version: 1
+project: braveheart-lichess-bot
+repository: Braveheart-Chess/braveheart-lichess-bot
+
+# The tags every resource carries (through the provider's default_tags), plus
+# ManagedBy=jwall-engineering-infra, which the tool adds.
+# Project, Repository and Environment=prod are cross-checked.
+tags:
+  Organization: jwall-engineering
+  Project: braveheart-lichess-bot
+  Environment: prod
+  Repository: Braveheart-Chess/braveheart-lichess-bot
+  Owner: jwallace145
+
+components:
+  - kind: container-image
+    architecture: x86_64            # must match the release asset
+    artifact:
+      # The engine's own releases: the binary each release publishes, checksum-
+      # verified and smoke-tested, never rebuilt here.
+      repository: Braveheart-Chess/braveheart
+      # The release the bot plays. Bump it in a pull request; the bot moves to
+      # it when this repository's next release is published.
+      version: v0.54.0
+      asset: braveheart-{version}-x86_64-unknown-linux-gnu.tar.gz
+      checksum: braveheart-{version}-x86_64-unknown-linux-gnu.tar.gz.sha256
+      binary: braveheart
+
+  - kind: lichess-bot
+    # Exactly artifact.version, rolled out again whenever the pin or config.yml
+    # changes: the image tag is <version>-<8 hex digits of config.yml's SHA-256>.
+    track: pinned
+    # A whole, unshared, fast core: the engine is single-threaded and its
+    # strength is that core's speed (doubling nodes per second is worth
+    # roughly 50-80 Elo at a clock). Never a burstable type: the bot searches
+    # almost continuously, and a t3 in standard credit mode is held to 10% of
+    # a core once its credits run out, within hours. c8a.medium is one AMD
+    # Zen 5 core at 4.5 GHz with SMT off, about $39/month on demand; it runs
+    # the x86-64-v3 release asset as-is.
+    instance_type: c8a.medium
+    config: config.yml              # lichess-bot config with LICHESS_TOKEN_PLACEHOLDER
+    lichess_user: jwallace145       # the bot account, for the profile URL in `bot status`
+    secrets:
+      LICHESS_TOKEN: /jwall-engineering/braveheart-lichess-bot/lichess-token
+    engine:
+      hash_mb: 256                  # UCI Hash; c8a.medium has 2 GiB
+      move_overhead_ms: 500         # UCI Move Overhead (lichess-bot's own move_overhead stays in config.yml)
+    records:
+      s3: true                      # sync game_records/ to s3://jwall-engineering-braveheart-lichess-bot-records/records/
+    logs:
+      retention_days: 30

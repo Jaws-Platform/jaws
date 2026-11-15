@@ -30,7 +30,8 @@ locals {
   #                release and task roles trust local.github_owner_id.
   # One line per entry, `repository` first (the workflows read this block).
   bots = {
-    braveheart = { repository = "Braveheart-Chess/braveheart", repository_id = "1435162673", owner_id = "356866252" }
+    braveheart             = { repository = "Braveheart-Chess/braveheart", repository_id = "1435162673", owner_id = "356866252" }
+    braveheart-lichess-bot = { repository = "Braveheart-Chess/braveheart-lichess-bot", repository_id = "1459279608", owner_id = "356866252" }
   }
 
   # The entries of `bots` without a bot or an image (kind research): their plan

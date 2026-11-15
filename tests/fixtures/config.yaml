@@ -107,6 +107,11 @@ projects:
           prefix: data/
           consumers: [braveheart-databricks]
     # max_run_cost_usd: 80 # optional per-project override of tasks.max_run_cost_usd
+  braveheart-lichess-bot:
+    # Braveheart's Lichess bot (Braveheart-Chess/braveheart-lichess-bot): a container
+    # image and a lichess-bot only, running a pinned release of the engine's
+    # repository. No task runner and no datasets, so nothing to allow here.
+    {}
   databricks-poc:
     # A Databricks workspace project. `vpc_cidr` is allocated here so IP capacity is
     # central (/16 to /20; no overlap with another project or the bot VPC 10.0.0.0/16).
