@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.27.0...v0.28.0) (2026-11-15)
+
+
+### Features
+
+* **bots:** register the engine as braveheart alongside rusty-chess, under Braveheart-Chess ([#130](https://github.com/jwallace145/jwall-engineering-infra/issues/130)) ([edf470b](https://github.com/jwallace145/jwall-engineering-infra/commit/edf470b3518bcbccdbc669152e5d81bcf0f04c32))
+
 ## [0.27.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.26.0...v0.27.0) (2026-11-15)
 
 
