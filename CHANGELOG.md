@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.30.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.29.0...v0.30.0) (2026-11-15)
+
+
+### Features
+
+* **bots:** let a bot repository pin another repository's engine release ([#139](https://github.com/jwallace145/jwall-engineering-infra/issues/139)) ([bbdedd3](https://github.com/jwallace145/jwall-engineering-infra/commit/bbdedd34c532758360b613e25a32158ec5f01944))
+* **bots:** register braveheart-lichess-bot, the engine's Lichess bot in its own repository ([#140](https://github.com/jwallace145/jwall-engineering-infra/issues/140)) ([e525c03](https://github.com/jwallace145/jwall-engineering-infra/commit/e525c03234e4924321baa1e206f642e50db6c16d))
+* **databricks:** share the braveheart NNUE dataset with the braveheart-databricks workspace ([#137](https://github.com/jwallace145/jwall-engineering-infra/issues/137)) ([35aabfc](https://github.com/jwallace145/jwall-engineering-infra/commit/35aabfc3e0e2a4703f7cd20a02f5a45def858290))
+
 ## [0.29.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.28.1...v0.29.0) (2026-11-15)
 
 
