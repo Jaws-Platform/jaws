@@ -1,0 +1,5 @@
+# Source: this repository's Databricks apply run 43726818889 (destroy of a workspace project, account stack), 2026-11-15
+Error: cannot delete mws networks: MALFORMED_REQUEST: Cannot delete a network while it is attached to a workspace (7474647198655689)
+
+
+Error: cannot delete mws storage configurations: MALFORMED_REQUEST: Cannot delete a StorageConfiguration while it is attached to a workspace (7474647198655689)

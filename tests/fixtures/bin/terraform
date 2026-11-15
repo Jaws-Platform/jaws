@@ -4,6 +4,7 @@
 # A Databricks project's two stacks are told apart by their backend key, and each
 # can be scripted on its own with FAKE_TF_<ACCOUNT|WORKSPACE>_<SETTING> (bash 3.2):
 #   FAIL_ON=<command> ERROR=<file>  print the file and exit 1 when running <command>
+#   FAIL_TIMES=<n>                  ... only the first n times (default: every time)
 #   PLAN=<file> PLAN_EXIT=<n>       the plan's text and exit code
 #   OUTPUTS=<file> STATE_LIST=<..>  `output -json` and `state list`
 # FAKE_TF_STACK_LOG records "<stack> <args>" per call; FAKE_TF_ECHO_SECRET=1 prints
@@ -29,8 +30,14 @@ case "$1" in
     fi ;;
 esac
 if [ -n "$stack" ] && [ "$(setting FAIL_ON)" = "$1" ]; then
-  cat "$(setting ERROR)"
-  exit 1
+  times="$(setting FAIL_TIMES)"
+  counter="${FAKE_TF_LOG}.${stack}.$1.failures"
+  failed=$(cat "$counter" 2>/dev/null || echo 0)
+  if [ -z "$times" ] || [ "$failed" -lt "$times" ]; then
+    echo $((failed + 1)) > "$counter"
+    cat "$(setting ERROR)"
+    exit 1
+  fi
 fi
 case "$1" in
   version) printf '{"terraform_version":"%s"}\n' "${FAKE_TF_VERSION:-1.14.7}" ;;

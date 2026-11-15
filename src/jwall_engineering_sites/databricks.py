@@ -36,7 +36,7 @@ from .checks.framework import (
     run_stage,
 )
 from .databricks_names import derived_names
-from .diagnose import Failure, _redact, diagnose, render_failure
+from .diagnose import CATALOGUE, Failure, _redact, diagnose, render_failure
 from .errors import RunError
 from .events import EventLog, Result
 from .log import ARTIFACTS_DIR, LOG_FILE_NAME, phase
@@ -56,6 +56,13 @@ APPLIED_BY = "Databricks apply"
 SETUP_RUNBOOK = "docs/databricks.md#one-time-setup"
 _RERUN_APPLY = "re-running apply is safe"
 _RERUN_DESTROY = "Re-running destroy is safe: every step continues where this one stopped."
+#: Databricks reports a workspace deleted before it has detached its network and
+#: storage configuration (diagnose.py, DBX-WORKSPACE-DETACHING). The account
+#: stack's destroy waits this long and tries again, this many times in all. One
+#: wait was enough the only time it was measured (about 80 seconds).
+DETACH_PATTERN = next(d.pattern for d in CATALOGUE if d.error_class == "DBX-WORKSPACE-DETACHING")
+DETACH_WAIT_SECONDS = 60
+DETACH_ATTEMPTS = 5
 
 #: The event stage of each check stage.
 CHECK_STEPS: Mapping[Stage, str] = {
@@ -272,13 +279,38 @@ class DatabricksDeployment:
                 ):
                     tf.prepare()
                     tf.init()
-                    tf.destroy()
+                    self._destroy_account(tf)
                 deleted.append(
                     "the account stack: workspace, VPC, NAT instance, root bucket, roles"
                 )
             except StackFailedError as exc:
                 self._fail(exc.failure, suffix=_RERUN_DESTROY)
         return deleted
+
+    def _destroy_account(self, tf: stack.Terraform) -> None:
+        """Destroy the account stack, waiting out the workspace's detachment.
+
+        Terraform deletes the workspace and then its network and storage
+        configuration, which Databricks refuses while the deleted workspace is
+        still attached to them. Each destroy continues where the last stopped, so
+        that one failure is waited out and retried; any other is raised at once.
+        """
+        for attempt in range(1, DETACH_ATTEMPTS + 1):
+            try:
+                tf.destroy()
+                return
+            except RunError as exc:
+                detaching = exc.output is not None and DETACH_PATTERN.search(exc.output)
+                if not detaching or attempt == DETACH_ATTEMPTS:
+                    raise
+                self.logger.warning(
+                    "the deleted workspace is still attached to its network or storage "
+                    "configuration; waiting %ds, then destroying again (attempt %d of %d)",
+                    DETACH_WAIT_SECONDS,
+                    attempt + 1,
+                    DETACH_ATTEMPTS,
+                )
+                time.sleep(DETACH_WAIT_SECONDS)
 
     def outputs(self) -> dict[str, Any]:
         """Both stacks' outputs, merged; the account's alone until the workspace exists."""

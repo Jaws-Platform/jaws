@@ -599,6 +599,68 @@ def test_destroy_refuses_a_workspace_stack_it_cannot_reach(
     assert "workspace_url" in result.output
 
 
+DETACHING = FIXTURES / "errors" / "DBX-WORKSPACE-DETACHING.txt"
+
+
+def _account_destroys(tmp_path: Path) -> int:
+    return _stack_calls(tmp_path).count("account destroy")
+
+
+def test_destroy_waits_out_a_workspace_that_is_still_attached(
+    dbx: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Databricks refuses to delete the network of a workspace it has just deleted;
+    the account stack's destroy waits and tries again."""
+    waits: list[float] = []
+    monkeypatch.setattr("jwall_engineering_sites.databricks.time.sleep", waits.append)
+    monkeypatch.setenv("FAKE_TF_ACCOUNT_FAIL_ON", "destroy")
+    monkeypatch.setenv("FAKE_TF_ACCOUNT_FAIL_TIMES", "2")
+    monkeypatch.setenv("FAKE_TF_ACCOUNT_ERROR", str(DETACHING))
+    with _as_role(APPLY_ROLE):
+        result = runner.invoke(cli.app, ["destroy", "--yes"])
+        events = _events()
+    assert result.exit_code == 0, result.output
+    assert _account_destroys(tmp_path) == 3
+    assert waits == [60, 60]
+    assert "still attached" in result.output and "attempt 2 of 5" in result.output
+    # One step, reported once, as a success.
+    assert [s for s in _steps(events) if s[0] == "account-destroy"] == _ok("account-destroy")
+
+
+def test_destroy_gives_up_on_a_workspace_that_never_detaches(
+    dbx: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    waits: list[float] = []
+    monkeypatch.setattr("jwall_engineering_sites.databricks.time.sleep", waits.append)
+    monkeypatch.setenv("FAKE_TF_ACCOUNT_FAIL_ON", "destroy")
+    monkeypatch.setenv("FAKE_TF_ACCOUNT_ERROR", str(DETACHING))
+    with _as_role(APPLY_ROLE):
+        result = runner.invoke(cli.app, ["destroy", "--yes"])
+        events = _events()
+    assert result.exit_code == 1, result.output
+    assert _account_destroys(tmp_path) == 5
+    assert waits == [60, 60, 60, 60]
+    assert [(e["stage"], e["error_class"]) for e in events if e["result"] == "failure"] == [
+        ("account-destroy", "DBX-WORKSPACE-DETACHING")
+    ]
+    assert "re-running destroy" in result.output.lower()
+    assert "re-running apply" not in result.output.lower()
+
+
+def test_destroy_does_not_retry_any_other_failure(
+    dbx: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    waits: list[float] = []
+    monkeypatch.setattr("jwall_engineering_sites.databricks.time.sleep", waits.append)
+    monkeypatch.setenv("FAKE_TF_ACCOUNT_FAIL_ON", "destroy")
+    monkeypatch.setenv("FAKE_TF_ACCOUNT_ERROR", str(FIXTURES / "errors" / "DBX-AUTH.txt"))
+    with _as_role(APPLY_ROLE):
+        result = runner.invoke(cli.app, ["destroy", "--yes"])
+    assert result.exit_code == 1, result.output
+    assert _account_destroys(tmp_path) == 1
+    assert waits == []
+
+
 # What the workspace stack's destroy releases from state, and what it deletes.
 RELEASED = [
     "module.catalog.databricks_grants.catalog",

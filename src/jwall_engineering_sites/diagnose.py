@@ -149,6 +149,23 @@ CATALOGUE: tuple[Diagnosis, ...] = (
         retry_safe=False,
     ),
     Diagnosis(
+        error_class="DBX-WORKSPACE-DETACHING",
+        pattern=_re(r"Cannot delete a \S+ while it is attached to a workspace"),
+        title="The deleted workspace has not released its network or storage configuration",
+        likely_cause=(
+            "Databricks reports a workspace deleted before it has detached the network and "
+            "the storage configuration, so deleting those straight after it is refused."
+        ),
+        next_steps=(
+            "Wait a few minutes and re-run destroy; it continues where this one stopped.",
+            "`destroy` already waits and tries again by itself; this means the workspace "
+            "took longer than that to let go.",
+        ),
+        runbook=_anchor("dbx-workspace-detaching"),
+        # A destroy-only failure: `retry_safe` adds a line about re-running apply.
+        retry_safe=False,
+    ),
+    Diagnosis(
         error_class="DBX-NO-EGRESS",
         pattern=_re(
             r"NPIP_TUNNEL_SETUP_FAILURE|BOOTSTRAP_TIMEOUT|NPIP_TUNNEL_TOKEN_FAILURE|"
