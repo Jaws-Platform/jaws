@@ -144,6 +144,11 @@ class _Step:
 
 
 class DatabricksDeployment:
+    #: How the account stack's destroy waits between attempts. A seam for tests:
+    #: replacing `time.sleep` itself would also catch the sleeps `subprocess`
+    #: makes while it waits for Terraform.
+    sleep = staticmethod(time.sleep)
+
     def __init__(
         self,
         run: Run,
@@ -310,7 +315,7 @@ class DatabricksDeployment:
                     attempt + 1,
                     DETACH_ATTEMPTS,
                 )
-                time.sleep(DETACH_WAIT_SECONDS)
+                self.sleep(DETACH_WAIT_SECONDS)
 
     def outputs(self) -> dict[str, Any]:
         """Both stacks' outputs, merged; the account's alone until the workspace exists."""
