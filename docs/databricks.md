@@ -47,17 +47,19 @@ pointer back here.
    `databricks.enabled` is true, a nil-UUID ID or an `@example.com` metastore
    admin left in config.yaml stops the CLI from loading it and fails the
    foundation plan, so fill them in before flipping it.
-4. **Store the secret.** From the owner's shell with AWS credentials:
+4. **Store the secret.** From a checkout of this repository, in the owner's
+   shell with AWS credentials:
 
    ```sh
-   jwall-engineering-sites --file jwall-engineering-sites.yaml databricks credentials set
-   jwall-engineering-sites --file jwall-engineering-sites.yaml databricks credentials check
+   uv run jwall-engineering-sites --file tests/fixtures/bots/databricks-poc.yaml databricks credentials set
+   uv run jwall-engineering-sites --file tests/fixtures/bots/databricks-poc.yaml databricks credentials check
    ```
 
-   `--file` is any Databricks project's file, for example the governance
-   project's `jwall-engineering-sites.yaml` checked out from its repository
-   (the commands refuse other kinds); the secret is account-wide, so the
-   project only tells the CLI which `config.yaml` section and region to use.
+   `--file` is any Databricks project's file (the commands refuse other
+   kinds). The sample `tests/fixtures/bots/databricks-poc.yaml` works before
+   any project repository exists; a project's own `jwall-engineering-sites.yaml`
+   works too. The secret is account-wide, so the project only tells the CLI
+   which `config.yaml` section and region to use.
    `set` prompts without echo and writes a SecureString at
    `/jwall-engineering/databricks/client-secret` (`databricks.secret_parameter`).
    `check` exits 0 if it exists and decrypts and 3 if not; it never prints the
