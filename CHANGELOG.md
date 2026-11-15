@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.23.0...v0.23.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* **deps:** pin the module library at 0.19.1 for the audit log bucket policy fix ([#112](https://github.com/jwallace145/jwall-engineering-infra/issues/112)) ([29c53fd](https://github.com/jwallace145/jwall-engineering-infra/commit/29c53fd494a1e15253347b665944433b76fc9650))
+
 ## [0.23.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.22.0...v0.23.0) (2026-11-15)
 
 
