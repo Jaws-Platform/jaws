@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.25.0...v0.26.0) (2026-11-15)
+
+
+### Features
+
+* **databricks:** add the serverless shared-objects host workspace to the foundation ([#123](https://github.com/jwallace145/jwall-engineering-infra/issues/123)) ([063fe68](https://github.com/jwallace145/jwall-engineering-infra/commit/063fe680eb6e13525c65c5840b7b056b5d991169))
+
 ## [0.25.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.24.0...v0.25.0) (2026-11-15)
 
 
