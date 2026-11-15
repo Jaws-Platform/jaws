@@ -174,7 +174,10 @@ def _projects(path: Path | None = None) -> subprocess.CompletedProcess[str]:
 def test_the_registry_script_reads_databricks_tf(tmp_path: Path) -> None:
     assert json.loads(_projects().stdout) == [
         {"project": "databricks-poc", "repository": "jwallace145/databricks-poc"},
-        {"project": "braveheart-databricks", "repository": "jwallace145/braveheart-databricks"},
+        {
+            "project": "braveheart-databricks",
+            "repository": "Braveheart-Chess/braveheart-databricks",
+        },
     ]
     text = (REPO_ROOT / "foundation" / "databricks.tf").read_text()
     entry = (
@@ -186,7 +189,10 @@ def test_the_registry_script_reads_databricks_tf(tmp_path: Path) -> None:
     assert json.loads(_projects(filled).stdout) == [
         {"project": "other", "repository": "jwallace145/other"},
         {"project": "databricks-poc", "repository": "jwallace145/databricks-poc"},
-        {"project": "braveheart-databricks", "repository": "jwallace145/braveheart-databricks"},
+        {
+            "project": "braveheart-databricks",
+            "repository": "Braveheart-Chess/braveheart-databricks",
+        },
     ]
     missing = tmp_path / "missing.tf"
     missing.write_text("locals {}\n")
