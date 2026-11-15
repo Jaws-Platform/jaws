@@ -44,7 +44,7 @@ locals {
   # One line per entry, as in bots.tf (the workflows read this block).
   databricks_projects = {
     databricks-poc        = { repository = "jwallace145/databricks-poc", repository_id = "1458298100" }
-    braveheart-databricks = { repository = "jwallace145/braveheart-databricks", repository_id = "1458504699" }
+    braveheart-databricks = { repository = "Braveheart-Chess/braveheart-databricks", repository_id = "1458504699" }
   }
 
   databricks_ci = {
