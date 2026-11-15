@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.24.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.23.3...v0.24.0) (2026-11-15)
+
+
+### Features
+
+* **databricks:** register the braveheart workspace project ([#120](https://github.com/jwallace145/jwall-engineering-infra/issues/120)) ([b23e1a7](https://github.com/jwallace145/jwall-engineering-infra/commit/b23e1a7ceb22b8827d0f4f3665305b749abcc115))
+
+
+### Documentation
+
+* **databricks:** run the credentials step with uv and the sample project file ([#118](https://github.com/jwallace145/jwall-engineering-infra/issues/118)) ([637d0ac](https://github.com/jwallace145/jwall-engineering-infra/commit/637d0ac44e5f1bea4e2544120a1cb03168b27ba8))
+
 ## [0.23.3](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.23.2...v0.23.3) (2026-11-15)
 
 
