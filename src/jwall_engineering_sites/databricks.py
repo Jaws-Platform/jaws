@@ -568,6 +568,30 @@ class DatabricksDeployment:
                 return []
         return [f"{count} object versions from s3://{bucket}"]
 
+    def _release_before_destroy(self, tf: stack.Terraform, account: Mapping[str, Any]) -> None:
+        """Make the workspace stack destroyable: bind again what a failed destroy
+        left unbound, then release from state what must not be deleted first
+        (databricks_destroy.RELEASED_TYPES)."""
+        state = tf.state_list()
+        unbound = databricks_destroy.unbound_securables(state, self.project)
+        if unbound and self.clients is not None and account.get("workspace_id") is not None:
+            databricks_destroy.restore_bindings(
+                self.clients.workspace(str(account["workspace_url"])),
+                int(account["workspace_id"]),
+                unbound,
+                self.logger,
+            )
+        released = databricks_destroy.released_addresses(state)
+        for address in released:
+            tf.state_rm(address)
+        if released:
+            self.logger.info(
+                "released %d resource(s) from Terraform state; they go with the workspace or "
+                "with the catalog, external location and storage credential: %s",
+                len(released),
+                ", ".join(released),
+            )
+
     def _destroy_workspace(self) -> list[str]:
         with self._step("workspace-destroy") as step:
             account = self._read_outputs("account")
@@ -581,6 +605,7 @@ class DatabricksDeployment:
                 ):
                     tf.prepare()
                     tf.init()
+                    self._release_before_destroy(tf, account)
                     tf.destroy()
                 return ["the workspace stack: catalog, catalog bucket, compute policies"]
             # No workspace: a previous run destroyed this stack, then part of the account's.

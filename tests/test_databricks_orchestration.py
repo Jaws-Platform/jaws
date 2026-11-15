@@ -599,6 +599,143 @@ def test_destroy_refuses_a_workspace_stack_it_cannot_reach(
     assert "workspace_url" in result.output
 
 
+# What the workspace stack's destroy releases from state, and what it deletes.
+RELEASED = [
+    "module.catalog.databricks_grants.catalog",
+    "module.catalog.databricks_grants.external_location",
+    "module.catalog.databricks_workspace_binding.catalog",
+    "module.catalog.databricks_workspace_binding.external_location",
+    "module.catalog.databricks_workspace_binding.storage_credential",
+    "module.workspace_config.databricks_disable_legacy_access_setting.this",
+    "module.workspace_config.databricks_disable_legacy_dbfs_setting.this",
+]
+DELETED = [
+    "module.catalog.aws_s3_bucket.this",
+    "module.catalog.databricks_catalog.this",
+    "module.catalog.databricks_external_location.this",
+    "module.catalog.databricks_storage_credential.this",
+    "module.workspace_config.databricks_workspace_conf.this",
+]
+# The state a destroy left behind when it deleted the bindings and then failed
+# on the settings and on the external location's grants.
+STUCK = [
+    "module.catalog.aws_s3_bucket.this",
+    "module.catalog.databricks_external_location.this",
+    "module.catalog.databricks_grants.external_location",
+    "module.catalog.databricks_storage_credential.this",
+    "module.workspace_config.databricks_disable_legacy_access_setting.this",
+    "module.workspace_config.databricks_disable_legacy_dbfs_setting.this",
+]
+
+
+def _workspace_calls(tmp_path: Path) -> list[str]:
+    """The workspace stack's terraform calls, with `state rm` reduced to its address."""
+    calls = []
+    for line in (tmp_path / "stacks.log").read_text().splitlines():
+        words = line.split()
+        if words[0] != "workspace":
+            continue
+        calls.append(f"rm {words[-1]}" if words[1:3] == ["state", "rm"] else words[1])
+    return calls
+
+
+def test_destroy_releases_what_must_not_be_deleted_first(
+    dbx: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The legacy settings cannot be deleted, and a securable's grants cannot be
+    once its binding is gone: all of them leave state before `terraform destroy`."""
+    monkeypatch.setenv("FAKE_TF_WORKSPACE_STATE_LIST", " ".join(RELEASED + DELETED))
+    with _as_role(APPLY_ROLE):
+        result = runner.invoke(cli.app, ["destroy", "--yes"])  # FakeClients: no API call
+    assert result.exit_code == 0, result.output
+    calls = _workspace_calls(tmp_path)
+    assert calls[-1] == "destroy"
+    assert [c.removeprefix("rm ") for c in calls if c.startswith("rm ")] == RELEASED
+    assert "released 7 resource(s) from Terraform state" in result.output
+
+
+def test_destroy_binds_again_what_a_failed_destroy_left_unbound(
+    dbx: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    names = derived_names(_project())
+    workspace = MagicMock()
+    hosts: list[str] = []
+
+    def client(self: FakeClients, host: str) -> MagicMock:
+        hosts.append(host)
+        return workspace
+
+    monkeypatch.setattr(FakeClients, "workspace", client)
+    monkeypatch.setenv("FAKE_TF_WORKSPACE_STATE_LIST", " ".join(STUCK))
+    with _as_role(APPLY_ROLE):
+        result = runner.invoke(cli.app, ["destroy", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert hosts == [ACCOUNT_OUTPUTS["workspace_url"]]
+    bound = workspace.workspace_bindings.update_bindings.call_args_list
+    assert [c.args for c in bound] == [
+        ("external_location", names.catalog_bucket),
+        ("storage_credential", names.uc_role),
+    ]
+    for call in bound:
+        (binding,) = call.kwargs["add"]
+        assert binding.workspace_id == ACCOUNT_OUTPUTS["workspace_id"]
+        assert binding.binding_type.value == "BINDING_TYPE_READ_WRITE"
+    calls = _workspace_calls(tmp_path)
+    assert calls[-1] == "destroy"
+    assert [c.removeprefix("rm ") for c in calls if c.startswith("rm ")] == [
+        "module.catalog.databricks_grants.external_location",
+        "module.workspace_config.databricks_disable_legacy_access_setting.this",
+        "module.workspace_config.databricks_disable_legacy_dbfs_setting.this",
+    ]
+
+
+def test_destroy_goes_on_when_a_binding_is_refused(
+    dbx: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from databricks.sdk.errors.base import DatabricksError
+
+    workspace = MagicMock()
+    workspace.workspace_bindings.update_bindings.side_effect = DatabricksError("not accessible")
+    monkeypatch.setattr(FakeClients, "workspace", lambda self, host: workspace)
+    monkeypatch.setenv("FAKE_TF_WORKSPACE_STATE_LIST", " ".join(STUCK))
+    with _as_role(APPLY_ROLE):
+        result = runner.invoke(cli.app, ["destroy", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert "cannot bind the external location" in result.output
+    assert "delete it by hand" in result.output
+    assert _workspace_calls(tmp_path)[-1] == "destroy"
+
+
+def test_released_addresses_match_on_the_resource_type() -> None:
+    state = [
+        *DELETED,
+        *RELEASED,
+        'module.catalog.databricks_grants.schema["raw.events"]',
+        'module.workspace_config.databricks_cluster_policy.this["jobs"]',
+        "data.databricks_current_metastore.this",
+    ]
+    assert databricks_destroy.released_addresses(state) == [
+        *RELEASED,
+        'module.catalog.databricks_grants.schema["raw.events"]',
+    ]
+    assert databricks_destroy.released_addresses([]) == []
+
+
+def test_unbound_securables_are_those_in_state_without_their_binding() -> None:
+    project = _project()
+    names = derived_names(project)
+    assert databricks_destroy.unbound_securables(RELEASED + DELETED, project) == []
+    assert databricks_destroy.unbound_securables(STUCK, project) == [
+        ("external_location", names.catalog_bucket),
+        ("storage_credential", names.uc_role),
+    ]
+    only_catalog = ["module.catalog.databricks_catalog.this"]
+    assert databricks_destroy.unbound_securables(only_catalog, project) == [
+        ("catalog", "databricks_poc")
+    ]
+    assert databricks_destroy.unbound_securables([], project) == []
+
+
 class _VersionsStub:
     def __init__(self, count: int) -> None:
         self.count = count

@@ -245,9 +245,26 @@ prints what it deletes and refuses without `--yes`. The order matters:
    (and never read or write) objects.
 2. **Destroy the workspace stack**: the catalog, its storage credential and
    external location, the catalog bucket, the Unity Catalog role, the compute
-   policies and the settings. If the account stack no longer has a workspace
-   and the workspace state is empty, this step is skipped; if the state still
-   holds resources, destroy stops and says so (see [account-state](#account-state)).
+   policies and the settings. Before Terraform runs, some resources are
+   released from its state instead of deleted, because deleting them first
+   fails and each goes with something this step or the next deletes anyway:
+   - the *disable legacy access* and *disable legacy DBFS* settings, which
+     Databricks refuses to delete (`This setting cannot be modified or deleted
+     for this workspace`); they go with the workspace;
+   - the grants and workspace bindings of the catalog, the external location
+     and the storage credential. Terraform orders nothing between a
+     securable's grants and its binding, and once the binding is gone the
+     securable is `not accessible in current workspace`, so its grants cannot
+     be deleted.
+
+   If an earlier destroy already deleted a binding and then failed, the
+   securable is bound to the workspace again first. If Databricks refuses
+   that, destroy warns and goes on; should it then fail on that object,
+   delete it by hand in Catalog Explorer as a metastore admin and re-run.
+
+   If the account stack no longer has a workspace and the workspace state is
+   empty, this step is skipped; if the state still holds resources, destroy
+   stops and says so (see [account-state](#account-state)).
 3. **Destroy the account stack**: the workspace, VPC, subnets, endpoints,
    security group, NAT instance, root bucket and its contents, the roles, the
    account groups and the metastore assignment.

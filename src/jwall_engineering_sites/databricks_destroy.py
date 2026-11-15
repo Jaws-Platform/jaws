@@ -4,10 +4,17 @@ Destroy order (ruling R7): empty the catalog bucket while its bucket policy stil
 grants the apply role list and delete, then destroy the workspace stack (which
 removes the empty bucket and the catalog), then the account stack. Every step is
 idempotent, so a re-run continues where a failed one stopped.
+
+Before Terraform destroys the workspace stack, some of its resources are released
+from state instead of deleted (`released_addresses`), and a securable that lost
+its workspace binding to an earlier, failed destroy is bound again
+(`unbound_securables`, `restore_bindings`).
 """
 
 from __future__ import annotations
 
+import re
+from collections.abc import Sequence
 from logging import Logger
 from typing import Any
 
@@ -22,6 +29,100 @@ from .site import ENVIRONMENT
 DELETE_BATCH = 1000
 
 KEPT = "Kept: the metastore, the event log and the client secret in SSM."
+
+#: Resource types the workspace stack's destroy releases from Terraform state
+#: instead of deleting. Each goes with something destroy deletes anyway, and
+#: deleting it first fails:
+#:
+#: - the legacy settings: Databricks refuses to delete them ("This setting cannot
+#:   be modified or deleted for this workspace"); they go with the workspace.
+#: - grants and workspace bindings: they go with their catalog, external location
+#:   or storage credential. Terraform orders nothing between a securable's grants
+#:   and its binding, and once the binding is gone the isolated securable is "not
+#:   accessible in current workspace", so its grants can no longer be deleted.
+RELEASED_TYPES = frozenset(
+    {
+        "databricks_disable_legacy_access_setting",
+        "databricks_disable_legacy_dbfs_setting",
+        "databricks_grants",
+        "databricks_workspace_binding",
+    }
+)
+
+_INDEX = re.compile(r"\[[^\]]*\]$")
+
+
+def _resource(address: str) -> tuple[str, str]:
+    """The (type, name) of a state address, without its module path or index."""
+    parts = _INDEX.sub("", address).split(".")
+    return (parts[-2], parts[-1]) if len(parts) >= 2 else ("", "")
+
+
+def released_addresses(state: Sequence[str]) -> list[str]:
+    """The addresses in `state` to release (`terraform state rm`) before destroy."""
+    return [address for address in state if _resource(address)[0] in RELEASED_TYPES]
+
+
+def unbound_securables(state: Sequence[str], project: Project) -> list[tuple[str, str]]:
+    """The catalog module's securables still in `state` whose workspace binding is
+    not: an earlier destroy deleted the binding and then failed. Returns
+    (securable type, name) pairs, as the workspace bindings API takes them."""
+    names = derived_names(project)
+    securables = {
+        "databricks_catalog": ("catalog", project.project.replace("-", "_")),
+        "databricks_external_location": ("external_location", names.catalog_bucket),
+        # The catalog module names the storage credential after its role.
+        "databricks_storage_credential": ("storage_credential", names.uc_role),
+    }
+    resources = {_resource(address) for address in state}
+    present = {kind for kind, _ in resources}
+    bound = {name for kind, name in resources if kind == "databricks_workspace_binding"}
+    return [
+        securable
+        for kind, securable in securables.items()
+        if kind in present and securable[0] not in bound
+    ]
+
+
+def restore_bindings(
+    workspace: Any, workspace_id: int, securables: Sequence[tuple[str, str]], logger: Logger
+) -> list[str]:
+    """Bind each securable to the workspace again, so destroy can reach it.
+
+    `workspace` is the SDK's WorkspaceClient. A refusal is logged and destroy goes
+    on: Terraform's own error then names what is left. Returns the names bound.
+    """
+    from databricks.sdk.errors.base import DatabricksError
+    from databricks.sdk.service.catalog import WorkspaceBinding, WorkspaceBindingBindingType
+
+    bound: list[str] = []
+    for kind, name in securables:
+        binding = WorkspaceBinding(
+            workspace_id=workspace_id,
+            binding_type=WorkspaceBindingBindingType.BINDING_TYPE_READ_WRITE,
+        )
+        try:
+            workspace.workspace_bindings.update_bindings(kind, name, add=[binding])
+        except (DatabricksError, OSError) as exc:
+            logger.warning(
+                "cannot bind the %s %s to workspace %s again (%s: %s); destroy goes on. If it "
+                "fails on this object, delete it by hand in Catalog Explorer as a metastore "
+                "admin, then re-run destroy",
+                kind.replace("_", " "),
+                name,
+                workspace_id,
+                type(exc).__name__,
+                exc,
+            )
+            continue
+        logger.info(
+            "bound the %s %s to workspace %s again: an earlier destroy removed the binding",
+            kind.replace("_", " "),
+            name,
+            workspace_id,
+        )
+        bound.append(name)
+    return bound
 
 
 def deletion_list(project: Project) -> list[str]:
