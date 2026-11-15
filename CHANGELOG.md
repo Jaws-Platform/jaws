@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.24.0...v0.25.0) (2026-11-15)
+
+
+### Features
+
+* rebrand JWall Engineering Sites to JWall Engineering Infra in PR comments and docs ([#121](https://github.com/jwallace145/jwall-engineering-infra/issues/121)) ([72085d6](https://github.com/jwallace145/jwall-engineering-infra/commit/72085d6929e09e1599fe1965306151405886fa52))
+
 ## [0.24.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.23.3...v0.24.0) (2026-11-15)
 
 
