@@ -30,7 +30,7 @@ from jwall_engineering_sites.checks.framework import (
     Severity,
     Stage,
 )
-from jwall_engineering_sites.databricks import workspace_plan_stale
+from jwall_engineering_sites.databricks import DatabricksDeployment, workspace_plan_stale
 from jwall_engineering_sites.databricks_names import derived_names
 from jwall_engineering_sites.project import Project
 from jwall_engineering_sites.site import load_site_config
@@ -612,7 +612,7 @@ def test_destroy_waits_out_a_workspace_that_is_still_attached(
     """Databricks refuses to delete the network of a workspace it has just deleted;
     the account stack's destroy waits and tries again."""
     waits: list[float] = []
-    monkeypatch.setattr("jwall_engineering_sites.databricks.time.sleep", waits.append)
+    monkeypatch.setattr(DatabricksDeployment, "sleep", staticmethod(waits.append))
     monkeypatch.setenv("FAKE_TF_ACCOUNT_FAIL_ON", "destroy")
     monkeypatch.setenv("FAKE_TF_ACCOUNT_FAIL_TIMES", "2")
     monkeypatch.setenv("FAKE_TF_ACCOUNT_ERROR", str(DETACHING))
@@ -631,7 +631,7 @@ def test_destroy_gives_up_on_a_workspace_that_never_detaches(
     dbx: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     waits: list[float] = []
-    monkeypatch.setattr("jwall_engineering_sites.databricks.time.sleep", waits.append)
+    monkeypatch.setattr(DatabricksDeployment, "sleep", staticmethod(waits.append))
     monkeypatch.setenv("FAKE_TF_ACCOUNT_FAIL_ON", "destroy")
     monkeypatch.setenv("FAKE_TF_ACCOUNT_ERROR", str(DETACHING))
     with _as_role(APPLY_ROLE):
@@ -651,7 +651,7 @@ def test_destroy_does_not_retry_any_other_failure(
     dbx: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     waits: list[float] = []
-    monkeypatch.setattr("jwall_engineering_sites.databricks.time.sleep", waits.append)
+    monkeypatch.setattr(DatabricksDeployment, "sleep", staticmethod(waits.append))
     monkeypatch.setenv("FAKE_TF_ACCOUNT_FAIL_ON", "destroy")
     monkeypatch.setenv("FAKE_TF_ACCOUNT_ERROR", str(FIXTURES / "errors" / "DBX-AUTH.txt"))
     with _as_role(APPLY_ROLE):
