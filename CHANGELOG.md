@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.22.0...v0.23.0) (2026-11-15)
+
+
+### Features
+
+* **databricks:** register the databricks-poc project ([#110](https://github.com/jwallace145/jwall-engineering-infra/issues/110)) ([e6cb811](https://github.com/jwallace145/jwall-engineering-infra/commit/e6cb81178469149820f340b629f4bae75dd749d4))
+
 ## [0.22.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.21.1...v0.22.0) (2026-11-14)
 
 
