@@ -366,10 +366,11 @@ def _hcl_list(block: str, attribute: str) -> list[str]:
     return re.findall(r'"([^"]+)"', match.group(1))
 
 
-def test_databricks_registry_is_empty_until_the_repository_exists() -> None:
-    # databricks-poc is added (Task 14's first step) once the owner creates the repo.
-    assert databricks_registry() == {}
-    assert "databricks-poc" in _databricks_block()  # the comment says what to add
+def test_databricks_poc_is_the_registered_databricks_project() -> None:
+    # repository_id is GitHub's numeric ID: gh api repos/jwallace145/databricks-poc --jq .id
+    assert databricks_registry() == {
+        "databricks-poc": ("jwallace145/databricks-poc", "1458298100"),
+    }
 
 
 def test_databricks_projects_are_not_bots_and_have_guardrails() -> None:

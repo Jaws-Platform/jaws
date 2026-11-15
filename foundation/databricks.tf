@@ -43,8 +43,7 @@ locals {
   # repository_id: gh api repos/<owner>/<repo> --jq .id
   # One line per entry, as in bots.tf (the workflows read this block).
   databricks_projects = {
-    # Empty until the owner creates the repository. Then add databricks-poc
-    # with repository jwallace145/databricks-poc and its repository_id.
+    databricks-poc = { repository = "jwallace145/databricks-poc", repository_id = "1458298100" }
   }
 
   databricks_ci = {
