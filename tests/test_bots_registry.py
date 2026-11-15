@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from jwall_engineering_sites.site import load_site_config
 from tests.conftest import FIXTURES, REPO_ROOT
@@ -134,7 +139,8 @@ def test_container_release_runs_this_commit_and_pins_nothing() -> None:
     text = (REPO_ROOT / ".github/workflows/container-release.yml").read_text()
     assert "ref: ${{ github.job_workflow_sha }}" in text
     assert "@v0." not in text and "x-release-please-version" not in text
-    assert "bot reconcile --version" in text
+    assert 'bot reconcile "${version_args[@]}"' in text
+    assert 'version_args=(--version "$VERSION")' in text
     assert "--config .jwall-engineering-infra/config.yaml" in text
     release: dict[Any, Any] = _yaml(".github/workflows/container-release.yml")
     assert release["permissions"] == {}
@@ -550,3 +556,46 @@ def test_databricks_provider_authenticates_from_the_environment_only() -> None:
     assert 'alias = "account"' in _squashed(body)
     assert 'auth_type = "oauth-m2m"' in _squashed(body)
     assert "client_secret" not in body and "client_id" not in body
+
+
+def _reconcile_step() -> str:
+    release: dict[Any, Any] = _yaml(".github/workflows/container-release.yml")
+    steps = release["jobs"]["release"]["steps"]
+    script: str = next(
+        s["run"] for s in steps if s.get("name") == "jwall-engineering-sites bot reconcile"
+    )
+    return script
+
+
+@pytest.mark.skipif(shutil.which("yq") is None, reason="needs yq, as on the GitHub runners")
+@pytest.mark.parametrize(
+    ("track", "version_input", "expected"),
+    [
+        ("latest-release", "", "bot reconcile --version v0.1.0"),
+        ("pinned", "", "bot reconcile"),
+        ("pinned", "v0.13.0", "bot reconcile --version v0.13.0"),
+    ],
+)
+def test_container_release_passes_the_release_tag_unless_the_bot_is_pinned(
+    tmp_path: Path, track: str, version_input: str, expected: str
+) -> None:
+    """A pinned bot's release tag is its own repository's, not an engine release."""
+    (tmp_path / "jwall-engineering-sites.yaml").write_text(
+        f"components:\n  - kind: container-image\n  - kind: lichess-bot\n    track: {track}\n"
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    uv = bin_dir / "uv"
+    uv.write_text('#!/usr/bin/env bash\necho "$@" > "$UV_LOG"\n')
+    uv.chmod(0o755)
+    log = tmp_path / "uv.log"
+    env = {
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        # As the job sets it: the version input, else the caller's release tag.
+        "VERSION": version_input or "v0.1.0",
+        "VERSION_INPUT": version_input,
+        "DEBUG": "false",
+        "UV_LOG": str(log),
+    }
+    subprocess.run(["bash", "-e", "-c", _reconcile_step()], cwd=tmp_path, env=env, check=True)
+    assert log.read_text().strip().endswith(expected)

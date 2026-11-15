@@ -112,3 +112,24 @@ def test_main_writes_a_private_config(tmp_path: Path, monkeypatch: pytest.Monkey
     assert stat.S_IMODE(os.stat(target).st_mode) == 0o600
     assert "lip_secret" in target.read_text()
     assert executed and executed[0][-3:] == ["--config", str(target), "--disable_auto_logging"]
+
+
+def test_version_token_is_filled_from_engine_version() -> None:
+    template = {
+        **TEMPLATE,
+        "greeting": {"hello": "Hi! I'm Braveheart __VERSION__.", "goodbye": "Bye"},
+        "list": ["a __VERSION__", 3],
+    }
+    config = entrypoint.render_config(template, {**ENV, "ENGINE_VERSION": "v0.54.0"}, BOTH)
+    assert config["greeting"] == {"hello": "Hi! I'm Braveheart v0.54.0.", "goodbye": "Bye"}
+    assert config["list"] == ["a v0.54.0", 3]
+    assert template["greeting"]["hello"] == "Hi! I'm Braveheart __VERSION__."  # not mutated
+
+
+def test_version_token_without_engine_version_is_left_with_a_warning(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    template = {**TEMPLATE, "greeting": {"hello": "Braveheart __VERSION__"}}
+    config = entrypoint.render_config(template, ENV, BOTH)
+    assert config["greeting"]["hello"] == "Braveheart __VERSION__"
+    assert "ENGINE_VERSION is not set" in capsys.readouterr().err

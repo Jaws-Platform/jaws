@@ -99,6 +99,8 @@ def test_build_command_line(
         "--platform linux/amd64",
         "--build-arg ENGINE_BINARY=braveheart",
         "--build-arg VERSION=v0.14.0",
+        "--build-arg ENGINE_VERSION=v0.14.0",
+        "--build-arg ENGINE_REPOSITORY=https://github.com/Braveheart-Chess/braveheart",
         "--build-arg SOURCE_REPOSITORY=https://github.com/Braveheart-Chess/braveheart",
         "--tag jwall-engineering-braveheart:v0.14.0",
     ):
@@ -189,3 +191,54 @@ def test_present_tags_needs_only_describe_images() -> None:
         )
         tags = image.present_tags(ecr, "jwall-engineering-braveheart")
     assert tags == {"v0.13.0", "v0.14.0", "extra"}
+
+
+def _pinned_project(bot: Project) -> Project:
+    image_component = bot.config.image.model_copy(
+        update={
+            "artifact": bot.config.image.artifact.model_copy(
+                update={"repository": "Braveheart-Chess/braveheart", "version": "v0.13.0"}
+            )
+        }
+    )
+    bot_component = bot.config.bot.model_copy(update={"track": "pinned"})
+    components = tuple(
+        image_component if c is bot.config.image else bot_component if c is bot.config.bot else c
+        for c in bot.config.components
+    )
+    return bot.model_copy(
+        update={"config": bot.config.model_copy(update={"components": components})}
+    )
+
+
+def test_image_tag_is_the_release_for_a_bot_that_follows_releases(
+    bot: Project, bot_workspace: Path
+) -> None:
+    assert image.image_tag(bot, "v0.14.0", bot_workspace) == "v0.14.0"
+
+
+def test_image_tag_of_a_pinned_bot_names_its_config(bot: Project, bot_workspace: Path) -> None:
+    pinned = _pinned_project(bot)
+    first = image.image_tag(pinned, "v0.13.0", bot_workspace)
+    assert first.startswith("v0.13.0-") and len(first) == len("v0.13.0-") + 8
+    assert image.image_tag(pinned, "v0.13.0", bot_workspace) == first  # deterministic
+    config = bot_workspace / "lichess" / "config.yml"
+    config.write_text(config.read_text() + "# a change\n")
+    assert image.image_tag(pinned, "v0.13.0", bot_workspace) != first
+
+
+def test_image_tag_of_a_pinned_bot_needs_its_config(bot: Project, tmp_path: Path) -> None:
+    with pytest.raises(PreflightError, match=r"lichess/config\.yml not found"):
+        image.image_tag(_pinned_project(bot), "v0.13.0", tmp_path)
+
+
+def test_build_passes_the_engine_version_separately(
+    bot: Project, binary: Path, bot_workspace: Path, fake_docker: Path
+) -> None:
+    context = image.prepare_context(
+        bot, "v0.13.0-abcd1234", binary, bot_workspace / "c", bot_workspace
+    )
+    image.build(context, bot, "v0.13.0-abcd1234", logging.getLogger("t"), engine_version="v0.13.0")
+    line = fake_docker.read_text().splitlines()[0]
+    assert "--build-arg VERSION=v0.13.0-abcd1234" in line
+    assert "--build-arg ENGINE_VERSION=v0.13.0" in line

@@ -786,3 +786,58 @@ def test_a_workspace_user_who_is_also_an_admin_is_refused(
     admin = guard.admins[0].upper()  # the overlap check ignores case
     with pytest.raises(ConfigError, match=r"admins are set centrally.*config\.yaml"):
         _load(tmp_path, _workspace_raw(users=[admin]), settings)
+
+
+def _pinned(raw: dict[str, Any], version: str = "v0.13.0") -> dict[str, Any]:
+    """The fixture as a bot repository running another repository's engine, pinned."""
+    raw["repository"] = raw["tags"]["Repository"] = "Braveheart-Chess/braveheart-lichess-bot"
+    _image(raw)["artifact"]["repository"] = "Braveheart-Chess/braveheart"
+    _image(raw)["artifact"]["version"] = version
+    _bot(raw)["track"] = "pinned"
+    return raw
+
+
+def test_a_pinned_bot_takes_its_engine_from_another_repository(
+    tmp_path: Path, settings: Settings
+) -> None:
+    project = _load(tmp_path, _pinned(_raw()), settings)
+    assert project.pinned_version == "v0.13.0"
+    assert project.release_repository == "Braveheart-Chess/braveheart"
+    assert project.config.repository == "Braveheart-Chess/braveheart-lichess-bot"
+
+
+def test_the_release_repository_defaults_to_the_project_repository(bot: Project) -> None:
+    assert bot.release_repository == "Braveheart-Chess/braveheart"
+    assert bot.pinned_version is None
+
+
+def test_pinned_needs_a_version(tmp_path: Path, settings: Settings) -> None:
+    raw = _pinned(_raw())
+    del _image(raw)["artifact"]["version"]
+    with pytest.raises(
+        ConfigError, match=r"track: pinned needs container-image\.artifact\.version"
+    ):
+        _load(tmp_path, raw, settings)
+
+
+def test_a_version_needs_track_pinned(tmp_path: Path, settings: Settings) -> None:
+    raw = _pinned(_raw())
+    _bot(raw)["track"] = "latest-release"
+    with pytest.raises(ConfigError, match=r"set lichess-bot\.track: pinned"):
+        _load(tmp_path, raw, settings)
+
+
+@pytest.mark.parametrize("version", ["0.13.0", "v0.13", "v0.13.0-rc.1", "latest"])
+def test_the_pin_is_a_release_tag(tmp_path: Path, settings: Settings, version: str) -> None:
+    with pytest.raises(ConfigError, match="version"):
+        _load(tmp_path, _pinned(_raw(), version), settings)
+
+
+@pytest.mark.parametrize("repository", ["braveheart", "a/b/c", "https://github.com/a/b"])
+def test_the_artifact_repository_is_owner_slash_name(
+    tmp_path: Path, settings: Settings, repository: str
+) -> None:
+    raw = _pinned(_raw())
+    _image(raw)["artifact"]["repository"] = repository
+    with pytest.raises(ConfigError, match="repository"):
+        _load(tmp_path, raw, settings)

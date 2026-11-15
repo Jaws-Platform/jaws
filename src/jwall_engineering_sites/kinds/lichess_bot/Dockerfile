@@ -21,11 +21,17 @@ RUN git clone --quiet https://github.com/lichess-bot-devs/lichess-bot /opt/liche
 FROM python:3.12-slim
 ARG ENGINE_BINARY
 ARG VERSION
+ARG ENGINE_VERSION
+ARG ENGINE_REPOSITORY
 ARG SOURCE_REPOSITORY
 RUN test -n "$ENGINE_BINARY" || (echo "ENGINE_BINARY build-arg is required" && exit 1)
+# VERSION is the image tag: the engine release, plus the config digest for a
+# pinned bot. ENGINE_VERSION is the engine release alone.
 LABEL org.opencontainers.image.source="${SOURCE_REPOSITORY}" \
       org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.description="lichess-bot running the ${ENGINE_BINARY} release ${VERSION}"
+      org.opencontainers.image.description="lichess-bot running the ${ENGINE_BINARY} release ${ENGINE_VERSION}" \
+      engineering.jwall.engine.version="${ENGINE_VERSION}" \
+      engineering.jwall.engine.source="${ENGINE_REPOSITORY}"
 # uid/gid 1000: the instance owns the mounted records directory as 1000.
 RUN groupadd --gid 1000 bot && useradd --uid 1000 --gid 1000 --create-home --shell /usr/sbin/nologin bot
 COPY --from=fetch /opt/lichess-bot /opt/lichess-bot
@@ -37,6 +43,7 @@ RUN chmod 0755 "/opt/engine/$ENGINE_BINARY" \
     && install -d -o bot -g bot /opt/lichess-bot/game_records \
     && chown -R bot:bot /opt/lichess-bot
 ENV ENGINE_BINARY=${ENGINE_BINARY} \
+    ENGINE_VERSION=${ENGINE_VERSION} \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 USER bot

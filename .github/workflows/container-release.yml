@@ -6,6 +6,11 @@ name: Container release
 # finishes the game in progress first, so this job can wait that long.
 # `bot reconcile` is idempotent: re-running a release is harmless.
 #
+# A pinned bot (lichess-bot.track: pinned) is released by its own repository,
+# whose tags are not engine versions: it ships the engine release its project
+# file pins, under a tag that also names its config, so the caller's release
+# tag only selects the commit to read the project file and config from.
+#
 # The CLI runs from this workflow's own commit (github.job_workflow_sha), so
 # the tag the caller pins selects the tool version. It runs with uv rather
 # than the CLI image because the build needs Docker on the runner.
@@ -33,7 +38,9 @@ on:
         required: true
         type: string
       version:
-        description: Release tag to ship; defaults to the published release's tag.
+        description: >-
+          Release tag to ship; defaults to the published release's tag. A pinned bot
+          ships its pin, and refuses any other version.
         required: false
         type: string
         default: ""
@@ -64,6 +71,7 @@ jobs:
       id-token: write # the release role, through OIDC
     env:
       VERSION: ${{ inputs.version || github.event.release.tag_name }}
+      VERSION_INPUT: ${{ inputs.version }}
     steps:
       - name: Check out the release
         uses: actions/checkout@v7
@@ -106,10 +114,15 @@ jobs:
         run: |
           debug_flag=""
           if [ "$DEBUG" = "true" ]; then debug_flag="--debug"; fi
+          # A pinned bot's release tag is the bot repository's, not an engine
+          # release: let the project file's pin decide, unless a version was given.
+          track=$(yq -r '.components[] | select(.kind == "lichess-bot") | .track // "latest-release"' jwall-engineering-sites.yaml)
+          version_args=(--version "$VERSION")
+          if [ "$track" = "pinned" ] && [ -z "$VERSION_INPUT" ]; then version_args=(); fi
           # shellcheck disable=SC2086
           uv run --no-dev --project .jwall-engineering-infra jwall-engineering-sites \
             --config .jwall-engineering-infra/config.yaml $debug_flag \
-            bot reconcile --version "$VERSION"
+            bot reconcile "${version_args[@]}"
       - name: Upload the run log and artifacts
         if: always()
         uses: actions/upload-artifact@v7

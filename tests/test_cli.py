@@ -1040,3 +1040,137 @@ def test_destroy_bot_releases_its_dataset_buckets_too(
     summary = next(line for line in result.output.splitlines() if "destroyed braveheart" in line)
     assert "jwall-engineering-braveheart-nnue" in summary
     assert "records bucket" in summary and "secret" in summary
+
+
+import yaml  # noqa: E402
+
+
+@pytest.fixture
+def pinned_workspace(bot_workspace: Path) -> Path:
+    """The bot workspace as a bot repository that pins the engine repository's v0.13.0
+    (v0.14.0 is newer, so following releases would pick it instead)."""
+    path = bot_workspace / "jwall-engineering-sites.yaml"
+    raw = yaml.safe_load(path.read_text())
+    raw["repository"] = raw["tags"]["Repository"] = "Braveheart-Chess/braveheart-lichess-bot"
+    for component in raw["components"]:
+        if component["kind"] == "container-image":
+            component["artifact"]["repository"] = "Braveheart-Chess/braveheart"
+            component["artifact"]["version"] = "v0.13.0"
+        if component["kind"] == "lichess-bot":
+            component["track"] = "pinned"
+    path.write_text(yaml.safe_dump(raw))
+    return bot_workspace
+
+
+def _pinned_tag(workspace: Path) -> str:
+    config = workspace / "lichess" / "config.yml"
+    digest = hashlib.sha256(b"lichess/config.yml\0" + config.read_bytes() + b"\0").hexdigest()
+    return f"v0.13.0-{digest[:8]}"
+
+
+def test_reconcile_dry_run_of_a_pinned_bot_ships_the_pin(
+    pinned_workspace: Path, fake_github: dict[str, bytes]
+) -> None:
+    with mock_aws():
+        _ecr_with("v0.14.0")
+        _put_param("running-version", "v0.14.0")
+        result = runner.invoke(cli.app, ["bot", "reconcile", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    plan = json.loads(result.stdout.strip().splitlines()[-1])
+    assert plan["version"] == "v0.13.0"
+    assert plan["tag"] == _pinned_tag(pinned_workspace)
+    assert (plan["build"], plan["push"], plan["deploy"]) == (True, True, True)
+
+
+def test_reconcile_of_a_pinned_bot_refuses_another_version(
+    pinned_workspace: Path, fake_github: dict[str, bytes]
+) -> None:
+    with mock_aws():
+        _ecr_with()
+        result = runner.invoke(cli.app, ["bot", "reconcile", "--dry-run", "--version", "v0.14.0"])
+    assert result.exit_code == 3
+    assert "pinned to v0.13.0" in result.output
+
+
+def test_reconcile_of_a_pinned_bot_with_its_current_image_does_nothing(
+    pinned_workspace: Path, fake_github: dict[str, bytes], fake_docker: Path
+) -> None:
+    tag = _pinned_tag(pinned_workspace)
+    with mock_aws(), _as_role(BOT_RELEASE_ROLE):
+        _ecr_with(tag)
+        _put_param("running-version", tag)
+        result = runner.invoke(cli.app, ["bot", "reconcile"])
+    assert result.exit_code == 0, result.output
+    assert "already running" in result.output
+    assert fake_docker.read_text() == ""
+
+
+def test_reconcile_of_a_pinned_bot_builds_the_pin_and_deploys_its_tag(
+    pinned_workspace: Path,
+    fake_github: dict[str, bytes],
+    fake_docker: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tag = _pinned_tag(pinned_workspace)
+    deployed: list[str] = []
+    monkeypatch.setattr(rollout_module, "send_reconcile", lambda *a, **k: "cmd-1")
+
+    def fake_follow(
+        ssm: object,
+        command: str,
+        instance: str,
+        project: object,
+        version: str,
+        *a: object,
+        **k: object,
+    ) -> str:
+        deployed.append(version)
+        _put_param("running-version", version)
+        _put_param("status", "ok")
+        return "ok"
+
+    monkeypatch.setattr(rollout_module, "follow", fake_follow)
+    real_push = image_module.push
+
+    def push_and_register(project: object, registry: str, pushed: str, *a: object) -> str:
+        remote: str = real_push(project, registry, pushed, *a)  # type: ignore[arg-type]
+        _put_image(pushed)
+        return remote
+
+    monkeypatch.setattr(image_module, "push", push_and_register)
+    with mock_aws(), _as_role(BOT_RELEASE_ROLE):
+        _ecr_with("v0.14.0")
+        _bot_instance()
+        _put_param("running-version", "v0.14.0")
+        result = runner.invoke(cli.app, ["bot", "reconcile"])
+        running = _param("running-version")
+    assert result.exit_code == 0, result.output
+    build = fake_docker.read_text().splitlines()[0]
+    assert f"--build-arg VERSION={tag}" in build
+    assert "--build-arg ENGINE_VERSION=v0.13.0" in build
+    assert f"--tag {REPO}:{tag}" in build
+    assert deployed == [tag]
+    assert running == tag
+    record = json.loads((pinned_workspace / ".jwall-engineering-sites" / "build.json").read_text())
+    assert (record["tag"], record["version"]) == (tag, "v0.13.0")
+
+
+def test_bot_build_needs_a_version_unless_pinned(bot_workspace: Path) -> None:
+    result = runner.invoke(cli.app, ["bot", "build"])
+    assert result.exit_code == 3
+    assert "--version is required" in result.output
+
+
+def _put_image(tag: str) -> None:
+    boto3.client("ecr", region_name="us-east-1").put_image(
+        repositoryName=REPO,
+        imageManifest=json.dumps(
+            {
+                "schemaVersion": 2,
+                "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+                "config": {"digest": f"sha256:{tag}", "size": 1, "mediaType": "x"},
+                "layers": [],
+            }
+        ),
+        imageTag=tag,
+    )

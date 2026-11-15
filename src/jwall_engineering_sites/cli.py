@@ -865,27 +865,57 @@ def bot_logs(
 # -- images and rollouts ------------------------------------------------------------
 
 
-def _version(value: str) -> str:
-    if not releases.RELEASE_TAG.match(value):
+def _version(value: str | None) -> str | None:
+    if value is not None and not releases.RELEASE_TAG.match(value):
         raise typer.BadParameter("must be a release tag like v1.2.3")
     return value
 
 
 VersionOption = Annotated[
-    str, typer.Option("--version", help="Release tag, e.g. v0.14.0.", callback=_version)
+    str | None,
+    typer.Option(
+        "--version",
+        help="Engine release tag, e.g. v0.14.0. Required, unless the bot is pinned "
+        "(lichess-bot.track: pinned), where it defaults to the pin.",
+        callback=_version,
+    ),
 ]
 
 
-def _build(run: Run, project: Project, tag: str) -> str:
-    """Download, verify, extract, build and smoke-test; returns the local image name."""
+def _release_version(project: Project, requested: str | None) -> str:
+    """The engine release a command works on: `--version`, or a pinned bot's pin.
+    A pinned bot refuses any other release: the pin in the project file decides."""
+    pinned = project.pinned_version
+    if pinned is None:
+        if requested is None:
+            raise PreflightError("--version is required: the release tag, e.g. v0.14.0")
+        return requested
+    if requested is not None and requested != pinned:
+        raise PreflightError(
+            f"{project.project} is pinned to {pinned} (container-image.artifact.version); "
+            f"change the pin in the project file to ship {requested}"
+        )
+    return pinned
+
+
+def _image_tag(run: Run, project: Project, version: str) -> str:
+    # Paths in the project file (lichess/config.yml, dockerfile) are relative to
+    # the file's own directory, wherever the command runs from.
+    return image.image_tag(project, version, run.site_file.resolve().parent)
+
+
+def _build(run: Run, project: Project, version: str) -> str:
+    """Download, verify, extract, build and smoke-test release `version`; returns
+    the local image name."""
+    tag = _image_tag(run, project, version)
     work = run.artifacts / "build" / tag
     with phase("release"):
-        found = releases.list_releases(project.config.repository)
-        releases.find(found, tag)  # a published vX.Y.Z release, not a draft or prerelease
-        asset, checksum = releases.asset_names(project.image, tag)
+        found = releases.list_releases(project.release_repository)
+        releases.find(found, version)  # a published vX.Y.Z release, not a draft or prerelease
+        asset, checksum = releases.asset_names(project.image, version)
         release = releases.wait_for_assets(
-            project.config.repository,
-            tag,
+            project.release_repository,
+            version,
             (asset, checksum),
             run.settings.bot.asset_wait_seconds,
             run.logger,
@@ -902,16 +932,20 @@ def _build(run: Run, project: Project, tag: str) -> str:
         # the file's own directory, wherever the command runs from.
         consumer_root = run.site_file.resolve().parent
         context = image.prepare_context(project, tag, binary, work / "context", consumer_root)
-        name = image.build(context, project, tag, run.logger)
+        name = image.build(context, project, tag, run.logger, engine_version=version)
     with phase("smoke test"):
         nodes = image.smoke_test(name, project, run.logger)
-    (run.artifacts / "build.json").write_text(
-        json.dumps({"tag": tag, "image": name, "sha256": digest, "nodes": nodes}, indent=2) + "\n"
-    )
+    record = {"tag": tag, "version": version, "image": name, "sha256": digest, "nodes": nodes}
+    (run.artifacts / "build.json").write_text(json.dumps(record, indent=2) + "\n")
     github.append_summary(
         report.run_summary(
             f"Built {name}",
-            {"release asset": asset, "sha256": digest, "bench nodes (depth 6)": nodes},
+            {
+                "release": f"{project.release_repository} {version}",
+                "release asset": asset,
+                "sha256": digest,
+                "bench nodes (depth 6)": nodes,
+            },
         )
     )
     return name
@@ -978,7 +1012,7 @@ def _deploy(
 @bot_app.command("build")
 def bot_build(
     ctx: typer.Context,
-    version: VersionOption,
+    version: VersionOption = None,
     from_source: Annotated[
         bool, typer.Option("--from-source", help="Reserved: rebuild the engine from source.")
     ] = False,
@@ -991,19 +1025,20 @@ def bot_build(
             raise PreflightError(
                 "--from-source is not implemented in v1; build from the release asset"
             )
-        _build(run, project, version)
+        _build(run, project, _release_version(project, version))
 
     _command(body)(ctx)
 
 
 @bot_app.command("push")
-def bot_push(ctx: typer.Context, version: VersionOption) -> None:
-    """Push a built image to ECR under its release tag. Refuses an existing tag."""
+def bot_push(ctx: typer.Context, version: VersionOption = None) -> None:
+    """Push a built image to ECR under its tag. Refuses an existing tag."""
 
     def body(run: Run) -> None:
         project = _bot_project(run)
+        tag = _image_tag(run, project, _release_version(project, version))
         session = _project_session(run, roles=["release"])
-        _push(run, project, session, version)
+        _push(run, project, session, tag)
 
     _command(body)(ctx)
 
@@ -1011,7 +1046,7 @@ def bot_push(ctx: typer.Context, version: VersionOption) -> None:
 @bot_app.command("deploy")
 def bot_deploy(
     ctx: typer.Context,
-    version: VersionOption,
+    version: VersionOption = None,
     restart: Annotated[
         bool,
         typer.Option("--restart", help="Swap even if this version runs (e.g. a rotated secret)."),
@@ -1021,8 +1056,9 @@ def bot_deploy(
 
     def body(run: Run) -> None:
         project = _bot_project(run)
+        tag = _image_tag(run, project, _release_version(project, version))
         session = _project_session(run, roles=["release"])
-        _deploy(run, project, session, version, restart)
+        _deploy(run, project, session, tag, restart)
 
     _command(body)(ctx)
 
@@ -1032,26 +1068,35 @@ def bot_reconcile(
     ctx: typer.Context,
     version: Annotated[
         str | None,
-        typer.Option("--version", help="Release tag; default: the newest release."),
+        typer.Option(
+            "--version",
+            help="Release tag; default: the newest release, or a pinned bot's pin.",
+        ),
     ] = None,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Print the plan as JSON and change nothing.")
     ] = False,
 ) -> None:
-    """Build and push the release if it is missing, then deploy it if it is the newest.
-    Safe to repeat. The release workflow runs this."""
+    """Build and push the release if it is missing, then deploy it if it is the newest
+    (or, for a pinned bot, the pin with the current config). Safe to repeat. The
+    release workflow runs this."""
 
     def body(run: Run) -> None:
         project = _bot_project(run)
         if version is not None:
             _version(version)
         session = _project_session(run, roles=None if dry_run else ["release"])
-        found = releases.list_releases(project.config.repository)
         present = image.present_tags(session.client("ecr"), project.image_repository)
         running = botlib.get_parameters(
             session.client("ssm"), [project.parameter("running-version")]
         )[project.parameter("running-version")]
-        plan = rollout.decide(version, found, present, running, project.bot.track)
+        if project.pinned_version is not None:
+            pinned = _release_version(project, version)
+            tag = _image_tag(run, project, pinned)
+            plan = rollout.decide_pinned(pinned, tag, present, running)
+        else:
+            found = releases.list_releases(project.release_repository)
+            plan = rollout.decide(version, found, present, running, project.bot.track)
         run.logger.info("plan: %s", plan.reason)
         if dry_run:
             print(json.dumps(plan.as_dict(), sort_keys=True))
@@ -1059,9 +1104,9 @@ def bot_reconcile(
         if plan.build:
             _build(run, project, plan.version)
         if plan.push:
-            _push(run, project, session, plan.version)
+            _push(run, project, session, plan.tag)
         if plan.deploy:
-            _deploy(run, project, session, plan.version, restart=False)
+            _deploy(run, project, session, plan.tag, restart=False)
 
     _command(body)(ctx)
 

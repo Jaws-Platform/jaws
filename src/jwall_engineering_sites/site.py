@@ -133,6 +133,17 @@ class SiteConfig(_Model):
                 for kind, count in counts.items():
                     if count != 1:
                         raise ValueError(f"components must hold exactly one {kind}, got {count}")
+                pinned = self.bot.track == "pinned"
+                if pinned and self.image.artifact.version is None:
+                    raise ValueError(
+                        "lichess-bot.track: pinned needs container-image.artifact.version, "
+                        "the release tag to ship"
+                    )
+                if not pinned and self.image.artifact.version is not None:
+                    raise ValueError(
+                        "container-image.artifact.version pins a release; set "
+                        "lichess-bot.track: pinned, or remove the version to follow every release"
+                    )
             runners = sum(1 for c in self.components if c.kind == "task-runner")
             if runners > 1:
                 raise ValueError(f"components may hold at most one task-runner, got {runners}")
