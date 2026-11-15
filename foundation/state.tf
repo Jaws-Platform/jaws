@@ -60,7 +60,7 @@ locals {
 
 module "state_bucket" {
   source  = "jwallace145/jwall-engineering/aws//modules/tfstate-bucket"
-  version = "0.19.1"
+  version = "0.19.2"
 
   name = local.state_bucket_name
 
