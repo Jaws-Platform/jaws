@@ -99,7 +99,7 @@ resource "terraform_data" "databricks_config_filled_in" {
 module "databricks_metastore" {
   count     = local.databricks_enabled ? 1 : 0
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-metastore"
-  version   = "0.20.0"
+  version   = "0.21.0"
   providers = { databricks = databricks.account }
 
   name                             = local.databricks.metastore_name
@@ -110,17 +110,39 @@ module "databricks_metastore" {
 module "databricks_audit_logs" {
   count     = local.databricks_enabled ? 1 : 0
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-audit-logs"
-  version   = "0.20.0"
+  version   = "0.21.0"
   providers = { aws = aws, databricks = databricks.account }
 
   account_id  = local.databricks.account_id
   bucket_name = local.databricks.audit_bucket
 }
 
+# The shared-objects host: a serverless workspace with no VPC, NAT, buckets,
+# catalog or users, so metastore-level objects that need a workspace to be
+# created through but belong to no project (shared datasets, in
+# stacks/databricks-shared) have a home. Only the metastore admin group is
+# assigned to it. It has no standing AWS cost.
+module "databricks_shared_host" {
+  count     = local.databricks_enabled ? 1 : 0
+  source    = "jwallace145/jwall-engineering/aws//modules/databricks-host-workspace"
+  version   = "0.21.0"
+  providers = { databricks = databricks.account }
+
+  account_id       = local.databricks.account_id
+  workspace_name   = "jwall-engineering-shared"
+  metastore_id     = module.databricks_metastore[0].metastore_id
+  admin_group_name = module.databricks_metastore[0].admin_group_name
+
+  tags = merge(module.context.tags, {
+    CostCenter = "jwall-engineering-infra"
+    Workspace  = "jwall-engineering-shared"
+  })
+}
+
 module "databricks_ci_plan" {
   for_each = local.databricks_projects
   source   = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version  = "0.20.0"
+  version  = "0.21.0"
 
   project           = each.key
   repository        = local.context.repository
@@ -139,7 +161,7 @@ module "databricks_ci_plan" {
 module "databricks_ci_apply" {
   for_each = local.databricks_projects
   source   = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version  = "0.20.0"
+  version  = "0.21.0"
 
   project           = each.key
   repository        = local.context.repository
