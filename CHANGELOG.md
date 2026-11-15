@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.27.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.26.0...v0.27.0) (2026-11-15)
+
+
+### Features
+
+* **databricks:** rename the braveheart workspace project to braveheart-databricks ([#127](https://github.com/jwallace145/jwall-engineering-infra/issues/127)) ([4ad9353](https://github.com/jwallace145/jwall-engineering-infra/commit/4ad9353c52ea68c565109f82d34061125bdfbb65))
+* **databricks:** share dataset buckets read-only with many workspaces through the host ([#125](https://github.com/jwallace145/jwall-engineering-infra/issues/125)) ([c2aa800](https://github.com/jwallace145/jwall-engineering-infra/commit/c2aa8000f39870a6fc88e6a823749836daef5b69))
+
+
+### Bug Fixes
+
+* **databricks:** release undeletable settings, grants and bindings from state before destroy ([#128](https://github.com/jwallace145/jwall-engineering-infra/issues/128)) ([e207c43](https://github.com/jwallace145/jwall-engineering-infra/commit/e207c43b335fdd80ad63444cd75a9cc96f138379))
+
 ## [0.26.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.25.0...v0.26.0) (2026-11-15)
 
 
