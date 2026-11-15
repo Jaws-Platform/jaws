@@ -63,7 +63,7 @@ npm ci
 pre-commit install --hook-type commit-msg --hook-type pre-commit
 cd foundation && terraform init -backend=false
 tflint --init
-cd .. && uv sync                         # the sites CLI and its dev tools
+cd .. && uv sync                         # the infra CLI and its dev tools
 ```
 
 The `commit-msg` hook runs commitlint on every commit; the `pre-commit` hook runs `terraform fmt`, `terraform validate`, and `tflint`. CI is the authoritative check; the hooks exist so mistakes are caught before they are pushed. Skip them once with `git commit --no-verify` if you must, and expect CI to object.
@@ -87,7 +87,7 @@ The `context`, `tfstate-bucket`, `hosted-zone`, `site-bucket`, `ci-plan-role`, `
 
 Release Please opens and maintains a release PR as changes land on `main`. Merging that PR:
 
-1. tags a new version (starting at `v0.1.0`), updates `CHANGELOG.md`, and bumps the sites CLI version in `src/jwall_engineering_sites/__init__.py` and the image tag in `.github/actions/jwall-engineering-sites/action.yml` (the `x-release-please-version` annotations; keep them, and never add one under `.github/workflows/`, which the release bot cannot commit to);
+1. tags a new version (starting at `v0.1.0`), updates `CHANGELOG.md`, and bumps the infra CLI version in `src/jwall_engineering_sites/__init__.py` and the image tag in `.github/actions/jwall-engineering-sites/action.yml` (the `x-release-please-version` annotations; keep them, and never add one under `.github/workflows/`, which the release bot cannot commit to);
 2. triggers the `apply` job, which checks out the tag, assumes the apply role in the `prod` environment, and runs `terraform apply`;
 3. triggers the `image` job, which builds the CLI image and pushes `jwall-engineering-sites:<tag>` to ECR. Site repositories then receive a Dependabot PR bumping their reusable workflow refs to the new tag.
 

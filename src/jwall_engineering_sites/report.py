@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from .stack import PLAN_CHANGES, PLAN_NO_CHANGES
 from .sync import SyncResult
 
-PRODUCT = "JWall Engineering Sites"
+PRODUCT = "JWall Engineering Infra"
 PRODUCT_MARK = "⚡"
 MAX_RESOURCE_ROWS = 40
 _MIN_BODY_BYTES = 256

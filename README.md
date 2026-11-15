@@ -12,7 +12,13 @@ The foundation stack for every [jwall.engineering](https://jwall.engineering) si
 
 Everything is in `us-east-1`, managed with Terraform `>= 1.11` and the AWS provider `~> 6.0`. The shared building blocks are consumed from the public Terraform Registry, see [Shared modules](#shared-modules-from-the-terraform-registry). Releases are cut and applied by [Release Please](#releases-and-applies). Contribution rules are in [CONTRIBUTING.md](CONTRIBUTING.md); the rules for coding agents are in [AGENTS.md](AGENTS.md).
 
-## jwall-engineering-sites: the sites CLI
+## JWall Engineering Infra: the `jwall-engineering-sites` CLI
+
+JWall Engineering Infra started as a static-site tool and now provisions every
+kind of project here: sites, bots, research projects and Databricks
+workspaces. The command, the Python package, the ECR repository, the composite
+action and the `JES_*` variables keep their original `jwall-engineering-sites`
+names so existing consumers keep working.
 
 `jwall-engineering-sites` is the Python CLI (Typer, managed with `uv`) that
 provisions and publishes every site from one YAML file in its repository,
@@ -173,7 +179,7 @@ setup, the checks and the runbook, costs and known gaps:
 
 The plan and preview comments are the product's face in a site repository, so
 the CLI renders them (`report.py`) as one branded card rather than raw plan
-text: a centred **JWall Engineering Sites** header naming the site, one
+text: a centred **JWall Engineering Infra** header naming the site, one
 GitHub alert that carries the verdict, the detail a reviewer needs without
 expanding anything, the full Terraform output folded away, and a footer with
 the tool version, the commit and the workflow run. The alert is conditional
@@ -196,7 +202,7 @@ foundation plan and the site plans look the same.
 `github-actions[bot]`. Pass `app-client-id` (and the `app-private-key`
 secret) to `site-plan.yml` and `site-preview.yml`, or set `JES_APP_CLIENT_ID`
 and `JES_APP_PRIVATE_KEY` in this repository, and the workflows mint a
-short-lived installation token for the **JWall Engineering Sites** GitHub
+short-lived installation token for the **JWall Engineering Infra** GitHub
 App and post as it, with the app's name and avatar. The app needs only
 *Pull requests: read and write* and has to be installed on every repository
 that posts. If the token cannot be minted the step warns and the comment
@@ -254,9 +260,9 @@ CLI and `config.yaml`, the tool configuration shared by the stack and the CLI
 | `oidc.tf` | GitHub OIDC provider (data source; owned by prog-strength-infra, see the TODO there) |
 | `dns.tf` | The hosted zone, its CAA record and the zone owner's TXT records (`hosted-zone` module) |
 | `ci-roles.tf` | This repo's own plan and apply roles (`ci-plan-role` and `ci-apply-role` modules) |
-| `ecr.tf` | The ECR repository for the sites CLI image, configured from `config.yaml` at the repository root |
-| `config.yaml` (root) | Tool configuration for the sites CLI and the foundation stack: Terraform version, library pin, state bucket, DNS zone, ECR lifecycle, sync headers, and the central guardrails (`tasks.limits`, `tasks.max_run_cost_usd`, and per project the instance types, task profiles and dataset retention) |
-| `src/jwall_engineering_sites/`, `tests/`, `pyproject.toml` | The sites CLI, its tests and its `uv` project |
+| `ecr.tf` | The ECR repository for the infra CLI image, configured from `config.yaml` at the repository root |
+| `config.yaml` (root) | Tool configuration for the infra CLI and the foundation stack: Terraform version, library pin, state bucket, DNS zone, ECR lifecycle, sync headers, and the central guardrails (`tasks.limits`, `tasks.max_run_cost_usd`, and per project the instance types, task profiles and dataset retention) |
+| `src/jwall_engineering_sites/`, `tests/`, `pyproject.toml` | The infra CLI, its tests and its `uv` project |
 | `stacks/site/` | The site stack the CLI renders for each site, pinned to the library like any consumer |
 | `stacks/bot/` | The bot stack the CLI renders for each bot or research project: ECR repository, VPC, records bucket, bot instance (the image and bot are off for a research project), task runner and dataset buckets |
 | `src/jwall_engineering_sites/kinds/lichess_bot/` | The harness Dockerfile and entrypoint of the bot image |
@@ -358,7 +364,7 @@ token. `terraform output bots` lists the role ARNs.
 | Role | Trusted for | Permissions |
 | --- | --- | --- |
 | `jwall-engineering-infra-ci-plan` | `pull_request` | `tfstate/read` (this stack's state key, write of its `.tflock` only), `foundation/read` |
-| `jwall-engineering-infra-ci-apply` | `environment:prod` | `tfstate/write`, `foundation/read`, `foundation/manage`: everything needed to manage this stack, see below; `ecr/push` for the sites CLI image |
+| `jwall-engineering-infra-ci-apply` | `environment:prod` | `tfstate/write`, `foundation/read`, `foundation/manage`: everything needed to manage this stack, see below; `ecr/push` for the infra CLI image |
 
 ### Why the apply role is scoped the way it is
 
@@ -416,7 +422,7 @@ The state bucket does not exist before the first apply, so the first apply uses 
 - `PR title`: Conventional Commit check on the title
 - `Terraform fmt, validate, tflint` (`foundation/`) and `Site stack validate, tflint` (`stacks/site/`)
 - `Terraform plan`: assumes the plan role through OIDC and posts the foundation plan as the branded sticky PR comment (rendered by `jwall-engineering-sites report plan-comment`), updated on every push
-- `Python lint, types, tests`: ruff, mypy and pytest for the sites CLI
+- `Python lint, types, tests`: ruff, mypy and pytest for the infra CLI
 - `Image build and smoke test`: builds the CLI image, runs `validate` inside it offline, checks its Terraform version and enforces the compressed-size budget
 - `Bot stack validate, tflint` (`stacks/bot/`), `Databricks account stack validate, tflint` (`stacks/databricks-account/`) and `Databricks workspace stack validate, tflint` (`stacks/databricks-workspace/`)
 - `Stack plans against mock providers`: `scripts/test-stack-plans.sh` plans `stacks/bot` and both Databricks stacks with tfvars the CLI renders for the cases in `tests/stack_plans/<stack>/`; no AWS or Databricks
@@ -463,7 +469,7 @@ Not automated; these need the owner's credentials or the GitHub UI.
 - Run the bootstrap steps above.
 - Create the GitHub `prod` environment with a deployment branch restriction to `main`.
 - Set repository variables from `terraform output`: `AWS_PLAN_ROLE_ARN` and `AWS_APPLY_ROLE_ARN` here, and each project's role ARNs and bucket name (from `terraform output projects`) in that project's repo.
-- Optional, for comments authored by the product rather than `github-actions[bot]`: create a GitHub App named **JWall Engineering Sites** (no webhook; permissions *Pull requests: read and write*; upload an avatar), generate a private key, and install it on this repo and every site repo. In each of those repos set the variable `JES_APP_CLIENT_ID` to the app's client ID and the secret `JES_APP_PRIVATE_KEY` to the full `.pem` contents, and pass them to the reusable workflows as shown above.
+- Optional, for comments authored by the product rather than `github-actions[bot]`: create a GitHub App named **JWall Engineering Infra** (no webhook; permissions *Pull requests: read and write*; upload an avatar), generate a private key, and install it on this repo and every site repo. In each of those repos set the variable `JES_APP_CLIENT_ID` to the app's client ID and the secret `JES_APP_PRIVATE_KEY` to the full `.pem` contents, and pass them to the reusable workflows as shown above.
 - Activate cost allocation tags in Billing: `Organization`, `Project`, `Environment`, `Repository`, `ManagedBy`, `Owner`, `Component`, `Purpose`, `Profile` and `Lifecycle` (task instances carry `Purpose=ci-task`, `Profile=cpu|gpu` and `Lifecycle=spot|on-demand`, for the later tag-based cost tooling).
 - For GPU task profiles, raise the EC2 quotas in Service Quotas (us-east-1) as needed: *Running On-Demand G and VT instances* (5 vCPUs today, one `g6.xlarge` at a time) and *All G and VT Spot Instance Requests* (0 today). See [docs/remote-tasks.md](docs/remote-tasks.md#quotas).
 - For bot projects, after the release that creates their roles:
