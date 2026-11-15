@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.28.1...v0.29.0) (2026-11-15)
+
+
+### Features
+
+* **bots:** remove the rusty-chess project now that braveheart replaces it ([#135](https://github.com/jwallace145/jwall-engineering-infra/issues/135)) ([11e7315](https://github.com/jwallace145/jwall-engineering-infra/commit/11e731582d24c7af0722ef6e2f9c46c85982f877))
+
 ## [0.28.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.28.0...v0.28.1) (2026-11-15)
 
 
