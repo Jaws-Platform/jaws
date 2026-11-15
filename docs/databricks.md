@@ -311,7 +311,7 @@ projects:
       jwall-engineering-rusty-chess-nnue:
         databricks_share:
           prefix: data/
-          consumers: [braveheart]
+          consumers: [braveheart-databricks]
 ```
 
 ```yaml
@@ -320,7 +320,7 @@ projects:
     name: nnue
     bucket: jwall-engineering-rusty-chess-nnue
     prefix: data/
-    consumers: [braveheart]
+    consumers: [braveheart-databricks]
 ```
 
 - **The host.** The foundation owns `jwall-engineering-shared`, a serverless

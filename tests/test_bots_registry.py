@@ -370,7 +370,7 @@ def test_the_registered_databricks_projects() -> None:
     # repository_id is GitHub's numeric ID: gh api repos/<owner>/<repo> --jq .id
     assert databricks_registry() == {
         "databricks-poc": ("jwallace145/databricks-poc", "1458298100"),
-        "braveheart": ("jwallace145/braveheart-databricks", "1458504699"),
+        "braveheart-databricks": ("jwallace145/braveheart-databricks", "1458504699"),
     }
 
 

@@ -26,7 +26,12 @@ NNUE_ROLE = "arn:aws:iam::650503560686:role/jwall-engineering-rusty-chess-nnue-d
 
 
 def _raw() -> dict[str, Any]:
+    """config.yaml with the nnue dataset shared: the real file approves no share
+    yet (test_config_yaml_approves_no_share_yet), so the tests add one."""
     raw: dict[str, Any] = yaml.safe_load((FIXTURES / "config.yaml").read_text())
+    raw["projects"]["rusty-chess"]["datasets"][NNUE] = {
+        "databricks_share": {"prefix": "data/", "consumers": ["braveheart-databricks"]}
+    }
     return raw
 
 
@@ -52,29 +57,41 @@ def _bot_file(tmp_path: Path, consumers: list[str] | None, prefix: str = "data/"
     return path
 
 
+@pytest.fixture
+def settings(tmp_path: Path) -> Settings:
+    """The tool configuration with the nnue share approved (overrides conftest's)."""
+    return _load(tmp_path, _raw())
+
+
 # --- config.yaml ------------------------------------------------------------
 
 
-def test_the_nnue_share_is_approved_for_braveheart(settings: Settings) -> None:
+def test_config_yaml_approves_no_share_yet() -> None:
+    # The share returns once the braveheart-databricks workspace exists: the
+    # foundation refuses a share whose consumer has no workspace.
+    assert load_settings(FIXTURES / "config.yaml", environ={}).databricks_shares() == []
+
+
+def test_an_approved_share_names_its_producer_bucket_and_role(settings: Settings) -> None:
     (share,) = settings.databricks_shares()
     assert share.producer == "rusty-chess"
     assert share.bucket == NNUE
     assert share.name == "rusty-chess-nnue"
     assert share.prefix == "data/"
-    assert share.consumers == ("braveheart",)
+    assert share.consumers == ("braveheart-databricks",)
     assert share.role_arn == NNUE_ROLE
 
 
 def test_a_consumer_must_be_a_databricks_workspace_project(tmp_path: Path) -> None:
     raw = _raw()
-    _share(raw)["consumers"] = ["braveheart", "rusty-chess-bot"]
+    _share(raw)["consumers"] = ["braveheart-databricks", "rusty-chess-bot"]
     with pytest.raises(ConfigError, match=r"rusty-chess-bot.*not a Databricks workspace project"):
         _load(tmp_path, raw)
 
 
 def test_consumers_must_not_repeat(tmp_path: Path) -> None:
     raw = _raw()
-    _share(raw)["consumers"] = ["braveheart", "braveheart"]
+    _share(raw)["consumers"] = ["braveheart-databricks", "braveheart-databricks"]
     with pytest.raises(ConfigError, match="must not repeat"):
         _load(tmp_path, raw)
 
@@ -95,9 +112,9 @@ def test_a_share_prefix_is_a_prefix(tmp_path: Path) -> None:
 
 def test_consumers_are_sorted(tmp_path: Path) -> None:
     raw = _raw()
-    _share(raw)["consumers"] = ["databricks-poc", "braveheart"]
+    _share(raw)["consumers"] = ["databricks-poc", "braveheart-databricks"]
     (share,) = _load(tmp_path, raw).databricks_shares()
-    assert share.consumers == ("braveheart", "databricks-poc")
+    assert share.consumers == ("braveheart-databricks", "databricks-poc")
 
 
 def test_share_role_fits_iam() -> None:
@@ -112,7 +129,7 @@ def test_share_role_fits_iam() -> None:
 
 
 def test_producer_listing_the_approved_consumers_passes(tmp_path: Path, settings: Settings) -> None:
-    config = load_site_config(_bot_file(tmp_path, ["braveheart"]))
+    config = load_site_config(_bot_file(tmp_path, ["braveheart-databricks"]))
     assert guardrails.check(config, settings) == []
 
 
@@ -125,15 +142,18 @@ def test_producer_listing_nobody_yet_passes(tmp_path: Path, settings: Settings) 
 def test_producer_listing_other_consumers_fails(tmp_path: Path, settings: Settings) -> None:
     config = load_site_config(_bot_file(tmp_path, ["databricks-poc"]))
     problems = guardrails.check(config, settings)
-    assert any("consumers ['databricks-poc'] must equal the ['braveheart']" in p for p in problems)
+    assert any(
+        "consumers ['databricks-poc'] must equal the ['braveheart-databricks']" in p
+        for p in problems
+    )
 
 
 def test_producer_listing_a_subset_fails(tmp_path: Path) -> None:
     # One role reads for every consumer, so a subset would still let the rest in.
     raw = _raw()
-    _share(raw)["consumers"] = ["braveheart", "databricks-poc"]
+    _share(raw)["consumers"] = ["braveheart-databricks", "databricks-poc"]
     settings = _load(tmp_path, raw)
-    config = load_site_config(_bot_file(tmp_path, ["braveheart"]))
+    config = load_site_config(_bot_file(tmp_path, ["braveheart-databricks"]))
     assert any("must equal" in p for p in guardrails.check(config, settings))
 
 
@@ -141,12 +161,12 @@ def test_producer_sharing_an_unapproved_dataset_fails(tmp_path: Path) -> None:
     raw = _raw()
     del raw["projects"]["rusty-chess"]["datasets"][NNUE]["databricks_share"]
     settings = _load(tmp_path, raw)
-    config = load_site_config(_bot_file(tmp_path, ["braveheart"]))
+    config = load_site_config(_bot_file(tmp_path, ["braveheart-databricks"]))
     assert any("approved in config.yaml" in p for p in guardrails.check(config, settings))
 
 
 def test_producer_prefix_must_match_the_share(tmp_path: Path, settings: Settings) -> None:
-    config = load_site_config(_bot_file(tmp_path, ["braveheart"], prefix="other/"))
+    config = load_site_config(_bot_file(tmp_path, ["braveheart-databricks"], prefix="other/"))
     assert any("databricks_share.prefix" in p for p in guardrails.check(config, settings))
 
 
@@ -156,7 +176,9 @@ def test_producer_prefix_must_match_the_share(tmp_path: Path, settings: Settings
 def test_consenting_producer_names_the_share_role_as_a_reader(
     tmp_path: Path, settings: Settings
 ) -> None:
-    project = Project.from_config(load_site_config(_bot_file(tmp_path, ["braveheart"])), settings)
+    project = Project.from_config(
+        load_site_config(_bot_file(tmp_path, ["braveheart-databricks"])), settings
+    )
     (dataset,) = _bot_tfvars(project, settings)["datasets"]
     assert dataset["readers"] == [NNUE_ROLE]
 
@@ -168,7 +190,7 @@ def test_not_yet_consenting_producer_names_no_reader(tmp_path: Path, settings: S
 
 
 def test_the_consumer_endpoint_gets_the_share(settings: Settings) -> None:
-    assert _read_only_datasets("braveheart", settings) == {
+    assert _read_only_datasets("braveheart-databricks", settings) == {
         "rusty-chess-nnue": {"bucket": NNUE, "prefix": "data/", "role_arn": NNUE_ROLE}
     }
 
