@@ -210,9 +210,12 @@ stops the run with exit code 3.
    It creates the catalog bucket, the Unity Catalog role, the storage
    credential, the external location, the catalog (isolated, bound to this
    workspace only), the compute policies and the workspace settings: personal
-   access tokens are capped at 90 days, and the built-in `users` group loses
-   unrestricted cluster creation. Only the governance project
-   (`databricks.governance_project`) also enables the system schemas.
+   access tokens are capped at 90 days, and the plan fails if the built-in
+   `users` group (every user is in it) can create clusters or instance pools.
+   New workspaces give that group no entitlements and refuse changes to it, so
+   it is checked, not written. System schemas (`system.access`,
+   `system.billing` and the rest) are not managed: Databricks enables them
+   itself on the metastore.
 6. **After checks**: `DBX-AFT-*`.
 7. **Events and outputs**: `outputs.json` (both stacks, merged) and the job
    summary.
@@ -278,7 +281,7 @@ checks SKIP.
 | Bucket | Prefix | Holds |
 | --- | --- | --- |
 | `jwall-engineering-<project>-databricks-root` | Databricks' own | The workspace root storage. Private, S3-managed encryption; its policy grants only the access Databricks documents. |
-| `jwall-engineering-<project>-databricks-catalog` | `managed/` | The catalog's Unity Catalog managed storage (`s3://.../managed/`). Not a DBFS root; reachable through Unity Catalog only. |
+| `jwall-engineering-<project>-databricks-catalog` | `managed/` | The catalog's Unity Catalog managed storage (`s3://.../managed`, the external location; Databricks stores it without a trailing slash). Not a DBFS root; reachable through Unity Catalog only. |
 | `jwall-engineering-databricks-audit-logs` | `audit/` | Databricks audit log delivery (foundation, one for the account). |
 | `jwall-engineering-databricks-audit-logs` | `events/project=<p>/date=YYYY-MM-DD/` | The CLI's event records. |
 
@@ -381,7 +384,7 @@ larger Arm instance type if egress needs grow.
     "already assigned" (see [DBX-METASTORE-ALREADY-ASSIGNED](#dbx-metastore-already-assigned));
   - `deployment_name`: that a second account plan shows no diff, and what
     the prefix does for this account;
-  - that workspace-stack destroy succeeds (workspace settings, system schemas);
+  - that workspace-stack destroy succeeds (workspace settings);
   - that the `ec2:VpceServiceName` condition is honoured for the gateway
     endpoint.
 

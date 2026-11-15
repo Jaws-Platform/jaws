@@ -329,7 +329,6 @@ def test_databricks_section_parses(settings: Settings) -> None:
     assert section.has_placeholder_ids is False  # the real IDs are filled in
     assert section.secret_parameter == "/jwall-engineering/databricks/client-secret"
     assert section.metastore_name == "jwall-engineering-us-east-1"
-    assert section.governance_project == "databricks-poc"
     assert section.audit_bucket == "jwall-engineering-databricks-audit-logs"
     assert section.events_prefix == "events/"
     assert section.readiness_timeout_seconds == 1200
@@ -409,10 +408,11 @@ def test_project_policy_must_exist_centrally(tmp_path: Path) -> None:
         _load_raw(tmp_path, raw)
 
 
-def test_governance_project_must_have_databricks_guardrails(tmp_path: Path) -> None:
+def test_governance_project_is_no_longer_a_setting(tmp_path: Path) -> None:
+    # Databricks manages the system schemas itself, so no workspace enables them.
     raw = _databricks_raw()
-    raw["databricks"]["governance_project"] = "rusty-chess"
-    with pytest.raises(ConfigError, match=r"governance_project.*rusty-chess"):
+    raw["databricks"]["governance_project"] = "databricks-poc"
+    with pytest.raises(ConfigError, match="governance_project"):
         _load_raw(tmp_path, raw)
 
 

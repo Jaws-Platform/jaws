@@ -33,7 +33,7 @@ locals {
 
 module "context" {
   source  = "jwallace145/jwall-engineering/aws//modules/context"
-  version = "0.19.2"
+  version = "0.20.0"
 
   project      = local.context.project
   environment  = local.context.environment

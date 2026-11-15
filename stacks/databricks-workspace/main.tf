@@ -2,14 +2,14 @@
 # stack: its inputs include the account stack's outputs. The project's catalog
 # (bucket, Unity Catalog role, storage credential, external location, grants)
 # and the workspace's settings (the platform's compute policies, entitlements,
-# token lifetime and, in the governance workspace only, the system schemas).
+# token lifetime). Databricks manages the metastore's system schemas itself.
 #
 # Destroy empties the catalog bucket first, while its bucket policy stands;
 # then this stack goes, then the account stack.
 
 module "catalog" {
   source  = "jwallace145/jwall-engineering/aws//modules/databricks-catalog"
-  version = "0.19.2"
+  version = "0.20.0"
 
   providers = {
     databricks = databricks.workspace
@@ -29,7 +29,7 @@ module "catalog" {
 
 module "workspace_config" {
   source  = "jwallace145/jwall-engineering/aws//modules/databricks-workspace-config"
-  version = "0.19.2"
+  version = "0.20.0"
 
   providers = {
     databricks = databricks.workspace
@@ -39,8 +39,4 @@ module "workspace_config" {
   fixed_tags       = var.fixed_tags
   users_group_name = var.users_group_name
   metastore_id     = var.metastore_id
-
-  # System schemas are metastore-wide: only the governance project's workspace
-  # enables them.
-  enable_system_schemas = var.project == var.governance_project
 }

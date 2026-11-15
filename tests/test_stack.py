@@ -891,7 +891,6 @@ WORKSPACE_TFVARS_KEYS = {
     "metastore_id",
     "compute_policies",
     "fixed_tags",
-    "governance_project",
     "apply_role_arn",
     "management_role_arns",
     "catalog_tags",
@@ -1006,7 +1005,7 @@ def test_workspace_tfvars_take_account_outputs(databricks: Project, settings: Se
     assert tfvars["repository"] == "example-org/databricks-poc"
     assert tfvars["tags"] == databricks.databricks_tags
     assert tfvars["fixed_tags"] == databricks.databricks_tags
-    assert tfvars["governance_project"] == "databricks-poc"
+    assert "governance_project" not in tfvars
     assert tfvars["apply_role_arn"] == (
         "arn:aws:iam::650503560686:role/jwall-engineering-databricks-poc-ci-apply"
     )

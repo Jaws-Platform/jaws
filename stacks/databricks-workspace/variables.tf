@@ -101,12 +101,6 @@ variable "fixed_tags" {
   type        = map(string)
 }
 
-variable "governance_project" {
-  description = "The project whose workspace enables the metastore-wide system schemas (databricks.governance_project in config.yaml), or null for none."
-  type        = string
-  default     = null
-}
-
 variable "apply_role_arn" {
   description = "ARN of the project's CI apply role; the catalog bucket lets it list and delete objects so destroy can empty it."
   type        = string
