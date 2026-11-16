@@ -1,0 +1,32 @@
+# jwall-engineering-sites project file: a Databricks workspace for Braveheart.
+# The VPC range, cost center, compute policies it may use and the workspace
+# admins are set centrally (projects.braveheart-databricks.databricks in config.yaml).
+# Fields and behaviour:
+# https://github.com/jwallace145/jwall-engineering-infra/blob/main/docs/databricks.md#the-project-file
+version: 1
+project: braveheart-databricks
+repository: Braveheart-Chess/braveheart-databricks
+
+# Project, Repository and Environment=prod are cross-checked; the CLI adds
+# ManagedBy, CostCenter and Workspace itself.
+tags:
+  Organization: jwall-engineering
+  Project: braveheart-databricks
+  Environment: prod
+  Repository: Braveheart-Chess/braveheart-databricks
+  Owner: jwallace145
+
+components:
+  - kind: databricks-workspace
+    compute_policies: [small-interactive, jobs]
+    # Workspace users, by email. Each must already be a Databricks account user.
+    # Admins stay central (config.yaml); an admin listed here is refused.
+    # Changes take effect on the next Databricks plan/apply after merging to main.
+    users: []
+    # Datasets this workspace reads, read-only: each is an onboarded dataset
+    # (jwall-engineering-infra's datasets/<owner>/<name>.yaml) whose producer
+    # also lists this project under its consumers. Both halves of the
+    # handshake are needed; the Data access apply workflow binds and grants it.
+    reads:
+      - dataset: braveheart-selfplay/positions
+        purpose: generation-over-generation self-play analysis

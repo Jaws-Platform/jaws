@@ -233,9 +233,7 @@ def _bot_tfvars(project: Project, settings: Settings) -> dict[str, Any]:
                 "bucket": d.bucket,
                 "prefix": d.prefix,
                 "writers": list(d.writers),
-                # A shared dataset's role reads through the bucket policy: the
-                # producer's grant is what lets every consumer workspace in.
-                "readers": list(d.readers) + _share_readers(d.bucket, d.consumers, settings),
+                "readers": list(d.readers),
                 "transition_days": d.transition_days,
                 "versioning": d.versioning,
                 "expire_noncurrent_days": d.expire_noncurrent_days,
@@ -243,26 +241,6 @@ def _bot_tfvars(project: Project, settings: Settings) -> dict[str, Any]:
             }
             for d in project.datasets
         ],
-    }
-
-
-def _share_readers(bucket: str, consumers: tuple[str, ...], settings: Settings) -> list[str]:
-    """The share role of a dataset the project shares with Databricks, else nothing.
-
-    guardrails.check has already required the file's consumers to equal the
-    approved ones, so an unshared dataset (no consumers) adds no reader.
-    """
-    if not consumers:
-        return []
-    return [s.role_arn for s in settings.databricks_shares() if s.bucket == bucket]
-
-
-def _read_only_datasets(project: str, settings: Settings) -> dict[str, dict[str, str]]:
-    """The shared datasets a workspace project consumes, for its S3 endpoint policy."""
-    return {
-        s.name: {"bucket": s.bucket, "prefix": s.prefix, "role_arn": s.role_arn}
-        for s in settings.databricks_shares()
-        if project in s.consumers
     }
 
 
@@ -324,7 +302,7 @@ def _databricks_account_tfvars(project: Project, settings: Settings) -> dict[str
         "user_names": list(project.databricks.users),
         "service_principal_application_id": section.client_id,
         "account_id": section.account_id,
-        "read_only_datasets": _read_only_datasets(project.project, settings),
+        "read_only_datasets": {},
     }
 
 

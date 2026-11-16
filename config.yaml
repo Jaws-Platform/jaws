@@ -117,14 +117,6 @@ projects:
       jwall-engineering-braveheart-selfplay-positions:
         prefix: data/
         versioning: true
-        # Shared, read-only, with Databricks workspaces: the foundation registers
-        # one external location through the shared-objects host, bound to each
-        # consumer. Nothing can read until the producer's file lists the same
-        # consumers on its dataset (which adds the share role to its readers).
-        # The share role's name is exactly IAM's 64-character limit.
-        databricks_share:
-          prefix: data/
-          consumers: [braveheart-databricks]
   braveheart-trainer:
     # The trainer for Braveheart's nets (Braveheart-Chess/braveheart-trainer): bullet
     # on GPU instances. It reads the positions through the selfplay bucket's
@@ -184,6 +176,10 @@ databricks:
   audit_bucket: jwall-engineering-databricks-audit-logs
   events_prefix: events/
   readiness_timeout: 20m # how long apply waits for a new workspace to be RUNNING
+  # The shared-objects host's URL, which Databricks picked when the foundation
+  # created it: the data-access stack binds and grants onboarded datasets
+  # through it. The foundation checks it still matches its own output.
+  shared_host_url: null
   # Cluster policy definitions, by kebab-case name. A project lists the names it gets.
   compute_policies:
     small-interactive:
