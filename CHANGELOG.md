@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.32.0...v0.33.0) (2026-11-16)
+
+
+### Features
+
+* **bots:** register braveheart-selfplay and braveheart-trainer, and let a project give up a dataset ([#148](https://github.com/jwallace145/jwall-engineering-infra/issues/148)) ([dc6a51b](https://github.com/jwallace145/jwall-engineering-infra/commit/dc6a51b76784d26ca0c2998b405369d468f6011b))
+
 ## [0.32.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.31.0...v0.32.0) (2026-11-16)
 
 
