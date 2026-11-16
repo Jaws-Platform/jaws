@@ -80,7 +80,7 @@ locals {
 module "access" {
   for_each  = local.ready
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-dataset-access"
-  version   = "0.25.1"
+  version   = "0.26.0"
   providers = { databricks = databricks.host }
 
   external_location_name  = each.value.location_name
@@ -98,7 +98,7 @@ module "access" {
 module "catalog_access" {
   for_each  = local.catalog_consumers
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-producer-catalog-access"
-  version   = "0.25.1"
+  version   = "0.26.0"
   providers = { databricks = databricks.host }
 
   catalog_name     = each.key

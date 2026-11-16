@@ -22,7 +22,7 @@ from logging import Logger
 from pathlib import Path
 from typing import Any, Final
 
-from .access import Access
+from .access import Access, infra_root, project_registry_ids
 from .components import TaskRunner
 from .errors import ConfigError, RunError
 from .project import Project
@@ -343,6 +343,35 @@ def _databricks_account_tfvars(
         "service_principal_application_id": section.client_id,
         "account_id": section.account_id,
         "read_only_datasets": _read_only_datasets(project, settings, access),
+        "deployer": _deployer(project),
+    }
+
+
+def _deployer(project: Project) -> dict[str, str] | None:
+    """The deployer's repository and GitHub IDs, from the project registry, when the
+    project file asks for one: its federation subject is built from them."""
+    if not project.databricks.deployer:
+        return None
+    registry = "foundation/databricks.tf"
+    entry = project_registry_ids(infra_root()).get(project.project)
+    if entry is None:
+        raise ConfigError(
+            f"{project.project}: a deployer needs {project.project} registered in {registry}"
+        )
+    if entry.repository_id is None or entry.owner_id is None:
+        raise ConfigError(
+            f"{project.project}: a deployer needs repository_id and owner_id in {registry} "
+            "(gh api repos/<owner>/<repo> --jq '.id, .owner.id')"
+        )
+    if entry.repository != project.config.repository:
+        raise ConfigError(
+            f"{project.project}: the project file names {project.config.repository}, "
+            f"but {registry} registers {entry.repository}"
+        )
+    return {
+        "repository": entry.repository,
+        "repository_id": entry.repository_id,
+        "owner_id": entry.owner_id,
     }
 
 

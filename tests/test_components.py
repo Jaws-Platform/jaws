@@ -656,6 +656,19 @@ def test_databricks_only_project_is_kind_databricks(databricks: Project) -> None
     assert databricks.state_key == "project=databricks-poc/env=prod/databricks-poc-prod.tfstate"
 
 
+def test_deployer_defaults_to_false(databricks: Project) -> None:
+    assert databricks.databricks.deployer is False
+
+
+def test_deployer_is_a_boolean(tmp_path: Path, settings: Settings) -> None:
+    raw: dict[str, Any] = yaml.safe_load(DATABRICKS_FILE.read_text())
+    raw["components"][0]["deployer"] = True
+    assert _load(tmp_path, raw, settings).databricks.deployer is True
+    raw["components"][0]["deployer"] = "yes please"
+    with pytest.raises(ConfigError, match="deployer"):
+        _load(tmp_path, raw, settings)
+
+
 def test_databricks_with_bot_rejected(tmp_path: Path, settings: Settings) -> None:
     raw = _raw()
     raw["components"].append({"kind": "databricks-workspace", "compute_policies": ["jobs"]})

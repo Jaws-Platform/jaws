@@ -39,6 +39,16 @@ mock_provider "aws" {
 mock_provider "databricks" {
   alias = "account"
 
+  # The deployer's numeric ID feeds tonumber() in the module; known at plan, so
+  # the runs below can assert on the stack's output.
+  mock_resource "databricks_service_principal" {
+    override_during = plan
+    defaults = {
+      id             = "8888"
+      application_id = "99999999-8888-7777-6666-555555555555"
+    }
+  }
+
   mock_data "databricks_metastore" {
     defaults = {
       id           = "abcdef01-2345-6789-abcd-ef0123456789"
@@ -97,5 +107,32 @@ run "plans_the_network_nat_and_workspace" {
   assert {
     condition     = contains([for s in jsondecode(module.workspace.s3_endpoint_policy).Statement : s.Sid], "UnityCatalogOnly")
     error_message = "the S3 endpoint carries the workspace module's policy"
+  }
+}
+
+
+run "without_a_deployer_none_is_created" {
+  command = plan
+
+  assert {
+    condition     = output.deployer_application_id == null
+    error_message = "a project file that asks for no deployer gets none"
+  }
+}
+
+run "a_deployer_reaches_the_workspace_module" {
+  command = plan
+
+  variables {
+    deployer = {
+      repository    = "jwallace145/databricks-poc"
+      repository_id = "1458298100"
+      owner_id      = "35950238"
+    }
+  }
+
+  assert {
+    condition     = output.deployer_application_id == "99999999-8888-7777-6666-555555555555"
+    error_message = "the stack passes deployer to the workspace module and outputs its application ID"
   }
 }
