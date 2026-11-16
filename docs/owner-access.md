@@ -67,8 +67,10 @@ As root, in **us-east-1**:
 2. In Identity Center's **Settings**:
    - **Authentication → Multi-factor authentication:** prompt users for MFA
      **every time they sign in**; allow **security keys and built-in
-     authenticators** only; if a user has no registered MFA device, **require
-     them to register one at sign in**.
+     authenticators** and **authenticator apps**; if a user has no registered
+     MFA device, **require them to register one at sign in**. Sign in with a
+     passkey day to day (it only works on the real AWS domain, so it can't be
+     phished) and keep an authenticator app as the backup.
    - **Authentication → Session duration:** user interactive sessions,
      **12 hours**.
    - **Authentication → Standard authentication:** turn on **Send email OTP**
@@ -116,9 +118,9 @@ purpose, and expect to update `foundation/state.tf`.
 ## First sign-in and the CLI profile
 
 1. Open `terraform output -raw access_portal_url`. Sign in as `jwallace145`
-   with the emailed one-time password, set a password, and register **two**
-   passkeys or security keys (for example this Mac and a hardware key), so
-   losing one isn't a lockout.
+   with the emailed one-time password, set a password, and register two MFA
+   devices, such as a passkey on this Mac and an authenticator app, so losing
+   one isn't a lockout.
 2. Add the profile:
 
    ```sh
