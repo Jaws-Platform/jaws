@@ -42,6 +42,7 @@ reusable workflows this repository publishes. The design is in
 | `release --dist DIR` | `ci-apply` | `apply` then `publish` |
 | `outputs`, `config show` | `ci-plan` / none | Stack outputs as JSON; the effective tool configuration |
 | `report plan-comment --exit-code N --plan FILE --subject S` | none | Render the branded plan comment from a saved plan log (this repo's own CI uses it) |
+| `access render --out DIR [--base-registry DIR]` | none (`GH_TOKEN`) | Render `data-access/`'s variables and summary from `datasets/` and every project's file; refuses dropping a dataset that a handshake still names ([guide](docs/databricks.md#datasets-and-access)) |
 | `destroy --yes` | `ci-apply` | Bot and research projects: destroy the stack (the records, dataset and task results buckets and the secret are kept; refuses while tasks run) |
 | `bot build --version vX.Y.Z` | none | Bot projects: download and verify the release asset, build and smoke-test the image (Docker) |
 | `bot push --version vX.Y.Z` | `ci-release` | Push the image under the release tag; refuses an existing tag |
@@ -278,9 +279,12 @@ CLI and `config.yaml`, the tool configuration shared by the stack and the CLI
 | `.github/actions/terraform-init` | `terraform init` with a retry for the registry's lag after a library release |
 | `projects.tf` | The `projects` map: one entry per site, each fed to the registry `site-bucket`, `ci-plan-role`, `ci-preview-role` and `ci-apply-role` modules |
 | `outputs.tf` | Values the project repos and this repo's CI consume |
+| `registry/` | Derives the onboarded datasets from `datasets/` (each platform name, bucket and URL), tested against the CLI's derivation |
 | `docs/migration.md` | Legacy resources to retire after the move |
 | `scripts/apply-repo-settings.sh` | GitHub repository settings and the `main` ruleset |
 | `owner-access/` (root) | The owner's admin access through IAM Identity Center: a separate stack, applied only by the owner, never by CI ([docs/owner-access.md](docs/owner-access.md)) |
+| `datasets/` (root) | Onboarded datasets, one `<owner>/<name>.yaml` each ([datasets/README.md](datasets/README.md)) |
+| `data-access/` (root) | The reconcile: binds and grants each agreed dataset handshake, applied by the **Data access** workflow ([guide](docs/databricks.md#datasets-and-access)) |
 
 ## Tags
 
@@ -456,6 +460,8 @@ Role ARNs are **repository variables**, not secrets: `AWS_PLAN_ROLE_ARN` and `AW
 **Bot projects** (`.github/workflows/bot-apply.yml`, by hand): applies or destroys one bot's stack in the `prod` environment with its apply role. `.github/workflows/container-release.yml` is the reusable workflow a bot repository calls on each release ([guide](docs/lichess-bot.md#the-caller-workflow)).
 
 **Databricks projects** (`.github/workflows/databricks-apply.yml`, by hand): `workflow_dispatch` with the project name applies both stacks in the `prod` environment with the project's apply role (`action: apply`, the default); `action: destroy` empties the catalog bucket and destroys them; `action: doctor` runs the read-only checks and changes nothing. Re-running after a partial apply is safe ([guide](docs/databricks.md#what-apply-does)).
+
+**Dataset access** (`.github/workflows/data-access.yml`): plans on every pull request, against the base branch's `datasets/` so that dropping a dataset a handshake still names fails, and sweeps every 15 minutes in the `prod` environment with `jwall-engineering-data-access-ci-apply`: each sweep plans and applies exactly what its plan found, so a failed apply is retried and drift undone by the next one; `workflow_dispatch` runs a sweep now. Its role ARNs are built from `config.yaml` like the bots' ([guide](docs/databricks.md#datasets-and-access)).
 
 ## Local development
 

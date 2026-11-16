@@ -13,8 +13,9 @@ while both of these hold, a handshake:
 - the consuming project lists the dataset under its workspace's `reads`, with
   a `purpose`.
 
-The **Data access apply** workflow binds and grants every agreed handshake,
-every 15 minutes. [docs/databricks.md](../docs/databricks.md) has the whole
+The **Data access** workflow binds and grants every agreed handshake within
+15 minutes of its second half merging.
+[docs/databricks.md](../docs/databricks.md#datasets-and-access) has the whole
 flow.
 
 ## A dataset's file
@@ -38,13 +39,33 @@ prefix: data/
 - Nothing else lives here: no other keys, no nested folders, no `.yml`. This
   README is the only other file.
 
+## Onboarding
+
+Onboarding is the moment to take inventory of the dataset, so the file and its
+pull request say what the platform now vouches for:
+
+1. **Look at what is under the prefix**: the key layout, the formats, how it
+   grows, its size and object count, and whether the bucket keeps versions.
+   The producer's own tooling, or the bucket's Metrics tab in the S3 console,
+   answers this without reading the data.
+2. **Write the file**: `description` says what the data is and how it is laid
+   out, in words that stay true as it grows; `prefix` onboards only what
+   consumers should see.
+3. **Put the inventory in the pull request**: point-in-time numbers (size,
+   object count, the date) belong there, not in the file, where they would go
+   stale.
+
+The foundation's plan on that pull request adds exactly the dataset's role,
+storage credential, external location and their bindings to the host.
+
 Unity Catalog refuses overlapping external locations, so the foundation's plan
-fails on a URL equal to, inside, or containing another registered dataset's
-or any location already in the metastore.
+fails on a URL equal to, inside, or containing any location already in the
+metastore. Two registered datasets cannot overlap: each has its own bucket.
 
 ## Offboarding
 
-Delete the file, once neither project's file still names the dataset. A pull
-request that offboards a dataset still named by `consumers` or `reads` fails
-its **Data access** plan. Offboarding removes Unity Catalog metadata and the
-role, never data.
+Offboarding needs zero edges: remove both halves (`consumers` in the
+producer's file, `reads` in each consumer's), let a sweep revoke them, then
+delete the file. A pull request that deletes a file still named by
+`consumers` or `reads` fails its **Data access** plan. Offboarding removes
+Unity Catalog metadata and the role, never data.

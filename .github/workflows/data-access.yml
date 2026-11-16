@@ -1,0 +1,207 @@
+name: Data access
+
+# The reconcile (data-access/): binds and grants each agreed handshake on every
+# onboarded dataset (datasets/). `access render` derives its variables from
+# datasets/ and every project's file, read from each repository's default
+# branch, so a merged `consumers` or `reads` change in any repository reaches
+# Databricks on the next sweep, with no run here.
+#
+#   pull_request  plan, rendered with the base branch's registry so dropping a
+#                 dataset that a handshake still names fails; no path filter,
+#                 so this can be a required check
+#   schedule      every 15 minutes (the latency knob): a sweep plans, and
+#                 applies exactly what its plan found (scripts/data-access-sweep.sh),
+#                 so a failed apply is retried and drift undone by the next one
+#   dispatch      a sweep now
+#
+# Any project file that cannot be read fails the run before Terraform: it is
+# never taken for a file without a handshake, which would revoke access.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+# A pull request's plan never shares a group with the sweep: GitHub keeps one
+# pending run per group and cancels the older, which would cancel a required
+# check. Sweeps queue behind each other and are never cancelled mid-apply; the
+# state lock (-lock-timeout) orders a plan against a running apply.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('data-access-pr-{0}', github.event.pull_request.number) || 'data-access-sweep' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+env:
+  AWS_REGION: us-east-1
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "0"
+
+jobs:
+  plan:
+    name: Data access plan
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # assume the plan role through GitHub OIDC
+      pull-requests: write # post and update the plan comment
+    defaults:
+      run:
+        working-directory: data-access
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check out the base branch's registry (the offboarding check)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .base
+          sparse-checkout: datasets
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "~1.14"
+          terraform_wrapper: false
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+        working-directory: .
+      - name: Build the plan role ARN from config.yaml
+        id: role
+        working-directory: .
+        run: |
+          account=$(yq -r .aws.account_id config.yaml)
+          organization=$(yq -r .context.organization config.yaml)
+          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" && "$organization" != null ]] || { echo "::error::config.yaml has no aws.account_id or context.organization"; exit 1; }
+          echo "arn=arn:aws:iam::${account}:role/${organization}-data-access-ci-plan" >> "$GITHUB_OUTPUT"
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: gha-data-access-plan-pr-${{ github.event.pull_request.number }}
+      - name: Render the variables from datasets/ and every project's file
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run jwall-engineering-sites access render --out data-access --base-registry .base/datasets
+      - name: terraform init
+        uses: ./.github/actions/terraform-init
+        with:
+          args: -backend-config=backend/prod.hcl
+          working-directory: data-access
+      # The Databricks credential is sourced into each terraform step's own
+      # shell, never GITHUB_ENV.
+      - name: terraform plan
+        id: plan
+        run: |
+          source ../scripts/databricks-credentials.sh ../config.yaml
+          set +e
+          terraform plan -no-color -lock-timeout=60s -out=tfplan -detailed-exitcode > plan.log 2>&1
+          code=$?
+          set -e
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          cat plan.log
+          # 0 = no changes, 2 = changes, anything else = error
+          [ "$code" -eq 0 ] || [ "$code" -eq 2 ]
+      - name: Build plan comment (the plan, then who reads what and what is pending)
+        if: always() && steps.plan.outcome != 'skipped'
+        working-directory: .
+        env:
+          JES_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EXIT_CODE: ${{ steps.plan.outputs.exitcode }}
+        run: |
+          uv run jwall-engineering-sites report plan-comment \
+            --exit-code "$EXIT_CODE" \
+            --plan data-access/plan.log \
+            --subject jwall-engineering-infra/data-access \
+            --out data-access/plan-comment.md
+          { echo; cat data-access/access-summary.md; } >> data-access/plan-comment.md
+      - name: Mint a comment token for the JWall Engineering Infra app
+        id: app-token
+        if: always() && steps.plan.outcome != 'skipped' && vars.JES_APP_CLIENT_ID != ''
+        continue-on-error: true # a misconfigured app falls back to github-actions
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.JES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.JES_APP_PRIVATE_KEY }}
+      - name: Post plan comment (updated on each push)
+        if: always() && steps.plan.outcome != 'skipped'
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          header: data-access-plan
+          path: data-access/plan-comment.md
+
+  apply:
+    name: Data access apply
+    # The prod environment deploys only from main; a dispatch from any other
+    # branch is skipped here rather than refused there.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: prod
+    permissions:
+      contents: read
+      id-token: write # assume the apply role through GitHub OIDC
+    defaults:
+      run:
+        working-directory: data-access
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "~1.14"
+          terraform_wrapper: false
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+        working-directory: .
+      - name: Build the apply role ARN from config.yaml
+        id: role
+        working-directory: .
+        run: |
+          account=$(yq -r .aws.account_id config.yaml)
+          organization=$(yq -r .context.organization config.yaml)
+          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" && "$organization" != null ]] || { echo "::error::config.yaml has no aws.account_id or context.organization"; exit 1; }
+          echo "arn=arn:aws:iam::${account}:role/${organization}-data-access-ci-apply" >> "$GITHUB_OUTPUT"
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: gha-data-access-apply-${{ github.run_id }}
+      - name: Render the variables from datasets/ and every project's file
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run jwall-engineering-sites access render --out data-access
+      - name: terraform init
+        uses: ./.github/actions/terraform-init
+        with:
+          args: -backend-config=backend/prod.hcl
+          working-directory: data-access
+      # Every sweep plans, and applies only what its plan found: nothing in
+      # the state is trusted to say an earlier apply finished.
+      - name: Sweep (plan, then apply what changed)
+        id: sweep
+        run: |
+          source ../scripts/databricks-credentials.sh ../config.yaml
+          ../scripts/data-access-sweep.sh
+      - name: Summary (who reads what, what is pending, what waits)
+        if: always() && steps.sweep.outcome != 'skipped'
+        env:
+          RESULT: ${{ steps.sweep.outputs.result || 'failed' }}
+        run: |
+          {
+            echo "**Sweep: ${RESULT}**"
+            echo
+            cat access-summary.md
+            echo
+            echo "### Applied state"
+            echo
+            echo '```json'
+            terraform output -json | jq '{edges: .edges.value, awaiting_onboarding: .awaiting_onboarding.value, missing_workspaces: .missing_workspaces.value}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

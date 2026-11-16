@@ -39,7 +39,7 @@ components:
 | `transition_days` | Days before objects move to S3 Intelligent-Tiering. The default is 0, which means at the next daily lifecycle run. |
 | `versioning` | Keep prior versions of overwritten or deleted objects. The default is `false`. |
 | `expire_noncurrent_days` | Days before noncurrent versions expire. Needs `versioning: true`. |
-| `consumers` | Databricks workspace projects that may read the prefix, read-only, through one shared Unity Catalog location ([Shared datasets](databricks.md#shared-datasets)). Must equal `databricks_share.consumers` approved for the bucket in `config.yaml`, or be left out to share with nobody yet. Listing them adds the share role to `readers`. |
+| `consumers` | Databricks workspace projects that may read the prefix, read-only: this project's half of each handshake ([Datasets and access](databricks.md#datasets-and-access)). A workspace reads only once it also lists the dataset under its `reads` and the dataset is onboarded (`datasets/<owner>/<name>.yaml` in the infra repository); the dataset's role (`<organization>-ds-<owner>-<name>`) is then added to `readers`. Each must be a Databricks workspace project other than this one. The default is none. |
 | `expire_prefixes` | Sub-prefixes of `prefix` whose current objects expire, in days, such as `{tmp/: 30}`. |
 
 `versioning`, `expire_noncurrent_days` and `expire_prefixes` must equal what

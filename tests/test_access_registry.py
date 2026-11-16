@@ -7,6 +7,7 @@ refused with its path, never skipped: onboarding is what the platform creates.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -14,6 +15,7 @@ import pytest
 
 from jwall_engineering_sites.access import infra_root, load_registry
 from jwall_engineering_sites.errors import ConfigError
+from tests.conftest import FIXTURES
 
 GOOD = "description: Braveheart self-play positions and label sets\nprefix: data/\n"
 
@@ -134,3 +136,10 @@ def test_infra_root_is_the_env_override_else_the_configs_directory(
     monkeypatch.delenv("JES_INFRA_ROOT")
     monkeypatch.setenv("JES_CONFIG", str(tmp_path / "elsewhere" / "config.yaml"))
     assert infra_root() == tmp_path / "elsewhere"
+
+
+def test_python_and_terraform_derive_the_same_registry() -> None:
+    """foundation/registry's terraform test asserts the same file for the same fixtures."""
+    expected = json.loads((FIXTURES / "datasets-expected.json").read_text())
+    derived = {d.key: d.as_dict("jwall-engineering") for d in load_registry(FIXTURES / "datasets")}
+    assert derived == expected

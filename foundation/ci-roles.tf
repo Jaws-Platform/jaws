@@ -52,7 +52,7 @@ locals {
 
 module "infra_ci_plan" {
   source  = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version = "0.23.0"
+  version = "0.24.0"
 
   project           = local.infra_ci.project
   name_root         = local.context.organization
@@ -72,7 +72,7 @@ module "infra_ci_plan" {
 
 module "infra_ci_apply" {
   source  = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version = "0.23.0"
+  version = "0.24.0"
 
   project           = local.infra_ci.project
   name_root         = local.context.organization
@@ -89,5 +89,70 @@ module "infra_ci_apply" {
     foundation = local.infra_ci.foundation
     ecr        = local.infra_ci.ecr
     databricks = local.infra_ci.databricks
+  }
+}
+
+# The reconcile's roles (data-access/, .github/workflows/data-access.yml):
+#
+#   jwall-engineering-data-access-ci-plan   trusted for pull_request      tfstate/read, databricks/read
+#   jwall-engineering-data-access-ci-apply  trusted for environment:prod  tfstate/write, databricks/read
+#
+# The stack only binds and grants in Databricks, through the service principal
+# whose secret databricks/read reads; neither role has any other AWS
+# permission, and only its own state key. The key follows config.yaml
+# state.key_template, as every stack's does.
+locals {
+  data_access_ci = {
+    project = "data-access"
+
+    tfstate = {
+      bucket_arn = module.state_bucket.arn
+      key        = replace(replace(local.tool_config.state.key_template, "{project}", "data-access"), "{environment}", "prod")
+    }
+
+    # The literal is local.data_access_ci.project, which cannot be referenced here.
+    databricks = {
+      secret_parameter_arn = local.databricks_secret_parameter_arn
+      events_object_arn    = "${local.databricks_events_arn_prefix}project=data-access/*"
+    }
+  }
+}
+
+module "data_access_ci_plan" {
+  source  = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
+  version = "0.24.0"
+
+  project           = local.data_access_ci.project
+  name_root         = local.context.organization
+  repository        = local.context.repository
+  owner_id          = local.github.owner_id
+  repository_id     = local.github.repository_id
+  oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
+
+  policies = ["tfstate/read", "databricks/read"]
+
+  policy_inputs = {
+    tfstate    = local.data_access_ci.tfstate
+    databricks = local.data_access_ci.databricks
+  }
+}
+
+module "data_access_ci_apply" {
+  source  = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
+  version = "0.24.0"
+
+  project           = local.data_access_ci.project
+  name_root         = local.context.organization
+  repository        = local.context.repository
+  owner_id          = local.github.owner_id
+  repository_id     = local.github.repository_id
+  oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
+  environment       = "prod"
+
+  policies = ["tfstate/write", "databricks/read"]
+
+  policy_inputs = {
+    tfstate    = local.data_access_ci.tfstate
+    databricks = local.data_access_ci.databricks
   }
 }
