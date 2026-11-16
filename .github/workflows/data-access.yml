@@ -8,7 +8,8 @@ name: Data access
 #
 #   pull_request  plan, rendered with the base branch's registry so dropping a
 #                 dataset that a handshake still names fails; no path filter,
-#                 so this can be a required check
+#                 so it can be a required check on main, as it is
+#                 (scripts/apply-repo-settings.sh)
 #   schedule      every 15 minutes (the latency knob): a sweep plans, and
 #                 applies exactly what its plan found (scripts/data-access-sweep.sh),
 #                 so a failed apply is retried and drift undone by the next one

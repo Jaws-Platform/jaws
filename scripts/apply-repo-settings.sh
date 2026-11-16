@@ -40,6 +40,8 @@ ruleset='{
         "require_code_owner_review": false,
         "require_last_push_approval": false,
         "required_review_thread_resolution": false,
+        "require_extra_approval_for_unattributed_changes": true,
+        "required_reviewers": [],
         "allowed_merge_methods": ["squash", "rebase"]
       }
     },
@@ -47,6 +49,7 @@ ruleset='{
       "type": "required_status_checks",
       "parameters": {
         "strict_required_status_checks_policy": false,
+        "do_not_enforce_on_create": false,
         "required_status_checks": [
           { "context": "Commit messages" },
           { "context": "PR title" },
@@ -60,7 +63,9 @@ ruleset='{
           { "context": "Databricks workspace stack validate, tflint" },
           { "context": "Stack plans against mock providers" },
           { "context": "Databricks projects" },
-          { "context": "Owner access stack validate, tflint, test" }
+          { "context": "Owner access stack validate, tflint, test" },
+          { "context": "Data access stack validate, tflint, test" },
+          { "context": "Data access plan" }
         ]
       }
     }
