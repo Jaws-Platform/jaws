@@ -7,6 +7,8 @@
 #   FAIL_TIMES=<n>                  ... only the first n times (default: every time)
 #   PLAN=<file> PLAN_EXIT=<n>       the plan's text and exit code
 #   OUTPUTS=<file> STATE_LIST=<..>  `output -json` and `state list`
+# FAKE_TF_NO_STATE=1 makes `state list` behave as before a stack's first apply
+# (exit 1, "No state file was found!"); FAKE_TF_STATE_BROKEN=1 as on any other error.
 # FAKE_TF_STACK_LOG records "<stack> <args>" per call; FAKE_TF_ECHO_SECRET=1 prints
 # the Databricks secret from the environment, as a careless provider log might.
 set -euo pipefail
@@ -67,6 +69,16 @@ case "$1" in
   state)
     case "$2" in
       list)
+        if [ "${FAKE_TF_NO_STATE:-0}" = "1" ]; then
+          echo "No state file was found!"
+          echo
+          echo "State management commands require a state file."
+          exit 1
+        fi
+        if [ "${FAKE_TF_STATE_BROKEN:-0}" = "1" ]; then
+          echo "Error: Failed to load state: AccessDenied"
+          exit 1
+        fi
         if [ -n "$stack" ] && [ -n "$(setting STATE_LIST)" ]; then
           printf '%s\n' $(setting STATE_LIST)
         else
