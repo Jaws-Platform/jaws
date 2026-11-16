@@ -27,12 +27,10 @@ locals {
   #   silently drop the owner. AWS generates the suffix, so a recreated
   #   permission set needs a new ARN here (use root until that release lands).
   # - The root user, for emergencies (docs/owner-access.md).
-  # - prog-strength-admin, until its access key is retired (docs/owner-access.md).
   # - The apply role, which applies these policies.
   bucket_admin_principal_arns = [
     "arn:aws:iam::${local.account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_22a17d3bc2bca2d3",
     "arn:aws:iam::${local.account_id}:root",
-    "arn:aws:iam::${local.account_id}:user/prog-strength-admin",
     module.infra_ci_apply.role_arn,
   ]
 

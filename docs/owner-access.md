@@ -182,26 +182,24 @@ root-login` when done. Use root when Identity Center is down or misconfigured,
 when a stale break-glass ARN locks the admin role out, and for root-only tasks
 such as the Billing access switch.
 
-## Cutover from the `prog-strength-admin` access key
+## History: retiring the `prog-strength-admin` access key
 
-Each step leaves at least two ways in: root always, and the old key until
-step 7.
+Until 2026-11-15 the owner worked through the IAM user `prog-strength-admin`
+and a long-lived access key with AdministratorAccess and no MFA. The cutover
+kept at least two ways in at every step (root always):
 
-1. Add a second MFA device to root and confirm a root sign-in.
-2. After the release that adds `owner-access/`: the [console setup](#one-time-console-setup).
-3. Apply `owner-access/` with `AWS_PROFILE=prog-strength-admin`, which is on the
-   break-glass list today.
-4. [First sign-in](#first-sign-in-and-the-cli-profile) and the `jwall-admin` profile.
-5. PR: add `admin_role_arn` to `bucket_admin_principal_arns`; release. The plan
-   shows in-place updates to the state and site bucket policies only.
-6. Run the [verification](#verification) below with `jwall-admin`.
-7. Deactivate the old key and work for a few days:
-   `aws iam update-access-key --user-name prog-strength-admin --access-key-id <id> --status Inactive`.
-   Reactivating it is the same command with `Active`.
-8. Delete the key, detach `AdministratorAccess`, delete the user, and remove
-   `[prog-strength-admin]` from `~/.aws/credentials` and `~/.aws/config`.
-9. PR: remove `user/prog-strength-admin` from `bucket_admin_principal_arns` and
-   from README; release.
+1. A second MFA device on root.
+2. The [console setup](#one-time-console-setup), after the release that added `owner-access/`.
+3. The first apply of `owner-access/`, made with the old key (then a break-glass principal).
+4. The [first sign-in](#first-sign-in-and-the-cli-profile) and the `jwall-admin` profile.
+5. The role's ARN added to `bucket_admin_principal_arns` (#154, release 0.35.0).
+6. The [verification](#verification) below, run as `jwall-admin`.
+7. The key deactivated, then deleted; `AdministratorAccess` detached and the
+   user deleted; its sections removed from `~/.aws/credentials` and `~/.aws/config`.
+8. The user removed from `bucket_admin_principal_arns` and README.
+
+The account has no IAM users since. Ways in: the `jwall-admin` Identity Center
+session, and root for emergencies.
 
 ## Verification
 

@@ -23,7 +23,7 @@ ROLE_ARN = (
     "arn:aws:sts::650503560686:assumed-role/"
     "jwall-engineering-guitar-knowledge-base-ci-plan/gha-plan-pr-1"
 )
-USER_ARN = "arn:aws:iam::650503560686:user/prog-strength-admin"
+USER_ARN = "arn:aws:iam::650503560686:user/example-user"
 
 
 def _sts(arn: str) -> tuple[STSClient, Stubber]:
