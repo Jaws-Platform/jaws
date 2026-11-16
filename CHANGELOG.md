@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.33.1...v0.34.0) (2026-11-16)
+
+
+### Features
+
+* **owner-access:** add the owner's Identity Center admin access as an owner-applied stack ([#152](https://github.com/jwallace145/jwall-engineering-infra/issues/152)) ([9f04b08](https://github.com/jwallace145/jwall-engineering-infra/commit/9f04b08c689152d51ee129032cdd760f7b303e10))
+
 ## [0.33.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.33.0...v0.33.1) (2026-11-16)
 
 
