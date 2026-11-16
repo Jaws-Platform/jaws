@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.39.0...v0.40.0) (2026-11-16)
+
+
+### Features
+
+* **access:** onboard datasets from datasets/ and reconcile handshakes in a data-access stack ([#164](https://github.com/jwallace145/jwall-engineering-infra/issues/164))d ([48fb27d](https://github.com/jwallace145/jwall-engineering-infra/commit/48fb27d14f0647df4cfeaafb7226343a95d9299b))
+
 ## [0.39.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.38.0...v0.39.0) (2026-11-16)
 
 
