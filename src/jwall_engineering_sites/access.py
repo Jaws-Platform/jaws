@@ -11,16 +11,24 @@ workspace's `reads`: a handshake (docs/databricks.md, "Datasets and access").
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import os
 import re
-from dataclasses import dataclass
+import urllib.error
+import urllib.request
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Protocol
 
 import yaml
 
 from .components import check_prefixes
 from .errors import ConfigError
 from .settings import default_config_path
+from .site import SITE_FILE, SiteConfig, load_site_config, site_config_from_text
 
 #: The longest `<owner>-<name>`: the key of the consumer endpoint's
 #: `read_only_datasets` (databricks-workspace), stricter than IAM's 43
@@ -30,6 +38,18 @@ ONBOARDING_KEY_MAX = 40
 ENV_INFRA_ROOT = "JES_INFRA_ROOT"
 #: The one file in datasets/ that is not a dataset.
 REGISTRY_README = "README.md"
+#: A directory of `<project>.yaml` read instead of GitHub (tests, local runs).
+ENV_PROJECT_FILES_DIR = "JES_PROJECT_FILES_DIR"
+#: The registries of projects and their repositories, one line per entry, as
+#: the workflows read them (bot-apply.yml, scripts/databricks-projects.sh).
+PROJECT_REGISTRIES = (
+    ("foundation/bots.tf", "bots"),
+    ("foundation/databricks.tf", "databricks_projects"),
+)
+GITHUB_API = "https://api.github.com"
+#: Seconds before a GitHub request gives up. No retries: a failed sweep runs again.
+FETCH_TIMEOUT = 20
+_REGISTRY_ENTRY = re.compile(r'^ *([a-z0-9-]+) *= *\{ *repository *= *"([^"]*)"')
 
 _KEBAB = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _FIELDS = ("description", "prefix")
@@ -158,3 +178,99 @@ def _check_keys(datasets: list[OnboardedDataset]) -> None:
             f"{key}: {', '.join(sorted(ids))}" for key, ids in sorted(clashes.items())
         )
         raise ConfigError(f"datasets: ids that share a platform name: {detail}")
+
+
+# -- other projects' files ------------------------------------------------------
+
+
+def project_repositories(infra_root: Path) -> dict[str, str]:
+    """Every registered project and its repository, from foundation/bots.tf and databricks.tf."""
+    repositories: dict[str, str] = {}
+    for rel, block in PROJECT_REGISTRIES:
+        path = infra_root / rel
+        try:
+            lines = path.read_text().splitlines()
+        except FileNotFoundError as exc:
+            raise ConfigError(f"{path}: the project registry is missing") from exc
+        try:
+            start = lines.index(f"  {block} = {{")
+        except ValueError as exc:
+            raise ConfigError(f"{path}: no multi-line `{block} = {{ ... }}` block") from exc
+        for line in lines[start + 1 :]:
+            if line.startswith("  }"):
+                break
+            match = _REGISTRY_ENTRY.match(line)
+            if match:
+                repositories[match.group(1)] = match.group(2)
+    return repositories
+
+
+class ProjectFiles(Protocol):
+    """Where another project's jwall-engineering-sites.yaml is read from."""
+
+    def load(self, project: str) -> SiteConfig: ...
+
+
+@dataclass
+class DirectoryProjectFiles:
+    """`<directory>/<project>.yaml`: the test fixtures, or a local copy."""
+
+    directory: Path
+
+    def load(self, project: str) -> SiteConfig:
+        path = self.directory / f"{project}.yaml"
+        if not path.is_file():
+            raise ConfigError(f"{project}: no project file at {path}")
+        return load_site_config(path)
+
+
+@dataclass
+class GitHubProjectFiles:
+    """Each project's file on its repository's default branch, through GitHub's API.
+
+    Every failure names the project and the URL: a file that cannot be read
+    is never taken for one without a handshake.
+    """
+
+    repositories: Mapping[str, str]
+    token: str | None
+    opener: Callable[..., Any] = urllib.request.urlopen
+    #: The blob SHA of each file read, by project.
+    shas: dict[str, str] = field(default_factory=dict)
+
+    def load(self, project: str) -> SiteConfig:
+        repository = self.repositories.get(project)
+        if repository is None:
+            raise ConfigError(
+                f"{project}: not a registered project (foundation/bots.tf or "
+                "foundation/databricks.tf), so its file cannot be read"
+            )
+        url = f"{GITHUB_API}/repos/{repository}/contents/{SITE_FILE.name}"
+        request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+        if self.token:
+            request.add_header("Authorization", f"Bearer {self.token}")
+        try:
+            with self.opener(request, timeout=FETCH_TIMEOUT) as response:
+                payload = json.load(response)
+            text = base64.b64decode(payload["content"]).decode()
+            sha = str(payload["sha"])
+        except (
+            urllib.error.URLError,
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+            binascii.Error,
+        ) as exc:
+            raise ConfigError(f"{project}: could not read {url}: {exc}") from exc
+        config = site_config_from_text(text, f"{project} ({url})")
+        self.shas[project] = sha
+        return config
+
+
+def project_files_from_env(infra_root: Path) -> ProjectFiles:
+    """JES_PROJECT_FILES_DIR when set, else GitHub, with GH_TOKEN or GITHUB_TOKEN if present."""
+    if ENV_PROJECT_FILES_DIR in os.environ:
+        return DirectoryProjectFiles(Path(os.environ[ENV_PROJECT_FILES_DIR]))
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or None
+    return GitHubProjectFiles(project_repositories(infra_root), token)
