@@ -1,0 +1,6 @@
+description: >-
+  Braveheart self-play training data, every generation and label set:
+  gzipped `FEN | score | result` training records, the games they came from
+  and each shard's manifest (selfplay/v1/gen=N/run=RUN/), and relabelled scores
+  (selfplay/relabel/<label set>/gen=N/). Append-only; never rewritten.
+prefix: data/
