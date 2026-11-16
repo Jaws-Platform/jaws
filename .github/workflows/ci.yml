@@ -201,6 +201,43 @@ jobs:
           tflint --init --config "$GITHUB_WORKSPACE/.tflint.hcl"
           tflint --config "$GITHUB_WORKSPACE/.tflint.hcl"
 
+  data-access-stack:
+    # The reconcile (data-access/): validated, linted and tested against mocked
+    # Databricks data here; planned on every pull request by data-access.yml.
+    name: Data access stack validate, tflint, test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: data-access
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "~1.14"
+      - name: terraform init (no backend)
+        uses: ./.github/actions/terraform-init
+        with:
+          args: -backend=false
+          working-directory: data-access
+      - name: terraform validate
+        run: terraform validate -no-color
+      - name: terraform test (mock providers, no credentials)
+        run: terraform test -no-color
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: latest
+      - name: tflint
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # plugin downloads hit the unauthenticated API limit on shared runners
+        run: |
+          tflint --init --config "$GITHUB_WORKSPACE/.tflint.hcl"
+          tflint --config "$GITHUB_WORKSPACE/.tflint.hcl"
+      - name: shellcheck the sweep's skip check
+        working-directory: .
+        run: shellcheck scripts/data-access-should-apply.sh
+
   bot-stack:
     name: Bot stack validate, tflint
     runs-on: ubuntu-latest

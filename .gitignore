@@ -34,3 +34,7 @@ dist/
 
 # jwall-engineering-sites run artifacts
 .jwall-engineering-sites/
+
+# data-access/'s inputs, rendered by `jwall-engineering-sites access render`
+data-access/terraform.tfvars.json
+data-access/access-summary.md
