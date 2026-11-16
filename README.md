@@ -8,6 +8,7 @@ The foundation stack for every [jwall.engineering](https://jwall.engineering) si
 - for each site in the `projects` registry, an S3 bucket and three CI roles
 - its own plan and apply CI roles
 - the `jwall-engineering-sites` CLI that every site repository's CI runs to plan, preview, apply and publish, its image in a private ECR repository, and the reusable workflows that run it
+- the owner's admin access: an IAM Identity Center user with the AdministratorAccess permission set, in its own stack that only the owner applies ([guide](docs/owner-access.md))
 - bot and research projects: for each entry in the `bots` registry, CI roles (a research project has no release role), and the bot stack (`stacks/bot`) that runs a repository's GitHub releases as a permanent Lichess bot ([guide](docs/lichess-bot.md))
 
 Everything is in `us-east-1`, managed with Terraform `>= 1.11` and the AWS provider `~> 6.0`. The shared building blocks are consumed from the public Terraform Registry, see [Shared modules](#shared-modules-from-the-terraform-registry). Releases are cut and applied by [Release Please](#releases-and-applies). Contribution rules are in [CONTRIBUTING.md](CONTRIBUTING.md); the rules for coding agents are in [AGENTS.md](AGENTS.md).
@@ -227,6 +228,7 @@ This stack is a consumer of [`jwallace145/jwall-engineering/aws`](https://regist
 | `//modules/ci-apply-role` | Apply roles for this repo and each project, with read and write policies from the `ci-policies` catalog | `ci-roles.tf`, `projects.tf` |
 | `//modules/site-bucket` | One S3 bucket per project, `jwall-engineering-<project>` | `projects.tf` |
 | `//modules/ecr-repository` | The private repository for the `jwall-engineering-sites` CLI image, configured from `config.yaml` | `ecr.tf` |
+| `//modules/identity-center-access` | The owner's Identity Center user and `AdministratorAccess` permission set | `owner-access/main.tf` (its own stack) |
 
 The root module itself creates no resources directly. It is the composition: identity, the `projects` map, module calls, and outputs.
 
@@ -278,6 +280,7 @@ CLI and `config.yaml`, the tool configuration shared by the stack and the CLI
 | `outputs.tf` | Values the project repos and this repo's CI consume |
 | `docs/migration.md` | Legacy resources to retire after the move |
 | `scripts/apply-repo-settings.sh` | GitHub repository settings and the `main` ruleset |
+| `owner-access/` (root) | The owner's admin access through IAM Identity Center: a separate stack, applied only by the owner, never by CI ([docs/owner-access.md](docs/owner-access.md)) |
 
 ## Tags
 
@@ -305,7 +308,7 @@ project=<project>/env=<env>/<project>-<env>.tfstate
 For example this stack uses `project=infra/env=prod/infra-prod.tfstate`, and the main site would use `project=main-site/env=prod/main-site-prod.tfstate`. Terraform writes the lock beside it as `<key>.tflock`. The bucket has versioning, SSE-S3, Block Public Access, `BucketOwnerEnforced` ownership, `prevent_destroy`, and a hardened bucket policy:
 
 - each state prefix is reachable only by the CI roles listed for it (`state.tf`): a project's plan role reads `project=<key>/` and may write only `.tflock` objects there, its apply role reads and writes it, and this stack's key is limited to this repo's two roles;
-- nothing outside those prefixes is reachable, and bucket configuration (the bucket policy included) cannot be changed, except by the break-glass principals in `local.bucket_admin_principal_arns`: the account root user (for browsing the buckets in the console), the `prog-strength-admin` user and this repo's apply role.
+- nothing outside those prefixes is reachable, and bucket configuration (the bucket policy included) cannot be changed, except by the break-glass principals in `local.bucket_admin_principal_arns`: the account root user (emergencies), the `prog-strength-admin` user and this repo's apply role. The [owner access](docs/owner-access.md) cutover adds the owner's Identity Center admin role (console and CLI) once it exists, then removes the `prog-strength-admin` user.
 
 Every statement is a deny matched on `aws:PrincipalArn`, so it grants nothing: it stops any other principal in the account, including ones with `s3:*` on `*`, from reading or rewriting state. The statements are documented in the library's [`tfstate-bucket` README](https://github.com/jwallace145/terraform-aws-jwall-engineering/tree/main/modules/tfstate-bucket#hardened-bucket-policy).
 
@@ -399,7 +402,7 @@ The state bucket does not exist before the first apply, so the first apply uses 
 
    ```sh
    cd foundation
-   export AWS_PROFILE=<admin profile>   # us-east-1, account 650503560686
+   export AWS_PROFILE=jwall-admin       # after `aws sso login`, see docs/owner-access.md; us-east-1, account 650503560686
    printf 'terraform {\n  backend "local" {}\n}\n' > backend_override.tf
    terraform init
    terraform plan -out=bootstrap.tfplan
@@ -478,6 +481,8 @@ Not automated; these need the owner's credentials or the GitHub UI.
 - After the first pull request is merged, run `scripts/apply-repo-settings.sh` to set merge methods, auto-delete of head branches, and the `main` ruleset.
 
 **For this stack:**
+
+- Set up the owner's admin access and retire the `prog-strength-admin` access key: [docs/owner-access.md](docs/owner-access.md) (console setup, then `owner-access/` applied by the owner, then the break-glass entry).
 
 - Run the bootstrap steps above.
 - Create the GitHub `prod` environment with a deployment branch restriction to `main`.

@@ -8,6 +8,7 @@
 node_modules
 tests
 foundation
+owner-access
 docs
 .jwall-engineering-sites
 __pycache__

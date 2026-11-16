@@ -276,7 +276,8 @@ sudo docker ps; sudo docker logs --tail 100 app
 ## Commands
 
 The commands check that they run as the role in the table. In CI the
-workflows assume it. From your own shell with admin credentials, either
+workflows assume it. From your own shell with admin credentials (the
+`jwall-admin` profile, [owner access](owner-access.md)), either
 assume the role, or set `JES_SKIP_ROLE_CHECK=1` for read-only commands such
 as `bot status` and `bot logs`, and for `bot start` and `bot stop`.
 `bot secrets` needs no role.
@@ -385,7 +386,7 @@ the time. A change takes effect at the next **Bot apply**.
 - **`bot status`** shows the instance's state and the running hours. A drained
   instance's status is `stopped`; the next boot sets it back to `ok`.
 
-From your shell, with admin credentials:
+From your shell, with admin credentials ([owner access](owner-access.md)):
 
 ```sh
 JES_SKIP_ROLE_CHECK=1 jwall-engineering-sites bot start

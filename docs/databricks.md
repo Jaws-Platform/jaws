@@ -730,7 +730,8 @@ Terraform's own assignment (in the account stack) collides. Either disable
 metastore auto-assignment for the account and re-run `apply`, or have the owner
 import the existing assignment into the account stack's state:
 
-1. In the owner's shell, with admin AWS credentials, export
+1. In the owner's shell, with admin AWS credentials (the `jwall-admin`
+   profile, [owner access](owner-access.md)), export
    `DATABRICKS_ACCOUNT_ID` and `DATABRICKS_CLIENT_ID` (from `config.yaml`) and
    `DATABRICKS_CLIENT_SECRET` (from `/jwall-engineering/databricks/client-secret`).
 2. In the project's repository, run
