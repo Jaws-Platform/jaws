@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.31.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.30.1...v0.31.0) (2026-11-16)
+
+
+### Features
+
+* **bots:** give braveheart research roles now that its bot is braveheart-bot ([#145](https://github.com/jwallace145/jwall-engineering-infra/issues/145)) ([99a6bd2](https://github.com/jwallace145/jwall-engineering-infra/commit/99a6bd21d48cfa80933a4f968b1fd123e2030b75))
+* **bots:** let a bot project drop its bot and become a research project, keeping its records ([#143](https://github.com/jwallace145/jwall-engineering-infra/issues/143)) ([d87652a](https://github.com/jwallace145/jwall-engineering-infra/commit/d87652a0de974c874084e04b0a91a98457bf2754))
+
 ## [0.30.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.30.0...v0.30.1) (2026-11-15)
 
 
