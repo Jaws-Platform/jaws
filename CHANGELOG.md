@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.41.0...v0.42.0) (2026-11-16)
+
+
+### Features
+
+* **access:** shared datasets in the consumer's catalog view, one catalog per producer ([#169](https://github.com/jwallace145/jwall-engineering-infra/issues/169)) ([0f0a434](https://github.com/jwallace145/jwall-engineering-infra/commit/0f0a43490bdc231ab2bb9c45a64a14532ea194f0))
+
 ## [0.41.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.40.0...v0.41.0) (2026-11-16)
 
 
