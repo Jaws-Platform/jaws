@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.42.0...v0.42.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **foundation:** create producer catalogs after their managed storage ([#171](https://github.com/jwallace145/jwall-engineering-infra/issues/171)) ([4f5060a](https://github.com/jwallace145/jwall-engineering-infra/commit/4f5060a8f980a5852eec34f5a1d1605149bf46ff))
+
 ## [0.42.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.41.0...v0.42.0) (2026-11-16)
 
 
