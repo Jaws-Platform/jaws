@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.33.0...v0.33.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **stack:** treat no state file as an empty state, so a new project's first apply works ([#150](https://github.com/jwallace145/jwall-engineering-infra/issues/150)) ([458ecbd](https://github.com/jwallace145/jwall-engineering-infra/commit/458ecbd2e42410a55cd3965e27ae2908a78cdea2))
+
 ## [0.33.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.32.0...v0.33.0) (2026-11-16)
 
 
