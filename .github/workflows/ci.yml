@@ -102,6 +102,8 @@ jobs:
           args: -backend=false
       - name: terraform validate
         run: terraform validate -no-color
+      - name: terraform test (mock providers, no credentials)
+        run: terraform test -no-color
       # The onboarded-dataset registry (datasets/), derived as access.py derives
       # it: both are tested against tests/fixtures/datasets-expected.json.
       - name: terraform test (foundation/registry)
@@ -234,9 +236,9 @@ jobs:
         run: |
           tflint --init --config "$GITHUB_WORKSPACE/.tflint.hcl"
           tflint --config "$GITHUB_WORKSPACE/.tflint.hcl"
-      - name: shellcheck the sweep's skip check
+      - name: shellcheck the sweep
         working-directory: .
-        run: shellcheck scripts/data-access-should-apply.sh
+        run: shellcheck scripts/data-access-sweep.sh
 
   bot-stack:
     name: Bot stack validate, tflint

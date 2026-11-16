@@ -964,11 +964,11 @@ def access_render(
         registry = access.load_registry(root / "datasets")
         base = access.load_registry(base_registry) if base_registry is not None else ()
         workspaces = {name for name, g in run.settings.projects.items() if g.databricks is not None}
-        files = access.platform_files(
+        files, unregistered = access.platform_files(
             registry, workspaces | {d.owner for d in base}, access.project_files_from_env(root)
         )
         access.check_offboarding(base, registry, files)
-        handshakes = access.compute_access(registry, files)
+        handshakes = access.compute_access(registry, files, unregistered)
         tfvars = access.data_access_tfvars(handshakes, registry, run.settings)
         summary = access.access_summary(handshakes)
         for edge in handshakes.edges:

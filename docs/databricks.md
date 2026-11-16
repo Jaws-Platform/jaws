@@ -341,10 +341,11 @@ hold. Either side ends it alone by removing its half.
 
 - **Read-only at every layer.** An edge grants four things, and each is
   read-only:
-  - the producer's bucket policy names the dataset's role as a reader (the
-    producer's **Bot apply**, which computes its handshakes);
-  - the role's own policy allows only reads under the onboarded prefix (the
-    foundation);
+  - the producer's bucket policy names the dataset's role as a reader, under
+    the dataset's prefix only (the producer's **Bot apply**, which computes its
+    handshakes);
+  - the role's own policy grants no S3 read at all, only locating the bucket,
+    so it reads nothing a bucket policy does not grant (the foundation);
   - the location is bound to the consumer's workspace, with `READ_FILES` for
     `<consumer>-workspace-users` and nothing more (the **Data access** sweep);
   - the consumer's S3 endpoint policy allows the role's reads under the prefix
@@ -365,20 +366,25 @@ hold. Either side ends it alone by removing its half.
   which would revoke access unseen.
 - **Latency.** The sweep runs every 15 minutes (the `schedule` in
   `data-access.yml` is the knob), so a merged half takes effect within one
-  sweep, with no run anywhere else. A sweep applies only when the render
-  differs from the applied state (its `fingerprint`) or something still waits
-  (below); otherwise it skips. **Data access apply** with `full` re-applies
-  regardless, which also undoes a grant made by hand. Each sweep costs only S3
-  requests for the state.
+  sweep, with no run anywhere else. Every sweep plans and applies exactly what
+  its plan found (`scripts/data-access-sweep.sh`): nothing in the state is
+  trusted to say an earlier apply finished, so a failed or cancelled apply is
+  retried by the next sweep, and a grant made by hand or a recreated workspace
+  is undone or reported. Dispatching **Data access** runs a sweep now. Each
+  sweep costs only requests for the state and the Databricks secret.
 - **Waiting, never failing everyone.** A dataset whose location does not exist
   yet (its onboarding release has not applied) is reported under
   `awaiting_onboarding`, and a consumer with no `<consumer>-prod` workspace yet
   under `missing_workspaces`. Neither fails the sweep for anyone else, and every
-  sweep retries both until they are bound.
+  sweep retries both until they are bound. A read naming a project that does
+  not exist (a typo) is pending, not an error, so one consumer's mistake never
+  stops every sweep, and with it every revocation; a registered project whose
+  file cannot be read still fails the sweep.
 - **Pending handshakes.** A half without the other grants nothing. Each plan
   logs the ones naming its project with a reason (`the producer does not list
   the consumer`, `the consumer does not read the dataset`, `the dataset is not
-  onboarded`), and the sweep's summary lists them all.
+  onboarded`, `the producer is not a registered project`), and the sweep's
+  summary lists them all.
 - **Checks.** Offline, against `config.yaml`: a consumer must be a Databricks
   workspace project other than the producer, and a read must name a dataset
   bucket its owner has approved, once, and not the project's own. The registry

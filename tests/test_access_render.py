@@ -163,6 +163,31 @@ def test_render_writes_the_tfvars_and_the_summary(render_workspace: Path, tmp_pa
     assert "braveheart-databricks" in (out / "access-summary.md").read_text()
 
 
+def test_a_read_naming_an_unregistered_project_is_pending_not_an_error(
+    render_workspace: Path, tmp_path: Path
+) -> None:
+    """One consumer's merged typo must not stop every sweep, and so every
+    revocation: with no producer file to agree, it grants nothing and is
+    reported."""
+    path = tmp_path / "project-files" / "braveheart-databricks.yaml"
+    data = yaml.safe_load(path.read_text())
+    workspace = next(c for c in data["components"] if c["kind"] == "databricks-workspace")
+    workspace["reads"].append({"dataset": "braveheart-selfply/positions", "purpose": "a typo"})
+    path.write_text(yaml.safe_dump(data))
+    out = tmp_path / "out"
+    result = runner.invoke(cli.app, ["access", "render", "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    tfvars = json.loads((out / "terraform.tfvars.json").read_text())
+    consumers = tfvars["datasets"]["braveheart-selfplay-positions"]["consumers"]
+    assert list(consumers) == ["braveheart-databricks"]
+    summary = (out / "access-summary.md").read_text()
+    assert (
+        "| `braveheart-selfply/positions` | `braveheart-selfply` | `braveheart-databricks` |"
+        in summary
+    )
+    assert "the producer is not a registered project" in summary
+
+
 def test_render_with_a_failing_fetch_writes_nothing(render_workspace: Path, tmp_path: Path) -> None:
     (tmp_path / "project-files" / "braveheart-databricks.yaml").unlink()
     out = tmp_path / "out"

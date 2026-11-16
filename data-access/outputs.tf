@@ -1,5 +1,5 @@
 output "fingerprint" {
-  description = "The fingerprint of the variables this state was applied with: the scheduled sweep skips a run whose render has the same one and leaves nothing waiting."
+  description = "The fingerprint of the variables this state was last applied with, to trace a sweep to its render. Every sweep plans regardless: nothing skips on it."
   value       = var.fingerprint
 }
 

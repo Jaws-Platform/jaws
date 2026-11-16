@@ -125,6 +125,22 @@ def test_an_unregistered_project_is_an_error() -> None:
         files.load("not-a-project")
 
 
+def test_a_project_is_registered_when_its_file_can_be_asked_for(tmp_path: Path) -> None:
+    """The reconcile tells a project that does not exist (a typo in a read) from
+    a registered project whose file cannot be read, which stays an error."""
+    github = GitHubProjectFiles(
+        {"braveheart-selfplay": "Braveheart-Chess/braveheart-selfplay"},
+        None,
+        FakeOpener(_contents(PROJECT_FILE)),
+    )
+    assert github.registered("braveheart-selfplay")
+    assert not github.registered("braveheart-selfply")
+    (tmp_path / "braveheart-selfplay.yaml").write_text(PROJECT_FILE)
+    directory = DirectoryProjectFiles(tmp_path)
+    assert directory.registered("braveheart-selfplay")
+    assert not directory.registered("braveheart-selfply")
+
+
 def test_a_directory_holds_one_file_per_project(tmp_path: Path) -> None:
     (tmp_path / "braveheart-selfplay.yaml").write_text(PROJECT_FILE)
     files = DirectoryProjectFiles(tmp_path)

@@ -461,7 +461,7 @@ Role ARNs are **repository variables**, not secrets: `AWS_PLAN_ROLE_ARN` and `AW
 
 **Databricks projects** (`.github/workflows/databricks-apply.yml`, by hand): `workflow_dispatch` with the project name applies both stacks in the `prod` environment with the project's apply role (`action: apply`, the default); `action: destroy` empties the catalog bucket and destroys them; `action: doctor` runs the read-only checks and changes nothing. Re-running after a partial apply is safe ([guide](docs/databricks.md#what-apply-does)).
 
-**Dataset access** (`.github/workflows/data-access.yml`): plans on every pull request, against the base branch's `datasets/` so that dropping a dataset a handshake still names fails, and sweeps every 15 minutes, applying in the `prod` environment with `jwall-engineering-data-access-ci-apply` when the render changed or something still waits; `workflow_dispatch` with `full` applies regardless. Its role ARNs are built from `config.yaml` like the bots' ([guide](docs/databricks.md#datasets-and-access)).
+**Dataset access** (`.github/workflows/data-access.yml`): plans on every pull request, against the base branch's `datasets/` so that dropping a dataset a handshake still names fails, and sweeps every 15 minutes in the `prod` environment with `jwall-engineering-data-access-ci-apply`: each sweep plans and applies exactly what its plan found, so a failed apply is retried and drift undone by the next one; `workflow_dispatch` runs a sweep now. Its role ARNs are built from `config.yaml` like the bots' ([guide](docs/databricks.md#datasets-and-access)).
 
 ## Local development
 

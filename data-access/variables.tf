@@ -26,7 +26,7 @@ variable "datasets" {
 }
 
 variable "fingerprint" {
-  description = "SHA-256 of the canonical JSON of the other variables, as `access render` computed it. The scheduled sweep compares it with the applied state's to skip runs that would change nothing."
+  description = "SHA-256 of the canonical JSON of the other variables, as `access render` computed it: traces the applied state to its render (output fingerprint)."
   type        = string
 
   validation {

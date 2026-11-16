@@ -19,7 +19,7 @@ import os
 import re
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
@@ -214,6 +214,10 @@ class ProjectFiles(Protocol):
 
     def load(self, project: str) -> SiteConfig: ...
 
+    def registered(self, project: str) -> bool:
+        """Whether `project` exists at all: a file not registered is a typo, not an outage."""
+        ...
+
 
 @dataclass
 class DirectoryProjectFiles:
@@ -226,6 +230,9 @@ class DirectoryProjectFiles:
         if not path.is_file():
             raise ConfigError(f"{project}: no project file at {path}")
         return load_site_config(path)
+
+    def registered(self, project: str) -> bool:
+        return (self.directory / f"{project}.yaml").is_file()
 
 
 @dataclass
@@ -271,6 +278,9 @@ class GitHubProjectFiles:
         self.shas[project] = sha
         return config
 
+    def registered(self, project: str) -> bool:
+        return project in self.repositories
+
 
 def project_files_from_env(infra_root: Path) -> ProjectFiles:
     """JES_PROJECT_FILES_DIR when set, else GitHub, with GH_TOKEN or GITHUB_TOKEN if present."""
@@ -286,6 +296,8 @@ def project_files_from_env(infra_root: Path) -> ProjectFiles:
 PRODUCER_MISSING = "the producer does not list the consumer"
 CONSUMER_MISSING = "the consumer does not read the dataset"
 NOT_ONBOARDED = "the dataset is not onboarded"
+#: A read naming a project that does not exist (no producer file to agree).
+PRODUCER_UNREGISTERED = "the producer is not a registered project"
 
 
 @dataclass(frozen=True)
@@ -325,7 +337,11 @@ class Access:
         return tuple(e for e in self.edges if e.consumer == consumer)
 
 
-def compute_access(registry: Sequence[OnboardedDataset], files: Mapping[str, SiteConfig]) -> Access:
+def compute_access(
+    registry: Sequence[OnboardedDataset],
+    files: Mapping[str, SiteConfig],
+    unregistered: Collection[str] = (),
+) -> Access:
     """The edges and pending handshakes among `files`, keyed by project.
 
     Only pairs whose producer's and consumer's files are both in `files` are
@@ -333,7 +349,8 @@ def compute_access(registry: Sequence[OnboardedDataset], files: Mapping[str, Sit
     could not be read has already failed (ProjectFiles), so a pair left out
     here is never taken for a revoked one. An onboarded dataset its owner's
     file does not declare, or whose prefix lies outside the component's, is an
-    error naming its registry file.
+    error naming its registry file. A read naming one of `unregistered` (a
+    project that does not exist) is pending, never an edge.
     """
     onboarded = {d.id: d for d in registry}
     for d in registry:
@@ -354,6 +371,9 @@ def compute_access(registry: Sequence[OnboardedDataset], files: Mapping[str, Sit
     pending: list[Pending] = []
     for dataset_id, consumer in sorted(producer_halves | set(consumer_halves)):
         producer = dataset_id.split("/", 1)[0]
+        if producer in unregistered and consumer in files:
+            pending.append(Pending(dataset_id, producer, consumer, PRODUCER_UNREGISTERED))
+            continue
         if producer not in files or consumer not in files:
             continue
         if (dataset_id, consumer) not in producer_halves:
@@ -415,25 +435,34 @@ def access_for_project(
 
 def platform_files(
     registry: Sequence[OnboardedDataset], projects: Iterable[str], files: ProjectFiles
-) -> dict[str, SiteConfig]:
-    """The files the reconcile reads: each of `projects` (every Databricks
-    workspace project, and in a render the base registry's owners), each
-    onboarded dataset's owner's, and the owners their reads name. One that
-    cannot be read raises."""
+) -> tuple[dict[str, SiteConfig], frozenset[str]]:
+    """The files the reconcile reads, and the projects their reads name that do
+    not exist.
+
+    Reads each of `projects` (every Databricks workspace project, and in a
+    render the base registry's owners), each onboarded dataset's owner, and the
+    owners the reads name. A name in a read that is not a registered project at
+    all (a typo) is not read but returned, so its reads are pending and one
+    consumer's mistake never stops every sweep, and with it every revocation.
+    Any other file that cannot be read raises.
+    """
     loaded = {name: files.load(name) for name in sorted(set(projects))}
     owners = {d.owner for d in registry}
+    named: set[str] = set()
     for config in list(loaded.values()):
-        owners.update(counterparts(config))
-    for owner in sorted(owners - set(loaded)):
+        named.update(counterparts(config))
+    unregistered = frozenset(n for n in named - owners - set(loaded) if not files.registered(n))
+    for owner in sorted((owners | named) - set(loaded) - unregistered):
         loaded[owner] = files.load(owner)
-    return loaded
+    return loaded, unregistered
 
 
 def access_for_platform(
     registry: Sequence[OnboardedDataset], projects: Iterable[str], files: ProjectFiles
 ) -> Access:
     """Every handshake the reconcile applies (platform_files)."""
-    return compute_access(registry, platform_files(registry, projects, files))
+    loaded, unregistered = platform_files(registry, projects, files)
+    return compute_access(registry, loaded, unregistered)
 
 
 def check_offboarding(

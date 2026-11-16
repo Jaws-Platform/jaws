@@ -9,10 +9,10 @@ name: Data access
 #   pull_request  plan, rendered with the base branch's registry so dropping a
 #                 dataset that a handshake still names fails; no path filter,
 #                 so this can be a required check
-#   schedule      every 15 minutes (the latency knob): apply unless the render
-#                 matches the applied state and nothing waits
-#                 (scripts/data-access-should-apply.sh)
-#   dispatch      the same; `full` plans and applies whatever the state says
+#   schedule      every 15 minutes (the latency knob): a sweep plans, and
+#                 applies exactly what its plan found (scripts/data-access-sweep.sh),
+#                 so a failed apply is retried and drift undone by the next one
+#   dispatch      a sweep now
 #
 # Any project file that cannot be read fails the run before Terraform: it is
 # never taken for a file without a handshake, which would revoke access.
@@ -23,12 +23,6 @@ on:
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
-    inputs:
-      full:
-        description: Plan and apply even when the render matches the applied state.
-        required: false
-        type: boolean
-        default: false
 
 # A pull request's plan never shares a group with the sweep: GitHub keeps one
 # pending run per group and cancels the older, which would cancel a required
@@ -188,27 +182,20 @@ jobs:
         with:
           args: -backend-config=backend/prod.hcl
           working-directory: data-access
-      - name: Apply, or skip a run that would change nothing
-        id: decide
-        env:
-          FULL: ${{ inputs.full && 'true' || 'false' }}
-        run: |
-          decision=$(../scripts/data-access-should-apply.sh terraform.tfvars.json)
-          echo "decision=$decision" >> "$GITHUB_OUTPUT"
-          echo "decision: $decision (full=$FULL)"
-      - name: terraform plan and apply
-        if: steps.decide.outputs.decision == 'apply'
+      # Every sweep plans, and applies only what its plan found: nothing in
+      # the state is trusted to say an earlier apply finished.
+      - name: Sweep (plan, then apply what changed)
+        id: sweep
         run: |
           source ../scripts/databricks-credentials.sh ../config.yaml
-          terraform plan -no-color -lock-timeout=60s -out=tfplan
-          terraform apply -no-color -lock-timeout=60s tfplan
+          ../scripts/data-access-sweep.sh
       - name: Summary (who reads what, what is pending, what waits)
-        if: always() && steps.decide.outcome == 'success'
+        if: always() && steps.sweep.outcome != 'skipped'
         env:
-          DECISION: ${{ steps.decide.outputs.decision }}
+          RESULT: ${{ steps.sweep.outputs.result || 'failed' }}
         run: |
           {
-            echo "**Sweep: ${DECISION}**"
+            echo "**Sweep: ${RESULT}**"
             echo
             cat access-summary.md
             echo
