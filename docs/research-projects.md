@@ -16,6 +16,31 @@ research project by losing a component. The bot-only commands (`bot push`,
 `bot deploy`, `bot reconcile`, `bot secrets`, `bot status`) refuse a research
 project. A research project without a task runner creates no VPC.
 
+### A bot project that drops its bot
+
+A bot project whose file loses **both** `container-image` and `lichess-bot`
+becomes a research project, keeping its task runner and datasets. This happened
+when Braveheart's bot moved to its own repository and project (`braveheart-bot`).
+The next **Bot apply** deletes the bot's instance, image repository, instance
+role, security group, log group and parameters, and keeps the rest:
+
+1. **Delete the images first.** ECR refuses to delete a repository that still
+   holds images, so the apply refuses while any remain and prints the
+   `aws ecr batch-delete-image` command to run with admin credentials.
+2. **The records bucket is kept.** Its `prevent_destroy` would reject the plan,
+   so the apply releases `module.records` from Terraform state first, as
+   `destroy` does. The bucket and its games stay, no longer managed.
+3. **Until that apply, plans are not run.** The plan role cannot change state,
+   so `plan` reports the pending release in its comment instead of failing on
+   `prevent_destroy`, and plans normally afterwards.
+4. **Then switch the roles.** Add the project to `research_projects` in
+   `foundation/bots.tf` and release. Its plan and apply roles swap
+   `container/*` for `compute/*`, and its release role is deleted. Do this
+   after the apply: the research roles cannot delete the bot's resources.
+
+Stop the bot before the apply, between games. The apply terminates the instance
+and would end a game in progress.
+
 The commands `validate`, `plan`, `apply`, `destroy`, `task ...` and
 `cost report` work on both kinds. See [remote-tasks.md](remote-tasks.md),
 [datasets.md](datasets.md) and [costs.md](costs.md) for the parts they share
