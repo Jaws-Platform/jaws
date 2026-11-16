@@ -324,6 +324,71 @@ def validate(ctx: typer.Context) -> None:
     _command(body)(ctx)
 
 
+def _keeps_records(project: Project) -> bool:
+    return project.kind == "bot" and project.bot.records.s3
+
+
+def _dropped_records(project: Project, state: list[str]) -> bool:
+    """A bot project whose file no longer ships games to S3 (it dropped its bot and
+    became a research project, or turned records off) while its state still holds
+    the records bucket. The bucket has prevent_destroy, which rejects any plan that
+    would delete it, and its games are kept forever: release it from state instead,
+    as `destroy` does."""
+    return (
+        project.has_components
+        and not _keeps_records(project)
+        and any(a.startswith("module.records") for a in state)
+    )
+
+
+def _dropped_image(project: Project, state: list[str]) -> bool:
+    """A project without a bot whose state still holds the image repository: this
+    apply deletes it."""
+    return project.kind != "bot" and any(a.startswith("module.image") for a in state)
+
+
+def _prepare_dropped_bot(run: Run, terraform: stack.Terraform, state: list[str]) -> None:
+    """Before applying a project that dropped its bot (or its records): refuse while
+    the image repository holds images, which ECR would refuse to delete, then release
+    the records bucket from state so its games are kept."""
+    project = run.project
+    if _dropped_image(project, state):
+        session = boto3.session.Session(region_name=project.region)
+        try:
+            tags = image.present_tags(session.client("ecr"), project.image_repository)
+        except RunError:
+            tags = set()  # the repository is already gone
+        if tags:
+            raise PreflightError(
+                f"{project.project} no longer has a bot, so this apply deletes "
+                f"{project.image_repository}, which still holds {len(tags)} image tag(s); "
+                "ECR refuses to delete it while it has images. Delete them first with admin "
+                "credentials: aws ecr batch-delete-image --repository-name "
+                f"{project.image_repository} "
+                '--image-ids "$(aws ecr list-images --repository-name '
+                f'{project.image_repository} --query imageIds --output json)"'
+            )
+    if _dropped_records(project, state):
+        with phase("keep records"):
+            terraform.state_rm("module.records")
+            run.logger.info(
+                "released %s from Terraform state: the project no longer ships games to it; "
+                "the bucket and its games are kept",
+                project.records_bucket,
+            )
+
+
+#: The plan text when a records bucket must be released before anything can be planned.
+DROPPED_RECORDS_PLAN = (
+    "Not planned: {project} no longer ships games to {bucket}, which is still in its "
+    "Terraform state. The bucket has prevent_destroy, so Terraform rejects any plan that "
+    "would delete it. The next Bot apply releases it from state first (the bucket and its "
+    "games are kept, as `destroy` keeps them), then plans and applies the rest: for a bot "
+    "that became a research project, deleting the bot's instance, image repository, role, "
+    "security group, log group and parameters. Plans run normally after that apply.\n"
+)
+
+
 @app.command()
 def plan(ctx: typer.Context) -> None:
     """Plan the site's infrastructure and write the plan comment."""
@@ -340,6 +405,20 @@ def plan(ctx: typer.Context) -> None:
             nonlocal exit_code, plan_text
             with phase("init"):
                 terraform.init()
+            # The plan role cannot change state, so the release waits for the apply.
+            # Only a project without a bot or without records can have dropped them.
+            dropped = (
+                run.project.has_components
+                and not _keeps_records(run.project)
+                and _dropped_records(run.project, terraform.state_list())
+            )
+            if dropped:
+                exit_code = stack.PLAN_CHANGES
+                plan_text = DROPPED_RECORDS_PLAN.format(
+                    project=run.project.project, bucket=run.project.records_bucket
+                )
+                run.logger.warning("%s", plan_text.strip())
+                return
             with phase("plan"):
                 result = terraform.plan(detailed_exitcode=True)
                 exit_code, plan_text = result.returncode, result.output
@@ -454,9 +533,10 @@ def report_plan_comment(
     _command(body)(ctx)
 
 
-def _apply(run: Run, terraform: stack.Terraform) -> dict[str, object]:
-    with phase("init"):
-        terraform.init()
+def _apply(run: Run, terraform: stack.Terraform, init: bool = True) -> dict[str, object]:
+    if init:
+        with phase("init"):
+            terraform.init()
     with phase("plan"):
         planfile = Path(terraform.workdir or ".") / "tfplan"
         terraform.plan(out=planfile)
@@ -509,7 +589,12 @@ def apply(ctx: typer.Context) -> None:
         _preflight(run, "apply", prefix="")
 
         def tf(terraform: stack.Terraform) -> None:
-            outputs = _apply(run, terraform)
+            with phase("init"):
+                terraform.init()
+            # Only a project without a bot or without records can have dropped them.
+            if run.project.has_components and not _keeps_records(run.project):
+                _prepare_dropped_bot(run, terraform, terraform.state_list())
+            outputs = _apply(run, terraform, init=False)
             github.append_summary(
                 report.run_summary(
                     "Terraform apply",

@@ -866,7 +866,8 @@ def test_plan_research_uses_the_bot_stack_and_names_the_manual_apply(
     assert "research math-prover: state project=math-prover/" in result.output
     calls = _calls(fake_terraform)
     assert calls[0].startswith("init ") and "-backend-config=backend.hcl" in calls[0]
-    assert calls[1].startswith("plan ")
+    assert calls[1] == "state list"  # a research project may have dropped a bot's records
+    assert calls[2].startswith("plan ")
     tfvars = json.loads((tmp_path / "rendered.tfvars.json").read_text())
     assert tfvars["bot_enabled"] is False
     comment = (research_workspace / ".jwall-engineering-sites" / "plan-comment.md").read_text()
@@ -888,7 +889,8 @@ def test_apply_and_outputs_work_on_research(research_workspace: Path, fake_terra
     with _as_role(RESEARCH_APPLY_ROLE):
         applied = runner.invoke(cli.app, ["apply"])
     assert applied.exit_code == 0, applied.output
-    assert [c.split()[0] for c in _calls(fake_terraform)] == ["init", "plan", "apply", "output"]
+    verbs = [c.split()[0] for c in _calls(fake_terraform)]
+    assert verbs == ["init", "state", "plan", "apply", "output"]
     with _as_role(RESEARCH_PLAN_ROLE):
         outputs = runner.invoke(cli.app, ["outputs"])
     assert outputs.exit_code == 0, outputs.output
@@ -1174,3 +1176,80 @@ def _put_image(tag: str) -> None:
         ),
         imageTag=tag,
     )
+
+
+# -- a bot project that drops its bot ------------------------------------------------
+
+#: What the state of a bot project holds once its file has dropped the bot.
+DROPPED_BOT_STATE = (
+    "module.records[0].aws_s3_bucket.this module.image[0].aws_ecr_repository.this "
+    "module.bot[0].aws_instance.this module.tasks[0].aws_launch_template.this"
+)
+
+
+def test_apply_of_a_research_project_that_dropped_its_bot_keeps_the_records_bucket(
+    research_workspace: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_TF_STATE_LIST", DROPPED_BOT_STATE)
+    with mock_aws(), _as_role(RESEARCH_APPLY_ROLE):
+        result = runner.invoke(cli.app, ["apply"])
+    assert result.exit_code == 0, result.output
+    calls = _calls(fake_terraform)
+    assert [c.split()[0] for c in calls].count("init") == 1
+    rm = calls.index(TF_RM + "module.records")
+    plan = next(i for i, c in enumerate(calls) if c.startswith("plan "))
+    assert rm < plan
+    assert "jwall-engineering-math-prover-records" in result.output
+    assert "games are kept" in result.output
+
+
+def test_apply_of_a_dropped_bot_refuses_while_its_image_repository_holds_images(
+    research_workspace: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_TF_STATE_LIST", DROPPED_BOT_STATE)
+    with mock_aws(), _as_role(RESEARCH_APPLY_ROLE):
+        ecr = boto3.client("ecr", region_name="us-east-1")
+        ecr.create_repository(repositoryName="jwall-engineering-math-prover")
+        ecr.put_image(
+            repositoryName="jwall-engineering-math-prover",
+            imageManifest=json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+                    "config": {"digest": "sha256:v1.0.0", "size": 1, "mediaType": "x"},
+                    "layers": [],
+                }
+            ),
+            imageTag="v1.0.0",
+        )
+        result = runner.invoke(cli.app, ["apply"])
+    assert result.exit_code == 3
+    assert "aws ecr batch-delete-image --repository-name jwall-engineering-math-prover" in (
+        result.output
+    )
+    calls = _calls(fake_terraform)
+    assert not any(c.startswith(("plan ", "apply ", TF_RM)) for c in calls)
+
+
+def test_plan_of_a_dropped_bot_explains_instead_of_failing_on_prevent_destroy(
+    research_workspace: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_TF_STATE_LIST", DROPPED_BOT_STATE)
+    with _as_role(RESEARCH_PLAN_ROLE):
+        result = runner.invoke(cli.app, ["plan"])
+    assert result.exit_code == 0, result.output
+    calls = _calls(fake_terraform)
+    assert not any(c.startswith(("plan ", TF_RM)) for c in calls)  # the plan role changes nothing
+    comment = (research_workspace / ".jwall-engineering-sites" / "plan-comment.md").read_text()
+    assert "jwall-engineering-math-prover-records" in comment and "Bot apply" in comment
+
+
+def test_apply_of_a_bot_that_keeps_records_does_not_touch_its_state(
+    bot_workspace: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_TF_STATE_LIST", DROPPED_BOT_STATE)
+    with mock_aws(), _as_role(BOT_APPLY_ROLE):
+        result = runner.invoke(cli.app, ["apply"])
+    assert result.exit_code == 0, result.output
+    calls = _calls(fake_terraform)
+    assert not any(c.startswith(("state ", TF_RM)) for c in calls)
