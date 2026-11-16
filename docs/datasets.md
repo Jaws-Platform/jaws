@@ -159,10 +159,11 @@ aws s3 cp --only-show-errors FILE s3://jwall-engineering-braveheart-nnue/data/se
 
 ## Reading the data
 
-Run these from your machine with the admin profile:
+Run these from your machine with the admin profile ([owner access](owner-access.md)):
 
 ```sh
-export AWS_PROFILE=prog-strength-admin
+aws sso login --profile jwall-admin
+export AWS_PROFILE=jwall-admin
 B=s3://jwall-engineering-braveheart-nnue/data
 
 # Generations and runs
