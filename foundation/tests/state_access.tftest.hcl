@@ -80,6 +80,19 @@ override_module {
   }
 }
 
+# The catalogs' storage builds IAM policies from data sources a mock provider
+# fills with random strings; its own module test covers it.
+override_module {
+  target = module.dataset_catalog_storage
+  outputs = {
+    url                     = "s3://jwall-engineering-dataset-catalogs/managed"
+    external_location_name  = "jwall-engineering-dataset-catalogs"
+    storage_credential_name = "jwall-engineering-dataset-catalogs"
+    bucket_name             = "jwall-engineering-dataset-catalogs"
+    uc_role_arn             = "arn:aws:iam::650503560686:role/jwall-engineering-dataset-catalogs"
+  }
+}
+
 run "the_reconcile_reaches_its_state" {
   command = plan
 
@@ -89,5 +102,16 @@ run "the_reconcile_reaches_its_state" {
       write = ["arn:aws:iam::650503560686:role/jwall-engineering-data-access-ci-apply"]
     })
     error_message = "the state bucket policy must list data-access's key, readable by its plan role and writable by its apply role, or both roles are denied their own state"
+  }
+}
+
+# The onboarded positions (datasets/braveheart-selfplay/positions.yaml) get
+# their producer's catalog, and the dataset its schema and files volume.
+run "the_positions_get_their_producer_catalog" {
+  command = plan
+
+  assert {
+    condition     = jsonencode(keys(module.producer_catalog)) == jsonencode(["braveheart_selfplay"])
+    error_message = "one producer catalog per producer with an onboarded dataset: braveheart_selfplay"
   }
 }

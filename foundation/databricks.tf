@@ -99,7 +99,7 @@ resource "terraform_data" "databricks_config_filled_in" {
 module "databricks_metastore" {
   count     = local.databricks_enabled ? 1 : 0
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-metastore"
-  version   = "0.24.0"
+  version   = "0.25.0"
   providers = { databricks = databricks.account }
 
   name                             = local.databricks.metastore_name
@@ -110,7 +110,7 @@ module "databricks_metastore" {
 module "databricks_audit_logs" {
   count     = local.databricks_enabled ? 1 : 0
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-audit-logs"
-  version   = "0.24.0"
+  version   = "0.25.0"
   providers = { aws = aws, databricks = databricks.account }
 
   account_id  = local.databricks.account_id
@@ -125,7 +125,7 @@ module "databricks_audit_logs" {
 module "databricks_shared_host" {
   count     = local.databricks_enabled ? 1 : 0
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-host-workspace"
-  version   = "0.24.0"
+  version   = "0.25.0"
   providers = { databricks = databricks.account }
 
   account_id       = local.databricks.account_id
@@ -155,6 +155,9 @@ module "dataset_registry" {
   directory    = "${path.module}/../datasets"
   organization = local.context.organization
 
+  # Each workspace's own catalog is <project> with - replaced by _.
+  reserved_catalogs = [for p in keys(local.databricks_projects) : replace(p, "-", "_")]
+
   # The live overlap check below: what the host lists, then each location's URL.
   live_location_names = length(data.databricks_external_locations.all) > 0 ? data.databricks_external_locations.all[0].names : null
   live_location_urls  = { for name, l in data.databricks_external_location.live : name => l.external_location_info[0].url }
@@ -162,6 +165,40 @@ module "dataset_registry" {
 
 locals {
   onboarded_datasets = local.databricks_enabled ? module.dataset_registry.datasets : {}
+
+  # One catalog per producer with an onboarded dataset: catalog => producer.
+  producer_catalogs = { for c, owners in { for d in values(local.onboarded_datasets) : d.catalog => d.owner... } : c => owners[0] }
+}
+
+# The producer catalogs' managed storage (databricks-catalog-storage): the
+# metastore has no storage root, so each producer catalog's managed location
+# is a prefix of this one bucket. Nothing is ever written there.
+module "dataset_catalog_storage" {
+  count     = local.databricks_enabled ? 1 : 0
+  source    = "jwallace145/jwall-engineering/aws//modules/databricks-catalog-storage"
+  version   = "0.25.0"
+  providers = { aws = aws, databricks = databricks.shared }
+
+  name              = "${local.context.organization}-dataset-catalogs"
+  host_workspace_id = module.databricks_shared_host[0].workspace_id
+  owner_group_name  = module.databricks_metastore[0].admin_group_name
+  apply_role_arn    = module.infra_ci_apply.role_arn
+}
+
+# One isolated catalog per producer, owned by the platform, bound read-write
+# to the host only; each of its onboarded datasets is a schema there holding
+# an external volume `files`. Consumers are bound read-only, and granted, by
+# the data-access reconcile (data-access/).
+module "producer_catalog" {
+  for_each  = local.producer_catalogs
+  source    = "jwallace145/jwall-engineering/aws//modules/databricks-producer-catalog"
+  version   = "0.25.0"
+  providers = { databricks = databricks.shared }
+
+  producer          = each.value
+  storage_url       = module.dataset_catalog_storage[0].url
+  host_workspace_id = module.databricks_shared_host[0].workspace_id
+  owner_group_name  = module.databricks_metastore[0].admin_group_name
 }
 
 # Unity Catalog refuses overlapping external locations in the metastore, and
@@ -197,7 +234,7 @@ resource "terraform_data" "dataset_overlap_check" {
 module "databricks_dataset" {
   for_each  = local.onboarded_datasets
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-dataset"
-  version   = "0.24.0"
+  version   = "0.25.0"
   providers = { aws = aws, databricks = databricks.shared }
 
   name              = each.value.platform_name
@@ -205,6 +242,10 @@ module "databricks_dataset" {
   prefix            = each.value.prefix
   host_workspace_id = module.databricks_shared_host[0].workspace_id
   owner_group_name  = module.databricks_metastore[0].admin_group_name
+
+  # The dataset's schema and files volume in its producer's catalog.
+  catalog_name = module.producer_catalog[each.value.catalog].catalog_name
+  schema_name  = each.value.schema
 
   depends_on = [terraform_data.dataset_overlap_check]
 }
@@ -221,7 +262,7 @@ check "shared_host_url" {
 module "databricks_ci_plan" {
   for_each = local.databricks_projects
   source   = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version  = "0.24.0"
+  version  = "0.25.0"
 
   project           = each.key
   repository        = local.context.repository
@@ -240,7 +281,7 @@ module "databricks_ci_plan" {
 module "databricks_ci_apply" {
   for_each = local.databricks_projects
   source   = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version  = "0.24.0"
+  version  = "0.25.0"
 
   project           = each.key
   repository        = local.context.repository
