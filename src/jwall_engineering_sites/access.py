@@ -536,6 +536,14 @@ def workspace_users_group(project: str) -> str:
     return f"{project}-workspace-users"
 
 
+def metastore_admin_group(organization: str) -> str:
+    """The metastore admin group, `<organization>-metastore-admins` (the
+    databricks-metastore module's default, which the foundation keeps): it owns
+    every onboarded dataset's objects and is in every grant set the reconcile
+    manages."""
+    return f"{organization}-metastore-admins"
+
+
 def fingerprint(variables: Mapping[str, Any]) -> str:
     """SHA-256 of the canonical JSON of `variables`: sorted keys, no whitespace."""
     canonical = json.dumps(variables, sort_keys=True, separators=(",", ":"))
@@ -567,10 +575,15 @@ def data_access_tfvars(
         datasets[dataset.key] = {
             "id": dataset.id,
             "location_name": dataset.platform_name(organization),
+            "credential_name": dataset.platform_name(organization),
+            "catalog": dataset.catalog,
+            "schema": dataset.schema,
+            "volume": dataset.volume,
             "consumers": dict(sorted(consumers.items())),
         }
     variables: dict[str, Any] = {
         "host_workspace_url": databricks.shared_host_url,
+        "owner_group_name": metastore_admin_group(organization),
         "datasets": datasets,
     }
     return variables | {"fingerprint": fingerprint(variables)}

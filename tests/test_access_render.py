@@ -59,10 +59,15 @@ def _files(consumer_purpose: str = PURPOSE) -> dict[str, Any]:
 def _expected_without_fingerprint() -> dict[str, Any]:
     return {
         "host_workspace_url": HOST,
+        "owner_group_name": "jwall-engineering-metastore-admins",
         "datasets": {
             "braveheart-selfplay-positions": {
                 "id": "braveheart-selfplay/positions",
                 "location_name": "jwall-engineering-ds-braveheart-selfplay-positions",
+                "credential_name": "jwall-engineering-ds-braveheart-selfplay-positions",
+                "catalog": "braveheart_selfplay",
+                "schema": "positions",
+                "volume": "files",
                 "consumers": {
                     "braveheart-databricks": {
                         "users_group_name": "braveheart-databricks-workspace-users",

@@ -13,10 +13,14 @@ variable "host_workspace_url" {
 }
 
 variable "datasets" {
-  description = "Every onboarded dataset by its key (<owner>-<name>): its id, its external location, and each consumer whose handshake both halves declare, with the consumer's users group and its stated purpose."
+  description = "Every onboarded dataset by its key (<owner>-<name>): its id, its external location and storage credential, its producer catalog, schema and volume, and each consumer whose handshake both halves declare, with the consumer's users group and its stated purpose."
   type = map(object({
-    id            = string
-    location_name = string
+    id              = string
+    location_name   = string
+    credential_name = string
+    catalog         = string
+    schema          = string
+    volume          = string
     consumers = map(object({
       users_group_name = string
       purpose          = string
@@ -32,5 +36,15 @@ variable "fingerprint" {
   validation {
     condition     = can(regex("^[0-9a-f]{64}$", var.fingerprint))
     error_message = "fingerprint must be a lowercase SHA-256 hex digest; render the variables with `jwall-engineering-sites access render`."
+  }
+}
+
+variable "owner_group_name" {
+  description = "The group that owns every onboarded dataset's objects (the metastore admin group): it is in every grant set the reconcile manages, so none is ever empty."
+  type        = string
+
+  validation {
+    condition     = length(trimspace(var.owner_group_name)) > 0
+    error_message = "owner_group_name must not be empty; render the variables with `jwall-engineering-sites access render`."
   }
 }
