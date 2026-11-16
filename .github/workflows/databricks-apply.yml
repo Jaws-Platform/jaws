@@ -87,6 +87,9 @@ jobs:
         env:
           JES_STACKS_ROOT: ${{ github.workspace }}/stacks
           COMMAND: ${{ inputs.action == 'destroy' && 'destroy --yes' || inputs.action == 'doctor' && 'databricks doctor' || 'apply' }}
+          # The CLI reads the producers' project files of the datasets the
+          # workspace reads from GitHub to render its endpoint statements.
+          GH_TOKEN: ${{ github.token }}
         run: |
           # COMMAND is `apply`, `destroy --yes` or `databricks doctor`: words on purpose.
           # shellcheck disable=SC2086

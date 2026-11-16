@@ -1272,3 +1272,65 @@ def test_extra_env_is_not_in_the_parent_environment(
     assert terraform._environment()["DATABRICKS_CLIENT_SECRET"] == DATABRICKS_SENTINEL
     assert "DATABRICKS_CLIENT_SECRET" not in os.environ
     assert DATABRICKS_SENTINEL not in repr(terraform)
+
+
+# -- readers and endpoints from handshakes (access.py) -----------------------------
+
+_ROLES = "arn:aws:iam::650503560686:role/"
+_TRAINER_GPU = _ROLES + "jwall-engineering-braveheart-trainer-task-gpu"
+_POSITIONS_ROLE = _ROLES + "jwall-engineering-ds-braveheart-selfplay-positions"
+
+
+def _registry_project(name: str, settings: Settings) -> Project:
+    return Project.from_config(load_site_config(FIXTURES / "registry" / f"{name}.yaml"), settings)
+
+
+def _access(consumer_reads: bool = True) -> Any:
+    from jwall_engineering_sites.access import compute_access, load_registry
+
+    consumer = load_site_config(FIXTURES / "registry" / "braveheart-databricks.yaml")
+    if not consumer_reads:
+        workspace = consumer.components[0]
+        consumer = consumer.model_copy(
+            update={"components": [workspace.model_copy(update={"reads": ()})]}
+        )
+    return compute_access(
+        load_registry(FIXTURES / "datasets"),
+        {
+            "braveheart-selfplay": load_site_config(
+                FIXTURES / "registry" / "braveheart-selfplay.yaml"
+            ),
+            "braveheart-databricks": consumer,
+        },
+    )
+
+
+def test_a_shared_dataset_names_its_platform_role_as_a_reader(settings: Settings) -> None:
+    tfvars = render_tfvars(
+        _registry_project("braveheart-selfplay", settings), settings, access=_access()
+    )
+    (dataset,) = tfvars["datasets"]
+    assert dataset["readers"] == [_TRAINER_GPU, _POSITIONS_ROLE]
+
+
+def test_a_pending_handshake_adds_no_reader(settings: Settings) -> None:
+    project = _registry_project("braveheart-selfplay", settings)
+    for access in (_access(consumer_reads=False), None):
+        (dataset,) = render_tfvars(project, settings, access=access)["datasets"]
+        assert dataset["readers"] == [_TRAINER_GPU]
+
+
+def test_the_consumer_endpoint_gets_each_edge(settings: Settings) -> None:
+    project = _registry_project("braveheart-databricks", settings)
+    tfvars = render_tfvars(project, settings, stack="account", access=_access())
+    assert tfvars["read_only_datasets"] == {
+        "braveheart-selfplay-positions": {
+            "bucket": "jwall-engineering-braveheart-selfplay-positions",
+            "prefix": "data/",
+            "role_arn": _POSITIONS_ROLE,
+        }
+    }
+    pending = render_tfvars(
+        project, settings, stack="account", access=_access(consumer_reads=False)
+    )
+    assert pending["read_only_datasets"] == {}

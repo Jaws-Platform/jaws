@@ -517,6 +517,9 @@ jobs:
         env:
           JES_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           JES_STACKS_ROOT: ${{ github.workspace }}/stacks
+          # The CLI reads each counterpart's project file from GitHub (the
+          # consumers of a project's datasets, or the producers a workspace reads).
+          GH_TOKEN: ${{ github.token }}
         run: uv run jwall-engineering-sites --file .consumer/jwall-engineering-sites.yaml plan
       - name: Mint a comment token for the JWall Engineering Infra app
         id: app-token
@@ -637,6 +640,9 @@ jobs:
         env:
           JES_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           JES_STACKS_ROOT: ${{ github.workspace }}/stacks
+          # The CLI reads each counterpart's project file from GitHub (the
+          # consumers of a project's datasets, or the producers a workspace reads).
+          GH_TOKEN: ${{ github.token }}
         run: uv run jwall-engineering-sites --file .consumer/jwall-engineering-sites.yaml plan
       - name: Mint a comment token for the JWall Engineering Infra app
         id: app-token

@@ -15,6 +15,12 @@ from typing import Any
 
 import yaml
 
+from jwall_engineering_sites.access import (
+    Access,
+    DirectoryProjectFiles,
+    compute_access,
+    load_registry,
+)
 from jwall_engineering_sites.project import Project
 from jwall_engineering_sites.settings import Settings, load_settings
 from jwall_engineering_sites.site import SiteConfig
@@ -64,9 +70,18 @@ def _project(raw: dict[str, Any], settings: Settings) -> Project:
     return Project.from_config(SiteConfig.model_validate(raw), settings)
 
 
+def _handshakes() -> Access:
+    """The registry fixtures' handshakes, between the live files in fixtures/registry/."""
+    registry = load_registry(FIXTURES / "datasets")
+    files = DirectoryProjectFiles(FIXTURES / "registry")
+    projects = ("braveheart-selfplay", "braveheart-databricks")
+    return compute_access(registry, {name: files.load(name) for name in projects})
+
+
 def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
     """Each test file's inputs: by stack (its directory under stacks/), then by case name."""
     research = with_guardrails(settings, "math-prover", MATH_PROVER_GUARDRAILS)
+    handshakes = _handshakes()
     bots = {
         "braveheart": (_file("braveheart"), settings),
         "scheduled_bot": (_scheduled(), settings),
@@ -77,7 +92,10 @@ def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
     }
     databricks = _project(_file("databricks-poc"), settings)
     return {
-        "bot": {name: render_tfvars(_project(raw, s), s) for name, (raw, s) in bots.items()},
+        "bot": {
+            name: render_tfvars(_project(raw, s), s, access=handshakes)
+            for name, (raw, s) in bots.items()
+        },
         "databricks-account": {
             "databricks_poc": render_tfvars(databricks, settings, stack="account"),
         },

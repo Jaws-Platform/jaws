@@ -18,7 +18,7 @@ import os
 import re
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -382,3 +382,42 @@ def _check_onboarding(dataset: OnboardedDataset, owner: SiteConfig) -> None:
             f"{where}: prefix {dataset.prefix!r} lies outside {component.prefix!r}, the prefix "
             f"of {dataset.owner}'s dataset {dataset.name}"
         )
+
+
+def counterparts(config: SiteConfig) -> tuple[str, ...]:
+    """The projects whose files complete this file's handshakes: its datasets'
+    consumers and the owners of the datasets its workspaces read. Empty for a
+    project that declares neither half, whose plan then reads no other file."""
+    names: set[str] = set()
+    for component in config.components:
+        if isinstance(component, Dataset):
+            names.update(component.consumers)
+        elif isinstance(component, DatabricksWorkspace):
+            names.update(read.dataset.split("/", 1)[0] for read in component.reads)
+    names.discard(config.project)
+    return tuple(sorted(names))
+
+
+def access_for_project(
+    config: SiteConfig, registry: Sequence[OnboardedDataset], files: ProjectFiles
+) -> Access:
+    """The handshakes of one project's plan: its own file as given (it may be a
+    branch's), and each counterpart's from `files`. A counterpart that cannot be
+    read raises; it is never treated as one without the other half."""
+    loaded = {name: files.load(name) for name in counterparts(config)}
+    loaded[config.project] = config
+    return compute_access(registry, loaded)
+
+
+def access_for_platform(
+    registry: Sequence[OnboardedDataset], workspaces: Iterable[str], files: ProjectFiles
+) -> Access:
+    """Every handshake the reconcile applies: each Databricks workspace project's
+    file, each onboarded dataset's owner's, and the owners its reads name."""
+    loaded = {name: files.load(name) for name in sorted(set(workspaces))}
+    owners = {d.owner for d in registry}
+    for config in list(loaded.values()):
+        owners.update(counterparts(config))
+    for owner in sorted(owners - set(loaded)):
+        loaded[owner] = files.load(owner)
+    return compute_access(registry, loaded)

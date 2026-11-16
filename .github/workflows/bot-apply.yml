@@ -105,6 +105,9 @@ jobs:
         env:
           JES_STACKS_ROOT: ${{ github.workspace }}/stacks
           COMMAND: ${{ inputs.destroy && 'destroy --yes' || 'apply' }}
+          # The CLI reads each counterpart's project file (consumers of the
+          # project's datasets) from GitHub to render its bucket readers.
+          GH_TOKEN: ${{ github.token }}
         run: |
           # COMMAND is `apply` or `destroy --yes`: two words on purpose.
           # shellcheck disable=SC2086
