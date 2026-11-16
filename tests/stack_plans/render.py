@@ -45,6 +45,14 @@ def _dataset_only() -> dict[str, Any]:
     return raw
 
 
+def _scheduled() -> dict[str, Any]:
+    """The braveheart sample with running hours: 08:00-20:00 UTC on weekdays."""
+    raw = _file("braveheart")
+    bot = next(c for c in raw["components"] if c["kind"] == "lichess-bot")
+    bot["schedule"] = {"days": "weekdays", "start": "08:00", "stop": "20:00"}
+    return raw
+
+
 def _project(raw: dict[str, Any], settings: Settings) -> Project:
     """`Project.from_config` runs the guardrails."""
     return Project.from_config(SiteConfig.model_validate(raw), settings)
@@ -55,6 +63,7 @@ def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
     research = with_guardrails(settings, "math-prover", MATH_PROVER_GUARDRAILS)
     bots = {
         "braveheart": (_file("braveheart"), settings),
+        "scheduled_bot": (_scheduled(), settings),
         "math_prover": (_file("math-prover"), research),
         "dataset_only": (_dataset_only(), research),
     }

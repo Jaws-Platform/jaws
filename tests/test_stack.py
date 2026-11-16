@@ -122,6 +122,7 @@ def test_render_tfvars_for_bot(bot: Project, settings: Settings) -> None:
         "keep_release_images": 20,
         "expire_untagged_after_days": 7,
         "ami_name": settings.bot.amis["x86_64"],
+        "schedule": None,
         "task_runner_enabled": True,
         "task_instance_type": "c8a.16xlarge",
         "task_max_lifetime_hours": 6,
@@ -530,7 +531,7 @@ def _bot_stack(block_type: str, file: str = "main.tf") -> dict[str, dict[str, st
 
 def _strip_new_keys(tfvars: dict[str, Any]) -> dict[str, Any]:
     """`tfvars` without the keys stack gating added."""
-    old = {k: v for k, v in tfvars.items() if k not in ("bot_enabled", "task_rust")}
+    old = {k: v for k, v in tfvars.items() if k not in ("bot_enabled", "task_rust", "schedule")}
     old["task_profiles"] = [
         {
             **{k: v for k, v in profile.items() if k != "rust"},

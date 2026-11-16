@@ -61,6 +61,10 @@ components:
       s3: true
     logs:
       retention_days: 30
+    schedule:                 # optional: running hours, UTC; without it, always on
+      days: daily             # daily | weekdays | weekends
+      start: "08:00"
+      stop: "20:00"
 ```
 
 A file is either a site (`domain` and `site`) or a bot project
@@ -88,6 +92,10 @@ A file is either a site (`domain` and `site`) or a bot project
 | `lichess-bot.engine.move_overhead_ms` | 0–5000, 500 | UCI `Move Overhead`, when the engine offers it. lichess-bot's own `move_overhead` stays in your config. |
 | `lichess-bot.records.s3` | bool, `true` | Ship finished games to S3. |
 | `lichess-bot.logs.retention_days` | CloudWatch value, 30 | Container log retention. |
+| `lichess-bot.schedule` | map, none | Running hours, in UTC. Without it the instance runs all the time. See [Running hours](#running-hours). |
+| `lichess-bot.schedule.days` | `daily` \| `weekdays` \| `weekends`, `daily` | Which days the window applies to. `weekdays` is Monday to Friday. |
+| `lichess-bot.schedule.start`, `.stop` | quoted `"HH:MM"` | On a quarter hour, `stop` after `start` on the same day, 4 to 20 hours apart, and `stop` at 22:45 at the latest. Quote them: YAML reads an unquoted `08:00` as a number. |
+| `lichess-bot.schedule.timezone` | `UTC`, `UTC` | The only value accepted, so every day is the same window. |
 
 What the image enforces in your config, whatever it says:
 
@@ -158,6 +166,7 @@ components:
 | Log group | `/jwall-engineering/<project>/bot` |
 | Parameters | `/jwall-engineering/<project>/bot/{desired-version,running-version,status,last-sync}` |
 | CI roles | `jwall-engineering-<project>-ci-{plan,apply,release}` |
+| Schedules, with `schedule` | `jwall-engineering-<project>-bot-{start,drain,stop}` (EventBridge Scheduler, default group), run as the role `jwall-engineering-<project>-bot-scheduler` |
 | State | `s3://jwall-engineering-tfstate/project=<project>/env=prod/<project>-prod.tfstate` |
 
 ## How a release reaches the bot
@@ -269,7 +278,8 @@ sudo docker ps; sudo docker logs --tail 100 app
 The commands check that they run as the role in the table. In CI the
 workflows assume it. From your own shell with admin credentials, either
 assume the role, or set `JES_SKIP_ROLE_CHECK=1` for read-only commands such
-as `bot status` and `bot logs`. `bot secrets` needs no role.
+as `bot status` and `bot logs`, and for `bot start` and `bot stop`.
+`bot secrets` needs no role.
 
 | Command | Role | What it does |
 |---|---|---|
@@ -281,7 +291,9 @@ as `bot status` and `bot logs`. `bot secrets` needs no role.
 | `bot push --version vX.Y.Z` | `ci-release` | Push a built image; refuses an existing tag |
 | `bot deploy --version vX.Y.Z [--restart]` | `ci-release` | Roll the bot to a pushed tag and follow the swap |
 | `bot reconcile [--version vX.Y.Z] [--dry-run]` | `ci-release` | Build, push and deploy as needed; idempotent |
-| `bot status` | `ci-plan` or `ci-release` | Instance, versions, status, last records sync |
+| `bot status` | `ci-plan` or `ci-release` | Instance, versions, status, running hours, last records sync |
+| `bot start` | `ci-release` | Start the stopped instance and wait until the bot is up |
+| `bot stop [--wait]` | `ci-release` | Drain the bot as the schedule does: it finishes its game, ships its records and powers off. Returns once the drain has begun, or with `--wait` once the instance has stopped |
 | `bot logs [--since 10m] [--follow]` | `ci-plan` | The container's CloudWatch logs |
 | `bot secrets set\|check NAME` | your shell | Write or check a secret |
 
@@ -334,6 +346,60 @@ credits, so a busy engine slows down rather than running up charges. The
 largest saving would be Graviton (`t4g.micro`), which needs an arm64 release
 asset.
 
+## Running hours
+
+A bot does not have to run all day. With `schedule`, three EventBridge
+Scheduler schedules (no Lambda) run the instance in a window, in UTC:
+
+| Schedule | When | What it does |
+|---|---|---|
+| `<project>-bot-start` | `start` | Starts the instance. At boot the reconciler starts the desired version, including one released while it was off. |
+| `<project>-bot-drain` | `stop` | Drains it: the bot gets the one SIGINT a rollout sends, stops taking challenges and finishes its game; its records are shipped; the instance powers off. It stops, never terminates, so its disk is kept. |
+| `<project>-bot-stop` | `stop` + 60 min | Stops the instance in case the drain is still waiting or never ran. Only a game still going then is lost. |
+
+```yaml
+    schedule:
+      days: daily      # daily | weekdays | weekends
+      start: "08:00"
+      stop: "20:00"
+```
+
+The schedule is kept regular on purpose: one window a day on a fixed set of
+days, on a quarter hour, never across midnight, 4 to 20 hours long (so the
+instance is up and down at least 4 hours at a time), with `stop` at 22:45 at
+the latest so the hard stop lands the same day. Anything else fails
+`validate` and the plan, saying why. Leaving `schedule` out runs the bot all
+the time. A change takes effect at the next **Bot apply**.
+
+**Outside the window:**
+
+- **A release** sets the desired version and succeeds: Run Command cannot
+  reach a stopped instance, and the next start picks it up. The workflow's
+  summary says so.
+- **`bot start`** starts the bot to test or play outside its hours. It then
+  runs until `bot stop` or the next scheduled drain, which can be most of a
+  day later, so stop it when done.
+- **`bot stop`** drains it inside its hours too; it stays stopped until
+  `bot start` or the next scheduled start. It also works on a bot without a
+  schedule, which then stays stopped until `bot start`.
+- **`bot status`** shows the instance's state and the running hours. A drained
+  instance's status is `stopped`; the next boot sets it back to `ok`.
+
+From your shell, with admin credentials:
+
+```sh
+JES_SKIP_ROLE_CHECK=1 jwall-engineering-sites bot start
+JES_SKIP_ROLE_CHECK=1 jwall-engineering-sites bot stop --wait
+```
+
+**Saving.** 12 hours a day halves the instance's hours: about $19.50 a month
+on a `c8a.medium`, about $3.80 on a `t3.micro`. The disk, the public IP while
+running, and the image repository are billed as before; the schedules cost
+nothing at this volume.
+
+**Each start gets a new public IP.** The instance has no ingress, so nothing
+depends on it.
+
 ## Applying and replacing
 
 The bot's stack is planned on every pull request of this repository: the
@@ -353,7 +419,8 @@ skips an entry the default branch's file does not name, with a warning.
 
 A change to the instance's image, instance type or user data **replaces the
 instance** and ends the game in progress. That includes a library bump that
-changes the on-instance scripts. Read the plan comment and run the apply
+changes the on-instance scripts, such as library 0.22.0, which added the
+drain to every bot instance whether or not it has a schedule. Read the plan comment and run the apply
 while the bot is idle. Games already finished are shipped at shutdown.
 
 **The image is pinned by name.** `bot.amis` in `config.yaml` holds one

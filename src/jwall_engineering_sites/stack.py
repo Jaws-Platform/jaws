@@ -161,6 +161,11 @@ def _lichess_bot_tfvars(project: Project, settings: Settings) -> dict[str, Any]:
         "keep_release_images": settings.ecr.keep_release_images,
         "expire_untagged_after_days": settings.ecr.expire_untagged_after_days,
         "ami_name": settings.bot.amis.get(image.architecture),
+        "schedule": (
+            None
+            if bot.schedule is None
+            else {"days": bot.schedule.days, "start": bot.schedule.start, "stop": bot.schedule.stop}
+        ),
     }
 
 

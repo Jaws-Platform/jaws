@@ -46,7 +46,8 @@ reusable workflows this repository publishes. The design is in
 | `bot push --version vX.Y.Z` | `ci-release` | Push the image under the release tag; refuses an existing tag |
 | `bot deploy --version vX.Y.Z [--restart]` | `ci-release` | Roll the bot to a pushed tag and follow the swap (waits for the game in progress) |
 | `bot reconcile [--version vX.Y.Z] [--dry-run]` | `ci-release` | Build, push and deploy as needed; idempotent; what the release workflow runs |
-| `bot status` | `ci-plan` or `ci-release` | Instance, versions and rollout status |
+| `bot status` | `ci-plan` or `ci-release` | Instance, versions, rollout status and running hours |
+| `bot start`, `bot stop [--wait]` | `ci-release` | Start the stopped instance and wait for the bot; or drain it (the game in progress finishes, then the instance powers off). For a bot with running hours ([docs/lichess-bot.md](docs/lichess-bot.md#running-hours)), or any bot |
 | `bot logs [--since D] [--follow]` | `ci-plan` | The container's CloudWatch logs |
 | `bot secrets set\|check NAME` | the owner's shell | Write (no echo) or check a SecureString secret |
 | `task run --script P --ref SHA [--profile NAME] [--instance-type T] [--market spot\|on-demand] [--max-hours N] [--out DIR] -- ARGS...` | `ci-task` | Bot and research projects with a `task-runner`: refuse a worst-case cost over the ceiling, then run one script on a fresh instance (spot under a price cap by default, on demand only as a launch fallback), stream it, copy its outputs, always terminate; exits with the script's code, or 75 on a spot interruption |
@@ -359,8 +360,8 @@ bucket, readable by the plan role and writable by the apply role:
 | Role | Trusted for | Policies |
 | --- | --- | --- |
 | `jwall-engineering-<key>-ci-plan` | `pull_request` on this repository | `tfstate/read`, `container/read`, `task/read`, and `dataset/read` with datasets |
-| `jwall-engineering-<key>-ci-apply` | `environment:prod` on this repository | `tfstate/write`, `container/read`, `container/manage`, `task/read`, `task/manage`, and `dataset/read`, `dataset/manage` with datasets |
-| `jwall-engineering-<key>-ci-release` | the bot repository's `v*` tags | `container/release` |
+| `jwall-engineering-<key>-ci-apply` | `environment:prod` on this repository | `tfstate/write`, `container/read`, `container/manage`, `task/read`, `task/manage`, `container/schedule` (a research project gets `compute/*` and no `container/schedule`), and `dataset/read`, `dataset/manage` with datasets |
+| `jwall-engineering-<key>-ci-release` | the bot repository's `v*` tags | `container/release` (which also lets `bot start` start the instance) |
 | `jwall-engineering-<key>-ci-task` | the bot repository's `pull_request` and `main` (never forks) | `task/launch`: launch from the project's task template, run commands on and terminate its `Purpose=ci-task` instances |
 
 The bot's infrastructure is planned and applied here; the bot repository

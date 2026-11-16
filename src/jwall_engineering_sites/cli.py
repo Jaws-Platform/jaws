@@ -922,6 +922,51 @@ def bot_status(ctx: typer.Context) -> None:
     _command(body)(ctx)
 
 
+@bot_app.command("start")
+def bot_start(ctx: typer.Context) -> None:
+    """Start the stopped bot instance and wait until the bot is up. With running
+    hours it then runs until `bot stop` or the next scheduled drain."""
+
+    def body(run: Run) -> None:
+        project = _bot_project(run)
+        session = _project_session(run, roles=["release"])
+        with phase("start"):
+            status = botlib.start_instance(
+                session.client("ec2"), session.client("ssm"), project, run.logger
+            )
+        if project.bot.schedule is not None and status != "already running":
+            run.logger.info(
+                "it runs until `bot stop` or the next scheduled drain (%s)",
+                project.bot.schedule.describe(),
+            )
+        if status.startswith("failed:"):
+            raise RunError(f"the bot started but its reconcile failed: {status}")
+
+    _command(body)(ctx)
+
+
+@bot_app.command("stop")
+def bot_stop(
+    ctx: typer.Context,
+    wait: Annotated[
+        bool, typer.Option("--wait", help="Wait until the instance has stopped.")
+    ] = False,
+) -> None:
+    """Stop the bot gracefully, as its scheduled drain does: it finishes the game
+    in progress, ships its records and powers off. It stays stopped until
+    `bot start` or the next scheduled start."""
+
+    def body(run: Run) -> None:
+        project = _bot_project(run)
+        session = _project_session(run, roles=["release"])
+        with phase("stop"):
+            botlib.drain_instance(
+                session.client("ec2"), session.client("ssm"), project, run.logger, wait=wait
+            )
+
+    _command(body)(ctx)
+
+
 @bot_app.command("logs")
 def bot_logs(
     ctx: typer.Context,
@@ -1054,6 +1099,32 @@ def _deploy(
             f"{project.image_repository}:{tag} is not in the repository; push it first"
         )
     instance = botlib.find_instance(session.client("ec2"), project.project)
+    schedule = project.bot.schedule
+    if instance is not None and instance.state in ("stopped", "stopping") and schedule is not None:
+        # Outside its running hours. Run Command cannot reach a stopped
+        # instance; the reconciler at its next boot converges to the desired
+        # version, so setting it is the whole deploy.
+        with phase("deploy"):
+            botlib.put_parameter(ssm, project.parameter("desired-version"), tag)
+        run.logger.info(
+            "%s is %s outside its running hours (%s); %s is the desired version and runs "
+            "at the next start (or `bot start`)",
+            instance.id,
+            instance.state,
+            schedule.describe(),
+            tag,
+        )
+        github.write_output("version", tag)
+        github.append_summary(
+            report.run_summary(
+                f"{tag} set; it runs at the next start",
+                {
+                    "instance": f"{instance.id} ({instance.state})",
+                    "running hours": schedule.describe(),
+                },
+            )
+        )
+        return
     # Not "pending": its SSM agent is not registered yet and would refuse the
     # command; a booting instance converges to the desired version on its own.
     if instance is None or instance.state != "running":
@@ -1061,7 +1132,7 @@ def _deploy(
             f"no running instance tagged tag:Project={project.project}, "
             f"tag:Component={botlib.INSTANCE_COMPONENT}"
             + (f" ({instance.id} is {instance.state})" if instance else "")
-            + "; run `apply` first"
+            + ("; start it with `bot start`" if instance else "; run `apply` first")
         )
     before = botlib.get_parameters(ssm, [project.parameter("running-version")])[
         project.parameter("running-version")
