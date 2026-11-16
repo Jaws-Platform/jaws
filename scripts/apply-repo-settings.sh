@@ -51,7 +51,16 @@ ruleset='{
           { "context": "Commit messages" },
           { "context": "PR title" },
           { "context": "Terraform fmt, validate, tflint" },
-          { "context": "Terraform plan" }
+          { "context": "Terraform plan" },
+          { "context": "Python lint, types, tests" },
+          { "context": "Site stack validate, tflint" },
+          { "context": "Image build and smoke test" },
+          { "context": "Bot stack validate, tflint" },
+          { "context": "Databricks account stack validate, tflint" },
+          { "context": "Databricks workspace stack validate, tflint" },
+          { "context": "Stack plans against mock providers" },
+          { "context": "Databricks projects" },
+          { "context": "Owner access stack validate, tflint, test" }
         ]
       }
     }

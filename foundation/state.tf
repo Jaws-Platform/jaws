@@ -18,10 +18,19 @@ locals {
   state_key = "project=infra/env=prod/infra-prod.tfstate"
 
   # Break-glass principals exempt from the hardened bucket policies on the
-  # state bucket and every site bucket. The apply role must be here: it
-  # applies those policies. The root user is here so the owner can browse the
-  # buckets in the console. Being exempt grants nothing by itself.
+  # state bucket and every site bucket. Being exempt grants nothing by itself.
+  #
+  # - The owner's Identity Center admin role (owner-access/), for the console
+  #   and the CLI. Its exact ARN, path included, from
+  #   `terraform -chdir=owner-access output -raw admin_role_arn`: a literal,
+  #   because the CI roles cannot list IAM roles and an empty lookup would
+  #   silently drop the owner. AWS generates the suffix, so a recreated
+  #   permission set needs a new ARN here (use root until that release lands).
+  # - The root user, for emergencies (docs/owner-access.md).
+  # - prog-strength-admin, until its access key is retired (docs/owner-access.md).
+  # - The apply role, which applies these policies.
   bucket_admin_principal_arns = [
+    "arn:aws:iam::${local.account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_22a17d3bc2bca2d3",
     "arn:aws:iam::${local.account_id}:root",
     "arn:aws:iam::${local.account_id}:user/prog-strength-admin",
     module.infra_ci_apply.role_arn,
