@@ -21,8 +21,11 @@ from jwall_engineering_sites.stack import _bot_tfvars, _read_only_datasets
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPO_ROOT = Path(__file__).resolve().parent.parent
-NNUE = "jwall-engineering-braveheart-nnue"
-NNUE_ROLE = "arn:aws:iam::650503560686:role/jwall-engineering-braveheart-nnue-databricks-share"
+POSITIONS = "jwall-engineering-braveheart-selfplay-positions"
+ACCOUNT_ROLES = "arn:aws:iam::650503560686:role/"
+POSITIONS_ROLE = ACCOUNT_ROLES + "jwall-engineering-braveheart-selfplay-positions-databricks-share"
+#: The positions bucket's own reader, listed in the producer's file.
+TRAINER_GPU = ACCOUNT_ROLES + "jwall-engineering-braveheart-trainer-task-gpu"
 
 
 def _raw() -> dict[str, Any]:
@@ -37,14 +40,19 @@ def _load(tmp_path: Path, raw: dict[str, Any]) -> Settings:
 
 
 def _share(raw: dict[str, Any]) -> dict[str, Any]:
-    share: dict[str, Any] = raw["projects"]["braveheart"]["datasets"][NNUE]["databricks_share"]
+    share: dict[str, Any] = raw["projects"]["braveheart-selfplay"]["datasets"][POSITIONS][
+        "databricks_share"
+    ]
     return share
 
 
 def _bot_file(tmp_path: Path, consumers: list[str] | None, prefix: str = "data/") -> Path:
-    data: dict[str, Any] = yaml.safe_load((FIXTURES / "bots" / "braveheart.yaml").read_text())
+    data: dict[str, Any] = yaml.safe_load(
+        (FIXTURES / "registry" / "braveheart-selfplay.yaml").read_text()
+    )
     dataset = next(c for c in data["components"] if c["kind"] == "dataset")
     dataset["prefix"] = prefix
+    dataset.pop("consumers", None)
     if consumers is not None:
         dataset["consumers"] = consumers
     path = tmp_path / "jwall-engineering-sites.yaml"
@@ -55,14 +63,15 @@ def _bot_file(tmp_path: Path, consumers: list[str] | None, prefix: str = "data/"
 # --- config.yaml ------------------------------------------------------------
 
 
-def test_the_nnue_share_is_approved_for_braveheart_databricks(settings: Settings) -> None:
+def test_the_positions_share_is_approved_for_braveheart_databricks(settings: Settings) -> None:
+    # The only share: the engine's old bucket stopped being shared at the split.
     (share,) = settings.databricks_shares()
-    assert share.producer == "braveheart"
-    assert share.bucket == NNUE
-    assert share.name == "braveheart-nnue"
+    assert share.producer == "braveheart-selfplay"
+    assert share.bucket == POSITIONS
+    assert share.name == "braveheart-selfplay-positions"
     assert share.prefix == "data/"
     assert share.consumers == ("braveheart-databricks",)
-    assert share.role_arn == NNUE_ROLE
+    assert share.role_arn == POSITIONS_ROLE
 
 
 def test_a_consumer_must_be_a_databricks_workspace_project(tmp_path: Path) -> None:
@@ -101,11 +110,10 @@ def test_consumers_are_sorted(tmp_path: Path) -> None:
 
 
 def test_share_role_fits_iam() -> None:
-    assert len(share_role_name("jwall-engineering", NNUE)) <= 64
-    assert (
-        share_role_name("jwall-engineering", NNUE)
-        == "jwall-engineering-braveheart-nnue-databricks-share"
-    )
+    # Exactly IAM's 64-character limit, with nothing to spare.
+    name = share_role_name("jwall-engineering", POSITIONS)
+    assert name == "jwall-engineering-braveheart-selfplay-positions-databricks-share"
+    assert len(name) == 64
 
 
 # --- the producer's consent ---------------------------------------------------
@@ -142,7 +150,7 @@ def test_producer_listing_a_subset_fails(tmp_path: Path) -> None:
 
 def test_producer_sharing_an_unapproved_dataset_fails(tmp_path: Path) -> None:
     raw = _raw()
-    del raw["projects"]["braveheart"]["datasets"][NNUE]["databricks_share"]
+    del raw["projects"]["braveheart-selfplay"]["datasets"][POSITIONS]["databricks_share"]
     settings = _load(tmp_path, raw)
     config = load_site_config(_bot_file(tmp_path, ["braveheart-databricks"]))
     assert any("approved in config.yaml" in p for p in guardrails.check(config, settings))
@@ -163,18 +171,22 @@ def test_consenting_producer_names_the_share_role_as_a_reader(
         load_site_config(_bot_file(tmp_path, ["braveheart-databricks"])), settings
     )
     (dataset,) = _bot_tfvars(project, settings)["datasets"]
-    assert dataset["readers"] == [NNUE_ROLE]
+    assert dataset["readers"] == [TRAINER_GPU, POSITIONS_ROLE]
 
 
 def test_not_yet_consenting_producer_names_no_reader(tmp_path: Path, settings: Settings) -> None:
     project = Project.from_config(load_site_config(_bot_file(tmp_path, None)), settings)
     (dataset,) = _bot_tfvars(project, settings)["datasets"]
-    assert dataset["readers"] == []
+    assert dataset["readers"] == [TRAINER_GPU]
 
 
 def test_the_consumer_endpoint_gets_the_share(settings: Settings) -> None:
     assert _read_only_datasets("braveheart-databricks", settings) == {
-        "braveheart-nnue": {"bucket": NNUE, "prefix": "data/", "role_arn": NNUE_ROLE}
+        "braveheart-selfplay-positions": {
+            "bucket": POSITIONS,
+            "prefix": "data/",
+            "role_arn": POSITIONS_ROLE,
+        }
     }
 
 

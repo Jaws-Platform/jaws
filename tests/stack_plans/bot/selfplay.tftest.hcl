@@ -38,8 +38,11 @@ run "plans_a_task_runner_and_the_positions_bucket" {
   }
 
   assert {
-    condition     = jsonencode(var.datasets[0].readers) == jsonencode(["arn:aws:iam::650503560686:role/jwall-engineering-braveheart-trainer-task-gpu"])
-    error_message = "the trainer's GPU tasks, and only they, read the positions through the bucket policy"
+    condition = jsonencode(var.datasets[0].readers) == jsonencode([
+      "arn:aws:iam::650503560686:role/jwall-engineering-braveheart-trainer-task-gpu",
+      "arn:aws:iam::650503560686:role/jwall-engineering-braveheart-selfplay-positions-databricks-share",
+    ])
+    error_message = "the trainer's GPU tasks and the Databricks share role, and only they, read the positions through the bucket policy"
   }
 
   # jsonencode: a list(...) variable never equals a tuple literal with `==`.

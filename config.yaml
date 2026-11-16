@@ -95,20 +95,15 @@ tasks:
 # retention: write_once, expire_prefixes, expire_noncurrent_days, versioning.
 projects:
   braveheart:
-    # Keeps jwall-engineering-braveheart-nnue, the GPU, datagen and relabel
-    # profiles and the share approval until the split's cutover, when the data
-    # is in the two buckets below and the engine gives its dataset up.
+    # Keeps jwall-engineering-braveheart-nnue and the GPU, datagen and relabel
+    # profiles until the split's cutover, when the data is in the two buckets
+    # below and the engine gives its dataset up.
     instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge, g6.xlarge, g6.2xlarge, g6e.xlarge]
     task_profiles: [cpu, gpu, sprt, match, datagen, relabel]
     datasets:
-      jwall-engineering-braveheart-nnue:
-        # Shared, read-only, with Databricks workspaces: the foundation registers
-        # one external location through the shared-objects host, bound to each
-        # consumer. Nothing can read until the producer's file lists the same
-        # consumers on its dataset (which adds the share role to its readers).
-        databricks_share:
-          prefix: data/
-          consumers: [braveheart-databricks]
+      # Approved until the cutover, when the engine gives it up. No longer
+      # shared: the positions' share is braveheart-selfplay's, below.
+      jwall-engineering-braveheart-nnue: {}
     # max_run_cost_usd: 80 # optional per-project override of tasks.max_run_cost_usd
   braveheart-selfplay:
     # Braveheart's self-play dataset and the pipeline that grows it
@@ -122,6 +117,14 @@ projects:
       jwall-engineering-braveheart-selfplay-positions:
         prefix: data/
         versioning: true
+        # Shared, read-only, with Databricks workspaces: the foundation registers
+        # one external location through the shared-objects host, bound to each
+        # consumer. Nothing can read until the producer's file lists the same
+        # consumers on its dataset (which adds the share role to its readers).
+        # The share role's name is exactly IAM's 64-character limit.
+        databricks_share:
+          prefix: data/
+          consumers: [braveheart-databricks]
   braveheart-trainer:
     # The trainer for Braveheart's nets (Braveheart-Chess/braveheart-trainer): bullet
     # on GPU instances. It reads the positions through the selfplay bucket's
