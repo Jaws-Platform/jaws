@@ -56,6 +56,7 @@ GITHUB_API = "https://api.github.com"
 #: Seconds before a GitHub request gives up. No retries: a failed sweep runs again.
 FETCH_TIMEOUT = 20
 _REGISTRY_ENTRY = re.compile(r'^ *([a-z0-9-]+) *= *\{ *repository *= *"([^"]*)"')
+_REGISTRY_FIELD = re.compile(r'([a-z_]+) *= *"([^"]*)"')
 
 _KEBAB = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _FIELDS = ("description", "prefix")
@@ -207,9 +208,34 @@ def _check_keys(datasets: list[OnboardedDataset]) -> None:
 # -- other projects' files ------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class RegistryIds:
+    """A registered project's repository and GitHub's immutable IDs for it, as the
+    registry records them (`gh api repos/<owner>/<repo> --jq '.id, .owner.id'`)."""
+
+    repository: str
+    repository_id: str | None
+    owner_id: str | None
+
+
+def project_registry_ids(infra_root: Path) -> dict[str, RegistryIds]:
+    """Every registered project's repository and IDs: a deployer's federation subject
+    is built from them."""
+    ids: dict[str, RegistryIds] = {}
+    for key, repository, line in _registry_entries(infra_root):
+        fields = dict(_REGISTRY_FIELD.findall(line))
+        ids[key] = RegistryIds(repository, fields.get("repository_id"), fields.get("owner_id"))
+    return ids
+
+
 def project_repositories(infra_root: Path) -> dict[str, str]:
     """Every registered project and its repository, from foundation/bots.tf and databricks.tf."""
-    repositories: dict[str, str] = {}
+    return {key: repository for key, repository, _ in _registry_entries(infra_root)}
+
+
+def _registry_entries(infra_root: Path) -> list[tuple[str, str, str]]:
+    """Each registry entry's key, repository and line, read the way the workflows read them."""
+    entries: list[tuple[str, str, str]] = []
     for rel, block in PROJECT_REGISTRIES:
         path = infra_root / rel
         try:
@@ -225,8 +251,8 @@ def project_repositories(infra_root: Path) -> dict[str, str]:
                 break
             match = _REGISTRY_ENTRY.match(line)
             if match:
-                repositories[match.group(1)] = match.group(2)
-    return repositories
+                entries.append((match.group(1), match.group(2), line))
+    return entries
 
 
 class ProjectFiles(Protocol):

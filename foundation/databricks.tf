@@ -41,10 +41,12 @@ locals {
   databricks_events_arn_prefix    = "arn:aws:s3:::${local.databricks.audit_bucket}/${trimsuffix(local.databricks.events_prefix, "/")}/"
 
   # repository_id: gh api repos/<owner>/<repo> --jq .id
+  # owner_id:      gh api repos/<owner>/<repo> --jq .owner.id. A deployer's
+  #                federation subject names both (docs/databricks.md).
   # One line per entry, as in bots.tf (the workflows read this block).
   databricks_projects = {
-    databricks-poc        = { repository = "jwallace145/databricks-poc", repository_id = "1458298100" }
-    braveheart-databricks = { repository = "Braveheart-Chess/braveheart-databricks", repository_id = "1458504699" }
+    databricks-poc        = { repository = "jwallace145/databricks-poc", repository_id = "1458298100", owner_id = "35950238" }
+    braveheart-databricks = { repository = "Braveheart-Chess/braveheart-databricks", repository_id = "1458504699", owner_id = "356866252" }
   }
 
   databricks_ci = {
