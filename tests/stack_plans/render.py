@@ -39,6 +39,12 @@ def _file(name: str) -> dict[str, Any]:
     return raw
 
 
+def _registered(name: str) -> dict[str, Any]:
+    """A registered project's own file (tests/fixtures/registry/), as it is live."""
+    raw: dict[str, Any] = yaml.safe_load((FIXTURES / "registry" / f"{name}.yaml").read_text())
+    return raw
+
+
 def _dataset_only() -> dict[str, Any]:
     raw = _file("math-prover")
     raw["components"] = [c for c in raw["components"] if c["kind"] == "dataset"]
@@ -64,6 +70,8 @@ def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
     bots = {
         "braveheart": (_file("braveheart"), settings),
         "scheduled_bot": (_scheduled(), settings),
+        "selfplay": (_registered("braveheart-selfplay"), settings),
+        "trainer": (_registered("braveheart-trainer"), settings),
         "math_prover": (_file("math-prover"), research),
         "dataset_only": (_dataset_only(), research),
     }

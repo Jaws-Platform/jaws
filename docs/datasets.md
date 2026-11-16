@@ -59,8 +59,8 @@ module, in the bot stack.
 
 - **Kept forever by default.** With no `expire_prefixes`, there is no
   expiration rule. Terraform refuses to destroy the bucket
-  (`prevent_destroy`), so removing the component from the file fails the plan
-  instead of deleting data. `destroy` also keeps the bucket.
+  (`prevent_destroy`), and `destroy` keeps it. Removing the component from the
+  file never deletes data: see [Giving a dataset up](#giving-a-dataset-up).
 - **Write-once, by convention or by IAM.** With plain `writers` or `write`
   grants, a new run gets a new partition and never overwrites, but nothing
   stops `PutObject` replacing a key. Prefixes that `config.yaml` lists under
@@ -85,6 +85,25 @@ module, in the bot stack.
   - incomplete multipart uploads aborted after 7 days.
 - **Tagged** `Component = dataset` and `Purpose = dataset`, plus the six
   organisation tags.
+
+## Giving a dataset up
+
+A project can stop declaring a dataset, for example when the data moves to
+another project's bucket. The bucket and its data are always kept, and it takes
+two changes, so a dataset removed from a file by mistake is refused rather than
+left unmanaged:
+
+1. **The project file drops the dataset** (and every profile's grant on it).
+2. **`config.yaml` drops its approval** under `projects.<name>.datasets`, a
+   reviewed change in this repository, released before the project's next apply.
+
+While the file has dropped it but `config.yaml` still approves it, `plan` and
+`apply` refuse and say which to change. Once both are gone, the plan comment
+reports the pending release, and the next **Bot apply** releases the bucket's
+resources (the bucket, its policy and its configuration) from Terraform state
+before applying, as `destroy` does, then removes the dataset's grants from the
+task roles. The bucket is no longer managed here; the owner deletes it when its
+data has a home.
 
 ## Who can do what
 

@@ -31,12 +31,16 @@ locals {
   #                release and task roles trust local.github_owner_id.
   # One line per entry, `repository` first (the workflows read this block).
   #
-  # A key is at most 15 characters: it is repeated in the ARNs of the apply
-  # role's container/manage policy, which IAM caps at 6,144 characters, and at
-  # 15 that policy is about 6,130 (tests/test_bots_registry.py checks).
+  # A bot's key is at most 15 characters: it is repeated in the ARNs of the apply
+  # role's container/manage policy, which IAM caps at 6,144 characters, and at 15
+  # that policy is about 6,130. A research project's policies are far smaller
+  # (compute/manage about 3,900 and task/launch about 4,050 characters at 19), so
+  # its key may take the 30 a project name allows (tests/test_bots_registry.py).
   bots = {
-    braveheart     = { repository = "Braveheart-Chess/braveheart", repository_id = "1435162673", owner_id = "356866252" }
-    braveheart-bot = { repository = "Braveheart-Chess/braveheart-lichess-bot", repository_id = "1459279608", owner_id = "356866252" }
+    braveheart          = { repository = "Braveheart-Chess/braveheart", repository_id = "1435162673", owner_id = "356866252" }
+    braveheart-bot      = { repository = "Braveheart-Chess/braveheart-lichess-bot", repository_id = "1459279608", owner_id = "356866252" }
+    braveheart-selfplay = { repository = "Braveheart-Chess/braveheart-selfplay", repository_id = "1459456470", owner_id = "356866252" }
+    braveheart-trainer  = { repository = "Braveheart-Chess/braveheart-trainer", repository_id = "1459456509", owner_id = "356866252" }
   }
 
   # The entries of `bots` without a bot or an image (kind research): their plan
@@ -44,8 +48,10 @@ locals {
   #
   # braveheart dropped its bot on 2026-11-15, when the bot moved to braveheart-bot:
   # the engine keeps its task runner and NNUE dataset (docs/research-projects.md,
-  # "A bot project that drops its bot").
-  research_projects = toset(["braveheart"])
+  # "A bot project that drops its bot"). braveheart-selfplay and braveheart-trainer
+  # take over the engine's self-play pipeline and its training from 2026-11-16;
+  # until the data moves to their own buckets they have task runners only.
+  research_projects = toset(["braveheart", "braveheart-selfplay", "braveheart-trainer"])
 
   # The guardrails come from config.yaml's `projects`, not from the project
   # file. The launch role is assumed by the consumer's pull requests, so

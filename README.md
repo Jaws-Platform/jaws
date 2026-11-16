@@ -342,6 +342,9 @@ release role ([docs/research-projects.md](docs/research-projects.md)):
 | Key | Repository |
 | --- | --- |
 | `braveheart` | `Braveheart-Chess/braveheart` |
+| `braveheart-bot` | `Braveheart-Chess/braveheart-lichess-bot` |
+| `braveheart-selfplay` | `Braveheart-Chess/braveheart-selfplay` |
+| `braveheart-trainer` | `Braveheart-Chess/braveheart-trainer` |
 
 An entry for a repository outside this account also carries `owner_id`, the
 numeric ID of the organisation that owns it, because the release and task roles

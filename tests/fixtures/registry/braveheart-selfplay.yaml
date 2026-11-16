@@ -1,0 +1,53 @@
+# jwall-engineering-sites project file: Braveheart's self-play dataset and the
+# pipeline that grows it (datagen, relabel). Fields and behaviour:
+# https://github.com/jwallace145/jwall-engineering-infra/blob/main/docs/research-projects.md
+#
+# Interim, until the data move: the positions still live in
+# jwall-engineering-braveheart-nnue, owned by the engine's project
+# (Braveheart-Chess/braveheart), and datagen and relabel still run from there.
+# This project has no dataset yet, so its tasks can write nowhere. The data
+# move adds the `positions` dataset and its grants.
+version: 1
+project: braveheart-selfplay
+repository: Braveheart-Chess/braveheart-selfplay
+
+# The tags every resource carries (through the provider's default_tags).
+# Project, Repository and Environment=prod are cross-checked.
+tags:
+  Organization: jwall-engineering
+  Project: braveheart-selfplay
+  Environment: prod
+  Repository: Braveheart-Chess/braveheart-selfplay
+  Owner: jwallace145
+
+components:
+  # Self-play and relabelling on dedicated, ephemeral EC2 instances, through
+  # jwall-engineering-infra's remote-task.yml. A caller that names no profile
+  # gets the fields below as the default `cpu` profile: a small on-demand box.
+  - kind: task-runner
+    instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge]  # whole Zen 5 cores, SMT off
+    default_instance_type: c8a.xlarge
+    market: on-demand
+    max_hours: 6
+    max_vcpus: 16
+    slot_wait_minutes: 30
+    results_days: 7                 # task outputs expire from S3 after this
+    log_retention_days: 14
+    profiles:
+      datagen:
+        instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge]
+        default_instance_type: c8a.16xlarge
+        market: spot                # an interruption only loses the shards in progress
+        max_price_fraction: 0.58
+        on_demand_fallback: true
+        max_hours: 6
+        max_vcpus: 192              # three tasks at once
+      relabel:
+        instance_types: [c8a.16xlarge]
+        default_instance_type: c8a.16xlarge
+        market: spot                # no capacity fails the run; rerun it later rather than pay on demand
+        max_price_fraction: 0.58
+        on_demand_fallback: false
+        spot_wait_minutes: 30
+        max_hours: 6
+        max_vcpus: 192

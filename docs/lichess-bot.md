@@ -73,7 +73,7 @@ A file is either a site (`domain` and `site`) or a bot project
 | Field | Type, default | Meaning |
 |---|---|---|
 | `version` | `1` | File format version. |
-| `project` | kebab-case, ≤ 30 | The project; every name below is derived from it. A bot project registered in `foundation/bots.tf` takes at most 15 characters: its apply role's `container/manage` policy repeats the name in 17 ARNs and IAM caps a managed policy at 6,144 characters. The project can differ from the repository name (`braveheart-bot` deploys from `Braveheart-Chess/braveheart-lichess-bot`). |
+| `project` | kebab-case, ≤ 30 | The project; every name below is derived from it. A bot project registered in `foundation/bots.tf` takes at most 15 characters (a research project up to 30: its policies are much smaller): its apply role's `container/manage` policy repeats the name in 17 ARNs and IAM caps a managed policy at 6,144 characters. The project can differ from the repository name (`braveheart-bot` deploys from `Braveheart-Chess/braveheart-lichess-bot`). |
 | `repository` | `owner/repo` | Where the releases are published. Must match `tags.Repository`. |
 | `tags` | five required keys | Applied to every AWS resource for cost allocation. `Project`, `Repository` and `Environment: prod` are cross-checked; extra keys pass through. The tool adds `ManagedBy: jwall-engineering-infra` itself, so leave it out (a legacy `ManagedBy: terraform` is accepted and replaced). |
 | `container-image.architecture` | `x86_64` \| `arm64`, `x86_64` | Must match the release asset. `arm64` also needs a `t4g` instance type. |
