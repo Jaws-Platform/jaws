@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.37.0...v0.38.0) (2026-11-16)
+
+
+### Features
+
+* **config:** share the self-play positions with braveheart-databricks instead of the old bucket ([#160](https://github.com/jwallace145/jwall-engineering-infra/issues/160)) ([90c5389](https://github.com/jwallace145/jwall-engineering-infra/commit/90c5389733d35af452a8f99a428866c731353c95))
+
 ## [0.37.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.36.0...v0.37.0) (2026-11-16)
 
 
