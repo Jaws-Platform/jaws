@@ -51,6 +51,9 @@ def test_registry_lists_braveheart() -> None:
         "braveheart": ("Braveheart-Chess/braveheart", "1435162673"),
         # The engine's Lichess bot, deployed from its own repository since 2026-11-15.
         "braveheart-bot": ("Braveheart-Chess/braveheart-lichess-bot", "1459279608"),
+        # The self-play dataset and the trainer, split from the engine on 2026-11-16.
+        "braveheart-selfplay": ("Braveheart-Chess/braveheart-selfplay", "1459456470"),
+        "braveheart-trainer": ("Braveheart-Chess/braveheart-trainer", "1459456509"),
     }
     # The engine's project was `rusty-chess` until 2026-11-15; the old name is gone.
     assert "rusty-chess" not in BOTS_TF.read_text()
@@ -62,14 +65,31 @@ def test_registry_lists_braveheart() -> None:
 #: character costs 17: 15 characters make about 6,128. `braveheart-lichess-bot`
 #: (22) failed the v0.30.0 foundation apply with LimitExceeded.
 MAX_PROJECT_KEY = 15
+#: A research project gets compute/* instead of container/*, and its largest
+#: policies are far from the cap. Measured with the library's ci-policies module
+#: on 2026-11-16 (role, policy: characters): at 19 characters (`braveheart-selfplay`)
+#: apply compute/manage 3,910 and task task/launch 4,052; at 27 characters with all
+#: six task profiles, 3,990 and 4,461. So the 30 a project name allows fits.
+MAX_RESEARCH_PROJECT_KEY = 30
 
 
 def test_registered_projects_fit_the_apply_policy_size() -> None:
+    research = _research_projects()
     for project in registry():
-        assert len(project) <= MAX_PROJECT_KEY, (
-            f"{project} is {len(project)} characters; its ci-apply container/manage policy "
-            f"would exceed IAM's 6,144-character limit (keep keys to {MAX_PROJECT_KEY})"
+        limit = MAX_RESEARCH_PROJECT_KEY if project in research else MAX_PROJECT_KEY
+        assert len(project) <= limit, f"{project} is {len(project)} characters; " + (
+            f"a research project's policies are measured to fit up to {MAX_RESEARCH_PROJECT_KEY}"
+            if project in research
+            else "its ci-apply container/manage policy would exceed IAM's "
+            f"6,144-character limit (keep bot keys to {MAX_PROJECT_KEY})"
         )
+
+
+def test_the_long_research_keys_are_research_projects() -> None:
+    # The 15-character limit binds every key that is not a research project.
+    long_keys = {p for p in registry() if len(p) > MAX_PROJECT_KEY}
+    assert long_keys == {"braveheart-selfplay", "braveheart-trainer"}
+    assert long_keys <= _research_projects()
 
 
 def test_a_repository_outside_this_account_names_its_owner() -> None:

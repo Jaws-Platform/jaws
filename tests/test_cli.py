@@ -1252,4 +1252,93 @@ def test_apply_of_a_bot_that_keeps_records_does_not_touch_its_state(
         result = runner.invoke(cli.app, ["apply"])
     assert result.exit_code == 0, result.output
     calls = _calls(fake_terraform)
-    assert not any(c.startswith(("state ", TF_RM)) for c in calls)
+    # It reads its state once (for datasets the file dropped) and never changes it.
+    assert [c for c in calls if c.startswith("state ")] == ["state list"]
+    assert not any(c.startswith(TF_RM) for c in calls)
+
+
+# -- a project that gives a dataset to another project ------------------------------
+
+#: The math-prover sample still declares `artifacts`; `nnue` is in its state only.
+DROPPED_DATASET_STATE = (
+    'module.datasets["artifacts"].aws_s3_bucket.this '
+    'module.datasets["nnue"].aws_s3_bucket.this '
+    'module.datasets["nnue"].aws_s3_bucket_policy.this '
+    'module.datasets["nnue"].aws_s3_bucket_lifecycle_configuration.this '
+    'module.datasets["nnue"].aws_iam_role_policy.grant["jwall-engineering-math-prover-task"] '
+    "module.tasks[0].aws_launch_template.this"
+)
+
+
+def _approve_nnue(workspace: Path) -> None:
+    config = yaml.safe_load((workspace / "config.yaml").read_text())
+    config["projects"]["math-prover"]["datasets"]["jwall-engineering-math-prover-nnue"] = {}
+    (workspace / "config.yaml").write_text(yaml.safe_dump(config))
+
+
+def test_apply_releases_a_dropped_datasets_bucket_and_keeps_its_grants_planned(
+    research_workspace: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_TF_STATE_LIST", DROPPED_DATASET_STATE)
+    with mock_aws(), _as_role(RESEARCH_APPLY_ROLE):
+        result = runner.invoke(cli.app, ["apply"])
+    assert result.exit_code == 0, result.output
+    calls = _calls(fake_terraform)
+    released = [c.removeprefix(TF_RM) for c in calls if c.startswith(TF_RM)]
+    assert released == [
+        'module.datasets["nnue"].aws_s3_bucket.this',
+        'module.datasets["nnue"].aws_s3_bucket_policy.this',
+        'module.datasets["nnue"].aws_s3_bucket_lifecycle_configuration.this',
+    ], "only the dropped dataset's bucket resources; its grants go with the apply"
+    plan = next(i for i, c in enumerate(calls) if c.startswith("plan "))
+    assert max(i for i, c in enumerate(calls) if c.startswith(TF_RM)) < plan
+    assert "jwall-engineering-math-prover-nnue" in result.output
+    assert "data are kept" in result.output
+
+
+def test_apply_refuses_a_dropped_dataset_config_still_approves(
+    research_workspace: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _approve_nnue(research_workspace)
+    monkeypatch.setenv("FAKE_TF_STATE_LIST", DROPPED_DATASET_STATE)
+    with mock_aws(), _as_role(RESEARCH_APPLY_ROLE):
+        result = runner.invoke(cli.app, ["apply"])
+    assert result.exit_code == 3
+    assert "config.yaml still approves jwall-engineering-math-prover-nnue" in result.output
+    calls = _calls(fake_terraform)
+    assert not any(c.startswith(("plan ", "apply ", TF_RM)) for c in calls)
+
+
+def test_plan_of_a_dropped_dataset_explains_instead_of_failing_on_prevent_destroy(
+    research_workspace: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_TF_STATE_LIST", DROPPED_DATASET_STATE)
+    with _as_role(RESEARCH_PLAN_ROLE):
+        result = runner.invoke(cli.app, ["plan"])
+    assert result.exit_code == 0, result.output
+    calls = _calls(fake_terraform)
+    assert not any(c.startswith(("plan ", TF_RM)) for c in calls)  # the plan role changes nothing
+    comment = (research_workspace / ".jwall-engineering-sites" / "plan-comment.md").read_text()
+    assert "jwall-engineering-math-prover-nnue" in comment and "Bot apply" in comment
+
+
+def test_plan_of_a_dropped_dataset_config_still_approves_fails(
+    research_workspace: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _approve_nnue(research_workspace)
+    monkeypatch.setenv("FAKE_TF_STATE_LIST", DROPPED_DATASET_STATE)
+    with _as_role(RESEARCH_PLAN_ROLE):
+        result = runner.invoke(cli.app, ["plan"])
+    assert result.exit_code == 3
+    comment = (research_workspace / ".jwall-engineering-sites" / "plan-comment.md").read_text()
+    assert "still approves" in comment
+
+
+def test_a_dataset_the_file_keeps_is_never_released(
+    research_workspace: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_TF_STATE_LIST", 'module.datasets["artifacts"].aws_s3_bucket.this')
+    with mock_aws(), _as_role(RESEARCH_APPLY_ROLE):
+        result = runner.invoke(cli.app, ["apply"])
+    assert result.exit_code == 0, result.output
+    assert not any(c.startswith(TF_RM) for c in _calls(fake_terraform))

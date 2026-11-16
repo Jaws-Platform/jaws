@@ -408,6 +408,8 @@ jobs:
         include:
           - { project: braveheart, repository: Braveheart-Chess/braveheart }
           - { project: braveheart-bot, repository: Braveheart-Chess/braveheart-lichess-bot }
+          - { project: braveheart-selfplay, repository: Braveheart-Chess/braveheart-selfplay }
+          - { project: braveheart-trainer, repository: Braveheart-Chess/braveheart-trainer }
     steps:
       - uses: actions/checkout@v7
       - name: Check out the bot's project file (its default branch)

@@ -16,6 +16,8 @@ on:
         options:
           - braveheart
           - braveheart-bot
+          - braveheart-selfplay
+          - braveheart-trainer
       destroy:
         description: Destroy the stack instead (the records, dataset and task results buckets and the secret are kept).
         required: false

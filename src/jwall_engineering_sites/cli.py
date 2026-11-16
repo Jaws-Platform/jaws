@@ -378,6 +378,75 @@ def _prepare_dropped_bot(run: Run, terraform: stack.Terraform, state: list[str])
             )
 
 
+def _dropped_datasets(project: Project, state: list[str]) -> list[str]:
+    """Datasets whose buckets are still in the project's Terraform state but no
+    longer in its file: given to another project, say. Each bucket has
+    prevent_destroy, which rejects any plan that would delete it."""
+    if not project.has_components:
+        return []
+    declared = {d.name for d in project.datasets}
+    in_state = stack.dataset_names(stack.dataset_bucket_addresses(state))
+    return [name for name in in_state if name not in declared]
+
+
+def _still_approved(run: Run, name: str) -> bool:
+    """Whether config.yaml still approves the dataset's bucket for this project.
+    Releasing a bucket takes two changes: the project file drops the dataset and
+    a reviewed change to config.yaml drops its approval, so a dataset removed from
+    a file by mistake is refused instead of quietly left unmanaged."""
+    approved = run.settings.projects.get(run.project.project)
+    return approved is not None and run.project.dataset_bucket(name) in approved.datasets
+
+
+def _dataset_refusal(run: Run, names: list[str]) -> str | None:
+    """Why the dropped datasets cannot be released yet, or None when they can."""
+    blocked = [name for name in names if _still_approved(run, name)]
+    if not blocked:
+        return None
+    buckets = ", ".join(run.project.dataset_bucket(n) for n in blocked)
+    return (
+        f"{run.project.project}'s file no longer declares {', '.join(blocked)}, but "
+        f"config.yaml still approves {buckets} for it. Put the dataset back, or remove the "
+        "approval from projects."
+        f"{run.project.project}.datasets in jwall-engineering-infra (a reviewed change); "
+        "the next Bot apply then releases the bucket from state and keeps it and its data"
+    )
+
+
+def _release_dropped_datasets(run: Run, terraform: stack.Terraform, state: list[str]) -> None:
+    """Before applying: release from state the buckets of datasets the file no longer
+    declares and config.yaml no longer approves, as `destroy` does. The bucket and
+    its data are kept; its IAM grants go with this apply."""
+    dropped = _dropped_datasets(run.project, state)
+    if not dropped:
+        return
+    refusal = _dataset_refusal(run, dropped)
+    if refusal:
+        raise PreflightError(refusal)
+    with phase("keep datasets"):
+        for address in stack.dataset_bucket_addresses(state):
+            if stack.dataset_names([address])[0] in dropped:
+                terraform.state_rm(address)
+        for name in dropped:
+            run.logger.info(
+                "released %s from Terraform state: %s no longer declares the dataset %s; "
+                "the bucket and its data are kept",
+                run.project.dataset_bucket(name),
+                run.project.project,
+                name,
+            )
+
+
+#: The plan text when dataset buckets must be released before anything can be planned.
+DROPPED_DATASETS_PLAN = (
+    "Not planned: {project} no longer declares {buckets}, still in its Terraform state. "
+    "Each bucket has prevent_destroy, so Terraform rejects any plan that would delete it. "
+    "The next Bot apply releases them from state first (each bucket and its data are kept, "
+    "as `destroy` keeps them), then plans and applies the rest, including removing the "
+    "datasets' grants from the task roles. Plans run normally after that apply.\n"
+)
+
+
 #: The plan text when a records bucket must be released before anything can be planned.
 DROPPED_RECORDS_PLAN = (
     "Not planned: {project} no longer ships games to {bucket}, which is still in its "
@@ -400,23 +469,40 @@ def plan(ctx: typer.Context) -> None:
         _preflight(run, "plan", prefix="")
         exit_code = stack.PLAN_ERROR
         plan_text = ""
+        refused: str | None = None
 
         def tf(terraform: stack.Terraform) -> None:
-            nonlocal exit_code, plan_text
+            nonlocal exit_code, plan_text, refused
             with phase("init"):
                 terraform.init()
-            # The plan role cannot change state, so the release waits for the apply.
+            # The plan role cannot change state, so a release waits for the apply.
+            # One listing serves both checks: a dropped bot's records, and datasets.
+            state = terraform.state_list() if run.project.has_components else []
             # Only a project without a bot or without records can have dropped them.
             dropped = (
                 run.project.has_components
                 and not _keeps_records(run.project)
-                and _dropped_records(run.project, terraform.state_list())
+                and _dropped_records(run.project, state)
             )
             if dropped:
                 exit_code = stack.PLAN_CHANGES
                 plan_text = DROPPED_RECORDS_PLAN.format(
                     project=run.project.project, bucket=run.project.records_bucket
                 )
+                run.logger.warning("%s", plan_text.strip())
+                return
+            datasets = _dropped_datasets(run.project, state)
+            if datasets:
+                refused = _dataset_refusal(run, datasets)
+                if refused:
+                    exit_code = stack.PLAN_ERROR
+                    plan_text = f"Not planned: {refused}.\n"
+                else:
+                    exit_code = stack.PLAN_CHANGES
+                    plan_text = DROPPED_DATASETS_PLAN.format(
+                        project=run.project.project,
+                        buckets=", ".join(run.project.dataset_bucket(n) for n in datasets),
+                    )
                 run.logger.warning("%s", plan_text.strip())
                 return
             with phase("plan"):
@@ -445,6 +531,8 @@ def plan(ctx: typer.Context) -> None:
                 {"project": run.project.project, "tool": tool_version()},
             )
         )
+        if refused:
+            raise PreflightError(refused)
 
     _command(body)(ctx)
 
@@ -591,9 +679,13 @@ def apply(ctx: typer.Context) -> None:
         def tf(terraform: stack.Terraform) -> None:
             with phase("init"):
                 terraform.init()
-            # Only a project without a bot or without records can have dropped them.
-            if run.project.has_components and not _keeps_records(run.project):
-                _prepare_dropped_bot(run, terraform, terraform.state_list())
+            if run.project.has_components:
+                # One listing serves both: a dropped bot's records, and datasets.
+                state = terraform.state_list()
+                # Only a project without a bot or without records can have dropped them.
+                if not _keeps_records(run.project):
+                    _prepare_dropped_bot(run, terraform, state)
+                _release_dropped_datasets(run, terraform, state)
             outputs = _apply(run, terraform, init=False)
             github.append_summary(
                 report.run_summary(
