@@ -110,6 +110,26 @@ run "a_dataset_without_a_location_waits_and_is_reported" {
   }
 }
 
+run "a_host_that_lists_no_location_reports_every_dataset_as_waiting" {
+  command = plan
+
+  # How the provider reports an empty list of locations.
+  override_data {
+    target = data.databricks_external_locations.all
+    values = { names = null }
+  }
+
+  assert {
+    condition     = jsonencode(output.awaiting_onboarding) == jsonencode(["braveheart-selfplay-positions"])
+    error_message = "a host that lists no location must report every dataset as awaiting onboarding, not fail."
+  }
+
+  assert {
+    condition     = length(module.access) == 0
+    error_message = "nothing is bound when no location exists."
+  }
+}
+
 run "a_consumer_without_a_workspace_is_left_out_and_reported" {
   command = plan
 

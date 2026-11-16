@@ -18,7 +18,8 @@ data "databricks_external_locations" "all" {
 
 locals {
   workspace_ids = data.databricks_mws_workspaces.all.ids
-  locations     = toset(data.databricks_external_locations.all.names)
+  # The provider reports an empty list as null.
+  locations = data.databricks_external_locations.all.names == null ? toset([]) : toset(data.databricks_external_locations.all.names)
 
   # A registry file merged before the foundation release that creates its
   # location has applied has nothing to bind yet: it waits, is reported, and

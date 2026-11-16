@@ -22,3 +22,13 @@ output "datasets" {
     error_message = "two ids share a platform name (<organization>-ds-<owner>-<name>): ${join("; ", local.clashing)}."
   }
 }
+
+output "live_names_to_check" {
+  description = "The live external locations other than the onboarded datasets' own: the foundation reads each one's URL."
+  value       = local.live_names_to_check
+}
+
+output "overlaps" {
+  description = "Each onboarded dataset that overlaps a live location, as `<id> (<url>) and <name> (<url>)`; the foundation's plan fails on any."
+  value       = local.overlaps
+}

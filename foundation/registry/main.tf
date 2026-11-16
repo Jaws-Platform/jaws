@@ -52,3 +52,23 @@ locals {
     }
   } : {}
 }
+
+# The live overlap check's two halves (the foundation reads the locations):
+# which live locations to read, and which of them overlap a dataset. Unity
+# Catalog refuses an external location equal to, inside or containing another.
+locals {
+  onboarded_names = toset([for d in values(local.datasets) : d.platform_name])
+
+  # The provider reports an empty list as null.
+  live_names          = var.live_location_names == null ? toset([]) : toset(var.live_location_names)
+  live_names_to_check = setsubtract(local.live_names, local.onboarded_names)
+
+  # Compared with a trailing slash, so s3://b/data and s3://b/data2 are not nested.
+  live_urls = { for name, url in var.live_location_urls : name => trimsuffix(url, "/") }
+  overlaps = sort(flatten([
+    for key, d in local.datasets : [
+      for name, url in local.live_urls : "${d.id} (${d.url}) and ${name} (${url})"
+      if startswith("${d.url}/", "${url}/") || startswith("${url}/", "${d.url}/")
+    ]
+  ]))
+}

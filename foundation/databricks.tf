@@ -154,38 +154,33 @@ module "dataset_registry" {
 
   directory    = "${path.module}/../datasets"
   organization = local.context.organization
+
+  # The live overlap check below: what the host lists, then each location's URL.
+  live_location_names = length(data.databricks_external_locations.all) > 0 ? data.databricks_external_locations.all[0].names : null
+  live_location_urls  = { for name, l in data.databricks_external_location.live : name => l.external_location_info[0].url }
 }
 
 locals {
   onboarded_datasets = local.databricks_enabled ? module.dataset_registry.datasets : {}
-  onboarded_names    = toset([for d in values(local.onboarded_datasets) : d.platform_name])
 }
 
 # Unity Catalog refuses overlapping external locations in the metastore, and
-# the registry cannot see the ones it did not create (each workspace's catalog
-# location, anything made by hand, a share being retired). So every registry
-# URL is checked against every other location in the live metastore first.
+# the registry cannot see the ones it did not create (a location made by hand,
+# a share being retired). So every registry URL is checked against every other
+# location the host lists (registry/ computes which to read and which overlap;
+# the provider reports none as null). Locations bound only to other workspaces,
+# such as each workspace's catalog, may be invisible here: Unity Catalog still
+# refuses an overlap with them at apply, later and less clearly.
 data "databricks_external_locations" "all" {
   count    = length(local.onboarded_datasets) > 0 ? 1 : 0
   provider = databricks.shared
 }
 
 data "databricks_external_location" "live" {
-  for_each = length(local.onboarded_datasets) > 0 ? setsubtract(toset(data.databricks_external_locations.all[0].names), local.onboarded_names) : toset([])
+  for_each = length(local.onboarded_datasets) > 0 ? module.dataset_registry.live_names_to_check : toset([])
   provider = databricks.shared
 
   name = each.key
-}
-
-locals {
-  # No trailing slash on either side, as Databricks stores URLs.
-  live_location_urls = { for name, l in data.databricks_external_location.live : name => trimsuffix(l.external_location_info[0].url, "/") }
-  dataset_overlaps = sort(flatten([
-    for key, d in local.onboarded_datasets : [
-      for name, url in local.live_location_urls : "${d.id} (${d.url}) and ${name} (${url})"
-      if d.url == url || startswith("${d.url}/", "${url}/") || startswith("${url}/", "${d.url}/")
-    ]
-  ]))
 }
 
 resource "terraform_data" "dataset_overlap_check" {
@@ -193,8 +188,8 @@ resource "terraform_data" "dataset_overlap_check" {
 
   lifecycle {
     precondition {
-      condition     = length(local.dataset_overlaps) == 0
-      error_message = "An onboarded dataset overlaps a location already in the metastore, which Unity Catalog refuses: ${join("; ", local.dataset_overlaps)}. Retire the other location first, or onboard another prefix."
+      condition     = length(module.dataset_registry.overlaps) == 0
+      error_message = "An onboarded dataset overlaps a location already in the metastore, which Unity Catalog refuses: ${join("; ", module.dataset_registry.overlaps)}. Retire the other location first, or onboard another prefix."
     }
   }
 }

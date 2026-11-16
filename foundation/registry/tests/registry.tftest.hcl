@@ -72,3 +72,58 @@ run "a_file_without_exactly_description_and_prefix_is_refused" {
 
   expect_failures = [output.datasets]
 }
+
+# The live overlap check (foundation/databricks.tf): the module is given what
+# the shared host lists, and says which locations to read and which overlap.
+
+run "a_host_that_lists_no_location_leaves_nothing_to_check" {
+  command = plan
+
+  variables {
+    directory           = "../../tests/fixtures/datasets"
+    live_location_names = null # how the provider reports an empty list
+  }
+
+  assert {
+    condition     = length(output.live_names_to_check) == 0 && length(output.overlaps) == 0
+    error_message = "a host that lists no location (null) leaves nothing to read and nothing overlapping"
+  }
+}
+
+run "every_live_location_but_the_onboarded_ones_is_checked" {
+  command = plan
+
+  variables {
+    directory           = "../../tests/fixtures/datasets"
+    live_location_names = ["jwall-engineering-ds-braveheart-selfplay-positions", "braveheart-databricks-catalog"]
+  }
+
+  assert {
+    condition     = jsonencode(output.live_names_to_check) == jsonencode(["braveheart-databricks-catalog"])
+    error_message = "an onboarded dataset's own location is not checked against itself"
+  }
+}
+
+run "a_live_location_equal_to_inside_or_containing_a_dataset_overlaps" {
+  command = plan
+
+  variables {
+    directory = "../../tests/fixtures/datasets"
+    live_location_urls = {
+      old-share = "s3://jwall-engineering-braveheart-selfplay-positions/data/"
+      root      = "s3://jwall-engineering-braveheart-selfplay-positions"
+      inside    = "s3://jwall-engineering-braveheart-selfplay-positions/data/selfplay"
+      sibling   = "s3://jwall-engineering-braveheart-selfplay-positions/data2"
+      other     = "s3://jwall-engineering-braveheart-selfplay-positions-2/data"
+    }
+  }
+
+  assert {
+    condition = jsonencode(output.overlaps) == jsonencode([
+      "braveheart-selfplay/positions (s3://jwall-engineering-braveheart-selfplay-positions/data) and inside (s3://jwall-engineering-braveheart-selfplay-positions/data/selfplay)",
+      "braveheart-selfplay/positions (s3://jwall-engineering-braveheart-selfplay-positions/data) and old-share (s3://jwall-engineering-braveheart-selfplay-positions/data)",
+      "braveheart-selfplay/positions (s3://jwall-engineering-braveheart-selfplay-positions/data) and root (s3://jwall-engineering-braveheart-selfplay-positions)",
+    ])
+    error_message = "equal, containing and contained locations overlap; a sibling prefix and another bucket do not"
+  }
+}
