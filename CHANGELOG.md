@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.31.0...v0.32.0) (2026-11-16)
+
+
+### Features
+
+* **bots:** run a bot instance on a daily UTC schedule, with bot start and bot stop ([#146](https://github.com/jwallace145/jwall-engineering-infra/issues/146)) ([9601e16](https://github.com/jwallace145/jwall-engineering-infra/commit/9601e16859bf92645bc635dd275b82ef4d2b6829))
+
 ## [0.31.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.30.1...v0.31.0) (2026-11-16)
 
 
