@@ -94,6 +94,10 @@ task_app = typer.Typer(
     no_args_is_help=True,
 )
 databricks_app = typer.Typer(help="Databricks workspace projects.", no_args_is_help=True)
+access_app = typer.Typer(
+    help="Onboarded datasets and the handshakes that grant read access to them.",
+    no_args_is_help=True,
+)
 credentials_app = typer.Typer(
     help="The Databricks service principal's client secret.", no_args_is_help=True
 )
@@ -109,6 +113,7 @@ app.add_typer(config_app, name="config")
 app.add_typer(report_app, name="report")
 app.add_typer(cost_app, name="cost")
 app.add_typer(databricks_app, name="databricks")
+app.add_typer(access_app, name="access")
 databricks_app.add_typer(credentials_app, name="credentials")
 
 LOG_FILE = "jwall-engineering-sites.log"
@@ -926,6 +931,71 @@ def config_show(ctx: typer.Context) -> None:
     """Print the effective tool configuration as JSON."""
     run: Run = ctx.obj
     print(json.dumps(run.settings.model_dump(mode="json"), indent=2, sort_keys=True))
+
+
+# -- dataset access ------------------------------------------------------------------
+
+
+@access_app.command("render")
+def access_render(
+    ctx: typer.Context,
+    out: Annotated[
+        Path,
+        typer.Option("--out", help="Directory for terraform.tfvars.json and access-summary.md."),
+    ],
+    base_registry: Annotated[
+        Path | None,
+        typer.Option(
+            "--base-registry",
+            help="The base branch's datasets/: a dataset it onboards that this branch drops "
+            "must have no half of a handshake left.",
+        ),
+    ] = None,
+) -> None:
+    """Render data-access/'s variables and a summary from datasets/ and every project's file.
+
+    Reads every Databricks workspace project's file (config.yaml projects with a
+    databricks entry) and every onboarded dataset's owner's. One that cannot be
+    read, or an offboarding that leaves a half of a handshake, writes nothing.
+    """
+
+    def body(run: Run) -> None:
+        root = access.infra_root()
+        registry = access.load_registry(root / "datasets")
+        base = access.load_registry(base_registry) if base_registry is not None else ()
+        workspaces = {name for name, g in run.settings.projects.items() if g.databricks is not None}
+        files = access.platform_files(
+            registry, workspaces | {d.owner for d in base}, access.project_files_from_env(root)
+        )
+        access.check_offboarding(base, registry, files)
+        handshakes = access.compute_access(registry, files)
+        tfvars = access.data_access_tfvars(handshakes, registry, run.settings)
+        summary = access.access_summary(handshakes)
+        for edge in handshakes.edges:
+            run.logger.info(
+                "handshake: %s reads %s (%s)", edge.consumer, edge.dataset.id, edge.purpose
+            )
+        for pending in handshakes.pending:
+            run.logger.info(
+                "handshake pending: %s for %s: %s",
+                pending.dataset,
+                pending.consumer,
+                pending.reason,
+            )
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "terraform.tfvars.json").write_text(
+            json.dumps(tfvars, indent=2, sort_keys=True) + "\n"
+        )
+        (out / "access-summary.md").write_text(summary)
+        run.logger.info(
+            "rendered %d onboarded datasets and %d edges into %s (fingerprint %s)",
+            len(registry),
+            len(handshakes.edges),
+            out,
+            tfvars["fingerprint"],
+        )
+
+    _command(body)(ctx)
 
 
 # -- bot and research projects -------------------------------------------------------

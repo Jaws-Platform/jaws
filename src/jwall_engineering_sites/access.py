@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import json
 import os
 import re
@@ -21,7 +22,7 @@ import urllib.request
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import yaml
 
@@ -29,6 +30,9 @@ from .components import DatabricksWorkspace, Dataset, check_prefixes
 from .errors import ConfigError
 from .settings import default_config_path
 from .site import SITE_FILE, SiteConfig, load_site_config, site_config_from_text
+
+if TYPE_CHECKING:
+    from .settings import Settings
 
 #: The longest `<owner>-<name>`: the key of the consumer endpoint's
 #: `read_only_datasets` (databricks-workspace), stricter than IAM's 43
@@ -409,15 +413,146 @@ def access_for_project(
     return compute_access(registry, loaded)
 
 
-def access_for_platform(
-    registry: Sequence[OnboardedDataset], workspaces: Iterable[str], files: ProjectFiles
-) -> Access:
-    """Every handshake the reconcile applies: each Databricks workspace project's
-    file, each onboarded dataset's owner's, and the owners its reads name."""
-    loaded = {name: files.load(name) for name in sorted(set(workspaces))}
+def platform_files(
+    registry: Sequence[OnboardedDataset], projects: Iterable[str], files: ProjectFiles
+) -> dict[str, SiteConfig]:
+    """The files the reconcile reads: each of `projects` (every Databricks
+    workspace project, and in a render the base registry's owners), each
+    onboarded dataset's owner's, and the owners their reads name. One that
+    cannot be read raises."""
+    loaded = {name: files.load(name) for name in sorted(set(projects))}
     owners = {d.owner for d in registry}
     for config in list(loaded.values()):
         owners.update(counterparts(config))
     for owner in sorted(owners - set(loaded)):
         loaded[owner] = files.load(owner)
-    return compute_access(registry, loaded)
+    return loaded
+
+
+def access_for_platform(
+    registry: Sequence[OnboardedDataset], projects: Iterable[str], files: ProjectFiles
+) -> Access:
+    """Every handshake the reconcile applies (platform_files)."""
+    return compute_access(registry, platform_files(registry, projects, files))
+
+
+def check_offboarding(
+    base: Sequence[OnboardedDataset],
+    registry: Sequence[OnboardedDataset],
+    files: Mapping[str, SiteConfig],
+) -> None:
+    """Refuse dropping a dataset from datasets/ while a half of a handshake still names it.
+
+    Offboarding needs zero edges (docs/databricks.md): a half left behind would
+    grant again, unreviewed, the day the id is onboarded again. `base` is the
+    base branch's registry; `files` must hold its owners' files.
+    """
+    current = {d.id for d in registry}
+    for dataset in base:
+        if dataset.id in current:
+            continue
+        halves = _halves_naming(dataset, files)
+        if halves:
+            raise ConfigError(
+                f"offboarding {dataset.id} needs its handshakes removed first: {'; '.join(halves)}"
+            )
+
+
+def _halves_naming(dataset: OnboardedDataset, files: Mapping[str, SiteConfig]) -> list[str]:
+    halves: list[str] = []
+    owner = files.get(dataset.owner)
+    for component in owner.components if owner is not None else ():
+        if (
+            isinstance(component, Dataset)
+            and component.name == dataset.name
+            and component.consumers
+        ):
+            listed = ", ".join(component.consumers)
+            halves.append(f"{dataset.owner} lists {listed} under {dataset.name}'s consumers")
+    for project, config in sorted(files.items()):
+        for component in config.components:
+            if isinstance(component, DatabricksWorkspace) and any(
+                read.dataset == dataset.id for read in component.reads
+            ):
+                halves.append(f"{project} lists it under its workspace's reads")
+    return halves
+
+
+# -- the data-access stack ---------------------------------------------------------
+
+
+def workspace_users_group(project: str) -> str:
+    """A workspace project's users group, `<project>-workspace-users` (the
+    library's databricks-workspace): the principal a consumer's grant names."""
+    return f"{project}-workspace-users"
+
+
+def fingerprint(variables: Mapping[str, Any]) -> str:
+    """SHA-256 of the canonical JSON of `variables`: sorted keys, no whitespace."""
+    canonical = json.dumps(variables, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def data_access_tfvars(
+    handshakes: Access, registry: Sequence[OnboardedDataset], settings: Settings
+) -> dict[str, Any]:
+    """data-access/'s variables: the host, every onboarded dataset with each
+    consumer whose handshake is agreed, and the fingerprint of both."""
+    databricks = settings.databricks
+    if databricks is None or databricks.shared_host_url is None:
+        raise ConfigError(
+            "config.yaml databricks.shared_host_url is not set: the data-access stack binds "
+            "and grants through the shared host (the foundation's databricks_shared_host output)"
+        )
+    organization = settings.context.organization
+    datasets: dict[str, Any] = {}
+    for dataset in registry:
+        consumers = {
+            edge.consumer: {
+                "users_group_name": workspace_users_group(edge.consumer),
+                "purpose": edge.purpose,
+            }
+            for edge in handshakes.edges
+            if edge.dataset.id == dataset.id
+        }
+        datasets[dataset.key] = {
+            "id": dataset.id,
+            "location_name": dataset.platform_name(organization),
+            "consumers": dict(sorted(consumers.items())),
+        }
+    variables: dict[str, Any] = {
+        "host_workspace_url": databricks.shared_host_url,
+        "datasets": datasets,
+    }
+    return variables | {"fingerprint": fingerprint(variables)}
+
+
+def access_summary(handshakes: Access) -> str:
+    """Markdown for the sweep's job summary: each agreed edge, then each pending
+    handshake and why it grants nothing."""
+    lines = ["## Dataset access", ""]
+    if handshakes.edges:
+        lines += ["| Dataset | Consumer | Purpose |", "| --- | --- | --- |"]
+        lines += [
+            f"| `{e.dataset.id}` | `{e.consumer}` | {_cell(e.purpose)} |" for e in handshakes.edges
+        ]
+    else:
+        lines.append("No agreed handshakes.")
+    lines += ["", "### Pending handshakes", ""]
+    if handshakes.pending:
+        lines += [
+            "| Dataset | Producer | Consumer | Why it grants nothing |",
+            "| --- | --- | --- | --- |",
+        ]
+        lines += [
+            f"| `{p.dataset}` | `{p.producer}` | `{p.consumer}` | {p.reason} |"
+            for p in handshakes.pending
+        ]
+    else:
+        lines.append("None.")
+    return "\n".join(lines) + "\n"
+
+
+def _cell(text: str) -> str:
+    """Text for one Markdown table cell: on one line, pipes escaped."""
+    return " ".join(text.split()).replace("|", "\\|")
