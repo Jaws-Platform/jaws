@@ -232,17 +232,24 @@ class SiteConfig(_Model):
 
 def load_site_config(path: Path = SITE_FILE) -> SiteConfig:
     try:
-        raw = yaml.safe_load(path.read_text())
+        text = path.read_text()
     except FileNotFoundError as exc:
         raise ConfigError(f"site file not found at {path}") from exc
+    return site_config_from_text(text, str(path))
+
+
+def site_config_from_text(text: str, where: str) -> SiteConfig:
+    """A site file's contents, validated; `where` names it in every error."""
+    try:
+        raw = yaml.safe_load(text)
     except yaml.YAMLError as exc:
-        raise ConfigError(f"{path}: not valid YAML: {exc}") from exc
+        raise ConfigError(f"{where}: not valid YAML: {exc}") from exc
     if not isinstance(raw, dict):
-        raise ConfigError(f"{path}: expected a mapping at the top level")
+        raise ConfigError(f"{where}: expected a mapping at the top level")
     try:
         return SiteConfig.model_validate(raw)
     except ValidationError as exc:
-        raise ConfigError(f"{path}: {_format_validation_error(exc)}") from exc
+        raise ConfigError(f"{where}: {_format_validation_error(exc)}") from exc
 
 
 def _format_validation_error(exc: ValidationError) -> str:

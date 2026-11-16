@@ -50,6 +50,50 @@ def check(config: SiteConfig, settings: Settings) -> list[str]:
                 )
             problems += _profile_problems(name, profile, approved, limits, project)
     problems += _dataset_problems(config, approved)
+    problems += _access_problems(config, settings)
+    return problems
+
+
+def _access_problems(config: SiteConfig, settings: Settings) -> list[str]:
+    """The project's halves of handshakes, checked against config.yaml.
+
+    Whether the other side agrees, and whether the dataset is onboarded, is
+    access.compute_access's question: that needs the other project's file.
+    """
+    project = config.project
+    workspaces = {name for name, g in settings.projects.items() if g.databricks is not None}
+    problems: list[str] = []
+    for component in config.components:
+        if isinstance(component, Dataset):
+            for consumer in component.consumers:
+                if consumer == project:
+                    problems.append(
+                        f"dataset {component.name}: {project} cannot consume its own dataset"
+                    )
+                elif consumer not in workspaces:
+                    problems.append(
+                        f"dataset {component.name}: consumer {consumer!r} is not a Databricks "
+                        f"workspace project (it needs a projects.{consumer}.databricks entry in "
+                        "config.yaml)"
+                    )
+        elif isinstance(component, DatabricksWorkspace):
+            seen: set[str] = set()
+            for read in component.reads:
+                if read.dataset in seen:
+                    problems.append(f"reads repeats {read.dataset}")
+                    continue
+                seen.add(read.dataset)
+                owner, name = read.dataset.split("/", 1)
+                if owner == project:
+                    problems.append(f"reads {read.dataset}: {project} reads its own dataset")
+                    continue
+                bucket = f"{settings.context.organization}-{owner}-{name}"
+                approved = settings.projects.get(owner)
+                if approved is None or bucket not in approved.datasets:
+                    problems.append(
+                        f"reads {read.dataset}: no project {owner} approves bucket {bucket} in "
+                        "config.yaml"
+                    )
     return problems
 
 
@@ -180,24 +224,6 @@ def _retention_problems(dataset: Dataset, retention: DatasetRetention) -> list[s
         problems.append(
             f"{where}: versioning {dataset.versioning} must equal the "
             f"{retention.versioning} approved in config.yaml"
-        )
-    # No consumers means the producer has not consented yet: config.yaml may
-    # already approve the share (the foundation registers it), but the share
-    # role is not a reader, so nothing can read. Once the producer lists
-    # consumers they must be exactly the approved ones: the one role reads for
-    # every consumer, so a subset would still let the others in.
-    share = retention.databricks_share
-    approved_consumers = share.consumers if share else ()
-    if dataset.consumers and dataset.consumers != approved_consumers:
-        problems.append(
-            f"{where}: consumers {list(dataset.consumers)} must equal the "
-            f"{list(approved_consumers)} approved in config.yaml "
-            "(databricks_share.consumers), or be empty to share with nobody yet"
-        )
-    if dataset.consumers and share is not None and dataset.prefix != share.prefix:
-        problems.append(
-            f"{where}: prefix {dataset.prefix!r} must equal the {share.prefix!r} that "
-            "config.yaml shares (databricks_share.prefix)"
         )
     if retention.write_once and "task-runner" in dataset.writers:
         problems.append(

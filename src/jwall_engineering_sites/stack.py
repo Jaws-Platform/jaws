@@ -22,6 +22,7 @@ from logging import Logger
 from pathlib import Path
 from typing import Any, Final
 
+from .access import Access
 from .components import TaskRunner
 from .errors import ConfigError, RunError
 from .project import Project
@@ -83,20 +84,24 @@ def render_tfvars(
     settings: Settings | None = None,
     stack: str | None = None,
     account_outputs: Mapping[str, Any] | None = None,
+    access: Access | None = None,
 ) -> dict[str, Any]:
     """The stack's input variables. Pure, so it can be tested.
 
     A bot or research project needs `settings` (health check, records prefix,
     zones and the ECR lifecycle come from config.yaml). A Databricks project
     needs `settings` and `stack` (`account` or `workspace`); the workspace stack
-    also needs the account stack's outputs. Other kinds ignore both.
+    also needs the account stack's outputs. Other kinds ignore both. `access`
+    is the project's handshakes (access.access_for_project): a dataset an edge
+    shares gets its platform role as a bucket reader, and a workspace gets an
+    endpoint statement per edge it reads. Without it, neither.
     """
     if isinstance(target, Project):
         if target.stack_kind == "databricks":
             if settings is None:
                 raise ValueError("render_tfvars needs settings for a databricks project")
             if stack == "account":
-                return _databricks_account_tfvars(target, settings)
+                return _databricks_account_tfvars(target, settings, access)
             if stack == "workspace":
                 if account_outputs is None:
                     raise ConfigError(
@@ -111,7 +116,7 @@ def render_tfvars(
         if target.has_components:
             if settings is None:
                 raise ValueError("render_tfvars needs settings for a project with components")
-            return _bot_tfvars(target, settings)
+            return _bot_tfvars(target, settings, access)
         return _site_tfvars_from_project(target)
     return _site_tfvars(target)
 
@@ -183,7 +188,9 @@ def _research_tfvars(project: Project, settings: Settings) -> dict[str, Any]:
     }
 
 
-def _bot_tfvars(project: Project, settings: Settings) -> dict[str, Any]:
+def _bot_tfvars(
+    project: Project, settings: Settings, access: Access | None = None
+) -> dict[str, Any]:
     runner = project.task_runner or TaskRunner(kind="task-runner")
     kind_tfvars = (
         _lichess_bot_tfvars(project, settings)
@@ -233,9 +240,9 @@ def _bot_tfvars(project: Project, settings: Settings) -> dict[str, Any]:
                 "bucket": d.bucket,
                 "prefix": d.prefix,
                 "writers": list(d.writers),
-                # A shared dataset's role reads through the bucket policy: the
-                # producer's grant is what lets every consumer workspace in.
-                "readers": list(d.readers) + _share_readers(d.bucket, d.consumers, settings),
+                # An onboarded dataset some workspace reads, by both projects'
+                # agreement: its role reads through this bucket policy.
+                "readers": list(d.readers) + _edge_readers(project, d.name, settings, access),
                 "transition_days": d.transition_days,
                 "versioning": d.versioning,
                 "expire_noncurrent_days": d.expire_noncurrent_days,
@@ -246,23 +253,32 @@ def _bot_tfvars(project: Project, settings: Settings) -> dict[str, Any]:
     }
 
 
-def _share_readers(bucket: str, consumers: tuple[str, ...], settings: Settings) -> list[str]:
-    """The share role of a dataset the project shares with Databricks, else nothing.
-
-    guardrails.check has already required the file's consumers to equal the
-    approved ones, so an unshared dataset (no consumers) adds no reader.
-    """
-    if not consumers:
+def _edge_readers(
+    project: Project, dataset: str, settings: Settings, access: Access | None
+) -> list[str]:
+    """The dataset's platform role, when an agreed handshake shares it; else nothing."""
+    if access is None:
         return []
-    return [s.role_arn for s in settings.databricks_shares() if s.bucket == bucket]
+    for edge in access.edges:
+        if edge.dataset.owner == project.project and edge.dataset.name == dataset:
+            return [edge.dataset.role_arn(settings.aws.account_id, settings.context.organization)]
+    return []
 
 
-def _read_only_datasets(project: str, settings: Settings) -> dict[str, dict[str, str]]:
-    """The shared datasets a workspace project consumes, for its S3 endpoint policy."""
+def _read_only_datasets(
+    project: Project, settings: Settings, access: Access | None
+) -> dict[str, dict[str, str]]:
+    """The onboarded datasets a workspace reads, for its S3 endpoint policy."""
+    if access is None:
+        return {}
+    organization = settings.context.organization
     return {
-        s.name: {"bucket": s.bucket, "prefix": s.prefix, "role_arn": s.role_arn}
-        for s in settings.databricks_shares()
-        if project in s.consumers
+        e.dataset.key: {
+            "bucket": e.dataset.bucket(organization),
+            "prefix": e.dataset.prefix,
+            "role_arn": e.dataset.role_arn(settings.aws.account_id, organization),
+        }
+        for e in access.consumed_by(project.project)
     }
 
 
@@ -305,7 +321,9 @@ def _approved(project: Project) -> DatabricksProject:
     return project.databricks_approved
 
 
-def _databricks_account_tfvars(project: Project, settings: Settings) -> dict[str, Any]:
+def _databricks_account_tfvars(
+    project: Project, settings: Settings, access: Access | None = None
+) -> dict[str, Any]:
     """The account stack's inputs: network, workspace, metastore and members."""
     section = _databricks_section(project, settings)
     approved = _approved(project)
@@ -324,7 +342,7 @@ def _databricks_account_tfvars(project: Project, settings: Settings) -> dict[str
         "user_names": list(project.databricks.users),
         "service_principal_application_id": section.client_id,
         "account_id": section.account_id,
-        "read_only_datasets": _read_only_datasets(project.project, settings),
+        "read_only_datasets": _read_only_datasets(project, settings, access),
     }
 
 
@@ -452,6 +470,7 @@ class Terraform:
         stack: str | None = None,
         extra_env: Mapping[str, str] = {},  # copied, never mutated
         tfvars_override: Mapping[str, Any] | None = None,
+        access: Access | None = None,
     ) -> None:
         """`stack` picks one of a project's stacks (a Databricks project's `account`
         or `workspace`): `stacks/<kind>-<stack>` and its own state key. `extra_env`
@@ -472,6 +491,8 @@ class Terraform:
         self.stack_dir = stack_dir or default_stack_dir(self.stack_name)
         self._extra_env = dict(extra_env)
         self.tfvars_override = dict(tfvars_override) if tfvars_override is not None else None
+        #: The project's handshakes, rendered into its readers or endpoint statements.
+        self.access = access
         self.plugin_dir = default_plugin_dir() if plugin_dir is None else plugin_dir
         self.binary = binary
         self.workdir: Path | None = None
@@ -520,7 +541,7 @@ class Terraform:
         tfvars = (
             self.tfvars_override
             if self.tfvars_override is not None
-            else render_tfvars(self.site, self.settings, stack=self.stack)
+            else render_tfvars(self.site, self.settings, stack=self.stack, access=self.access)
         )
         backend = self.backend()
         (self.workdir / "terraform.tfvars.json").write_text(json.dumps(tfvars, indent=2) + "\n")

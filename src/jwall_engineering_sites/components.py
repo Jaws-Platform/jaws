@@ -431,10 +431,11 @@ class Dataset(_Model):
     #: Sub-prefixes of `prefix` whose objects expire, by days. Must equal the
     #: values config.yaml approves for the bucket.
     expire_prefixes: dict[str, int] = {}
-    #: Databricks workspace projects that may read the prefix, read-only, through
-    #: one shared Unity Catalog location the foundation registers. Must equal
-    #: `databricks_share.consumers` approved in config.yaml for the bucket; the
-    #: share's role is then added to the bucket policy's readers.
+    #: Databricks workspace projects this project agrees may read the dataset,
+    #: read-only: its half of each handshake. A workspace reads only while it also
+    #: lists `<project>/<name>` under its `reads` and the dataset is onboarded
+    #: (jwall-engineering-infra's datasets/<project>/<name>.yaml); the dataset's
+    #: role is then added to the bucket policy's readers.
     consumers: tuple[str, ...] = ()
 
     @field_validator("expire_prefixes")
@@ -491,6 +492,38 @@ class Dataset(_Model):
         return value
 
 
+_DATASET_ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*$")
+#: The longest `purpose` a read may give.
+READ_PURPOSE_MAX = 200
+
+
+class DatasetRead(_Model):
+    """One dataset a workspace reads: an onboarded `<owner>/<name>`, and why."""
+
+    #: The onboarded dataset (jwall-engineering-infra's datasets/<owner>/<name>.yaml).
+    dataset: str
+    #: Why the workspace reads it, recorded with the handshake.
+    purpose: str
+
+    @field_validator("dataset")
+    @classmethod
+    def _dataset(cls, value: str) -> str:
+        if not _DATASET_ID.match(value):
+            raise ValueError(
+                f"{value!r} must be an onboarded dataset's id, <owner>/<name> in kebab-case, "
+                "e.g. braveheart-selfplay/positions"
+            )
+        return value
+
+    @field_validator("purpose")
+    @classmethod
+    def _purpose(cls, value: str) -> str:
+        value = value.strip()
+        if not 1 <= len(value) <= READ_PURPOSE_MAX:
+            raise ValueError(f"purpose must be 1 to {READ_PURPOSE_MAX} characters")
+        return value
+
+
 class DatabricksWorkspace(_Model):
     """A Databricks workspace. The VPC range, cost center and admins are central
     (`projects.<name>.databricks` in config.yaml); this names what the project asks for,
@@ -505,6 +538,10 @@ class DatabricksWorkspace(_Model):
     #: Workspace users, by email: membership is the team's to change from its own repo.
     #: Admins stay central (`projects.<name>.databricks.admins` in config.yaml).
     users: tuple[str, ...] = ()
+    #: Onboarded datasets the workspace reads, read-only: its half of each handshake.
+    #: A read takes effect only while the dataset's producer lists this project
+    #: under its `consumers`.
+    reads: tuple[DatasetRead, ...] = ()
 
     @field_validator("users")
     @classmethod

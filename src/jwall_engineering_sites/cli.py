@@ -25,6 +25,7 @@ import boto3
 import typer
 
 from . import (
+    access,
     aws,
     checks,
     costs,
@@ -199,11 +200,42 @@ def _command(body: Callable[[Run], None]) -> Callable[[typer.Context], None]:
 # -- helpers ------------------------------------------------------------------
 
 
-def _terraform(run: Run) -> stack.Terraform:
+def _terraform(run: Run, handshakes: access.Access | None = None) -> stack.Terraform:
     """Terraform for the project's stack: the site stack for a site (exactly as
-    before) or the bot stack for a bot or research project."""
+    before) or the bot stack for a bot or research project. `handshakes` renders
+    the project's bucket readers (plan and apply only)."""
     target: stack.Target = run.site if run.project.kind == "site" else run.project
-    return stack.Terraform(target, run.settings, run.logger)
+    return stack.Terraform(target, run.settings, run.logger, access=handshakes)
+
+
+def _project_access(run: Run) -> access.Access | None:
+    """The project's handshakes, for plan and apply: None for a project that
+    declares no half of one, which then reads no other project's file.
+
+    Reads the registry (datasets/) and each counterpart's file. One that cannot
+    be read raises before Terraform runs: readers rendered without it would
+    revoke a consumer's access unseen. Each pending handshake naming the project
+    is logged with its reason.
+    """
+    config = run.project.config
+    if not access.counterparts(config):
+        return None
+    root = access.infra_root()
+    handshakes = access.access_for_project(
+        config, access.load_registry(root / "datasets"), access.project_files_from_env(root)
+    )
+    project = run.project.project
+    for edge in handshakes.edges:
+        run.logger.info("handshake: %s reads %s (%s)", edge.consumer, edge.dataset.id, edge.purpose)
+    for pending in handshakes.pending:
+        if project in (pending.producer, pending.consumer):
+            run.logger.info(
+                "handshake pending: %s for %s: %s",
+                pending.dataset,
+                pending.consumer,
+                pending.reason,
+            )
+    return handshakes
 
 
 def _preflight(run: Run, role: Role, prefix: str | None) -> None:
@@ -273,8 +305,10 @@ def _sync_to(
     return sync.execute_sync(client, site.bucket, plan, run.logger)
 
 
-def _with_terraform(run: Run, body: Callable[[stack.Terraform], None]) -> None:
-    terraform = _terraform(run)
+def _with_terraform(
+    run: Run, body: Callable[[stack.Terraform], None], handshakes: access.Access | None = None
+) -> None:
+    terraform = _terraform(run, handshakes)
     failed = True
     try:
         terraform.prepare()
@@ -509,8 +543,9 @@ def plan(ctx: typer.Context) -> None:
                 result = terraform.plan(detailed_exitcode=True)
                 exit_code, plan_text = result.returncode, result.output
 
+        handshakes = _project_access(run)
         try:
-            _with_terraform(run, tf)
+            _with_terraform(run, tf, handshakes)
         finally:
             (run.artifacts / "plan.txt").write_text(plan_text)
             comment = report.plan_comment(
@@ -694,7 +729,7 @@ def apply(ctx: typer.Context) -> None:
                 )
             )
 
-        _with_terraform(run, tf)
+        _with_terraform(run, tf, _project_access(run))
 
     _command(body)(ctx)
 
@@ -1795,7 +1830,11 @@ def _databricks_deployment(
         base_fields(project, run.settings, tool_version()),
         run.logger,
     )
-    factory = functools.partial(stack.Terraform, project, run.settings, run.logger, extra_env=env)
+    # Plan and apply render the workspace's endpoint statements from its handshakes.
+    handshakes = _project_access(run) if live and role in ("plan", "apply") else None
+    factory = functools.partial(
+        stack.Terraform, project, run.settings, run.logger, extra_env=env, access=handshakes
+    )
     return databricks.DatabricksDeployment(
         run,
         project,

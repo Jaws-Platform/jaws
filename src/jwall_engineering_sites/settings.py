@@ -167,34 +167,6 @@ class TaskLimits(_Section):
     root_volume_gb: int = Field(ge=1)
 
 
-class DatabricksShare(_Section):
-    """A dataset bucket shared, read-only, with Databricks workspace projects.
-
-    The foundation registers it once, as one external location through the
-    shared-objects host, bound to every consumer; the producing project's
-    dataset component must name the same consumers and prefix.
-    """
-
-    #: The dataset's `prefix`: what is shared, and what the producer's readers grant covers.
-    prefix: str
-    #: Databricks workspace projects that may read it (`projects.<name>.databricks`).
-    consumers: tuple[str, ...] = Field(min_length=1)
-
-    @field_validator("prefix")
-    @classmethod
-    def _prefix(cls, value: str) -> str:
-        check_prefixes((value,))
-        return value
-
-    @field_validator("consumers")
-    @classmethod
-    def _consumers(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        repeated = sorted({c for c in value if value.count(c) > 1})
-        if repeated:
-            raise ValueError(f"consumers must not repeat a project: {', '.join(repeated)}")
-        return tuple(sorted(value))
-
-
 class DatasetRetention(_Section):
     """The centrally approved retention of one dataset bucket.
 
@@ -209,8 +181,6 @@ class DatasetRetention(_Section):
     expire_prefixes: dict[str, int] = {}
     expire_noncurrent_days: int | None = None
     versioning: bool = False
-    #: Shared, read-only, with Databricks workspaces (through the foundation's host).
-    databricks_share: DatabricksShare | None = None
 
     @field_validator("prefix")
     @classmethod
@@ -327,6 +297,12 @@ class DatabricksSection(_Section):
     events_prefix: str = Field(default="events/", pattern=r"^([a-z0-9][a-z0-9-]*/)+$")
     compute_policies: dict[str, DatabricksPolicy] = {}
     readiness_timeout: str = "20m"
+    #: The shared-objects host's URL (foundation/databricks.tf, `databricks_shared_host`):
+    #: the workspace the data-access stack binds and grants onboarded datasets through.
+    #: Databricks picks it when the workspace is created; the foundation checks it matches.
+    shared_host_url: str | None = Field(
+        default=None, pattern=r"^https://[a-z0-9.-]+\.cloud\.databricks\.com$"
+    )
 
     @field_validator("metastore_admins")
     @classmethod
@@ -497,54 +473,6 @@ class Settings(_Section):
             taken.append((f"project {name!r}", network))
         return self
 
-    @model_validator(mode="after")
-    def _shares_consistency(self) -> Settings:
-        workspaces = {n for n, g in self.projects.items() if g.databricks}
-        for producer, bucket, share in self._raw_shares():
-            where = f"projects.{producer}.datasets.{bucket}.databricks_share"
-            if self.databricks is None:
-                raise ValueError(f"{where}: config.yaml has no databricks section")
-            organization = f"{self.context.organization}-"
-            if not bucket.startswith(organization):
-                raise ValueError(f"{where}: the bucket must start with {organization!r}")
-            role = share_role_name(self.context.organization, bucket)
-            if len(role) > 64:
-                raise ValueError(f"{where}: the share role {role!r} exceeds IAM's 64 characters")
-            for consumer in share.consumers:
-                if consumer not in workspaces:
-                    raise ValueError(
-                        f"{where}: consumer {consumer!r} is not a Databricks workspace project "
-                        "(it needs a projects.<name>.databricks entry)"
-                    )
-                if consumer == producer:
-                    raise ValueError(f"{where}: a project cannot consume its own dataset")
-        return self
-
-    def _raw_shares(self) -> list[tuple[str, str, DatabricksShare]]:
-        return [
-            (producer, bucket, retention.databricks_share)
-            for producer, guardrails in sorted(self.projects.items())
-            for bucket, retention in sorted(guardrails.datasets.items())
-            if retention.databricks_share is not None
-        ]
-
-    def databricks_shares(self) -> list[SharedDataset]:
-        """Every approved share: what the foundation registers and consumers read."""
-        return [
-            SharedDataset(
-                producer=producer,
-                bucket=bucket,
-                name=share_name(self.context.organization, bucket),
-                prefix=share.prefix,
-                consumers=share.consumers,
-                role_arn=(
-                    f"arn:aws:iam::{self.aws.account_id}:role/"
-                    f"{share_role_name(self.context.organization, bucket)}"
-                ),
-            )
-            for producer, bucket, share in self._raw_shares()
-        ]
-
     def run_cost_ceiling(self, project: str) -> float:
         """The project's `max_run_cost_usd` override, else `tasks.max_run_cost_usd`."""
         guardrails = self.projects.get(project)
@@ -565,29 +493,6 @@ class Settings(_Section):
         if not key.endswith(".tfstate"):
             raise ValueError("key_template must end in .tfstate to add a stack suffix")
         return f"{key.removesuffix('.tfstate')}-{stack}.tfstate"
-
-
-class SharedDataset(_Section):
-    """One approved share, with the names the foundation and the stacks derive."""
-
-    producer: str
-    bucket: str
-    #: `<bucket>` without `<organization>-`, for example `braveheart-nnue`.
-    name: str
-    prefix: str
-    consumers: tuple[str, ...]
-    #: The share role's ARN, `<organization>-<name>-databricks-share`.
-    role_arn: str
-
-
-def share_name(organization: str, bucket: str) -> str:
-    """A share's name: its bucket without the organization prefix."""
-    return bucket.removeprefix(f"{organization}-")
-
-
-def share_role_name(organization: str, bucket: str) -> str:
-    """The share role, named as databricks-shared-dataset names it."""
-    return f"{organization}-{share_name(organization, bucket)}-databricks-share"
 
 
 def default_config_path() -> Path:
