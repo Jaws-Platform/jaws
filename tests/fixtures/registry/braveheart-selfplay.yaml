@@ -58,7 +58,9 @@ components:
   # approves, so an overwritten or deleted object can be recovered. Only the
   # datagen and relabel profiles add objects, under their grants above; nothing
   # automated deletes. The trainer's GPU tasks read it through the bucket
-  # policy. Layout: docs/datagen.md. Fields and access:
+  # policy, and so does braveheart-databricks, read-only, through the share
+  # config.yaml approves (listing it here is this project's consent).
+  # Layout: docs/datagen.md. Fields and access:
   # https://github.com/jwallace145/jwall-engineering-infra/blob/main/docs/datasets.md
   - kind: dataset
     name: positions
@@ -67,3 +69,4 @@ components:
     versioning: true
     readers:
       - arn:aws:iam::650503560686:role/jwall-engineering-braveheart-trainer-task-gpu  # Train
+    consumers: [braveheart-databricks]  # adds the share role to the readers
