@@ -40,7 +40,11 @@ locals {
 
   # The entries of `bots` without a bot or an image (kind research): their plan
   # and apply roles get compute/* for container/*, and they have no release role.
-  research_projects = toset([])
+  #
+  # braveheart dropped its bot on 2026-11-15, when the bot moved to braveheart-bot:
+  # the engine keeps its task runner and NNUE dataset (docs/research-projects.md,
+  # "A bot project that drops its bot").
+  research_projects = toset(["braveheart"])
 
   # The guardrails come from config.yaml's `projects`, not from the project
   # file. The launch role is assumed by the consumer's pull requests, so

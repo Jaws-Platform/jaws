@@ -15,6 +15,8 @@ from jwall_engineering_sites.site import load_site_config
 from tests.conftest import FIXTURES, REPO_ROOT
 
 BOTS_TF = REPO_ROOT / "foundation" / "bots.tf"
+#: Each registered project's file, as its repository commits it.
+REGISTRY_FILES = FIXTURES / "registry"
 _ENTRY = re.compile(
     r'^\s+([a-z0-9-]+)\s*=\s*\{\s*repository\s*=\s*"([^"]+)",\s*repository_id\s*=\s*"(\d+)"'
     r'(?:,\s*owner_id\s*=\s*"(\d+)")?\s*\}',
@@ -34,10 +36,11 @@ def owners() -> dict[str, str]:
 
 
 def project_file(project: str) -> dict[str, Any]:
-    """tests/fixtures/bots/<project>.yaml, the copy of the file onboarding adds."""
+    """tests/fixtures/registry/<project>.yaml, a copy of the project file as the
+    registered repository commits it (tests/fixtures/bots/ holds samples)."""
     import yaml
 
-    path = FIXTURES / "bots" / f"{project}.yaml"
+    path = REGISTRY_FILES / f"{project}.yaml"
     assert path.is_file(), f"{project} is registered: add its project file as {path.name}"
     raw: dict[str, Any] = yaml.safe_load(path.read_text())
     return raw
@@ -372,7 +375,7 @@ def test_research_projects_are_exactly_the_files_of_that_kind() -> None:
     research = {
         project
         for project in registry()
-        if load_site_config(FIXTURES / "bots" / f"{project}.yaml").kind == "research"
+        if load_site_config(REGISTRY_FILES / f"{project}.yaml").kind == "research"
     }
     assert _research_projects() == research
 
