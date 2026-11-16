@@ -2,11 +2,8 @@
 # pipeline that grows it (datagen, relabel). Fields and behaviour:
 # https://github.com/jwallace145/jwall-engineering-infra/blob/main/docs/research-projects.md
 #
-# Interim, until the data move: the positions still live in
-# jwall-engineering-braveheart-nnue, owned by the engine's project
-# (Braveheart-Chess/braveheart), and datagen and relabel still run from there.
-# This project has no dataset yet, so its tasks can write nowhere. The data
-# move adds the `positions` dataset and its grants.
+# The positions were copied key for key from jwall-engineering-braveheart-nnue
+# (data/selfplay/) at the split; docs/datasets.md records the move.
 version: 1
 project: braveheart-selfplay
 repository: Braveheart-Chess/braveheart-selfplay
@@ -42,6 +39,8 @@ components:
         on_demand_fallback: true
         max_hours: 6
         max_vcpus: 192              # three tasks at once
+        datasets:
+          positions: { write: [selfplay/] }  # data/selfplay/v1/* out
       relabel:
         instance_types: [c8a.16xlarge]
         default_instance_type: c8a.16xlarge
@@ -51,3 +50,20 @@ components:
         spot_wait_minutes: 30
         max_hours: 6
         max_vcpus: 192
+        datasets:
+          positions: { read: [selfplay/], write: [selfplay/relabel/] }  # a generation in, a label set out
+
+  # Every self-play generation (data/selfplay/v1/) and label set
+  # (data/selfplay/relabel/): kept forever and versioned, as config.yaml
+  # approves, so an overwritten or deleted object can be recovered. Only the
+  # datagen and relabel profiles add objects, under their grants above; nothing
+  # automated deletes. The trainer's GPU tasks read it through the bucket
+  # policy. Layout: docs/datagen.md. Fields and access:
+  # https://github.com/jwallace145/jwall-engineering-infra/blob/main/docs/datasets.md
+  - kind: dataset
+    name: positions
+    bucket: jwall-engineering-braveheart-selfplay-positions  # <Organization>-<project>-<name>
+    prefix: data/
+    versioning: true
+    readers:
+      - arn:aws:iam::650503560686:role/jwall-engineering-braveheart-trainer-task-gpu  # Train

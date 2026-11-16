@@ -95,6 +95,9 @@ tasks:
 # retention: write_once, expire_prefixes, expire_noncurrent_days, versioning.
 projects:
   braveheart:
+    # Keeps jwall-engineering-braveheart-nnue, the GPU, datagen and relabel
+    # profiles and the share approval until the split's cutover, when the data
+    # is in the two buckets below and the engine gives its dataset up.
     instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge, g6.xlarge, g6.2xlarge, g6e.xlarge]
     task_profiles: [cpu, gpu, sprt, match, datagen, relabel]
     datasets:
@@ -109,17 +112,29 @@ projects:
     # max_run_cost_usd: 80 # optional per-project override of tasks.max_run_cost_usd
   braveheart-selfplay:
     # Braveheart's self-play dataset and the pipeline that grows it
-    # (Braveheart-Chess/braveheart-selfplay): datagen and relabel. Until the data
-    # moves, its dataset stays with braveheart above and these profiles have no
-    # dataset grants. The data move approves jwall-engineering-braveheart-selfplay-positions here.
+    # (Braveheart-Chess/braveheart-selfplay): datagen and relabel.
     instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge]
     task_profiles: [cpu, datagen, relabel]
+    datasets:
+      # The positions: every generation and label set, copied key for key from
+      # jwall-engineering-braveheart-nnue's data/selfplay/. Versioned, with no
+      # expiry, so an overwritten or deleted object can always be recovered.
+      jwall-engineering-braveheart-selfplay-positions:
+        prefix: data/
+        versioning: true
   braveheart-trainer:
     # The trainer for Braveheart's nets (Braveheart-Chess/braveheart-trainer): bullet
-    # on GPU instances. Until the data moves, the positions and nets stay with
-    # braveheart above. The data move approves jwall-engineering-braveheart-trainer-nets here.
+    # on GPU instances. It reads the positions through the selfplay bucket's
+    # readers.
     instance_types: [c8a.xlarge, g6.xlarge, g6.2xlarge, g6e.xlarge]
     task_profiles: [cpu, gpu]
+    datasets:
+      # Every net trained, kept or not, with its training.json, losses and log,
+      # copied key for key from jwall-engineering-braveheart-nnue's data/nets/.
+      # Versioned, with no expiry, like the positions.
+      jwall-engineering-braveheart-trainer-nets:
+        prefix: data/
+        versioning: true
   braveheart-bot:
     # Braveheart's Lichess bot (Braveheart-Chess/braveheart-lichess-bot): a container
     # image and a lichess-bot only, running a pinned release of the engine's

@@ -1,10 +1,10 @@
-# braveheart-trainer's live file (tests/fixtures/registry/): a task runner and, until the data
-# moves, no dataset.
+# braveheart-trainer's live file (tests/fixtures/registry/): a task runner, and the
+# nets bucket the split copies data/nets/ into.
 mock_provider "aws" {
   source = "./tests/mocks"
 }
 
-run "plans_a_task_runner_that_can_reach_no_dataset" {
+run "plans_a_task_runner_and_the_nets_bucket" {
   command = plan
 
   assert {
@@ -23,12 +23,27 @@ run "plans_a_task_runner_that_can_reach_no_dataset" {
   }
 
   assert {
-    condition     = length(var.datasets) == 0 && length(module.datasets) == 0
-    error_message = "until the data moves, braveheart-trainer has no dataset, so its tasks can write nowhere"
+    condition     = toset(keys(module.datasets)) == toset(["nets"]) && var.datasets[0].bucket == "jwall-engineering-braveheart-trainer-nets" && var.datasets[0].prefix == "data/"
+    error_message = "braveheart-trainer has one dataset, nets, under data/ like the bucket it is copied from"
   }
 
   assert {
-    condition     = alltrue([for p in var.task_profiles : length(p.datasets) == 0])
-    error_message = "no task profile is granted a dataset"
+    condition     = var.datasets[0].versioning && var.datasets[0].expire_noncurrent_days == null && length(var.datasets[0].expire_prefixes) == 0
+    error_message = "the nets are versioned and nothing expires"
+  }
+
+  assert {
+    condition     = length(var.datasets[0].writers) == 0
+    error_message = "no task instance writes the whole prefix: only the GPU profile adds objects, under its grant"
+  }
+
+  assert {
+    condition     = jsonencode(var.datasets[0].readers) == jsonencode(["arn:aws:iam::650503560686:role/jwall-engineering-braveheart-selfplay-task-relabel"])
+    error_message = "self-play's relabel tasks, and only they, read the nets through the bucket policy"
+  }
+
+  assert {
+    condition     = jsonencode([for p in var.task_profiles : p.datasets if p.name == "gpu"][0]) == jsonencode([{ name = "nets", read = [], write = ["nets/"], write_once = [] }])
+    error_message = "the GPU profile writes nets/ and reads nothing of its own bucket; the positions come from self-play's readers"
   }
 }
