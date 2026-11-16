@@ -17,7 +17,7 @@ terraform:
 
 library:
   source: jwallace145/jwall-engineering/aws
-  version: 0.23.0 # the one module pin the whole fleet shares (sites and bots)
+  version: 0.24.0 # the one module pin the whole fleet shares (sites and bots)
 
 state:
   bucket: jwall-engineering-tfstate
@@ -179,7 +179,7 @@ databricks:
   # The shared-objects host's URL, which Databricks picked when the foundation
   # created it: the data-access stack binds and grants onboarded datasets
   # through it. The foundation checks it still matches its own output.
-  shared_host_url: null
+  shared_host_url: https://dbc-46322154-036c.cloud.databricks.com
   # Cluster policy definitions, by kebab-case name. A project lists the names it gets.
   compute_policies:
     small-interactive:

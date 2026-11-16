@@ -99,7 +99,7 @@ resource "terraform_data" "databricks_config_filled_in" {
 module "databricks_metastore" {
   count     = local.databricks_enabled ? 1 : 0
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-metastore"
-  version   = "0.23.0"
+  version   = "0.24.0"
   providers = { databricks = databricks.account }
 
   name                             = local.databricks.metastore_name
@@ -110,7 +110,7 @@ module "databricks_metastore" {
 module "databricks_audit_logs" {
   count     = local.databricks_enabled ? 1 : 0
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-audit-logs"
-  version   = "0.23.0"
+  version   = "0.24.0"
   providers = { aws = aws, databricks = databricks.account }
 
   account_id  = local.databricks.account_id
@@ -119,13 +119,13 @@ module "databricks_audit_logs" {
 
 # The shared-objects host: a serverless workspace with no VPC, NAT, buckets,
 # catalog or users, so metastore-level objects that need a workspace to be
-# created through but belong to no project (shared datasets, in
-# stacks/databricks-shared) have a home. Only the metastore admin group is
+# created through but belong to no project (onboarded datasets, below, and
+# their bindings in data-access/) have a home. Only the metastore admin group is
 # assigned to it. It has no standing AWS cost.
 module "databricks_shared_host" {
   count     = local.databricks_enabled ? 1 : 0
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-host-workspace"
-  version   = "0.23.0"
+  version   = "0.24.0"
   providers = { databricks = databricks.account }
 
   account_id       = local.databricks.account_id
@@ -139,82 +139,94 @@ module "databricks_shared_host" {
   })
 }
 
-# ------------------------------------------------------- shared datasets
+# --------------------------------------------------- onboarded datasets
 
-# Dataset buckets shared, read-only, with Databricks workspace projects
-# (config.yaml projects.<producer>.datasets.<bucket>.databricks_share). Each gets
-# one read-only external location, registered once through the host and bound
-# to every consumer: Unity Catalog refuses overlapping locations in a
-# metastore. The share role reads only because the producer's bucket policy
-# names it as a reader (the CLI adds it to the producer's readers), so the
-# project that owns the data grants access. Names match settings.py
-# (share_name, share_role_name).
+# Each file under datasets/ (datasets/<owner>/<name>.yaml) onboards one dataset:
+# one read-only role, storage credential and external location, all named
+# <organization>-ds-<owner>-<name>, created through the host and bound to it
+# only. Onboarding grants nothing: the role reads only once the owner's bucket
+# policy names it (the owner's Bot apply, for an agreed handshake), and a
+# workspace is bound and granted only by the data-access stack (data-access/).
+# Names match access.py's load_registry (registry/, tested against the same
+# expected output).
+module "dataset_registry" {
+  source = "./registry"
+
+  directory    = "${path.module}/../datasets"
+  organization = local.context.organization
+}
+
 locals {
-  databricks_shares = local.databricks_enabled ? {
-    for share in flatten([
-      for producer, guardrails in local.tool_config.projects : [
-        for bucket, retention in try(guardrails.datasets, {}) : {
-          name      = trimprefix(bucket, "${local.context.organization}-")
-          producer  = producer
-          bucket    = bucket
-          prefix    = retention.databricks_share.prefix
-          consumers = sort(retention.databricks_share.consumers)
-        } if try(retention.databricks_share, null) != null
-      ]
-    ]) : share.name => share
-  } : {}
-
-  # Workspaces are named <project>-<environment>, environment prod.
-  databricks_share_consumers = distinct(flatten([for s in values(local.databricks_shares) : s.consumers]))
+  onboarded_datasets = local.databricks_enabled ? module.dataset_registry.datasets : {}
+  onboarded_names    = toset([for d in values(local.onboarded_datasets) : d.platform_name])
 }
 
-data "databricks_mws_workspaces" "all" {
-  count    = length(local.databricks_shares) > 0 ? 1 : 0
-  provider = databricks.account
+# Unity Catalog refuses overlapping external locations in the metastore, and
+# the registry cannot see the ones it did not create (each workspace's catalog
+# location, anything made by hand, a share being retired). So every registry
+# URL is checked against every other location in the live metastore first.
+data "databricks_external_locations" "all" {
+  count    = length(local.onboarded_datasets) > 0 ? 1 : 0
+  provider = databricks.shared
 }
 
-# A consumer must exist before a share names it: its workspace ID is looked up
-# by name, and binding to a workspace that does not exist would fail anyway.
-resource "terraform_data" "databricks_share_consumers_exist" {
-  count = length(local.databricks_shares) > 0 ? 1 : 0
+data "databricks_external_location" "live" {
+  for_each = length(local.onboarded_datasets) > 0 ? setsubtract(toset(data.databricks_external_locations.all[0].names), local.onboarded_names) : toset([])
+  provider = databricks.shared
+
+  name = each.key
+}
+
+locals {
+  # No trailing slash on either side, as Databricks stores URLs.
+  live_location_urls = { for name, l in data.databricks_external_location.live : name => trimsuffix(l.external_location_info[0].url, "/") }
+  dataset_overlaps = sort(flatten([
+    for key, d in local.onboarded_datasets : [
+      for name, url in local.live_location_urls : "${d.id} (${d.url}) and ${name} (${url})"
+      if d.url == url || startswith("${d.url}/", "${url}/") || startswith("${url}/", "${d.url}/")
+    ]
+  ]))
+}
+
+resource "terraform_data" "dataset_overlap_check" {
+  count = length(local.onboarded_datasets) > 0 ? 1 : 0
 
   lifecycle {
     precondition {
-      condition = alltrue([
-        for c in local.databricks_share_consumers : contains(keys(data.databricks_mws_workspaces.all[0].ids), "${c}-prod")
-      ])
-      error_message = "A databricks_share consumer has no workspace yet: ${join(", ", [for c in local.databricks_share_consumers : c if !contains(keys(data.databricks_mws_workspaces.all[0].ids), "${c}-prod")])}. Run the Databricks apply for it first, then this release."
+      condition     = length(local.dataset_overlaps) == 0
+      error_message = "An onboarded dataset overlaps a location already in the metastore, which Unity Catalog refuses: ${join("; ", local.dataset_overlaps)}. Retire the other location first, or onboard another prefix."
     }
   }
 }
 
-module "databricks_shared_dataset" {
-  for_each  = local.databricks_shares
-  source    = "jwallace145/jwall-engineering/aws//modules/databricks-shared-dataset"
-  version   = "0.23.0"
+module "databricks_dataset" {
+  for_each  = local.onboarded_datasets
+  source    = "jwallace145/jwall-engineering/aws//modules/databricks-dataset"
+  version   = "0.24.0"
   providers = { aws = aws, databricks = databricks.shared }
 
-  name_root         = local.context.organization
-  name              = each.key
+  name              = each.value.platform_name
   bucket            = each.value.bucket
   prefix            = each.value.prefix
   host_workspace_id = module.databricks_shared_host[0].workspace_id
   owner_group_name  = module.databricks_metastore[0].admin_group_name
 
-  consumers = {
-    for c in each.value.consumers : c => {
-      workspace_id     = data.databricks_mws_workspaces.all[0].ids["${c}-prod"]
-      users_group_name = "${c}-workspace-users"
-    }
-  }
+  depends_on = [terraform_data.dataset_overlap_check]
+}
 
-  depends_on = [terraform_data.databricks_share_consumers_exist]
+# config.yaml names the host's URL for the data-access stack; Databricks picked
+# it when this stack created the host. A mismatch is reported, not fatal.
+check "shared_host_url" {
+  assert {
+    condition     = !local.databricks_enabled || try(local.databricks.shared_host_url, null) == try(module.databricks_shared_host[0].workspace_url, null)
+    error_message = "config.yaml databricks.shared_host_url must be the shared host's URL (output databricks_shared_host.workspace_url), which the data-access stack binds and grants through."
+  }
 }
 
 module "databricks_ci_plan" {
   for_each = local.databricks_projects
   source   = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version  = "0.23.0"
+  version  = "0.24.0"
 
   project           = each.key
   repository        = local.context.repository
@@ -233,7 +245,7 @@ module "databricks_ci_plan" {
 module "databricks_ci_apply" {
   for_each = local.databricks_projects
   source   = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version  = "0.23.0"
+  version  = "0.24.0"
 
   project           = each.key
   repository        = local.context.repository

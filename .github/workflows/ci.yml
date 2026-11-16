@@ -102,6 +102,13 @@ jobs:
           args: -backend=false
       - name: terraform validate
         run: terraform validate -no-color
+      # The onboarded-dataset registry (datasets/), derived as access.py derives
+      # it: both are tested against tests/fixtures/datasets-expected.json.
+      - name: terraform test (foundation/registry)
+        working-directory: foundation/registry
+        run: |
+          terraform init -backend=false -input=false -no-color
+          terraform test -no-color
       - uses: terraform-linters/setup-tflint@v6
         with:
           tflint_version: latest

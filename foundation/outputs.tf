@@ -76,10 +76,11 @@ output "databricks_shared_host" {
   } : null
 }
 
-output "databricks_shared_datasets" {
-  description = "Each shared dataset's external location, URL and share role, by share name."
+output "databricks_datasets" {
+  description = "Each onboarded dataset (datasets/) by its key: its id, external location, URL and role."
   value = {
-    for name, m in module.databricks_shared_dataset : name => {
+    for key, m in module.databricks_dataset : key => {
+      id                = local.onboarded_datasets[key].id
       external_location = m.external_location_name
       url               = m.url
       role_arn          = m.role_arn
