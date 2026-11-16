@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.36.0...v0.37.0) (2026-11-16)
+
+
+### Features
+
+* **config:** approve the Braveheart split's positions and nets datasets, versioned ([#158](https://github.com/jwallace145/jwall-engineering-infra/issues/158)) ([4d472ce](https://github.com/jwallace145/jwall-engineering-infra/commit/4d472ce0a5875614d356e1decab71603d85bb8e6))
+
 ## [0.36.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.35.0...v0.36.0) (2026-11-16)
 
 
