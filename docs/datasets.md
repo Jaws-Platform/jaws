@@ -115,7 +115,7 @@ data has a home.
 |---|---|---|---|
 | Task instances, when `writers: [task-runner]` | `PutObject` under the prefix (and `AbortMultipartUpload` for their own failed uploads) | `ListBucket` under the prefix only, never `GetObject` | no |
 | A task profile's instances, through its `datasets` grant | `PutObject` under each `write` sub-prefix | `GetObject` under each `read` sub-prefix; `ListBucket` limited to those sub-prefixes | no |
-| `readers` | no | `GetObject` and `ListBucket` under the prefix | no |
+| `readers` | no | `GetObject` under the prefix and on its own key (`data` for `data/`); `ListBucket` on the whole bucket, unconditioned, so a directory probe (Unity Catalog's, Spark's) gets 404 rather than 403 for a missing key. Listing shows key names, never contents | no |
 | The task launch role (`ci-task`) | no | no | no |
 | The plan and apply roles (`ci-plan`, `ci-apply`) | the bucket's configuration only (`dataset/read`, `dataset/manage`) | no objects | no objects |
 | The account's administrators | yes | yes | yes |
