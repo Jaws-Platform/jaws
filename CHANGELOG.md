@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.34.0...v0.35.0) (2026-11-16)
+
+
+### Features
+
+* **owner-access:** exempt the owner's Identity Center admin role from the hardened bucket policies ([#154](https://github.com/jwallace145/jwall-engineering-infra/issues/154)) ([59b362e](https://github.com/jwallace145/jwall-engineering-infra/commit/59b362e938e56bcaa476a608896027f6d234cf55))
+
 ## [0.34.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.33.1...v0.34.0) (2026-11-16)
 
 
