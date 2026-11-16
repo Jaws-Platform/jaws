@@ -66,8 +66,12 @@ module, in the bot stack.
   stops `PutObject` replacing a key. Prefixes that `config.yaml` lists under
   `write_once` are enforced: see [Write-once prefixes](#write-once-prefixes).
 - **Versioning is off unless the project turns it on** (and `config.yaml`
-  approves it). The braveheart bucket has it off, because it would only store
-  an accidental re-upload twice. When it is on:
+  approves it). `jwall-engineering-braveheart-nnue` has it off, because it
+  would only store an accidental re-upload twice. The buckets the Braveheart
+  split copies it into, `jwall-engineering-braveheart-selfplay-positions` and
+  `jwall-engineering-braveheart-trainer-nets`, have it on with no expiry: the
+  data can't be regenerated cheaply, and an overwrite or a delete stays
+  recoverable. When it is on:
   - S3 advises waiting 15 minutes after enabling versioning before writing.
   - `expire_prefixes` only adds delete markers on a versioned bucket; the data
     stays, and is billed, until `expire_noncurrent_days` expires the

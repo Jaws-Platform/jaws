@@ -1,10 +1,10 @@
-# braveheart-selfplay's live file (tests/fixtures/registry/): a task runner and, until the data
-# moves, no dataset.
+# braveheart-selfplay's live file (tests/fixtures/registry/): a task runner, and the
+# positions bucket the split copies data/selfplay/ into.
 mock_provider "aws" {
   source = "./tests/mocks"
 }
 
-run "plans_a_task_runner_that_can_reach_no_dataset" {
+run "plans_a_task_runner_and_the_positions_bucket" {
   command = plan
 
   assert {
@@ -23,12 +23,31 @@ run "plans_a_task_runner_that_can_reach_no_dataset" {
   }
 
   assert {
-    condition     = length(var.datasets) == 0 && length(module.datasets) == 0
-    error_message = "until the data moves, braveheart-selfplay has no dataset, so its tasks can write nowhere"
+    condition     = toset(keys(module.datasets)) == toset(["positions"]) && var.datasets[0].bucket == "jwall-engineering-braveheart-selfplay-positions" && var.datasets[0].prefix == "data/"
+    error_message = "braveheart-selfplay has one dataset, positions, under data/ like the bucket it is copied from"
   }
 
   assert {
-    condition     = alltrue([for p in var.task_profiles : length(p.datasets) == 0])
-    error_message = "no task profile is granted a dataset"
+    condition     = var.datasets[0].versioning && var.datasets[0].expire_noncurrent_days == null && length(var.datasets[0].expire_prefixes) == 0
+    error_message = "the positions are versioned and nothing expires"
+  }
+
+  assert {
+    condition     = length(var.datasets[0].writers) == 0
+    error_message = "no task instance writes the whole prefix: only the datagen and relabel profiles add objects, under their grants"
+  }
+
+  assert {
+    condition     = jsonencode(var.datasets[0].readers) == jsonencode(["arn:aws:iam::650503560686:role/jwall-engineering-braveheart-trainer-task-gpu"])
+    error_message = "the trainer's GPU tasks, and only they, read the positions through the bucket policy"
+  }
+
+  # jsonencode: a list(...) variable never equals a tuple literal with `==`.
+  assert {
+    condition = (
+      jsonencode([for p in var.task_profiles : p.datasets if p.name == "datagen"][0]) == jsonencode([{ name = "positions", read = [], write = ["selfplay/"], write_once = [] }]) &&
+      jsonencode([for p in var.task_profiles : p.datasets if p.name == "relabel"][0]) == jsonencode([{ name = "positions", read = ["selfplay/"], write = ["selfplay/relabel/"], write_once = [] }])
+    )
+    error_message = "datagen writes selfplay/; relabel reads selfplay/ and writes selfplay/relabel/"
   }
 }
