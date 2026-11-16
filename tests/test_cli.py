@@ -1342,3 +1342,48 @@ def test_a_dataset_the_file_keeps_is_never_released(
         result = runner.invoke(cli.app, ["apply"])
     assert result.exit_code == 0, result.output
     assert not any(c.startswith(TF_RM) for c in _calls(fake_terraform))
+
+
+# -- a project's first apply, before it has any state ---------------------------------
+
+
+@pytest.mark.parametrize("workspace", ["research_workspace", "bot_workspace"])
+def test_first_apply_of_a_project_without_state_applies(
+    workspace: str,
+    fake_terraform: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+) -> None:
+    """`state list` exits 1 with "No state file was found!" before the first apply;
+    that is an empty state, not a failure (both v0.33.0 first applies failed on it)."""
+    request.getfixturevalue(workspace)
+    monkeypatch.setenv("FAKE_TF_NO_STATE", "1")
+    role = RESEARCH_APPLY_ROLE if workspace == "research_workspace" else BOT_APPLY_ROLE
+    with mock_aws(), _as_role(role):
+        result = runner.invoke(cli.app, ["apply"])
+    assert result.exit_code == 0, result.output
+    verbs = [c.split()[0] for c in _calls(fake_terraform)]
+    assert verbs[:3] == ["init", "state", "plan"]
+    assert "apply" in verbs
+    assert not any(c.startswith(TF_RM) for c in _calls(fake_terraform))
+
+
+def test_first_plan_of_a_project_without_state_plans(
+    research_workspace: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_TF_NO_STATE", "1")
+    with _as_role(RESEARCH_PLAN_ROLE):
+        result = runner.invoke(cli.app, ["plan"])
+    assert result.exit_code == 0, result.output
+    assert any(c.startswith("plan ") for c in _calls(fake_terraform))
+
+
+def test_any_other_state_error_still_fails(
+    research_workspace: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_TF_STATE_BROKEN", "1")
+    with mock_aws(), _as_role(RESEARCH_APPLY_ROLE):
+        result = runner.invoke(cli.app, ["apply"])
+    assert result.exit_code == 1
+    assert "terraform state failed" in result.output
+    assert not any(c.startswith(("plan ", "apply ")) for c in _calls(fake_terraform))

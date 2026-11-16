@@ -56,6 +56,8 @@ _LOCK_INFO = re.compile(r"Lock Info:\n((?:\s{2,}\S.*\n?)+)")
 #: quoted key, which may hold anything) and the segment after it, the resource type.
 _DATASET_RESOURCE = re.compile(r'^module\.datasets\["((?:[^"\\]|\\.)*)"\]\.([a-z0-9_]+)\.')
 _BUCKET_TYPE_PREFIX = "aws_s3_bucket"
+#: What `terraform state list` prints, exiting 1, before a stack's first apply.
+NO_STATE = "No state file was found!"
 
 
 #: The stacks of a Databricks project, in apply order; each is `stacks/databricks-<stack>`.
@@ -600,7 +602,13 @@ class Terraform:
         )
 
     def state_list(self) -> list[str]:
-        result = self._run(["state", "list"], allowed=(0,), timeout=120, stream=False)
+        """The addresses in the state; none before the stack's first apply, when
+        Terraform reports "No state file was found!" and exits 1."""
+        result = self._run(["state", "list"], allowed=(0, 1), timeout=120, stream=False)
+        if result.returncode == 1:
+            if NO_STATE in result.output:
+                return []
+            raise RunError("terraform state failed with exit code 1", output=result.output)
         return [line.strip() for line in result.output.splitlines() if line.strip()]
 
     def state_rm(self, address: str) -> None:
