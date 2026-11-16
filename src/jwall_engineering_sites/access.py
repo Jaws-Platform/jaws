@@ -18,14 +18,14 @@ import os
 import re
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
 import yaml
 
-from .components import check_prefixes
+from .components import DatabricksWorkspace, Dataset, check_prefixes
 from .errors import ConfigError
 from .settings import default_config_path
 from .site import SITE_FILE, SiteConfig, load_site_config, site_config_from_text
@@ -274,3 +274,111 @@ def project_files_from_env(infra_root: Path) -> ProjectFiles:
         return DirectoryProjectFiles(Path(os.environ[ENV_PROJECT_FILES_DIR]))
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or None
     return GitHubProjectFiles(project_repositories(infra_root), token)
+
+
+# -- handshakes -------------------------------------------------------------------
+
+#: Why a declared half has no edge, in the order they are checked.
+PRODUCER_MISSING = "the producer does not list the consumer"
+CONSUMER_MISSING = "the consumer does not read the dataset"
+NOT_ONBOARDED = "the dataset is not onboarded"
+
+
+@dataclass(frozen=True)
+class Edge:
+    """An agreed handshake: `consumer` reads `dataset`, read-only."""
+
+    dataset: OnboardedDataset
+    consumer: str
+    #: Why, from the consumer's `reads`.
+    purpose: str
+
+
+@dataclass(frozen=True)
+class Pending:
+    """A handshake one side declared but that grants nothing yet, and why."""
+
+    #: `<owner>/<name>`, onboarded or not.
+    dataset: str
+    producer: str
+    consumer: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class Access:
+    """Every edge and pending handshake among the files that were read."""
+
+    edges: tuple[Edge, ...]
+    pending: tuple[Pending, ...]
+
+    def shared(self, owner: str, name: str) -> bool:
+        """Whether some workspace reads `<owner>/<name>`: its role is then a bucket reader."""
+        return any(e.dataset.owner == owner and e.dataset.name == name for e in self.edges)
+
+    def consumed_by(self, consumer: str) -> tuple[Edge, ...]:
+        """The edges `consumer` reads: its S3 endpoint's statements."""
+        return tuple(e for e in self.edges if e.consumer == consumer)
+
+
+def compute_access(registry: Sequence[OnboardedDataset], files: Mapping[str, SiteConfig]) -> Access:
+    """The edges and pending handshakes among `files`, keyed by project.
+
+    Only pairs whose producer's and consumer's files are both in `files` are
+    judged: a project's own plan reads just its counterparts, and a file that
+    could not be read has already failed (ProjectFiles), so a pair left out
+    here is never taken for a revoked one. An onboarded dataset its owner's
+    file does not declare, or whose prefix lies outside the component's, is an
+    error naming its registry file.
+    """
+    onboarded = {d.id: d for d in registry}
+    for d in registry:
+        owner = files.get(d.owner)
+        if owner is not None:
+            _check_onboarding(d, owner)
+    producer_halves: set[tuple[str, str]] = set()
+    consumer_halves: dict[tuple[str, str], str] = {}
+    for project, config in files.items():
+        for component in config.components:
+            if isinstance(component, Dataset):
+                for consumer in component.consumers:
+                    producer_halves.add((f"{project}/{component.name}", consumer))
+            elif isinstance(component, DatabricksWorkspace):
+                for read in component.reads:
+                    consumer_halves[(read.dataset, project)] = read.purpose
+    edges: list[Edge] = []
+    pending: list[Pending] = []
+    for dataset_id, consumer in sorted(producer_halves | set(consumer_halves)):
+        producer = dataset_id.split("/", 1)[0]
+        if producer not in files or consumer not in files:
+            continue
+        if (dataset_id, consumer) not in producer_halves:
+            reason = PRODUCER_MISSING
+        elif (dataset_id, consumer) not in consumer_halves:
+            reason = CONSUMER_MISSING
+        elif dataset_id not in onboarded:
+            reason = NOT_ONBOARDED
+        else:
+            edges.append(
+                Edge(onboarded[dataset_id], consumer, consumer_halves[(dataset_id, consumer)])
+            )
+            continue
+        pending.append(Pending(dataset_id, producer, consumer, reason))
+    return Access(edges=tuple(edges), pending=tuple(pending))
+
+
+def _check_onboarding(dataset: OnboardedDataset, owner: SiteConfig) -> None:
+    where = f"datasets/{dataset.owner}/{dataset.name}.yaml"
+    component = next(
+        (c for c in owner.components if isinstance(c, Dataset) and c.name == dataset.name), None
+    )
+    if component is None:
+        raise ConfigError(
+            f"{where}: {dataset.owner}'s file declares no dataset {dataset.name!r}, so there "
+            "is nothing to onboard"
+        )
+    if not dataset.prefix.startswith(component.prefix):
+        raise ConfigError(
+            f"{where}: prefix {dataset.prefix!r} lies outside {component.prefix!r}, the prefix "
+            f"of {dataset.owner}'s dataset {dataset.name}"
+        )
