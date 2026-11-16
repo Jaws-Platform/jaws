@@ -52,6 +52,9 @@ def test_as_dict_is_what_the_foundation_derives(tmp_path: Path) -> None:
         "platform_name": "jwall-engineering-ds-braveheart-selfplay-positions",
         "bucket": "jwall-engineering-braveheart-selfplay-positions",
         "url": "s3://jwall-engineering-braveheart-selfplay-positions/data/v1",
+        "catalog": "braveheart_selfplay",
+        "schema": "positions",
+        "volume": "files",
     }
 
 

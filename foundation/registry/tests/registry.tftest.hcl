@@ -127,3 +127,14 @@ run "a_live_location_equal_to_inside_or_containing_a_dataset_overlaps" {
     error_message = "equal, containing and contained locations overlap; a sibling prefix and another bucket do not"
   }
 }
+
+run "a_catalog_named_like_a_workspace_catalog_is_refused" {
+  command = plan
+
+  variables {
+    directory         = "../../tests/fixtures/datasets"
+    reserved_catalogs = ["braveheart_selfplay"]
+  }
+
+  expect_failures = [output.datasets]
+}

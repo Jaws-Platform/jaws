@@ -42,6 +42,8 @@ ONBOARDING_KEY_MAX = 40
 ENV_INFRA_ROOT = "JES_INFRA_ROOT"
 #: The one file in datasets/ that is not a dataset.
 REGISTRY_README = "README.md"
+#: Every onboarded dataset's external volume, in its schema of its producer's catalog.
+ONBOARDED_VOLUME = "files"
 #: A directory of `<project>.yaml` read instead of GitHub (tests, local runs).
 ENV_PROJECT_FILES_DIR = "JES_PROJECT_FILES_DIR"
 #: The registries of projects and their repositories, one line per entry, as
@@ -93,6 +95,21 @@ class OnboardedDataset:
         """The location's URL, without the trailing slash Databricks drops."""
         return f"s3://{self.bucket(organization)}/{self.prefix.removesuffix('/')}"
 
+    @property
+    def catalog(self) -> str:
+        """The producer's Unity Catalog catalog: the owner, `-` replaced by `_`."""
+        return self.owner.replace("-", "_")
+
+    @property
+    def schema(self) -> str:
+        """The dataset's schema in its producer's catalog: the name, `-` replaced by `_`."""
+        return self.name.replace("-", "_")
+
+    @property
+    def volume(self) -> str:
+        """The dataset's external volume in its schema: /Volumes/<catalog>/<schema>/files/."""
+        return ONBOARDED_VOLUME
+
     def as_dict(self, organization: str) -> dict[str, str]:
         """Every derived value, as the foundation's registry module outputs it."""
         return {
@@ -104,6 +121,9 @@ class OnboardedDataset:
             "platform_name": self.platform_name(organization),
             "bucket": self.bucket(organization),
             "url": self.url(organization),
+            "catalog": self.catalog,
+            "schema": self.schema,
+            "volume": self.volume,
         }
 
 
@@ -516,6 +536,14 @@ def workspace_users_group(project: str) -> str:
     return f"{project}-workspace-users"
 
 
+def metastore_admin_group(organization: str) -> str:
+    """The metastore admin group, `<organization>-metastore-admins` (the
+    databricks-metastore module's default, which the foundation keeps): it owns
+    every onboarded dataset's objects and is in every grant set the reconcile
+    manages."""
+    return f"{organization}-metastore-admins"
+
+
 def fingerprint(variables: Mapping[str, Any]) -> str:
     """SHA-256 of the canonical JSON of `variables`: sorted keys, no whitespace."""
     canonical = json.dumps(variables, sort_keys=True, separators=(",", ":"))
@@ -547,10 +575,15 @@ def data_access_tfvars(
         datasets[dataset.key] = {
             "id": dataset.id,
             "location_name": dataset.platform_name(organization),
+            "credential_name": dataset.platform_name(organization),
+            "catalog": dataset.catalog,
+            "schema": dataset.schema,
+            "volume": dataset.volume,
             "consumers": dict(sorted(consumers.items())),
         }
     variables: dict[str, Any] = {
         "host_workspace_url": databricks.shared_host_url,
+        "owner_group_name": metastore_admin_group(organization),
         "datasets": datasets,
     }
     return variables | {"fingerprint": fingerprint(variables)}

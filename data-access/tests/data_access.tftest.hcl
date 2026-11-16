@@ -29,15 +29,32 @@ mock_provider "databricks" {
       ]
     }
   }
+
+  mock_data "databricks_catalogs" {
+    defaults = {
+      ids = ["braveheart_databricks", "braveheart_selfplay"]
+    }
+  }
+
+  mock_data "databricks_schemas" {
+    defaults = {
+      ids = ["braveheart_selfplay.games", "braveheart_selfplay.positions"]
+    }
+  }
 }
 
 variables {
   host_workspace_url = "https://dbc-01234567-89ab.cloud.databricks.com"
   fingerprint        = "0f5b6a3c9d8e7f60123456789abcdef0123456789abcdef0123456789abcdef0"
+  owner_group_name   = "jwall-engineering-metastore-admins"
   datasets = {
     braveheart-selfplay-positions = {
-      id            = "braveheart-selfplay/positions"
-      location_name = "jwall-engineering-ds-braveheart-selfplay-positions"
+      id              = "braveheart-selfplay/positions"
+      location_name   = "jwall-engineering-ds-braveheart-selfplay-positions"
+      credential_name = "jwall-engineering-ds-braveheart-selfplay-positions"
+      catalog         = "braveheart_selfplay"
+      schema          = "positions"
+      volume          = "files"
       consumers = {
         braveheart-databricks = {
           users_group_name = "braveheart-databricks-workspace-users"
@@ -155,9 +172,13 @@ run "a_dataset_nobody_reads_keeps_its_instance_and_binds_nothing" {
   variables {
     datasets = {
       braveheart-selfplay-positions = {
-        id            = "braveheart-selfplay/positions"
-        location_name = "jwall-engineering-ds-braveheart-selfplay-positions"
-        consumers     = {}
+        id              = "braveheart-selfplay/positions"
+        location_name   = "jwall-engineering-ds-braveheart-selfplay-positions"
+        credential_name = "jwall-engineering-ds-braveheart-selfplay-positions"
+        catalog         = "braveheart_selfplay"
+        schema          = "positions"
+        volume          = "files"
+        consumers       = {}
       }
     }
   }
@@ -188,4 +209,91 @@ run "a_host_url_that_is_not_a_databricks_workspace_is_refused" {
   }
 
   expect_failures = [var.host_workspace_url]
+}
+
+# The producer catalog: bound read-only to the union of the consumers of its
+# ready datasets; each dataset's schema and volume granted to its own.
+
+run "two_datasets_of_one_producer_with_different_consumers" {
+  command = plan
+
+  override_data {
+    target = data.databricks_external_locations.all
+    values = { names = ["jwall-engineering-ds-braveheart-selfplay-games", "jwall-engineering-ds-braveheart-selfplay-positions"] }
+  }
+
+  variables {
+    datasets = {
+      braveheart-selfplay-positions = {
+        id              = "braveheart-selfplay/positions"
+        location_name   = "jwall-engineering-ds-braveheart-selfplay-positions"
+        credential_name = "jwall-engineering-ds-braveheart-selfplay-positions"
+        catalog         = "braveheart_selfplay"
+        schema          = "positions"
+        volume          = "files"
+        consumers = {
+          braveheart-databricks = { users_group_name = "braveheart-databricks-workspace-users", purpose = "analysis" }
+        }
+      }
+      braveheart-selfplay-games = {
+        id              = "braveheart-selfplay/games"
+        location_name   = "jwall-engineering-ds-braveheart-selfplay-games"
+        credential_name = "jwall-engineering-ds-braveheart-selfplay-games"
+        catalog         = "braveheart_selfplay"
+        schema          = "games"
+        volume          = "files"
+        consumers = {
+          databricks-poc = { users_group_name = "databricks-poc-workspace-users", purpose = "a demo" }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = jsonencode(output.catalogs) == jsonencode({ braveheart_selfplay = ["braveheart-databricks", "databricks-poc"] })
+    error_message = "the producer catalog is bound to the union of its datasets' consumers"
+  }
+
+  assert {
+    condition = (jsonencode(keys(local.bound["braveheart-selfplay-positions"])) == jsonencode(["braveheart-databricks"])
+    && jsonencode(keys(local.bound["braveheart-selfplay-games"])) == jsonencode(["databricks-poc"]))
+    error_message = "each dataset's schema and volume are granted to its own consumers only"
+  }
+}
+
+run "a_dataset_whose_catalog_or_schema_is_missing_waits" {
+  command = plan
+
+  override_data {
+    target = data.databricks_catalogs.all
+    values = { ids = ["braveheart_databricks"] }
+  }
+
+  assert {
+    condition     = jsonencode(output.awaiting_onboarding) == jsonencode(["braveheart-selfplay-positions"]) && length(module.access) == 0 && length(module.catalog_access) == 0
+    error_message = "a dataset whose producer catalog does not exist yet waits, binding and granting nothing"
+  }
+}
+
+run "the_last_edge_into_a_producer_unbinds_its_catalog" {
+  command = plan
+
+  variables {
+    datasets = {
+      braveheart-selfplay-positions = {
+        id              = "braveheart-selfplay/positions"
+        location_name   = "jwall-engineering-ds-braveheart-selfplay-positions"
+        credential_name = "jwall-engineering-ds-braveheart-selfplay-positions"
+        catalog         = "braveheart_selfplay"
+        schema          = "positions"
+        volume          = "files"
+        consumers       = {}
+      }
+    }
+  }
+
+  assert {
+    condition     = jsonencode(output.catalogs) == jsonencode({ braveheart_selfplay = [] })
+    error_message = "with no consumer left, the catalog stays managed with no binding and no consumer's USE CATALOG"
+  }
 }

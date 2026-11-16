@@ -77,13 +77,16 @@ output "databricks_shared_host" {
 }
 
 output "databricks_datasets" {
-  description = "Each onboarded dataset (datasets/) by its key: its id, external location, URL and role."
+  description = "Each onboarded dataset (datasets/) by its key: its id, external location, URL, role, and where consumers find it (catalog, schema, volume path)."
   value = {
     for key, m in module.databricks_dataset : key => {
       id                = local.onboarded_datasets[key].id
       external_location = m.external_location_name
       url               = m.url
       role_arn          = m.role_arn
+      catalog           = local.onboarded_datasets[key].catalog
+      schema            = local.onboarded_datasets[key].schema
+      volume_path       = m.volume_path
     }
   }
 }

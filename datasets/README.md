@@ -13,8 +13,11 @@ while both of these hold, a handshake:
 - the consuming project lists the dataset under its workspace's `reads`, with
   a `purpose`.
 
-The **Data access** workflow binds and grants every agreed handshake within
-15 minutes of its second half merging.
+Once both halves stand, the dataset appears in the consumer workspace's
+Catalog Explorer, under its producer's catalog, and its users read
+`/Volumes/<owner>/<name>/files/` (`-` replaced by `_`). The **Data access**
+workflow binds and grants every agreed handshake within 15 minutes of its
+second half merging.
 [docs/databricks.md](../docs/databricks.md#datasets-and-access) has the whole
 flow.
 

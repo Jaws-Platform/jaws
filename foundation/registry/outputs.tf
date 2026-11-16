@@ -18,6 +18,11 @@ output "datasets" {
   }
 
   precondition {
+    condition     = length(local.catalog_clashes) == 0
+    error_message = "a producer catalog (<owner> with - replaced by _) would take a Databricks workspace project's own catalog: ${join(", ", local.catalog_clashes)}. Rename one of the projects."
+  }
+
+  precondition {
     condition     = length(local.clashing) == 0
     error_message = "two ids share a platform name (<organization>-ds-<owner>-<name>): ${join("; ", local.clashing)}."
   }
