@@ -16,7 +16,7 @@ parts the first live apply must confirm are listed under
 Contents: [setup](#one-time-setup), [onboarding a project](#onboarding-a-project),
 [the project file](#the-project-file), [plan](#what-plan-shows),
 [apply](#what-apply-does), [destroy](#destroy), [doctor](#doctor),
-[shared datasets](#shared-datasets), [layout](#bucket-and-prefix-layout), [tags](#tags-on-every-resource),
+[datasets and access](#datasets-and-access), [layout](#bucket-and-prefix-layout), [tags](#tags-on-every-resource),
 [compute policies](#central-compute-policies), [costs](#costs),
 [known gaps](#known-gaps), [runbook](#runbook).
 
@@ -299,75 +299,122 @@ current state, where `apply` would poll for up to
 failed; warnings do not fail it. While `databricks.enabled` is false, the live
 checks SKIP.
 
-## Shared datasets
+## Datasets and access
 
-A dataset bucket (a `dataset` component of another project) can be read,
-read-only, by any number of Databricks workspace projects. Unity Catalog
-refuses overlapping external locations in a metastore, and every workspace
-shares one, so a dataset prefix is registered **once**, by the foundation, and
-every consumer is bound to that one location.
+A dataset bucket (another project's `dataset` component) can be read,
+read-only, by any number of Databricks workspace projects. Three parties each
+own one piece, and nothing in `config.yaml` names a consumer:
 
-```yaml
-# config.yaml, on the producer's approved dataset (reviewed here)
-projects:
-  braveheart-selfplay:
-    datasets:
-      jwall-engineering-braveheart-selfplay-positions:
-        prefix: data/
-        versioning: true
-        databricks_share:
-          prefix: data/
-          consumers: [braveheart-databricks]
-```
+1. **Onboarding, by the platform.** One file in this repository,
+   `datasets/<owner>/<name>.yaml` ([datasets/README.md](../datasets/README.md)),
+   registers the dataset once. The foundation creates its read-only IAM role,
+   storage credential and external location, all named
+   `<organization>-ds-<owner>-<name>`, through the shared host, and binds them
+   to the host only. Onboarding lets nobody read.
+2. **The producer's half.** The producing project lists the workspace project
+   under the dataset's `consumers`, in its own file:
 
-```yaml
-# the producer's jwall-engineering-sites.yaml (its consent)
-  - kind: dataset
-    name: positions
-    bucket: jwall-engineering-braveheart-selfplay-positions
-    prefix: data/
-    versioning: true
-    consumers: [braveheart-databricks]
-```
+   ```yaml
+   # braveheart-selfplay's jwall-engineering-sites.yaml
+     - kind: dataset
+       name: positions
+       bucket: jwall-engineering-braveheart-selfplay-positions
+       prefix: data/
+       versioning: true
+       consumers: [braveheart-databricks]
+   ```
 
-- **The host.** The foundation owns `jwall-engineering-shared`, a serverless
-  workspace with no VPC, NAT, buckets, catalog or users; only the metastore
-  admin group is assigned to it. Shared objects are created through it, so no
-  project owns them. It has no standing AWS cost.
-- **What the foundation creates per share** (`databricks-shared-dataset`): the
-  share role `jwall-engineering-<bucket without the organization>-databricks-share`
-  (for example `jwall-engineering-braveheart-selfplay-positions-databricks-share`,
-  exactly IAM's 64-character limit), a
-  read-only storage credential, and one read-only external location
-  `jwall-engineering-<name>` at `s3://<bucket>/<prefix>`, bound to the host and
-  to each consumer, with `READ_FILES` for `<consumer>-workspace-users`. The
-  metastore admin group owns them.
-- **Who grants access.** The share role has no S3 read permission of its own.
-  It reads only because the producer's bucket policy names it as a reader: the
-  CLI adds it to the dataset's `readers` once the producer's file lists the
-  consumers. Removing `consumers` from the producer's file revokes every
-  consumer at once.
-- **The consumer's endpoint.** Each consumer's account stack passes the share
-  to its workspace's S3 endpoint policy (`read_only_datasets`): only the
-  share role, only read actions, only under the prefix.
-- **Checks.** config.yaml refuses a consumer that is not a Databricks workspace
-  project, a repeated consumer and a malformed prefix. The producer's
-  `consumers` must be empty (not shared yet) or exactly the approved ones, with
-  the approved prefix: one role reads for every consumer, so a subset would
-  still let the others in.
+3. **The consumer's half.** The consuming project lists the dataset under its
+   workspace's `reads`, saying why:
 
-**Order.** A consumer's workspace must exist before a share names it (the
-foundation looks up `<consumer>-prod` and its plan fails with a message naming
-the missing one). Then: a pull request here approves the share; its release
-registers the location (reads are still denied); the producer lists
-`consumers` and its release (or a bot apply) adds the reader; each consumer's
-**Databricks apply** adds the endpoint statement. Consumers read
-`s3://<bucket>/<prefix>` with `spark.read`, `dbutils.fs.ls` or a volume an
-admin creates on the location.
+   ```yaml
+   # braveheart-databricks's jwall-engineering-sites.yaml
+     - kind: databricks-workspace
+       # ...
+       reads:
+         - dataset: braveheart-selfplay/positions
+           purpose: generation-over-generation self-play analysis
+   ```
+
+An **edge** (this workspace reads that dataset) exists only while all three
+hold. Either side ends it alone by removing its half.
+
+- **Read-only at every layer.** An edge grants four things, and each is
+  read-only:
+  - the producer's bucket policy names the dataset's role as a reader (the
+    producer's **Bot apply**, which computes its handshakes);
+  - the role's own policy allows only reads under the onboarded prefix (the
+    foundation);
+  - the location is bound to the consumer's workspace, with `READ_FILES` for
+    `<consumer>-workspace-users` and nothing more (the **Data access** sweep);
+  - the consumer's S3 endpoint policy allows the role's reads under the prefix
+    (the consumer's **Databricks apply**).
+
+  The storage credential and the external location are themselves read-only,
+  so no grant can write through them.
+- **The reconcile.** `data-access/` is a root module of its own (state key
+  `project=data-access/env=prod/data-access-prod.tfstate`), planned and applied
+  by the **Data access** workflow (`.github/workflows/data-access.yml`) with
+  the roles `jwall-engineering-data-access-ci-plan` and
+  `jwall-engineering-data-access-ci-apply`, which reach only that state and the
+  Databricks secret. `jwall-engineering-sites access render` reads `datasets/`,
+  every Databricks workspace project's file and every onboarded dataset's
+  owner's file (each repository's default branch, through GitHub's API) and
+  writes the stack's variables and a summary. A file that cannot be read fails
+  the run before Terraform: it is never taken for a file without a handshake,
+  which would revoke access unseen.
+- **Latency.** The sweep runs every 15 minutes (the `schedule` in
+  `data-access.yml` is the knob), so a merged half takes effect within one
+  sweep, with no run anywhere else. A sweep applies only when the render
+  differs from the applied state (its `fingerprint`) or something still waits
+  (below); otherwise it skips. **Data access apply** with `full` re-applies
+  regardless, which also undoes a grant made by hand. Each sweep costs only S3
+  requests for the state.
+- **Waiting, never failing everyone.** A dataset whose location does not exist
+  yet (its onboarding release has not applied) is reported under
+  `awaiting_onboarding`, and a consumer with no `<consumer>-prod` workspace yet
+  under `missing_workspaces`. Neither fails the sweep for anyone else, and every
+  sweep retries both until they are bound.
+- **Pending handshakes.** A half without the other grants nothing. Each plan
+  logs the ones naming its project with a reason (`the producer does not list
+  the consumer`, `the consumer does not read the dataset`, `the dataset is not
+  onboarded`), and the sweep's summary lists them all.
+- **Checks.** Offline, against `config.yaml`: a consumer must be a Databricks
+  workspace project other than the producer, and a read must name a dataset
+  bucket its owner has approved, once, and not the project's own. The registry
+  refuses misplaced files, keys other than `description` and `prefix`, an
+  `<owner>-<name>` over 40 characters, and two ids with one platform name. A
+  registry file naming a dataset its owner does not declare, or a prefix
+  outside the component's, fails the render. The foundation's plan refuses a
+  registry URL equal to, inside or containing any location already in the
+  metastore; two registry datasets cannot overlap, since each has its own
+  bucket.
+- **Offboarding needs zero edges, and never deletes data.** Remove both halves,
+  let a sweep revoke the edge, then delete the registry file. A pull request
+  that deletes a file still named by `consumers` or `reads` fails its **Data
+  access plan** (it renders against the base branch's registry). The
+  foundation then removes the role, credential and location; the data stays.
+
+**Order for a new edge.** Onboard first: a pull request adding the registry
+file, and its release. Then the two halves, in either order, each merged in
+its own repository; the next sweep binds and grants. Then the producer's **Bot
+apply** (the bucket reader) and the consumer's **Databricks apply** (the
+endpoint statement). Revoking takes effect at the next sweep, which removes the
+binding and grant; the next applies remove the reader and the statement.
+Consumers read `s3://<bucket>/<prefix>` with `spark.read`, `dbutils.fs.ls` or
+a volume an admin creates on the location.
+
+**Migration from the share `config.yaml` used to approve.** That share's
+location covered the same S3 path as the onboarded one, which Unity Catalog
+refuses to hold twice. The release that removes it from `config.yaml` destroys
+it; the onboarding file comes in a later release, whose plan checks the live
+metastore for any overlap first.
 
 **Rebuilding the foundation from nothing** takes two applies: the host first,
-with no `databricks_share` in config.yaml (the shared datasets' provider needs
-the host's URL), then the shares.
+with `datasets/` empty (the onboarded datasets' provider needs the host's URL),
+then the datasets. Set `databricks.shared_host_url` in `config.yaml` to the
+host's URL (output `databricks_shared_host.workspace_url`) for the reconcile;
+the foundation reports a mismatch as a check warning.
 
 ## Bucket and prefix layout
 
@@ -472,9 +519,9 @@ larger Arm instance type if egress needs grow.
   the catalog bucket's policy or the role's trust policy. The policies deny
   object reads and writes to them, but not their own reconfiguration.
 - **To confirm on the first live apply:**
-  - that a shared dataset's location, created through the serverless host, can be
-    bound to classic consumer workspaces, and that consumers read through it while
-    its storage credential is bound to the host only;
+  - that an onboarded dataset's location, created through the serverless host,
+    can be bound to classic consumer workspaces, and that consumers read through
+    it while its storage credential is bound to the host only;
   - metastore auto-assignment: whether Databricks assigns the new workspace to
     the region's metastore itself, so `databricks_metastore_assignment` fails
     "already assigned" (see [DBX-METASTORE-ALREADY-ASSIGNED](#dbx-metastore-already-assigned));

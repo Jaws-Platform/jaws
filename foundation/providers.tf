@@ -20,12 +20,12 @@ provider "databricks" {
   auth_type = "oauth-m2m"
 }
 
-# The shared-objects host's workspace API (databricks.tf), for the shared
-# datasets' credentials, locations, bindings and grants. Same service
-# principal and environment credentials as the account provider; the host is
-# the workspace this stack created, so its URL is known from state. Rebuilding
-# the foundation from nothing therefore takes two applies: the host first, with
-# no databricks_share in config.yaml, then the shares.
+# The shared-objects host's workspace API (databricks.tf), for the onboarded
+# datasets' storage credentials, external locations and host bindings. Same
+# service principal and environment credentials as the account provider; the
+# host is the workspace this stack created, so its URL is known from state.
+# Rebuilding the foundation from nothing therefore takes two applies: the host
+# first, with datasets/ empty, then the datasets.
 provider "databricks" {
   alias     = "shared"
   host      = local.databricks_enabled ? module.databricks_shared_host[0].workspace_url : null
