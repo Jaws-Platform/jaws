@@ -49,6 +49,11 @@ locals {
       platform_name = "${var.organization}-ds-${local.keys[f]}"
       bucket        = "${var.organization}-${local.keys[f]}"
       url           = "s3://${var.organization}-${local.keys[f]}/${trimsuffix(local.raw[f].prefix, "/")}"
+      # In Unity Catalog: the producer's catalog, the dataset's schema in it,
+      # and its external volume (/Volumes/<catalog>/<schema>/files/).
+      catalog = replace(split("/", local.ids[f])[0], "-", "_")
+      schema  = replace(split("/", local.ids[f])[1], "-", "_")
+      volume  = "files"
     }
   } : {}
 }
@@ -70,5 +75,14 @@ locals {
       for name, url in local.live_urls : "${d.id} (${d.url}) and ${name} (${url})"
       if startswith("${d.url}/", "${url}/") || startswith("${url}/", "${d.url}/")
     ]
+  ]))
+}
+
+# A producer catalog may not take a Databricks workspace project's own catalog
+# name (each workspace's catalog is <project> with - replaced by _).
+locals {
+  catalog_clashes = sort(distinct([
+    for f in local.valid : replace(split("/", local.ids[f])[0], "-", "_")
+    if contains(var.reserved_catalogs, replace(split("/", local.ids[f])[0], "-", "_"))
   ]))
 }

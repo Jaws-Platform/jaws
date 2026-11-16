@@ -42,6 +42,8 @@ ONBOARDING_KEY_MAX = 40
 ENV_INFRA_ROOT = "JES_INFRA_ROOT"
 #: The one file in datasets/ that is not a dataset.
 REGISTRY_README = "README.md"
+#: Every onboarded dataset's external volume, in its schema of its producer's catalog.
+ONBOARDED_VOLUME = "files"
 #: A directory of `<project>.yaml` read instead of GitHub (tests, local runs).
 ENV_PROJECT_FILES_DIR = "JES_PROJECT_FILES_DIR"
 #: The registries of projects and their repositories, one line per entry, as
@@ -93,6 +95,21 @@ class OnboardedDataset:
         """The location's URL, without the trailing slash Databricks drops."""
         return f"s3://{self.bucket(organization)}/{self.prefix.removesuffix('/')}"
 
+    @property
+    def catalog(self) -> str:
+        """The producer's Unity Catalog catalog: the owner, `-` replaced by `_`."""
+        return self.owner.replace("-", "_")
+
+    @property
+    def schema(self) -> str:
+        """The dataset's schema in its producer's catalog: the name, `-` replaced by `_`."""
+        return self.name.replace("-", "_")
+
+    @property
+    def volume(self) -> str:
+        """The dataset's external volume in its schema: /Volumes/<catalog>/<schema>/files/."""
+        return ONBOARDED_VOLUME
+
     def as_dict(self, organization: str) -> dict[str, str]:
         """Every derived value, as the foundation's registry module outputs it."""
         return {
@@ -104,6 +121,9 @@ class OnboardedDataset:
             "platform_name": self.platform_name(organization),
             "bucket": self.bucket(organization),
             "url": self.url(organization),
+            "catalog": self.catalog,
+            "schema": self.schema,
+            "volume": self.volume,
         }
 
 

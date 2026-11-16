@@ -20,3 +20,9 @@ variable "live_location_urls" {
   type        = map(string)
   default     = {}
 }
+
+variable "reserved_catalogs" {
+  description = "Catalog names already taken by Databricks workspace projects (each workspace's own catalog, `<project>` with `-` replaced by `_`): no producer catalog may take one."
+  type        = list(string)
+  default     = []
+}
