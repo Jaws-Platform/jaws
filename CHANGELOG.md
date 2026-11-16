@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.2](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.42.1...v0.42.2) (2026-11-16)
+
+
+### Bug Fixes
+
+* **deps:** pin the module library at 0.25.1 for the dataset reader and catalog fixes ([#173](https://github.com/jwallace145/jwall-engineering-infra/issues/173)) ([4e2d96f](https://github.com/jwallace145/jwall-engineering-infra/commit/4e2d96fcad744e99a1c9af8a40476141731a4240))
+
 ## [0.42.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.42.0...v0.42.1) (2026-11-16)
 
 
