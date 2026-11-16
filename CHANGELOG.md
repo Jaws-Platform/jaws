@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.35.0...v0.36.0) (2026-11-16)
+
+
+### Features
+
+* **owner-access:** retire the prog-strength-admin user from the break-glass list ([#156](https://github.com/jwallace145/jwall-engineering-infra/issues/156)) ([9767e81](https://github.com/jwallace145/jwall-engineering-infra/commit/9767e81da50d198663b7bc06ca5baa8e2c8ca273))
+
 ## [0.35.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.34.0...v0.35.0) (2026-11-16)
 
 
