@@ -103,6 +103,67 @@ class LogsSection(_Model):
     retention_days: RetentionDays = 30
 
 
+_CLOCK = re.compile(r"^([01][0-9]|2[0-3]):(00|15|30|45)$")
+#: The stop schedule fires this long after `stop` (the container-instance
+#: module's drain_minutes default), and must fall before midnight UTC.
+DRAIN_MINUTES = 60
+SCHEDULE_MIN_WINDOW_MINUTES = 4 * 60
+SCHEDULE_MAX_WINDOW_MINUTES = 20 * 60
+
+
+def _minutes(clock: str) -> int:
+    hours, minutes = clock.split(":")
+    return int(hours) * 60 + int(minutes)
+
+
+class BotSchedule(_Model):
+    """When the bot instance runs, in UTC. Kept regular on purpose: one window a
+    day on a fixed set of days, never across midnight."""
+
+    days: Literal["daily", "weekdays", "weekends"] = "daily"
+    start: str
+    stop: str
+    timezone: Literal["UTC"] = "UTC"
+
+    @field_validator("start", "stop")
+    @classmethod
+    def _clock(cls, value: str) -> str:
+        if not _CLOCK.match(value):
+            raise ValueError(
+                f"{value!r} must be HH:MM in UTC on a quarter hour (:00, :15, :30, :45), "
+                "from 00:00 to 23:45, for example 08:00; quote it in YAML"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _window(self) -> BotSchedule:
+        window = _minutes(self.stop) - _minutes(self.start)
+        if window <= 0:
+            raise ValueError(
+                f"stop {self.stop} must be after start {self.start} on the same day: a window "
+                "may not cross midnight UTC"
+            )
+        if not SCHEDULE_MIN_WINDOW_MINUTES <= window <= SCHEDULE_MAX_WINDOW_MINUTES:
+            raise ValueError(
+                f"{self.start}-{self.stop} is {window // 60}h{window % 60:02d}; the window must "
+                "be 4 to 20 hours, so the instance is up and down at least 4 hours at a time"
+            )
+        if _minutes(self.stop) + DRAIN_MINUTES > 23 * 60 + 59:
+            raise ValueError(
+                f"stop {self.stop} is too late: the hard stop {DRAIN_MINUTES} minutes later must "
+                "fall before midnight UTC, so stop at 22:45 at the latest"
+            )
+        return self
+
+    def describe(self) -> str:
+        days = {
+            "daily": "every day",
+            "weekdays": "Monday to Friday",
+            "weekends": "Saturday and Sunday",
+        }
+        return f"{self.start}-{self.stop} UTC, {days[self.days]}"
+
+
 class LichessBot(_Model):
     kind: Literal["lichess-bot"]
     #: latest-release: every newly published release is rolled out.
@@ -116,6 +177,8 @@ class LichessBot(_Model):
     engine: EngineSection = EngineSection()
     records: RecordsSection = RecordsSection()
     logs: LogsSection = LogsSection()
+    #: Running hours; None runs the instance all the time.
+    schedule: BotSchedule | None = None
 
     @field_validator("config")
     @classmethod

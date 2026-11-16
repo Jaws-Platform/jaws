@@ -1,5 +1,5 @@
 """AWS calls for bot projects: the secret, the shared parameters, the
-instance, the status view and the container's logs."""
+instance, starting and draining it, the status view and the container's logs."""
 
 from __future__ import annotations
 
@@ -97,6 +97,126 @@ class BotStatus:
     status: str | None
     last_sync: str | None
     profile_url: str | None
+    #: The running hours from the project file, or None: always on.
+    schedule: str | None = None
+
+
+#: What the scheduled drain and `bot stop` run on the instance.
+DRAIN_COMMAND = "/usr/local/bin/container-reconcile-async --drain"
+START_TIMEOUT_SECONDS = 900.0
+DRAIN_ACK_SECONDS = 120.0
+#: The status `bot start` writes before starting; the boot's reconcile replaces it.
+STARTING = "starting"
+POWER_POLL_SECONDS = 10.0
+
+
+def start_instance(
+    ec2: EC2Client,
+    ssm: SSMClient,
+    project: Project,
+    logger: Logger,
+    sleep: Callable[[float], None] = time.sleep,
+    now: Callable[[], float] = time.monotonic,
+    timeout: float = START_TIMEOUT_SECONDS,
+) -> str:
+    """Start the stopped bot instance and wait for the reconciler at boot to end
+    (status `ok` or `failed:...`). Returns that status, or "already running"."""
+    instance = find_instance(ec2, project.project)
+    if instance is None:
+        raise PreflightError(f"{project.project} has no bot instance; run `apply` first")
+    if instance.state in ("running", "pending"):
+        logger.info("%s is already %s", instance.id, instance.state)
+        return "already running"
+    if instance.state != "stopped":
+        raise PreflightError(
+            f"{instance.id} is {instance.state}; run `bot start` again once it has stopped"
+        )
+    status_name = project.parameter("status")
+    before = get_parameters(ssm, [status_name])[status_name]
+    # Not finished until the reconciler at boot writes ok or failed: a stale `ok`
+    # from before the stop must never end the wait early.
+    put_parameter(ssm, status_name, STARTING)
+    try:
+        ec2.start_instances(InstanceIds=[instance.id])
+    except ClientError as exc:
+        if before is not None:
+            put_parameter(ssm, status_name, before)
+        raise RunError(f"could not start {instance.id}: {exc.response['Error']['Code']}") from exc
+    logger.info("starting %s; waiting for the bot to come up", instance.id)
+    deadline = now() + timeout
+    while now() < deadline:
+        sleep(POWER_POLL_SECONDS)
+        current = find_instance(ec2, project.project)
+        status = get_parameters(ssm, [status_name])[status_name]
+        state = current.state if current else "gone"
+        if (
+            state == "running"
+            and status is not None
+            and (status == "ok" or status.startswith("failed:"))
+        ):
+            logger.info("%s is running; status %s", instance.id, status)
+            return status
+    raise RunError(
+        f"{instance.id} did not report ok within {int(timeout)}s; check `bot status` and `bot logs`"
+    )
+
+
+def drain_instance(
+    ec2: EC2Client,
+    ssm: SSMClient,
+    project: Project,
+    logger: Logger,
+    wait: bool = False,
+    sleep: Callable[[float], None] = time.sleep,
+    now: Callable[[], float] = time.monotonic,
+    ack_seconds: float = DRAIN_ACK_SECONDS,
+) -> str:
+    """Ask the bot instance to drain: the bot finishes its game, ships its records
+    and powers off. Returns once the drain has begun (status `waiting:...` or
+    `stopped`), or with `wait` once the instance has stopped. A manual drain has no
+    deadline: the reconciler waits as long as the game lasts."""
+    instance = find_instance(ec2, project.project)
+    if instance is None:
+        raise PreflightError(f"{project.project} has no bot instance")
+    if instance.state in ("stopped", "stopping"):
+        logger.info("%s is already %s", instance.id, instance.state)
+        return instance.state
+    if instance.state != "running":
+        raise PreflightError(f"{instance.id} is {instance.state}; try again once it is running")
+    status_name = project.parameter("status")
+    try:
+        ssm.send_command(
+            InstanceIds=[instance.id],
+            DocumentName="AWS-RunShellScript",
+            Parameters={"commands": [DRAIN_COMMAND], "executionTimeout": ["120"]},
+            Comment="jwall-engineering-sites bot stop",
+        )
+    except ClientError as exc:
+        raise RunError(
+            f"could not send the drain to {instance.id}: {exc.response['Error']['Code']}"
+        ) from exc
+    logger.info(
+        "asked %s to drain; the bot finishes its game, then the instance stops", instance.id
+    )
+    deadline = now() + ack_seconds
+    while True:
+        status = get_parameters(ssm, [status_name])[status_name] or ""
+        current = find_instance(ec2, project.project)
+        state = current.state if current else "gone"
+        if state in ("stopping", "stopped"):
+            logger.info("%s is %s", instance.id, state)
+            return state
+        draining = status.startswith("waiting:") or status == "stopped"
+        if draining and not wait:
+            logger.info("draining (status %s); it stops once the game in progress ends", status)
+            return status
+        if not draining and now() >= deadline:
+            raise RunError(
+                f"{instance.id} has not started draining after {int(ack_seconds)}s (status "
+                f"{status or 'not set'}). An instance from before the drain mode ignores it: "
+                "apply the stack (library 0.22.0 or later), then try again"
+            )
+        sleep(POWER_POLL_SECONDS)
 
 
 def status(session: boto3.session.Session, project: Project) -> BotStatus:
@@ -110,6 +230,7 @@ def status(session: boto3.session.Session, project: Project) -> BotStatus:
         status=values[names[2]],
         last_sync=values[names[3]],
         profile_url=project.profile_url,
+        schedule=project.bot.schedule.describe() if project.bot.schedule else None,
     )
 
 
@@ -124,6 +245,7 @@ def render_status(s: BotStatus) -> str:
         ("desired version", s.desired or "not set"),
         ("running version", s.running or "not set"),
         ("status", s.status or "not set"),
+        ("running hours", s.schedule or "always on"),
         ("last records sync", s.last_sync or "never"),
         ("lichess profile", s.profile_url or "not configured (lichess_user)"),
     ]

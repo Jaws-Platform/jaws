@@ -106,6 +106,16 @@ variable "records_container_path" {
   default     = null
 }
 
+variable "schedule" {
+  description = "When the bot instance runs, in UTC (lichess-bot.schedule): `days` (daily, weekdays or weekends), `start` and `stop` (HH:MM). Null runs it all the time. The container-instance module validates it."
+  type = object({
+    days  = string
+    start = string
+    stop  = string
+  })
+  default = null
+}
+
 variable "log_retention_days" {
   description = "Retention of the bot's CloudWatch log group (lichess-bot.logs.retention_days)."
   type        = number

@@ -30,4 +30,9 @@ run "plans_a_bot_with_its_tasks_and_dataset" {
     condition     = toset(keys(module.task_profiles)) == toset(["datagen", "gpu", "match", "relabel", "sprt"])
     error_message = "braveheart has one launch template per task profile"
   }
+
+  assert {
+    condition     = var.schedule == null && module.bot[0].schedule == null
+    error_message = "without a schedule the bot runs all the time"
+  }
 }

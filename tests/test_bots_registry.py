@@ -396,12 +396,15 @@ def test_foundation_gives_research_projects_compute_and_bots_container() -> None
     # Same order as before research existed: reordering would churn braveheart's attachments.
     assert _policies(plan) == ["tfstate/read", "container/read", "task/read"]
     assert _research_policies(plan) == ["tfstate/read", "compute/read", "task/read"]
+    # container/schedule is appended, not inserted, for the same reason; it is its
+    # own policy because container/manage is near IAM's 6,144-character limit.
     assert _policies(apply) == [
         "tfstate/write",
         "container/read",
         "container/manage",
         "task/read",
         "task/manage",
+        "container/schedule",
     ]
     assert _research_policies(apply) == [
         "tfstate/write",
