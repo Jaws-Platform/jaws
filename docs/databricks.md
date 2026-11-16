@@ -310,7 +310,9 @@ own one piece, and nothing in `config.yaml` names a consumer:
    registers the dataset once. The foundation creates its read-only IAM role,
    storage credential and external location, all named
    `<organization>-ds-<owner>-<name>`, through the shared host, and binds them
-   to the host only. Onboarding lets nobody read.
+   to the host only. In Unity Catalog the dataset becomes a schema in its
+   producer's catalog holding one external volume, `files` (below).
+   Onboarding lets nobody read.
 2. **The producer's half.** The producing project lists the workspace project
    under the dataset's `consumers`, in its own file:
 
@@ -346,13 +348,37 @@ hold. Either side ends it alone by removing its half.
     handshakes);
   - the role's own policy grants no S3 read at all, only locating the bucket,
     so it reads nothing a bucket policy does not grant (the foundation);
-  - the location is bound to the consumer's workspace, with `READ_FILES` for
-    `<consumer>-workspace-users` and nothing more (the **Data access** sweep);
+  - Unity Catalog: the producer's catalog is bound read-only to the consumer's
+    workspace, and `<consumer>-workspace-users` gets `USE_CATALOG`,
+    `USE_SCHEMA` on the dataset's schema and `READ_VOLUME` on its volume, and
+    nothing more; the dataset's location and credential are bound to the
+    workspace (the **Data access** sweep);
   - the consumer's S3 endpoint policy allows the role's reads under the prefix
     (the consumer's **Databricks apply**).
 
   The storage credential and the external location are themselves read-only,
-  so no grant can write through them.
+  so no grant can write through them, and the location grants `READ_FILES` to
+  the platform's admin group alone: consumers read through the volume only.
+- **Where consumers find it.** One Unity Catalog catalog per producer, owned
+  by the platform, holds a schema per onboarded dataset, each with an external
+  volume `files` at the dataset's URL. A consumer's users see it in Catalog
+  Explorer next to their own catalog and read
+  `/Volumes/<producer>/<dataset>/files/`, `-` replaced by `_` (the positions:
+  `/Volumes/braveheart_selfplay/positions/files/`). The producer catalogs'
+  managed storage is one platform bucket, `<organization>-dataset-catalogs`,
+  where nothing is written. A producer catalog may not take a workspace
+  project's own catalog name; the foundation's plan refuses it.
+- **Separation.** A producer's catalog is bound only to the workspaces with an
+  agreed edge into one of its datasets, and Unity Catalog's binding supersedes
+  grants: in every other workspace it is invisible and inaccessible, whatever
+  grants a person holds. Inside it, each dataset is granted on its own, and
+  Unity Catalog lists only what a user may read, so a workspace's users never
+  see another workspace's datasets. Every grant set is authoritative and
+  always holds the admin group, so a grant made by hand (`BROWSE` included) is
+  removed at the next sweep. One gap is accepted: grants follow people, so
+  someone in two consumer groups can reach, from either workspace, a dataset
+  of the same producer shared only with the other. A dedicated catalog per
+  sensitive dataset would close it (not built).
 - **The reconcile.** `data-access/` is a root module of its own (state key
   `project=data-access/env=prod/data-access-prod.tfstate`), planned and applied
   by the **Data access** workflow (`.github/workflows/data-access.yml`) with
@@ -406,9 +432,9 @@ file, and its release. Then the two halves, in either order, each merged in
 its own repository; the next sweep binds and grants. Then the producer's **Bot
 apply** (the bucket reader) and the consumer's **Databricks apply** (the
 endpoint statement). Revoking takes effect at the next sweep, which removes the
-binding and grant; the next applies remove the reader and the statement.
-Consumers read `s3://<bucket>/<prefix>` with `spark.read`, `dbutils.fs.ls` or
-a volume an admin creates on the location.
+grants, and the catalog binding with a consumer's last edge into the producer;
+the next applies remove the reader and the statement. Consumers read
+`/Volumes/<producer>/<dataset>/files/` with `spark.read` or `dbutils.fs.ls`.
 
 **Migration from the share `config.yaml` used to approve.** That share's
 location covered the same S3 path as the onboarded one, which Unity Catalog
