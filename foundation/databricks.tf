@@ -199,6 +199,12 @@ module "producer_catalog" {
   storage_url       = module.dataset_catalog_storage[0].url
   host_workspace_id = module.databricks_shared_host[0].workspace_id
   owner_group_name  = module.databricks_metastore[0].admin_group_name
+
+  # The storage's url output is built from its name, so it carries no
+  # dependency: without this, a catalog is created before the external
+  # location its managed storage lies under, and Unity Catalog refuses it
+  # ("External Location ... does not exist", the v0.42.0 release apply).
+  depends_on = [module.dataset_catalog_storage]
 }
 
 # Unity Catalog refuses overlapping external locations in the metastore, and
