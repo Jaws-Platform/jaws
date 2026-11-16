@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.39.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.38.0...v0.39.0) (2026-11-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **access:** dataset access by producer and consumer handshake, replacing databricks_share ([#162](https://github.com/jwallace145/jwall-engineering-infra/issues/162))
+
+### Features
+
+* **access:** dataset access by producer and consumer handshake, replacing databricks_share ([#162](https://github.com/jwallace145/jwall-engineering-infra/issues/162)) ([a313991](https://github.com/jwallace145/jwall-engineering-infra/commit/a3139914d1360c18ce4007398ecdcf208c7eeb21))
+
 ## [0.38.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.37.0...v0.38.0) (2026-11-16)
 
 
