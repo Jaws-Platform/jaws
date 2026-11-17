@@ -149,7 +149,7 @@ wrong; with "no admin_role_arn …", step 2 is not merged.
 Read the plan. It must be **39 to add, 0 to change, 0 to destroy**, and only
 these:
 
-- the state bucket `jaws-terraform-state`, with its versioning, encryption,
+- the state bucket `jaws-terraform-state-570327089884`, with its versioning, encryption,
   ownership controls, public access block and policy (6);
 - four roles, `jaws-infra-ci-plan`, `jaws-infra-ci-apply`,
   `jaws-data-access-ci-plan` and `jaws-data-access-ci-apply`, with twelve
@@ -166,6 +166,13 @@ is off in production: they name `jaws-databricks-audit-logs` and
 ```sh
 terraform apply bootstrap.tfplan
 ```
+
+If the apply stops partway, keep `terraform.tfstate`: it is the only record of
+what was created. Fix the cause, run the same `terraform plan` again and apply
+that plan; it creates only what is missing. A bucket name can be refused with
+`BucketAlreadyExists` even when it answers 404 to everyone: another account,
+or a recent deletion, still holds it. That is why the state bucket's name ends
+in the account ID.
 
 ## 6. Move the state into the bucket
 
