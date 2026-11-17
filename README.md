@@ -240,8 +240,10 @@ account=production` plans the production account (state in
 creates roles and buckets only for the projects with a stack in its account,
 and a plan made with the other account's credentials stops before it starts.
 
-The production account is bootstrapped once by the owner:
-[docs/production-bootstrap.md](docs/production-bootstrap.md).
+The owner bootstrapped the production account on 2026-11-17
+([docs/production-bootstrap.md](docs/production-bootstrap.md)). Since then a
+pull request's checks plan the foundation in both accounts, and a release
+applies it in both and publishes the image to both registries.
 
 Two refusals keep a run in one account. Credentials must belong to the account
 the run addresses, even where the role check is skipped (`JAWS_SKIP_ROLE_CHECK`),

@@ -210,7 +210,7 @@ databricks:
 # (`--account` chooses for a project that is moving). This whole section is
 # folded into the top level when the last project has moved.
 production:
-  bootstrapped: false # true once the owner has run docs/production-bootstrap.md
+  bootstrapped: true # the owner ran docs/production-bootstrap.md on 2026-11-17
   # Projects with a stack in production: `moving` while the old stack still
   # exists in the management account, `moved` once it has been destroyed.
   projects: {}
@@ -227,7 +227,10 @@ production:
       bucket: jaws-terraform-state-570327089884
     ecr:
       repository: jaws-cli
-    # dns: {zone_id: ...}  # known once the bootstrap creates the zone; required when bootstrapped
+    dns:
+      # The jwall.engineering zone the bootstrap created. Not authoritative yet: the
+      # registrar still names management's zone until every record is copied.
+      zone_id: Z0644006DW6W2HALU9BI
     databricks:
       enabled: false # Databricks moves last, as a whole
       # Its names there, so that nothing created in production (the roles'
