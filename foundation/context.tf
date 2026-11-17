@@ -13,13 +13,18 @@ locals {
     # Project tag value, and the prefix of this stack's Name tags.
     project     = local.in_production ? "jaws" : "jwall-engineering-infra"
     environment = "prod"
-    repository  = "jwallace145/jwall-engineering-infra"
-    owner       = "jwallace145"
+    repository  = "jwallace145/jaws"
 
-    # The name this repository is about to take. The roles its own workflows
-    # assume trust both until the rename is done, because GitHub's OIDC
-    # subject contains the name; then the old name is dropped.
-    repository_aliases = ["jwallace145/jaws"]
+    # The `Repository` tag. Unchanged in the management account: its resources
+    # leave with the move to production, and retagging 144 of them (a
+    # Databricks workspace and a storage credential among them) would buy nothing.
+    repository_tag = local.in_production ? "jwallace145/jaws" : "jwallace145/jwall-engineering-infra"
+    owner          = "jwallace145"
+
+    # The name this repository had until it was renamed. The roles its own
+    # workflows assume still trust it, because GitHub's OIDC subject contains
+    # the name; it is dropped once nothing can present a token with it.
+    repository_aliases = ["jwallace145/jwall-engineering-infra"]
   }
 
   # Numeric GitHub IDs for the immutable OIDC subject form
@@ -43,7 +48,7 @@ module "context" {
 
   project      = local.context.project
   environment  = local.context.environment
-  repository   = local.context.repository
+  repository   = local.context.repository_tag
   owner        = local.context.owner
   organization = local.context.organization
   name_root    = local.context.organization

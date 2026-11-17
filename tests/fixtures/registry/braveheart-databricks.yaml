@@ -2,7 +2,7 @@
 # The VPC range, cost center, compute policies it may use and the workspace
 # admins are set centrally (projects.braveheart-databricks.databricks in config.yaml).
 # Fields and behaviour:
-# https://github.com/jwallace145/jwall-engineering-infra/blob/main/docs/databricks.md#the-project-file
+# https://github.com/jwallace145/jaws/blob/main/docs/databricks.md#the-project-file
 version: 1
 project: braveheart-databricks
 repository: Braveheart-Chess/braveheart-databricks
@@ -24,7 +24,7 @@ components:
     # Changes take effect on the next Databricks plan/apply after merging to main.
     users: []
     # Datasets this workspace reads, read-only: each is an onboarded dataset
-    # (jwall-engineering-infra's datasets/<owner>/<name>.yaml) whose producer
+    # (jaws's datasets/<owner>/<name>.yaml) whose producer
     # also lists this project under its consumers. Both halves of the
     # handshake are needed; the Data access apply workflow binds and grants it.
     reads:

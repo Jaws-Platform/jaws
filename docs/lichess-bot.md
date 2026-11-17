@@ -313,7 +313,7 @@ permissions: {}
 
 jobs:
   release:
-    uses: jwallace145/jwall-engineering-infra/.github/workflows/container-release.yml@vX.Y.Z
+    uses: jwallace145/jaws/.github/workflows/container-release.yml@vX.Y.Z
     with:
       project: braveheart
     permissions:

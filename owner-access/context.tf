@@ -15,7 +15,7 @@ locals {
     organization = local.tool_config.context.organization
     project      = "jwall-engineering-infra" # Project tag value
     environment  = "prod"
-    repository   = "jwallace145/jwall-engineering-infra"
+    repository   = "jwallace145/jwall-engineering-infra" # the Repository tag, unchanged in the management account
     owner        = local.tool_config.context.owner
   }
 }

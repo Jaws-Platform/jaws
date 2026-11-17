@@ -45,19 +45,19 @@ jobs:
       pull-requests: write # the sticky preview comment
     steps:
       - uses: actions/checkout@v7
-      - name: Check out jwall-engineering-infra at this workflow's own commit
+      - name: Check out jaws at this workflow's own commit
         uses: actions/checkout@v7
         with:
-          repository: jwallace145/jwall-engineering-infra
+          repository: jwallace145/jaws
           ref: ${{ github.job_workflow_sha }}
-          path: .jwall-engineering-infra
+          path: .jaws-tool
       - uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.artifact }}
           path: .jaws-dist
       - name: preview deploy
         id: deploy
-        uses: ./.jwall-engineering-infra/.github/actions/jaws
+        uses: ./.jaws-tool/.github/actions/jaws
         with:
           command: preview deploy --pr ${{ github.event.pull_request.number }} --dist .jaws-dist
           role-arn: ${{ inputs.preview-role-arn }}
@@ -96,14 +96,14 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
-      - name: Check out jwall-engineering-infra at this workflow's own commit
+      - name: Check out jaws at this workflow's own commit
         uses: actions/checkout@v7
         with:
-          repository: jwallace145/jwall-engineering-infra
+          repository: jwallace145/jaws
           ref: ${{ github.job_workflow_sha }}
-          path: .jwall-engineering-infra
+          path: .jaws-tool
       - name: preview remove
-        uses: ./.jwall-engineering-infra/.github/actions/jaws
+        uses: ./.jaws-tool/.github/actions/jaws
         with:
           command: preview remove --pr ${{ github.event.pull_request.number }}
           role-arn: ${{ inputs.preview-role-arn }}

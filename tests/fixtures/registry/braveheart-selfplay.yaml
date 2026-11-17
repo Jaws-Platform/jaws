@@ -1,6 +1,6 @@
 # jaws project file: Braveheart's self-play dataset and the
 # pipeline that grows it (datagen, relabel). Fields and behaviour:
-# https://github.com/jwallace145/jwall-engineering-infra/blob/main/docs/research-projects.md
+# https://github.com/jwallace145/jaws/blob/main/docs/research-projects.md
 #
 # The positions were copied key for key from jwall-engineering-braveheart-nnue
 # (data/selfplay/) at the split; docs/datasets.md records the move.
@@ -19,7 +19,7 @@ tags:
 
 components:
   # Self-play and relabelling on dedicated, ephemeral EC2 instances, through
-  # jwall-engineering-infra's remote-task.yml. A caller that names no profile
+  # jaws's remote-task.yml. A caller that names no profile
   # gets the fields below as the default `cpu` profile: a small on-demand box.
   - kind: task-runner
     instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge]  # whole Zen 5 cores, SMT off
@@ -61,7 +61,7 @@ components:
   # policy, and so does braveheart-databricks, read-only, through the share
   # config.yaml approves (listing it here is this project's consent).
   # Layout: docs/datagen.md. Fields and access:
-  # https://github.com/jwallace145/jwall-engineering-infra/blob/main/docs/datasets.md
+  # https://github.com/jwallace145/jaws/blob/main/docs/datasets.md
   - kind: dataset
     name: positions
     bucket: jwall-engineering-braveheart-selfplay-positions  # <Organization>-<project>-<name>

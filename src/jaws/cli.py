@@ -505,7 +505,7 @@ def _dataset_refusal(run: Run, names: list[str]) -> str | None:
         f"{run.project.project}'s file no longer declares {', '.join(blocked)}, but "
         f"config.yaml still approves {buckets} for it. Put the dataset back, or remove the "
         "approval from projects."
-        f"{run.project.project}.datasets in jwall-engineering-infra (a reviewed change); "
+        f"{run.project.project}.datasets in jaws (a reviewed change); "
         "the next Bot apply then releases the bucket from state and keeps it and its data"
     )
 

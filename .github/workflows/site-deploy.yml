@@ -47,18 +47,18 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ inputs.tag }}
-      - name: Check out jwall-engineering-infra at this workflow's own commit
+      - name: Check out jaws at this workflow's own commit
         uses: actions/checkout@v7
         with:
-          repository: jwallace145/jwall-engineering-infra
+          repository: jwallace145/jaws
           ref: ${{ github.job_workflow_sha }}
-          path: .jwall-engineering-infra
+          path: .jaws-tool
       - uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.artifact }}
           path: .jaws-dist
       - name: release
-        uses: ./.jwall-engineering-infra/.github/actions/jaws
+        uses: ./.jaws-tool/.github/actions/jaws
         with:
           command: release --dist .jaws-dist
           role-arn: ${{ inputs.apply-role-arn }}

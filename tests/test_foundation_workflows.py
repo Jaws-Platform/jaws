@@ -111,7 +111,7 @@ def test_each_accounts_plan_has_its_own_sticky_comment() -> None:
     )
     build = _step(job, lambda s: "report plan-comment" in str(s.get("run", "")))
     assert build["env"]["ACCOUNT"] == "${{ matrix.account }}"
-    assert '--subject "jwall-engineering-infra/foundation${SUFFIX}"' in build["run"]
+    assert '--subject "jaws/foundation${SUFFIX}"' in build["run"]
 
 
 def test_the_image_is_pushed_to_each_accounts_repository() -> None:

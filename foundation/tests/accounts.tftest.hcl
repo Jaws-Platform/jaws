@@ -131,7 +131,7 @@ run "management_is_unchanged_by_default" {
       ManagedBy    = "jwall-engineering-infra"
       Owner        = "jwallace145"
     })
-    error_message = "management's tags must not change"
+    error_message = "management's tags must not change, the Repository tag included: the rename does not retag the account"
   }
 
   assert {
@@ -217,7 +217,7 @@ run "production_starts_empty" {
       Organization = "jaws"
       Project      = "jaws"
       Environment  = "prod"
-      Repository   = "jwallace145/jwall-engineering-infra"
+      Repository   = "jwallace145/jaws"
       ManagedBy    = "jaws"
       Owner        = "jwallace145"
     })
