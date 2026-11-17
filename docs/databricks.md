@@ -441,8 +441,9 @@ hold. Either side ends it alone by removing its half.
   retried by the next sweep, and a grant made by hand or a recreated workspace
   is undone or reported. Dispatching **Data access** runs a sweep now. Each
   sweep costs only requests for the state and the Databricks secret.
-- **Waiting, never failing everyone.** A dataset whose location does not exist
-  yet (its onboarding release has not applied) is reported under
+- **Waiting, never failing everyone.** A dataset whose location, producer
+  catalog, schema or `files` volume does not exist yet (its onboarding release
+  has not applied, or stopped partway) is reported under
   `awaiting_onboarding`, and a consumer with no `<consumer>-prod` workspace yet
   under `missing_workspaces`. Neither fails the sweep for anyone else, and every
   sweep retries both until they are bound. A read naming a project that does

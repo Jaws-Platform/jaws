@@ -41,6 +41,12 @@ mock_provider "databricks" {
       ids = ["braveheart_selfplay.games", "braveheart_selfplay.positions"]
     }
   }
+
+  mock_data "databricks_volumes" {
+    defaults = {
+      ids = ["braveheart_selfplay.games.files", "braveheart_selfplay.positions.files"]
+    }
+  }
 }
 
 variables {
@@ -272,6 +278,39 @@ run "a_dataset_whose_catalog_or_schema_is_missing_waits" {
   assert {
     condition     = jsonencode(output.awaiting_onboarding) == jsonencode(["braveheart-selfplay-positions"]) && length(module.access) == 0 && length(module.catalog_access) == 0
     error_message = "a dataset whose producer catalog does not exist yet waits, binding and granting nothing"
+  }
+}
+
+# The schema exists without its volume, as after release v0.42.1, whose apply
+# created the schema and then failed on the volume: a sweep granting READ
+# VOLUME then would fail, after the rest of its apply (the location's READ
+# FILES revoked among it) had gone through.
+run "a_dataset_whose_volume_is_missing_waits" {
+  command = plan
+
+  # How the provider reports an empty list of volumes.
+  override_data {
+    target = data.databricks_volumes.in
+    values = { ids = null }
+  }
+
+  assert {
+    condition     = jsonencode(output.awaiting_onboarding) == jsonencode(["braveheart-selfplay-positions"]) && length(module.access) == 0 && length(module.catalog_access) == 0
+    error_message = "a dataset whose schema exists without its volume waits, binding and granting nothing"
+  }
+}
+
+run "another_volume_in_the_schema_is_not_the_dataset" {
+  command = plan
+
+  override_data {
+    target = data.databricks_volumes.in
+    values = { ids = ["braveheart_selfplay.positions.scratch"] }
+  }
+
+  assert {
+    condition     = jsonencode(output.awaiting_onboarding) == jsonencode(["braveheart-selfplay-positions"]) && length(module.access) == 0
+    error_message = "only the dataset's own volume (files) makes it ready, not any volume in its schema"
   }
 }
 

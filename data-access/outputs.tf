@@ -9,7 +9,7 @@ output "edges" {
 }
 
 output "awaiting_onboarding" {
-  description = "Keys of datasets whose external location, producer catalog or schema does not exist yet: the foundation release that onboards them has not applied."
+  description = "Keys of datasets whose external location, producer catalog, schema or volume does not exist yet: the foundation release that onboards them has not applied, or stopped partway."
   value       = local.awaiting_onboarding
 }
 
