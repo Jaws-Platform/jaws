@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.45.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.44.0...v0.45.0) (2026-11-17)
+
+
+### Features
+
+* **config:** an account view of the configuration, for the move to production ([#182](https://github.com/jwallace145/jwall-engineering-infra/issues/182)) ([9d15464](https://github.com/jwallace145/jwall-engineering-infra/commit/9d154640845b0a364b9dcd9b0e6de43e9f9b6fb6))
+
 ## [0.44.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.43.1...v0.44.0) (2026-11-17)
 
 
