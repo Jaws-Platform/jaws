@@ -51,11 +51,45 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  apply:
-    name: Terraform apply (${{ needs.release-please.outputs.tag_name }})
+  # The accounts the foundation is applied in and the image is published to:
+  # the tool lists them (management, and production once it is bootstrapped),
+  # so a leg's role, state and `-var account` all come from one entry. Listed
+  # from this workflow's own commit, which is the release's on a push.
+  accounts:
+    name: Accounts
     runs-on: ubuntu-latest
     needs: release-please
+    # After a release, or on demand for an existing tag (release-please is then skipped).
+    if: >-
+      !cancelled() &&
+      (
+        (github.event_name == 'push' &&
+         needs.release-please.outputs.release_created == 'true') ||
+        (github.event_name == 'workflow_dispatch' && inputs.tag != '')
+      )
+    permissions:
+      contents: read
+    outputs:
+      accounts: ${{ steps.list.outputs.accounts }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - name: List the accounts (management, and production once it is bootstrapped)
+        id: list
+        run: echo "accounts=$(uv run jaws config accounts)" >> "$GITHUB_OUTPUT"
+
+  apply:
+    name: Terraform apply (${{ needs.release-please.outputs.tag_name }}${{ matrix.account != 'management' && format(', {0}', matrix.account) || '' }})
+    runs-on: ubuntu-latest
+    needs: [release-please, accounts]
     if: github.event_name == 'push' && needs.release-please.outputs.release_created == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.accounts.outputs.accounts) }}
     environment:
       name: prod
       url: https://github.com/${{ github.repository }}/releases/tag/${{ needs.release-please.outputs.tag_name }}
@@ -75,29 +109,34 @@ jobs:
           terraform_wrapper: false
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::${{ matrix.account_id }}:role/${{ matrix.organization }}-infra-ci-apply
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: gha-apply-${{ needs.release-please.outputs.tag_name }}
       - name: terraform init
         uses: ./.github/actions/terraform-init
         with:
-          args: -backend-config=backend/management.hcl
+          args: -backend-config=backend/${{ matrix.account }}.hcl
       # The metastore and audit log delivery (foundation/databricks.tf) need the
       # Databricks credential: each terraform step sources it into its own shell
       # (never GITHUB_ENV); it does nothing while databricks.enabled is false.
       - name: terraform plan
+        env:
+          ACCOUNT: ${{ matrix.account }}
         run: |
-          source ../scripts/databricks-credentials.sh ../config.yaml
-          terraform plan -no-color -lock-timeout=120s -out=tfplan
+          source ../scripts/databricks-credentials.sh ../config.yaml "$ACCOUNT"
+          terraform plan -no-color -lock-timeout=120s -out=tfplan -var "account=$ACCOUNT"
+      # The saved plan carries its account: applying it cannot address another.
       - name: terraform apply
+        env:
+          ACCOUNT: ${{ matrix.account }}
         run: |
-          source ../scripts/databricks-credentials.sh ../config.yaml
+          source ../scripts/databricks-credentials.sh ../config.yaml "$ACCOUNT"
           terraform apply -no-color -lock-timeout=120s tfplan
 
   image:
-    name: Publish image (${{ needs.release-please.outputs.tag_name || inputs.tag }})
+    name: Publish image (${{ needs.release-please.outputs.tag_name || inputs.tag }}${{ matrix.account != 'management' && format(', {0}', matrix.account) || '' }})
     runs-on: ubuntu-latest
-    needs: [release-please, apply]
+    needs: [release-please, accounts, apply]
     # After a release's apply, or on demand for an existing tag. The apply
     # role's trust policy accepts only the `prod` environment's OIDC subject.
     if: >-
@@ -108,6 +147,10 @@ jobs:
          needs.release-please.outputs.release_created == 'true') ||
         (github.event_name == 'workflow_dispatch' && inputs.tag != '')
       )
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.accounts.outputs.accounts) }}
     environment:
       name: prod
     permissions:
@@ -123,10 +166,9 @@ jobs:
         id: config
         run: |
           echo "terraform_version=$(yq -r .terraform.version config.yaml)" >> "$GITHUB_OUTPUT"
-          echo "repository=$(yq -r .ecr.repository config.yaml)" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::${{ matrix.account_id }}:role/${{ matrix.organization }}-infra-ci-apply
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: gha-image-${{ needs.release-please.outputs.tag_name || inputs.tag }}
       - uses: aws-actions/amazon-ecr-login@v2
@@ -138,9 +180,9 @@ jobs:
           push: true
           platforms: linux/amd64
           provenance: false
-          tags: ${{ steps.ecr.outputs.registry }}/${{ steps.config.outputs.repository }}:${{ env.TAG }}
+          tags: ${{ steps.ecr.outputs.registry }}/${{ matrix.ecr_repository }}:${{ env.TAG }}
           build-args: TERRAFORM_VERSION=${{ steps.config.outputs.terraform_version }}
       - name: Summary
         env:
-          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ steps.config.outputs.repository }}:${{ env.TAG }}
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ matrix.ecr_repository }}:${{ env.TAG }}
         run: printf '## Image\n\n- `%s`\n' "$IMAGE" >> "$GITHUB_STEP_SUMMARY"

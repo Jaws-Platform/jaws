@@ -42,11 +42,23 @@ def _index(steps: list[dict[str, Any]], predicate: Any) -> int:
 # --- the credential script --------------------------------------------------
 
 
-def _run_credentials(tmp_path: Path, *, enabled: bool) -> tuple[str, Path, Path]:
+def _run_credentials(
+    tmp_path: Path,
+    *,
+    enabled: bool,
+    account: str | None = None,
+    production_enabled: bool | None = False,
+) -> tuple[str, Path, Path]:
     """Source the script in a step-like shell (`bash -e`) with a fake `aws` that returns
-    SENTINEL, then print the environment the step's terraform would see."""
+    SENTINEL, then print the environment the step's terraform would see. `account` is
+    the script's second argument; `production_enabled` is production's override of
+    `databricks.enabled` (None removes the override)."""
     config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
     config["databricks"]["enabled"] = enabled
+    if production_enabled is None:
+        config["production"]["overrides"].pop("databricks")
+    else:
+        config["production"]["overrides"]["databricks"] = {"enabled": production_enabled}
     (tmp_path / "config.yaml").write_text(yaml.safe_dump(config))
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -57,7 +69,12 @@ def _run_credentials(tmp_path: Path, *, enabled: bool) -> tuple[str, Path, Path]
     github_env = tmp_path / "github-env"
     github_env.touch()
     result = subprocess.run(
-        ["bash", "-e", "-c", f'source "{CREDENTIALS_SCRIPT}" config.yaml\necho ---\nenv'],
+        [
+            "bash",
+            "-e",
+            "-c",
+            f'source "{CREDENTIALS_SCRIPT}" config.yaml {account or ""}\necho ---\nenv',
+        ],
         cwd=tmp_path,
         env={
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
@@ -69,6 +86,52 @@ def _run_credentials(tmp_path: Path, *, enabled: bool) -> tuple[str, Path, Path]
         check=True,
     )
     return result.stdout, calls, github_env
+
+
+@needs_yq
+def test_production_needs_no_credential_while_databricks_is_off_there(tmp_path: Path) -> None:
+    """Databricks stays in the management account until it moves as a whole: the
+    production foundation is planned and applied without the credential."""
+    out, calls, _ = _run_credentials(tmp_path, enabled=True, account="production")
+    printed, environment = out.split("---\n", 1)
+    assert "no Databricks credential is needed" in printed
+    assert not calls.exists(), "the secret must not be read for production"
+    assert "DATABRICKS_CLIENT_SECRET" not in environment
+
+
+@needs_yq
+@pytest.mark.parametrize("account", [None, "management"])
+def test_management_reads_the_credential_whatever_production_says(
+    tmp_path: Path, account: str | None
+) -> None:
+    out, calls, _ = _run_credentials(tmp_path, enabled=True, account=account)
+    assert calls.exists()
+    assert f"DATABRICKS_CLIENT_SECRET={SENTINEL}" in out.split("---\n", 1)[1]
+
+
+@needs_yq
+def test_production_follows_the_shared_setting_without_an_override(tmp_path: Path) -> None:
+    out, calls, _ = _run_credentials(
+        tmp_path, enabled=True, account="production", production_enabled=None
+    )
+    assert calls.exists()
+    assert f"DATABRICKS_CLIENT_SECRET={SENTINEL}" in out.split("---\n", 1)[1]
+
+
+@needs_yq
+def test_production_can_turn_databricks_on_while_management_has_it_off(tmp_path: Path) -> None:
+    """The day Databricks moves: off in management, on in production."""
+    out, calls, _ = _run_credentials(
+        tmp_path, enabled=False, account="production", production_enabled=True
+    )
+    assert calls.exists()
+    assert f"DATABRICKS_CLIENT_SECRET={SENTINEL}" in out.split("---\n", 1)[1]
+
+
+@needs_yq
+def test_an_unknown_account_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_credentials(tmp_path, enabled=True, account="dev")
 
 
 @needs_yq
@@ -120,7 +183,7 @@ def test_a_multiline_secret_fails_the_step_without_printing_it(tmp_path: Path) -
     assert SENTINEL not in result.stdout + result.stderr
 
 
-_SOURCE = "source ../scripts/databricks-credentials.sh ../config.yaml"
+_SOURCE = 'source ../scripts/databricks-credentials.sh ../config.yaml "$ACCOUNT"'
 
 
 @pytest.mark.parametrize(
