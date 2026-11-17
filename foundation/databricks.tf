@@ -30,7 +30,7 @@
 # under project=<key>/ in the shared bucket (state.tf).
 
 locals {
-  databricks = local.tool_config.databricks
+  databricks = local.account.databricks
 
   databricks_enabled = local.databricks.enabled
 
@@ -50,7 +50,7 @@ locals {
   }
 
   databricks_ci = {
-    for key, project in local.databricks_projects : key => {
+    for key, project in local.served_databricks_projects : key => {
       tfstate = {
         bucket_arn = module.state_bucket.arn
         prefix     = "project=${key}/"
@@ -268,11 +268,12 @@ check "shared_host_url" {
 }
 
 module "databricks_ci_plan" {
-  for_each = local.databricks_projects
+  for_each = local.served_databricks_projects
   source   = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
   version  = "0.27.0"
 
   project            = each.key
+  name_root          = local.context.organization
   repository         = local.context.repository
   repository_aliases = local.context.repository_aliases
   owner_id           = local.github.owner_id
@@ -288,11 +289,12 @@ module "databricks_ci_plan" {
 }
 
 module "databricks_ci_apply" {
-  for_each = local.databricks_projects
+  for_each = local.served_databricks_projects
   source   = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
   version  = "0.27.0"
 
   project            = each.key
+  name_root          = local.context.organization
   repository         = local.context.repository
   repository_aliases = local.context.repository_aliases
   owner_id           = local.github.owner_id

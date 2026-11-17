@@ -81,7 +81,7 @@ jobs:
       - name: terraform init
         uses: ./.github/actions/terraform-init
         with:
-          args: -backend-config=backend/prod.hcl
+          args: -backend-config=backend/management.hcl
       # The metastore and audit log delivery (foundation/databricks.tf) need the
       # Databricks credential: each terraform step sources it into its own shell
       # (never GITHUB_ENV); it does nothing while databricks.enabled is false.

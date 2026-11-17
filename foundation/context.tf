@@ -6,14 +6,15 @@ locals {
   region = "us-east-1"
 
   # From config.yaml (read in ecr.tf), the tool's single source for the account.
-  account_id = local.tool_config.aws.account_id
+  account_id = local.account.aws.account_id
 
   context = {
-    organization = "jwall-engineering"
-    project      = "jwall-engineering-infra" # Project tag value
-    environment  = "prod"
-    repository   = "jwallace145/jwall-engineering-infra"
-    owner        = "jwallace145"
+    organization = local.account.context.organization
+    # Project tag value, and the prefix of this stack's Name tags.
+    project     = local.in_production ? "jaws" : "jwall-engineering-infra"
+    environment = "prod"
+    repository  = "jwallace145/jwall-engineering-infra"
+    owner       = "jwallace145"
 
     # The name this repository is about to take. The roles its own workflows
     # assume trust both until the rename is done, because GitHub's OIDC
@@ -45,4 +46,6 @@ module "context" {
   repository   = local.context.repository
   owner        = local.context.owner
   organization = local.context.organization
+  name_root    = local.context.organization
+  managed_by   = local.in_production ? "jaws" : "jwall-engineering-infra"
 }

@@ -4,27 +4,22 @@
 # config.yaml, the tool's configuration, so the CLI and the repository that
 # holds it agree.
 
-data "aws_caller_identity" "current" {}
-
 locals {
-  # config.yaml lives at the repository root, next to the CLI that reads it.
-  tool_config = yamldecode(file("${path.module}/../config.yaml"))
-
   # Built from the configured name rather than module.sites_image.arn so the
   # roles' ECR policies do not depend on the repository. That lets the
   # repository depend on the apply role below, which orders its creation after
   # the foundation/manage update that grants ecr:CreateRepository on a fresh
   # account. A check below flags any drift from the module's own ARN.
-  sites_image_repository_arn = "arn:aws:ecr:${local.region}:${data.aws_caller_identity.current.account_id}:repository/${local.tool_config.ecr.repository}"
+  sites_image_repository_arn = "arn:aws:ecr:${local.region}:${data.aws_caller_identity.current.account_id}:repository/${local.account.ecr.repository}"
 }
 
 module "sites_image" {
   source  = "jwallace145/jwall-engineering/aws//modules/ecr-repository"
   version = "0.27.0"
 
-  name                       = local.tool_config.ecr.repository
-  keep_release_images        = local.tool_config.ecr.keep_release_images
-  expire_untagged_after_days = local.tool_config.ecr.expire_untagged_after_days
+  name                       = local.account.ecr.repository
+  keep_release_images        = local.account.ecr.keep_release_images
+  expire_untagged_after_days = local.account.ecr.expire_untagged_after_days
 
   depends_on = [module.infra_ci_apply]
 }
@@ -38,9 +33,3 @@ check "sites_image_repository_arn_matches" {
 
 # config.yaml names the account the workflows build role ARNs for; a plan
 # against any other account is a mistake worth flagging.
-check "configured_account_matches" {
-  assert {
-    condition     = data.aws_caller_identity.current.account_id == local.account_id
-    error_message = "config.yaml aws.account_id (${local.account_id}) is not the account these credentials belong to (${data.aws_caller_identity.current.account_id})."
-  }
-}

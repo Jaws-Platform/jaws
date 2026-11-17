@@ -11,10 +11,10 @@
 # the account (including ones with s3:* on *) without granting anything.
 
 locals {
-  state_bucket_name = "jwall-engineering-tfstate"
+  state_bucket_name = local.account.state.bucket
 
   # This stack's own state, used by the CI role policies. Must match
-  # backend/prod.hcl, which cannot reference variables.
+  # backend/<account>.hcl, which cannot reference variables.
   state_key = "project=infra/env=prod/infra-prod.tfstate"
 
   # Break-glass principals exempt from the hardened bucket policies on the
@@ -29,7 +29,7 @@ locals {
   # - The root user, for emergencies (docs/owner-access.md).
   # - The apply role, which applies these policies.
   bucket_admin_principal_arns = [
-    "arn:aws:iam::${local.account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_22a17d3bc2bca2d3",
+    local.account.aws.admin_role_arn,
     "arn:aws:iam::${local.account_id}:root",
     module.infra_ci_apply.role_arn,
   ]
@@ -53,20 +53,20 @@ locals {
       }
     },
     {
-      for key, project in local.projects : "project=${key}/" => {
+      for key, project in local.served_sites : "project=${key}/" => {
         read  = [module.site_ci_plan[key].role_arn]
         write = [module.site_ci_apply[key].role_arn]
       }
     },
     {
-      for key, bot in local.bots : "project=${key}/" => {
+      for key, bot in local.served_bots : "project=${key}/" => {
         read  = [module.bot_ci_plan[key].role_arn]
         write = [module.bot_ci_apply[key].role_arn]
       }
     },
     {
       # Both stacks of a Databricks project: its account and workspace keys.
-      for key, project in local.databricks_projects : "project=${key}/" => {
+      for key, project in local.served_databricks_projects : "project=${key}/" => {
         read  = [module.databricks_ci_plan[key].role_arn]
         write = [module.databricks_ci_apply[key].role_arn]
       }

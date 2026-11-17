@@ -234,6 +234,12 @@ account:
 - `--account management` addresses the old stack of a project that is `moving`
   (to destroy it), and `--account production` a run without a project file.
 
+The foundation is one root for both accounts: `terraform plan -var
+account=production` plans the production account (state in
+`backend/production.hcl`), and the default plans the management account. Each
+creates roles and buckets only for the projects with a stack in its account,
+and a plan made with the other account's credentials stops before it starts.
+
 `jaws config show` prints the view a run would use, and `jaws config env` the
 few values a workflow needs to build a role ARN: every workflow gets a
 project's account from it (`config env --project <name>`), never from its own
@@ -285,7 +291,8 @@ CLI and `config.yaml`, the tool configuration shared by the stack and the CLI
 | Path | Owns |
 | --- | --- |
 | `versions.tf`, `providers.tf`, `context.tf` | Terraform and provider constraints, region, identity, and the registry `context` module whose tags are applied through `default_tags` |
-| `backend.tf`, `backend/prod.hcl` | S3 backend with native lockfile locking (no DynamoDB) |
+| `backend.tf`, `backend/management.hcl`, `backend/production.hcl` | S3 backend with native lockfile locking (no DynamoDB), one state per account |
+| `accounts.tf` | `var.account`: which account this root is planned for, the configuration as that account sees it, and the projects it serves |
 | `state.tf` | The shared state bucket (`tfstate-bucket` module) |
 | `oidc.tf` | GitHub OIDC provider (data source; owned by prog-strength-infra, see the TODO there) |
 | `dns.tf` | The hosted zone, its CAA record and the zone owner's TXT records (`hosted-zone` module) |
@@ -444,11 +451,11 @@ The state bucket does not exist before the first apply, so the first apply uses 
    terraform apply bootstrap.tfplan
    ```
 
-2. **Migrate state into the bucket.** `backend.tf` and `backend/prod.hcl` are already in the repo.
+2. **Migrate state into the bucket.** `backend.tf` and `backend/management.hcl` are already in the repo.
 
    ```sh
    rm backend_override.tf
-   terraform init -backend-config=backend/prod.hcl -migrate-state
+   terraform init -backend-config=backend/management.hcl -migrate-state
    rm -f terraform.tfstate terraform.tfstate.backup bootstrap.tfplan
    ```
 
@@ -500,7 +507,7 @@ terraform init -backend=false && terraform validate
 tflint --init && tflint --config ../.tflint.hcl --recursive
 ```
 
-A real plan needs AWS credentials and the remote backend, from `foundation/`: `terraform init -backend-config=backend/prod.hcl && terraform plan`.
+A real plan needs AWS credentials and the remote backend, from `foundation/`: `terraform init -backend-config=backend/management.hcl && terraform plan`.
 
 ## Owner hand-off
 
