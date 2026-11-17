@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.47.0...v0.47.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* findings from the review of the account move ([#191](https://github.com/jwallace145/jwall-engineering-infra/issues/191)) ([833e4d6](https://github.com/jwallace145/jwall-engineering-infra/commit/833e4d6d17d649ee5a8de46607e49a8f4ebdce36))
+
 ## [0.47.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.46.0...v0.47.0) (2026-11-17)
 
 
