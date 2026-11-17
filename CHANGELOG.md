@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.0](https://github.com/jwallace145/jaws/compare/v0.51.0...v0.52.0) (2026-11-17)
+
+
+### Features
+
+* **config:** start moving braveheart-bot to the production account ([#205](https://github.com/jwallace145/jaws/issues/205)) ([0393785](https://github.com/jwallace145/jaws/commit/0393785d720ff41d65546e00ad4309591e1f0e3d))
+
 ## [0.51.0](https://github.com/jwallace145/jaws/compare/v0.50.1...v0.51.0) (2026-11-17)
 
 
