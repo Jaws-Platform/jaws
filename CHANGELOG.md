@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.43.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.42.2...v0.43.0) (2026-11-17)
+
+
+### Features
+
+* **databricks:** a deployer for a workspace project's CI, asked for in its project file ([#176](https://github.com/jwallace145/jwall-engineering-infra/issues/176)) ([2ed9d29](https://github.com/jwallace145/jwall-engineering-infra/commit/2ed9d29744e089928646c593e3ea61a757b79ec8))
+
+
+### Bug Fixes
+
+* **access:** treat a dataset as ready only once its volume exists ([#175](https://github.com/jwallace145/jwall-engineering-infra/issues/175)) ([bbd0921](https://github.com/jwallace145/jwall-engineering-infra/commit/bbd0921a5428e6ffcba548792eb8a3787efff12c))
+
 ## [0.42.2](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.42.1...v0.42.2) (2026-11-16)
 
 
