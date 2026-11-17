@@ -214,6 +214,21 @@ def main(
     )
 
 
+def _require_account_to_destroy(run: Run) -> None:
+    """A project that is moving has a stack in both accounts: refuse to guess
+    which one a destroy means. Checked before the project file is validated,
+    which only one account's view accepts."""
+    production = run.settings.production
+    name = _project_named_in(run.site_file)
+    if production is None or name is None or run.requested_account is not None:
+        return
+    if production.projects.get(name) == "moving":
+        raise ConfigError(
+            f"{name} has a stack in both accounts while it moves: say which one to "
+            "destroy with --account management (the old stack) or --account production"
+        )
+
+
 def _project_named_in(file: Path) -> str | None:
     """The `project` a project file names, or None when there is no readable
     file: the command that needs the file reports what is wrong with it."""
@@ -285,7 +300,12 @@ def _preflight(run: Run, role: Role, prefix: str | None) -> None:
     with phase("preflight"):
         project = run.project
         session = boto3.session.Session(region_name=project.region)
-        aws.check_role(session.client("sts"), project.role_name(role), run.logger)
+        aws.check_role(
+            session.client("sts"),
+            project.role_name(role),
+            run.logger,
+            account_id=run.settings.aws.account_id,
+        )
         if project.kind == "databricks":
             # Two stacks, two state files; `project.state_key` is neither.
             run.logger.info(
@@ -866,6 +886,7 @@ def destroy(
     full deletion list is printed first."""
 
     def body(run: Run) -> None:
+        _require_account_to_destroy(run)
         project = run.project
         if not project.has_components:
             raise PreflightError("destroy is not supported for sites")
@@ -1146,11 +1167,15 @@ def _project_session(run: Run, roles: list[Role] | None) -> boto3.session.Sessio
     session = boto3.session.Session(region_name=project.region)
     with phase("preflight"):
         if roles is None:
-            _, arn = aws.caller_identity(session.client("sts"))
+            account, arn = aws.caller_identity(session.client("sts"))
+            aws.check_account(account, run.settings.aws.account_id, arn)
             run.logger.info("running as %s", arn)
         else:
             aws.check_any_role(
-                session.client("sts"), [project.role_name(r) for r in roles], run.logger
+                session.client("sts"),
+                [project.role_name(r) for r in roles],
+                run.logger,
+                account_id=run.settings.aws.account_id,
             )
     return session
 
@@ -2054,6 +2079,7 @@ def databricks_doctor(
                 session.client("sts"),
                 [project.role_name("plan"), project.role_name("apply")],
                 run.logger,
+                account_id=run.settings.aws.account_id,
             )
         checks.load_builtin_checks()
         results: list[CheckResult] = []
@@ -2149,7 +2175,8 @@ def _credentials_session(run: Run) -> tuple[boto3.session.Session, str]:
     section = _databricks_section(run)
     session = boto3.session.Session(region_name=project.region)
     with phase("preflight"):
-        _, arn = aws.caller_identity(session.client("sts"))
+        account, arn = aws.caller_identity(session.client("sts"))
+        aws.check_account(account, run.settings.aws.account_id, arn)
         run.logger.info("running as %s", arn)
     return session, section.secret_parameter
 

@@ -188,6 +188,11 @@ run "production_starts_empty" {
   }
 
   assert {
+    condition     = local.databricks_secret_parameter_arn == "arn:aws:ssm:us-east-1:570327089884:parameter/jaws/databricks/client-secret" && local.databricks_events_arn_prefix == "arn:aws:s3:::jaws-databricks-audit-logs/events/"
+    error_message = "the roles created in production must name production's Databricks secret and audit bucket, never the management account's"
+  }
+
+  assert {
     condition     = length(module.site_bucket) == 0 && length(module.site_ci_plan) == 0 && length(module.site_ci_preview) == 0 && length(module.site_ci_apply) == 0
     error_message = "no site is in production yet"
   }
@@ -351,13 +356,23 @@ run "a_moving_project_keeps_its_roles_in_management" {
   }
 
   assert {
-    condition     = !contains(keys(module.site_bucket), "main-site") && !contains(keys(module.site_ci_apply), "main-site")
-    error_message = "a project that has moved leaves the management account"
+    condition     = !contains(keys(module.site_ci_plan), "main-site") && !contains(keys(module.site_ci_preview), "main-site") && !contains(keys(module.site_ci_apply), "main-site")
+    error_message = "a site that has moved has no roles left in the management account"
   }
 
   assert {
-    condition     = toset(keys(module.site_bucket)) == toset(["cs-survival-guide", "guitar-knowledge-base"])
-    error_message = "the sites that have not moved stay in management"
+    condition     = toset(keys(module.site_bucket)) == toset(["main-site", "cs-survival-guide", "guitar-knowledge-base"])
+    error_message = "a site that has moved keeps its old bucket in the management account: buckets are never destroyed by a move, the owner deletes them by hand"
+  }
+
+  assert {
+    condition     = local.retained_site_buckets == toset(["main-site"]) && !contains(keys(local.project_ci), "main-site")
+    error_message = "the old bucket of a moved site is retained without any CI role or policy input of its own"
+  }
+
+  assert {
+    condition     = !contains(keys(local.state_prefix_access), "project=main-site/")
+    error_message = "a moved site's state prefix is closed in the management account"
   }
 }
 
@@ -404,9 +419,11 @@ run "rejects_the_other_accounts_credentials" {
 run "rejects_production_before_its_admin_role_is_known" {
   command = plan
 
-  # config.yaml as it is today: production has no admin_role_arn of its own.
+  # config.yaml before the bootstrap: production has no admin_role_arn of its
+  # own. A fixture, so this run survives the pull request that adds one.
   variables {
-    account = "production"
+    account     = "production"
+    config_file = "tests/fixtures/unbootstrapped.yaml"
   }
 
   override_data {

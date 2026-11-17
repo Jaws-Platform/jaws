@@ -9,6 +9,7 @@ from botocore.stub import Stubber
 from moto import mock_aws
 
 from jaws.aws import (
+    check_any_role,
     check_bucket,
     check_role,
     invalidate_distribution,
@@ -112,3 +113,45 @@ def test_invalidate_distribution() -> None:
     )
     invalidation = invalidate_distribution(cloudfront, distribution["Distribution"]["Id"], "ref")
     assert invalidation
+
+
+def test_check_role_refuses_another_accounts_credentials(logger: logging.Logger) -> None:
+    """Role names differ between the accounts, but a run with admin credentials
+    skips the role check: the account is checked first, and always."""
+    sts, stubber = _sts("arn:aws:sts::650503560686:assumed-role/jaws-guitar-ci-plan/s")
+    with stubber, pytest.raises(PreflightError, match=r"650503560686.*570327089884"):
+        check_role(sts, "jaws-guitar-ci-plan", logger, environ={}, account_id="570327089884")
+
+
+def test_skipping_the_role_check_does_not_skip_the_account_check(logger: logging.Logger) -> None:
+    sts, stubber = _sts("arn:aws:sts::650503560686:assumed-role/AWSReservedSSO_Admin_0f/owner")
+    with stubber, pytest.raises(PreflightError, match="570327089884"):
+        check_role(
+            sts,
+            "any-role",
+            logger,
+            environ={"JAWS_SKIP_ROLE_CHECK": "1"},
+            account_id="570327089884",
+        )
+
+
+def test_check_role_accepts_the_addressed_accounts_credentials(logger: logging.Logger) -> None:
+    arn = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-guitar-ci-plan/s"
+    sts, stubber = _sts(arn)
+    with stubber:
+        assert (
+            check_role(
+                sts,
+                "jwall-engineering-guitar-ci-plan",
+                logger,
+                environ={},
+                account_id="650503560686",
+            )
+            == arn
+        )
+
+
+def test_check_any_role_refuses_another_accounts_credentials(logger: logging.Logger) -> None:
+    sts, stubber = _sts("arn:aws:sts::650503560686:assumed-role/jaws-guitar-ci-plan/s")
+    with stubber, pytest.raises(PreflightError, match="570327089884"):
+        check_any_role(sts, ["jaws-guitar-ci-plan"], logger, environ={}, account_id="570327089884")

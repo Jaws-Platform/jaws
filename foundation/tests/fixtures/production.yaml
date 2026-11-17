@@ -189,5 +189,8 @@ production:
       repository: jaws-cli
     databricks:
       enabled: false
+      secret_parameter: /jaws/databricks/client-secret
+      metastore_name: jaws-us-east-1
+      audit_bucket: jaws-databricks-audit-logs
     dns:
       zone_id: Z0PRODUCTIONZONE0000

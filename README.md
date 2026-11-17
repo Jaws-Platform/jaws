@@ -243,6 +243,15 @@ and a plan made with the other account's credentials stops before it starts.
 The production account is bootstrapped once by the owner:
 [docs/production-bootstrap.md](docs/production-bootstrap.md).
 
+Two refusals keep a run in one account. Credentials must belong to the account
+the run addresses, even where the role check is skipped (`JAWS_SKIP_ROLE_CHECK`),
+so a secret or a stack is never written into the other account by an admin
+profile left active. And `destroy` on a project that is `moving` must name its
+account: both stacks exist, and the default is the new one.
+
+A site that has moved keeps its old bucket in the management account (without
+roles or writers) until the owner deletes it; a move never destroys a bucket.
+
 `jaws config show` prints the view a run would use, and `jaws config env` the
 few values a workflow needs to build a role ARN: every workflow gets a
 project's account from it (`config env --project <name>`), never from its own

@@ -34,6 +34,21 @@ def caller_identity(sts: STSClient) -> tuple[str, str]:
     return identity["Account"], identity["Arn"]
 
 
+def check_account(account: str, expected: str | None, arn: str) -> None:
+    """Fail unless the credentials belong to the account this run addresses.
+
+    Checked even when the role check is skipped: with admin credentials for
+    one account and a project that lives in the other, every name the run
+    derives would be created or read in the wrong account.
+    """
+    if expected is not None and account != expected:
+        raise PreflightError(
+            f"the credentials ({arn}) belong to account {account}, but this run addresses "
+            f"account {expected}: use that account's credentials, or choose the other "
+            "account with --account"
+        )
+
+
 def role_name_from_arn(arn: str) -> str | None:
     """The role name of an assumed-role session ARN, else None."""
     match = _ASSUMED_ROLE.match(arn)
@@ -45,15 +60,18 @@ def check_role(
     expected_role: str,
     logger: Logger,
     environ: dict[str, str] | None = None,
+    account_id: str | None = None,
 ) -> str:
-    """Fail unless the credentials are an assumed-role session of `expected_role`.
+    """Fail unless the credentials are an assumed-role session of `expected_role`
+    in account `account_id` (when given).
 
     `JAWS_SKIP_ROLE_CHECK=1` disables the check for local runs with admin
     credentials; it is logged as a warning so it never passes unnoticed.
     Returns the caller ARN.
     """
     env = os.environ if environ is None else environ
-    _, arn = caller_identity(sts)
+    account, arn = caller_identity(sts)
+    check_account(account, account_id, arn)
     actual = role_name_from_arn(arn)
     if env.get(ENV_SKIP_ROLE_CHECK) == "1":
         logger.warning(
@@ -74,11 +92,13 @@ def check_any_role(
     expected_roles: list[str],
     logger: Logger,
     environ: dict[str, str] | None = None,
+    account_id: str | None = None,
 ) -> str:
     """Like `check_role`, accepting any of several roles (read-only commands
     that both the plan and the release role may run)."""
     env = os.environ if environ is None else environ
-    _, arn = caller_identity(sts)
+    account, arn = caller_identity(sts)
+    check_account(account, account_id, arn)
     if env.get(ENV_SKIP_ROLE_CHECK) == "1":
         logger.warning("%s=1: not checking the role of %s", ENV_SKIP_ROLE_CHECK, arn)
         return arn

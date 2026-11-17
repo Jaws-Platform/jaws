@@ -81,8 +81,9 @@ def test_a_role_step_fails_when_the_tool_names_no_account(name: str) -> None:
 def test_a_dispatched_apply_can_choose_the_account(name: str) -> None:
     account = _workflow(name)[True]["workflow_dispatch"]["inputs"]["account"]
     assert account["type"] == "choice"
-    assert account["options"] == ["", "management", "production"]
-    assert account["default"] == ""
+    # `auto`, not an empty option: a choice input's options must be non-empty strings.
+    assert account["options"] == ["auto", "management", "production"]
+    assert account["default"] == "auto"
     assert account["required"] is False
 
 
@@ -97,5 +98,6 @@ def test_the_chosen_account_reaches_the_role_and_the_command(name: str) -> None:
     ]
     assert len(takes_account) >= 2, f"{name}: expected the role step and the stack command"
     for step in takes_account:
-        assert step["env"]["ACCOUNT"] == "${{ inputs.account }}", step.get("name")
+        # `auto` reaches the tool as no --account at all: the tool decides.
+        assert step["env"]["ACCOUNT"] == "${{ inputs.account != 'auto' && inputs.account || '' }}"
         assert '${ACCOUNT:+--account "$ACCOUNT"}' in step["run"], step.get("name")
