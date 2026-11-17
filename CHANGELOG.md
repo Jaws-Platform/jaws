@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.50.0](https://github.com/jwallace145/jaws/compare/v0.49.0...v0.50.0) (2026-11-17)
+
+
+### Features
+
+* **config:** mark the production account bootstrapped ([#199](https://github.com/jwallace145/jaws/issues/199)) ([47808b3](https://github.com/jwallace145/jaws/commit/47808b3e9680fece8fc85a3af56fcd1b37e772e0))
+
+
+### Bug Fixes
+
+* **config:** name production's state bucket after its account ([#197](https://github.com/jwallace145/jaws/issues/197)) ([719d94b](https://github.com/jwallace145/jaws/commit/719d94b43138a0925c674a5cbce1da39ef521eaa))
+
 ## [0.49.0](https://github.com/jwallace145/jaws/compare/v0.48.0...v0.49.0) (2026-11-17)
 
 
