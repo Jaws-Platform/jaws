@@ -216,7 +216,8 @@ production:
   bootstrapped: true # the owner ran docs/production-bootstrap.md on 2026-11-17
   # Projects with a stack in production: `moving` while the old stack still
   # exists in the management account, `moved` once it has been destroyed.
-  projects: {}
+  projects:
+    braveheart-bot: moving # docs/lichess-bot.md, "Moving a bot to the production account"
   overrides:
     aws:
       account_id: "570327089884"
