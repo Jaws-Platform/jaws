@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.49.0](https://github.com/jwallace145/jaws/compare/v0.48.0...v0.49.0) (2026-11-17)
+
+
+### Features
+
+* **config:** record the owner's admin role in the production account ([#195](https://github.com/jwallace145/jaws/issues/195)) ([ced493d](https://github.com/jwallace145/jaws/commit/ced493dcca50b6d9b3045618ebc03345e018852c))
+* **foundation:** stop trusting the repository's old name ([#194](https://github.com/jwallace145/jaws/issues/194)) ([260fdb5](https://github.com/jwallace145/jaws/commit/260fdb52c7e8c182b2a47201caf523c3d752c7fe))
+
 ## [0.48.0](https://github.com/jwallace145/jaws/compare/v0.47.1...v0.48.0) (2026-11-17)
 
 
