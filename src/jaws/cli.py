@@ -1000,6 +1000,32 @@ def config_env(
         print(f"{key}={value}")
 
 
+@config_app.command("accounts")
+def config_accounts(ctx: typer.Context) -> None:
+    """Print the accounts the foundation is planned and applied for, as one
+    line of JSON for a workflow matrix: management always, production once it
+    is bootstrapped. Each entry has what a job needs to name its role, its
+    state and its image repository."""
+    run: Run = ctx.obj
+    production = run.settings.production
+    names: list[Account] = ["management"]
+    if production is not None and production.bootstrapped:
+        names.append("production")
+    accounts = []
+    for name in names:
+        settings = load_settings(run.config_path, account=name)
+        accounts.append(
+            {
+                "account": name,
+                "account_id": settings.aws.account_id,
+                "organization": settings.context.organization,
+                "state_bucket": settings.state.bucket,
+                "ecr_repository": settings.ecr.repository,
+            }
+        )
+    print(json.dumps(accounts, separators=(",", ":")))
+
+
 @config_app.command("show")
 def config_show(ctx: typer.Context) -> None:
     """Print the effective tool configuration as JSON."""
