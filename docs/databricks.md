@@ -102,7 +102,8 @@ In this order:
    and `admins` (at least one email). Workspace users go in the project's own
    file, not here.
 2. In `foundation/databricks.tf`, add the project to `local.databricks_projects`
-   with its repository and repository ID. The release that applies it creates
+   with its repository, repository ID and owner ID
+   (`gh api repos/<owner>/<repo> --jq '.id, .owner.id'`). The release that applies it creates
    the project's `jwall-engineering-<name>-ci-plan` and `-ci-apply` roles
    (`compute/*` and `databricks/*` policies; no release or task role). A
    Databricks project must not also be a site or a bot.
@@ -135,6 +136,7 @@ components:
     compute_policies: [small-interactive, jobs]
     users: [user@example.com]           # workspace users, by email; optional
     # deployment_name: databricks-poc   # optional; needs databricks.deployment_name_prefix
+    # deployer: true                    # optional; a deploy identity for the repository's CI (below)
 ```
 
 The file names only what the project asks for. The network range, cost center
@@ -161,6 +163,47 @@ grants, which is exactly what the central guardrails bound. Listing an admin's
 email under `users` is refused (admins are set centrally in `config.yaml`), and
 a `users` key under `projects.<name>.databricks` in `config.yaml` no longer
 loads: move it to the project file.
+
+### The deployer
+
+`deployer: true` gives the project a deploy identity: a service principal,
+`<organization>-<project>-deployer`, that GitHub Actions in the project's
+repository signs in as with no secret. The workspace module creates it in the
+account stack, with a federation policy that trusts:
+
+- issuer `https://token.actions.githubusercontent.com`;
+- audience the Databricks account ID;
+- subject exactly `repo:<owner>@<owner_id>/<name>@<repository_id>:environment:prod`,
+  the immutable form GitHub issues for repositories created or moved since
+  2026-07-15. The IDs come from `local.databricks_projects`; a project that asks
+  for a deployer without both fails its render.
+
+It is `USER` on the workspace and a member of `<project>-workspace-users`, never
+an admin, so it can deploy and run the project's bundle and read exactly what
+the workspace's users may under their handshakes. It administers nothing.
+
+The account stack outputs `deployer_application_id`, which appears in the
+**Databricks apply**'s output. It is not a secret. The project's repository
+keeps it, with the workspace host and the account ID, as variables of a GitHub
+environment `prod` that deploys from `main` only. Its deploy workflow signs in
+like this:
+
+```yaml
+permissions:
+  id-token: write
+  contents: read
+environment: prod
+env:
+  DATABRICKS_AUTH_TYPE: github-oidc
+  DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+  DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+  DATABRICKS_TOKEN_AUDIENCE: ${{ vars.DATABRICKS_TOKEN_AUDIENCE }}  # the account ID
+```
+
+`DATABRICKS_TOKEN_AUDIENCE` matters: without it a workspace client takes the
+audience from the host's metadata, which need not be the account ID the policy
+trusts. braveheart-databricks is the first user
+([its deploy workflow](https://github.com/Braveheart-Chess/braveheart-databricks/blob/main/.github/workflows/deploy.yml)).
 
 ## What `plan` shows
 

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from jwall_engineering_sites import stack as stack_module
@@ -866,6 +867,7 @@ ACCOUNT_OUTPUTS: dict[str, Any] = {
 }
 
 ACCOUNT_TFVARS_KEYS = {
+    "deployer",
     "project",
     "environment",
     "repository",
@@ -924,9 +926,82 @@ def test_databricks_account_tfvars(databricks: Project, settings: Settings) -> N
         "service_principal_application_id": settings.databricks.client_id,
         "account_id": settings.databricks.account_id,
         "read_only_datasets": {},  # databricks-poc consumes no shared dataset
+        "deployer": None,  # the project file asks for none
     }
     assert tfvars["tags"]["CostCenter"] == "cc-0000"
     assert tfvars["tags"]["Workspace"] == "databricks-poc-prod"
+
+
+def _registry(root: Path, entry: str) -> str:
+    """A minimal infra checkout whose Databricks registry holds one entry line."""
+    (root / "foundation").mkdir(parents=True)
+    (root / "foundation" / "bots.tf").write_text("locals {\n  bots = {\n  }\n}\n")
+    (root / "foundation" / "databricks.tf").write_text(
+        f"locals {{\n  databricks_projects = {{\n    {entry}\n  }}\n}}\n"
+    )
+    return str(root)
+
+
+def _databricks_with_deployer(tmp_path: Path, settings: Settings) -> Project:
+    raw = yaml.safe_load((FIXTURES / "bots" / "databricks-poc.yaml").read_text())
+    raw["components"][0]["deployer"] = True
+    path = tmp_path / "jwall-engineering-sites.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    return Project.from_config(load_site_config(path), settings)
+
+
+def test_databricks_account_tfvars_deployer_comes_from_the_registry(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entry = (
+        'databricks-poc = { repository = "example-org/databricks-poc", '
+        'repository_id = "1111", owner_id = "2222" }'
+    )
+    monkeypatch.setenv("JES_INFRA_ROOT", _registry(tmp_path / "infra", entry))
+    project = _databricks_with_deployer(tmp_path, settings)
+    assert _databricks_account_tfvars(project, settings)["deployer"] == {
+        "repository": "example-org/databricks-poc",
+        "repository_id": "1111",
+        "owner_id": "2222",
+    }
+
+
+def test_a_deployer_without_registry_ids_is_refused(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _databricks_with_deployer(tmp_path, settings)
+    no_owner = (
+        'databricks-poc = { repository = "example-org/databricks-poc", repository_id = "1111" }'
+    )
+    monkeypatch.setenv("JES_INFRA_ROOT", _registry(tmp_path / "no-owner", no_owner))
+    with pytest.raises(ConfigError, match=r"databricks-poc.*owner_id.*foundation/databricks\.tf"):
+        _databricks_account_tfvars(project, settings)
+    absent = 'other = { repository = "o/other", repository_id = "1", owner_id = "2" }'
+    monkeypatch.setenv("JES_INFRA_ROOT", _registry(tmp_path / "absent", absent))
+    with pytest.raises(ConfigError, match=r"databricks-poc.*foundation/databricks\.tf"):
+        _databricks_account_tfvars(project, settings)
+
+
+def test_a_deployer_whose_registry_repository_differs_is_refused(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entry = (
+        'databricks-poc = { repository = "someone-else/databricks-poc", '
+        'repository_id = "1111", owner_id = "2222" }'
+    )
+    monkeypatch.setenv("JES_INFRA_ROOT", _registry(tmp_path / "infra", entry))
+    project = _databricks_with_deployer(tmp_path, settings)
+    with pytest.raises(
+        ConfigError, match=r"example-org/databricks-poc.*someone-else/databricks-poc"
+    ):
+        _databricks_account_tfvars(project, settings)
+
+
+def test_without_a_deployer_the_registry_is_not_read(
+    databricks: Project, settings: Settings, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("JES_INFRA_ROOT", str(tmp_path / "nowhere"))
+    assert _databricks_account_tfvars(databricks, settings)["deployer"] is None
 
 
 def test_databricks_tfvars_are_json_serialisable(databricks: Project, settings: Settings) -> None:
@@ -1027,13 +1102,18 @@ def test_databricks_tfvars_are_valid_for_the_stack_variables(
     assert set(tfvars) == _declared(f"databricks-{stack}")
 
 
+#: Account-stack outputs for people, not for the workspace stack: the deployer's
+#: application ID goes to the project's GitHub environment `prod`.
+ACCOUNT_OUTPUTS_FOR_PEOPLE = {"deployer_application_id"}
+
+
 def test_account_stack_outputs_what_the_workspace_stack_takes() -> None:
     declared = {
         labels[0]
         for kind, labels, _ in _blocks(REPO_ROOT / "stacks" / "databricks-account" / "outputs.tf")
         if kind == "output"
     }
-    assert declared == set(ACCOUNT_OUTPUTS)
+    assert declared == set(ACCOUNT_OUTPUTS) | ACCOUNT_OUTPUTS_FOR_PEOPLE
 
 
 @pytest.mark.parametrize("stack", ["databricks-account", "databricks-workspace"])

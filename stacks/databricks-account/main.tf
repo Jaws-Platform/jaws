@@ -44,7 +44,7 @@ data "databricks_metastore" "this" {
 
 module "network" {
   source  = "jwallace145/jwall-engineering/aws//modules/vpc"
-  version = "0.25.1"
+  version = "0.26.0"
 
   name                 = local.name
   cidr_block           = var.vpc_cidr
@@ -61,7 +61,7 @@ module "network" {
 
 module "nat" {
   source  = "jwallace145/jwall-engineering/aws//modules/nat-instance"
-  version = "0.25.1"
+  version = "0.26.0"
 
   name                    = "${local.name}-nat"
   subnet_id               = module.network.public_subnet_ids[0]
@@ -72,7 +72,7 @@ module "nat" {
 
 module "workspace" {
   source  = "jwallace145/jwall-engineering/aws//modules/databricks-workspace"
-  version = "0.25.1"
+  version = "0.26.0"
 
   providers = {
     databricks = databricks.account
@@ -91,6 +91,10 @@ module "workspace" {
   admin_user_names                 = var.admin_user_names
   user_names                       = var.user_names
   service_principal_application_id = var.service_principal_application_id
+
+  # The project's deploy identity, when its file sets `deployer: true`: GitHub
+  # Actions in its repository's prod environment signs in as it, with no secret.
+  deployer = var.deployer
 
   # Shared datasets this workspace consumes (config.yaml databricks_share):
   # each lets its share role through the S3 endpoint, read-only.

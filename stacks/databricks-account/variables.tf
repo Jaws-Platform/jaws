@@ -127,3 +127,13 @@ variable "read_only_datasets" {
   }))
   default = {}
 }
+
+variable "deployer" {
+  description = "The project's deploy identity, when its project file sets `deployer: true`: its repository and GitHub's immutable IDs for it (foundation/databricks.tf). The workspace module creates a service principal that GitHub Actions in that repository's `prod` environment signs in as, with no secret. Null for none."
+  type = object({
+    repository    = string
+    repository_id = string
+    owner_id      = string
+  })
+  default = null
+}

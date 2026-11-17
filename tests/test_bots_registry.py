@@ -485,6 +485,17 @@ def test_the_registered_databricks_projects() -> None:
     }
 
 
+def test_every_databricks_project_has_numeric_repository_and_owner_ids() -> None:
+    # owner_id: gh api repos/<owner>/<repo> --jq .owner.id. A deployer's
+    # federation subject names both: repo:<owner>@<owner_id>/<name>@<repository_id>.
+    entries = re.findall(r"^ *([a-z0-9-]+) *= *\{([^}]*)\}", _databricks_block(), re.M)
+    fields = {key: dict(re.findall(r'([a-z_]+) *= *"([^"]*)"', body)) for key, body in entries}
+    assert {key: (f.get("repository_id"), f.get("owner_id")) for key, f in fields.items()} == {
+        "databricks-poc": ("1458298100", "35950238"),
+        "braveheart-databricks": ("1458504699", "356866252"),
+    }
+
+
 def test_databricks_projects_are_not_bots_and_have_guardrails() -> None:
     projects = _projects()
     for key in databricks_registry():

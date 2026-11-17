@@ -21,7 +21,9 @@ import pytest
 from jwall_engineering_sites.access import (
     DirectoryProjectFiles,
     GitHubProjectFiles,
+    RegistryIds,
     project_files_from_env,
+    project_registry_ids,
     project_repositories,
 )
 from jwall_engineering_sites.errors import ConfigError
@@ -163,3 +165,25 @@ def test_the_environment_picks_a_directory_else_github(
     files = project_files_from_env(REPO_ROOT)
     assert isinstance(files, GitHubProjectFiles) and files.token == "from-gh-token"
     assert files.repositories["braveheart-selfplay"] == "Braveheart-Chess/braveheart-selfplay"
+
+
+def test_registry_ids_parse_both_registries() -> None:
+    ids = project_registry_ids(REPO_ROOT)
+    assert ids["braveheart-databricks"] == RegistryIds(
+        "Braveheart-Chess/braveheart-databricks", "1458504699", "356866252"
+    )
+    assert ids["braveheart-selfplay"] == RegistryIds(
+        "Braveheart-Chess/braveheart-selfplay", "1459456470", "356866252"
+    )
+    assert {key: i.repository for key, i in ids.items()} == project_repositories(REPO_ROOT)
+
+
+def test_registry_ids_tolerate_a_missing_owner_id(tmp_path: Path) -> None:
+    (tmp_path / "foundation").mkdir()
+    (tmp_path / "foundation" / "bots.tf").write_text("locals {\n  bots = {\n  }\n}\n")
+    (tmp_path / "foundation" / "databricks.tf").write_text(
+        "locals {\n  databricks_projects = {\n"
+        '    a-b = { repository = "o/a-b", repository_id = "12" }\n'
+        "  }\n}\n"
+    )
+    assert project_registry_ids(tmp_path) == {"a-b": RegistryIds("o/a-b", "12", None)}

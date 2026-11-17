@@ -542,6 +542,11 @@ class DatabricksWorkspace(_Model):
     #: A read takes effect only while the dataset's producer lists this project
     #: under its `consumers`.
     reads: tuple[DatasetRead, ...] = ()
+    #: A deploy identity: a workspace service principal that GitHub Actions in the
+    #: project's repository, in its `prod` environment, signs in as with no secret
+    #: (the repository's IDs come from foundation/databricks.tf). It is a workspace
+    #: user in the users group, so it can do nothing a workspace user cannot.
+    deployer: bool = False
 
     @field_validator("users")
     @classmethod

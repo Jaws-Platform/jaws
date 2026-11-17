@@ -30,3 +30,8 @@ output "metastore_id" {
   description = "ID of the Unity Catalog metastore the workspace is assigned to."
   value       = data.databricks_metastore.this.metastore_id
 }
+
+output "deployer_application_id" {
+  description = "The project's deployer's application ID, for its GitHub environment `prod` (`DATABRICKS_CLIENT_ID`); null when the project file asks for no deployer. Not a secret."
+  value       = module.workspace.deployer_application_id
+}
