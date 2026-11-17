@@ -50,7 +50,7 @@ output "projects" {
 }
 
 output "sites_image_repository_url" {
-  description = "ECR repository URL for the jwall-engineering-sites CLI image, for `docker push` and `docker pull`."
+  description = "ECR repository URL for the jaws CLI image, for `docker push` and `docker pull`."
   value       = module.sites_image.url
 }
 

@@ -19,9 +19,9 @@ from typing import Literal
 
 from .errors import ConfigError
 
-LOGGER_NAME = "jwall-engineering-sites"
-ARTIFACTS_DIR = Path(".jwall-engineering-sites")
-LOG_FILE_NAME = "jwall-engineering-sites.log"
+LOGGER_NAME = "jaws"
+ARTIFACTS_DIR = Path(".jaws")
+LOG_FILE_NAME = "jaws.log"
 
 
 def in_github_actions() -> bool:
@@ -121,12 +121,12 @@ def phase(name: str) -> Iterator[None]:
             _emit_workflow_command("endgroup")
 
 
-def annotate_error(message: str, title: str = "jwall-engineering-sites") -> None:
+def annotate_error(message: str, title: str = "Jaws") -> None:
     """An `::error::` annotation so the failure shows on the job summary."""
     if in_github_actions():
         _emit_workflow_command("error", message.replace("\n", "%0A"), title=title)
 
 
-def annotate_warning(message: str, title: str = "jwall-engineering-sites") -> None:
+def annotate_warning(message: str, title: str = "Jaws") -> None:
     if in_github_actions():
         _emit_workflow_command("warning", message.replace("\n", "%0A"), title=title)

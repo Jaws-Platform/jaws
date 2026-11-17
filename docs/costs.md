@@ -7,10 +7,10 @@ Usage Report to parse and nothing to deploy: the command is read-only and
 runs from the owner's shell.
 
 ```sh
-jwall-engineering-sites cost report --project braveheart   # one project, by component
-jwall-engineering-sites cost report --project braveheart --by profile  # task spend by profile, not workflow
-jwall-engineering-sites cost report                         # every project, then the untagged spend
-jwall-engineering-sites cost report --months 6              # 1-13 calendar months, this one included (default 3)
+jaws cost report --project braveheart   # one project, by component
+jaws cost report --project braveheart --by profile  # task spend by profile, not workflow
+jaws cost report                         # every project, then the untagged spend
+jaws cost report --months 6              # 1-13 calendar months, this one included (default 3)
 ```
 
 Cost Explorer groups by the `Project` tag as it was when the money was spent.

@@ -10,14 +10,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.settings import (
+from jaws.project import Project
+from jaws.settings import (
     DatasetRetention,
     ProjectGuardrails,
     Settings,
     load_settings,
 )
-from jwall_engineering_sites.site import Site, load_site_config
+from jaws.site import Site, load_site_config
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SITE_FIXTURES = sorted((FIXTURES / "sites").glob("*.yaml"))
@@ -78,7 +78,7 @@ def research(settings: Settings) -> Project:
 
 @pytest.fixture
 def logger() -> logging.Logger:
-    log = logging.getLogger("test-jwall-engineering-sites")
+    log = logging.getLogger("test-jaws")
     log.setLevel(logging.DEBUG)
     return log
 
@@ -104,10 +104,10 @@ def fake_terraform(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("PATH", f"{FIXTURES / 'bin'}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("FAKE_TF_LOG", str(log))
     monkeypatch.setenv("FAKE_TF_OUTPUTS", str(outputs))
-    monkeypatch.delenv("JES_STACK_DIR", raising=False)
-    monkeypatch.setenv("JES_STACKS_ROOT", str(REPO_ROOT / "stacks"))
+    monkeypatch.delenv("JAWS_STACK_DIR", raising=False)
+    monkeypatch.setenv("JAWS_STACKS_ROOT", str(REPO_ROOT / "stacks"))
     monkeypatch.setenv("FAKE_TF_TFVARS", str(tmp_path / "rendered.tfvars.json"))
-    monkeypatch.setenv("JES_PLUGIN_DIR", "")
+    monkeypatch.setenv("JAWS_PLUGIN_DIR", "")
     return log
 
 
@@ -138,7 +138,7 @@ def bot_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[P
     """A working directory holding the braveheart bot file, its lichess config and config.yaml."""
     root = tmp_path / "bot-workspace"
     (root / "lichess").mkdir(parents=True)
-    shutil.copy(FIXTURES / "bots" / "braveheart.yaml", root / "jwall-engineering-sites.yaml")
+    shutil.copy(FIXTURES / "bots" / "braveheart.yaml", root / "jaws.yaml")
     shutil.copy(FIXTURES / "config.yaml", root / "config.yaml")
     (root / "lichess" / "config.yml").write_text(
         "token: LICHESS_TOKEN_PLACEHOLDER\nurl: https://lichess.org/\n"
@@ -155,7 +155,7 @@ def research_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
     """A working directory holding the math-prover file and a config.yaml approving it."""
     root = tmp_path / "research-workspace"
     root.mkdir()
-    shutil.copy(FIXTURES / "bots" / "math-prover.yaml", root / "jwall-engineering-sites.yaml")
+    shutil.copy(FIXTURES / "bots" / "math-prover.yaml", root / "jaws.yaml")
     config = yaml.safe_load((FIXTURES / "config.yaml").read_text())
     config["projects"]["math-prover"] = MATH_PROVER_GUARDRAILS.model_dump(mode="json")
     (root / "config.yaml").write_text(yaml.safe_dump(config))
@@ -169,9 +169,7 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]
     """A working directory holding the guitar site file and config.yaml."""
     root = tmp_path / "workspace"
     root.mkdir()
-    shutil.copy(
-        FIXTURES / "sites" / "guitar-knowledge-base.yaml", root / "jwall-engineering-sites.yaml"
-    )
+    shutil.copy(FIXTURES / "sites" / "guitar-knowledge-base.yaml", root / "jaws.yaml")
     shutil.copy(FIXTURES / "config.yaml", root / "config.yaml")
     monkeypatch.chdir(root)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
@@ -183,7 +181,7 @@ def databricks_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Ite
     """A working directory with the databricks-poc file and a config.yaml enabling the account."""
     root = tmp_path / "databricks-workspace"
     root.mkdir()
-    shutil.copy(FIXTURES / "bots" / "databricks-poc.yaml", root / "jwall-engineering-sites.yaml")
+    shutil.copy(FIXTURES / "bots" / "databricks-poc.yaml", root / "jaws.yaml")
     config = yaml.safe_load((FIXTURES / "config.yaml").read_text())
     config["databricks"]["enabled"] = True
     config["databricks"]["account_id"] = "11111111-1111-1111-1111-111111111111"

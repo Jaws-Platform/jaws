@@ -6,9 +6,9 @@ from typing import Any
 import pytest
 import yaml
 
-from jwall_engineering_sites.errors import ConfigError
-from jwall_engineering_sites.settings import Settings
-from jwall_engineering_sites.site import (
+from jaws.errors import ConfigError
+from jaws.settings import Settings
+from jaws.site import (
     MANAGED_BY,
     REQUIRED_TAGS,
     Site,
@@ -38,7 +38,7 @@ def _raw(mutate: dict[str, Any] | None = None, drop: tuple[str, ...] = ()) -> di
 
 
 def _write(tmp_path: Path, raw: dict[str, Any]) -> Path:
-    path = tmp_path / "jwall-engineering-sites.yaml"
+    path = tmp_path / "jaws.yaml"
     path.write_text(yaml.safe_dump(raw))
     return path
 

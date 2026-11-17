@@ -12,9 +12,9 @@ import pytest
 from botocore.stub import Stubber
 from moto import mock_aws
 
-from jwall_engineering_sites import image
-from jwall_engineering_sites.errors import PreflightError, RunError
-from jwall_engineering_sites.project import Project
+from jaws import image
+from jaws.errors import PreflightError, RunError
+from jaws.project import Project
 
 REGISTRY = "123456789012.dkr.ecr.us-east-1.amazonaws.com"
 

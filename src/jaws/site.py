@@ -1,4 +1,4 @@
-"""The site file, jwall-engineering-sites.yaml, and everything derived from it.
+"""The site file, jaws.yaml, and everything derived from it.
 
 The file holds only what differs between sites. Bucket, roles, state key and
 URLs are derived here, which is what guarantees they follow the convention.
@@ -24,7 +24,7 @@ from .components import (
 from .errors import ConfigError
 from .settings import Settings
 
-SITE_FILE = Path("jwall-engineering-sites.yaml")
+SITE_FILE = Path("jaws.yaml")
 
 #: The tags the site file must state. Every resource also carries ManagedBy.
 REQUIRED_TAGS = ("Organization", "Project", "Environment", "Repository", "Owner")
@@ -78,7 +78,7 @@ class DevSection(_Model):
 
 
 class SiteConfig(_Model):
-    """jwall-engineering-sites.yaml, validated on its own.
+    """jaws.yaml, validated on its own.
 
     A file describes a site (`domain` and `site`), a bot project (`components`:
     one container image and one Lichess bot, and optionally datasets and a task

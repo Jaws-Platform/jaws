@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from jwall_engineering_sites.report import (
+from jaws.report import (
     MAX_RESOURCE_ROWS,
     PRODUCT,
     Provenance,
@@ -12,8 +12,8 @@ from jwall_engineering_sites.report import (
     sync_summary,
     truncate_tail,
 )
-from jwall_engineering_sites.stack import PLAN_CHANGES, PLAN_ERROR, PLAN_NO_CHANGES
-from jwall_engineering_sites.sync import SyncResult
+from jaws.stack import PLAN_CHANGES, PLAN_ERROR, PLAN_NO_CHANGES
+from jaws.sync import SyncResult
 
 PROVENANCE = Provenance(
     version="0.9.1",

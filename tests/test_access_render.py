@@ -18,17 +18,17 @@ from typing import Any
 import pytest
 import yaml
 
-from jwall_engineering_sites import cli
-from jwall_engineering_sites.access import (
+from jaws import cli
+from jaws.access import (
     access_summary,
     compute_access,
     data_access_tfvars,
     fingerprint,
     load_registry,
 )
-from jwall_engineering_sites.errors import ConfigError
-from jwall_engineering_sites.settings import Settings
-from jwall_engineering_sites.site import load_site_config
+from jaws.errors import ConfigError
+from jaws.settings import Settings
+from jaws.site import load_site_config
 from tests.conftest import FIXTURES
 from tests.test_cli import runner
 
@@ -153,8 +153,8 @@ def render_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterato
             shutil.copy(source, files / f"{name}.yaml")
     monkeypatch.chdir(root)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    monkeypatch.delenv("JES_INFRA_ROOT", raising=False)
-    monkeypatch.setenv("JES_PROJECT_FILES_DIR", str(files))
+    monkeypatch.delenv("JAWS_INFRA_ROOT", raising=False)
+    monkeypatch.setenv("JAWS_PROJECT_FILES_DIR", str(files))
     yield root
 
 
@@ -213,9 +213,7 @@ def test_render_refuses_offboarding_a_dataset_a_handshake_still_names(
         cli.app, ["access", "render", "--out", str(out), "--base-registry", str(base)]
     )
     assert result.exit_code == 2, result.output
-    log = (
-        render_workspace / ".jwall-engineering-sites" / "jwall-engineering-sites.log"
-    ).read_text()
+    log = (render_workspace / ".jaws" / "jaws.log").read_text()
     assert "offboarding braveheart-selfplay/positions" in log
     assert not (out / "terraform.tfvars.json").exists()
 

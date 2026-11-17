@@ -1,4 +1,4 @@
-"""Entrypoint of the lichess-bot image built by jwall-engineering-sites.
+"""Entrypoint of the lichess-bot image built by jaws.
 
 Renders lichess-bot's config.yml from the consumer's versioned template and
 the environment, then execs lichess-bot. Runs inside the image as the

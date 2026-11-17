@@ -39,12 +39,12 @@ RECORDS_CONTAINER_PATH = "/opt/lichess-bot/game_records"
 #: A research project has no container image to take its architecture from.
 RESEARCH_ARCHITECTURE: Final = "x86_64"
 
-ENV_STACK_DIR = "JES_STACK_DIR"
-ENV_STACKS_ROOT = "JES_STACKS_ROOT"
-ENV_PLUGIN_DIR = "JES_PLUGIN_DIR"
-ENV_KEEP_WORKDIR = "JES_KEEP_WORKDIR"
-IMAGE_STACKS_ROOT = Path("/opt/jwall-engineering-sites/stacks")
-IMAGE_PLUGIN_DIR = Path("/opt/jwall-engineering-sites/plugins")
+ENV_STACK_DIR = "JAWS_STACK_DIR"
+ENV_STACKS_ROOT = "JAWS_STACKS_ROOT"
+ENV_PLUGIN_DIR = "JAWS_PLUGIN_DIR"
+ENV_KEEP_WORKDIR = "JAWS_KEEP_WORKDIR"
+IMAGE_STACKS_ROOT = Path("/opt/jaws/stacks")
+IMAGE_PLUGIN_DIR = Path("/opt/jaws/plugins")
 LOCAL_STACKS_ROOT = Path("stacks")
 
 PLAN_NO_CHANGES = 0
@@ -448,7 +448,8 @@ def render_backend(site: Target, state_key: str | None = None) -> str:
 
 
 def default_stack_dir(kind: str = "site") -> Path:
-    """JES_STACK_DIR, else <JES_STACKS_ROOT>/<kind>, else the image's copy, else ./stacks/<kind>."""
+    """JAWS_STACK_DIR, else <JAWS_STACKS_ROOT>/<kind>, else the image's copy, else
+    ./stacks/<kind>."""
     if ENV_STACK_DIR in os.environ:
         return Path(os.environ[ENV_STACK_DIR])
     if ENV_STACKS_ROOT in os.environ:
@@ -557,7 +558,7 @@ class Terraform:
         if not self.stack_dir.is_dir():
             raise RunError(f"{self.stack_name} stack not found at {self.stack_dir}")
         self.check_version()
-        self.workdir = Path(tempfile.mkdtemp(prefix="jwall-engineering-sites-"))
+        self.workdir = Path(tempfile.mkdtemp(prefix="jaws-"))
         # Keep .terraform/modules (the image vendors them so run-time init is offline),
         # but not .terraform/providers: a local `terraform init` leaves hundreds of MB of
         # provider binaries there, and init takes providers from the plugin mirror or cache.
@@ -589,7 +590,7 @@ class Terraform:
         if self.workdir is None:
             return
         # The logger itself is always at DEBUG (the debug log file), so ask the console:
-        # keep the copy only when the user asked for debug output or JES_KEEP_WORKDIR=1.
+        # keep the copy only when the user asked for debug output or JAWS_KEEP_WORKDIR=1.
         keep = failed and (os.environ.get(ENV_KEEP_WORKDIR) == "1" or _console_debug(self.logger))
         if keep:
             self.logger.warning("keeping working directory %s for inspection", self.workdir)

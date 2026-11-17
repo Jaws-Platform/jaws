@@ -12,9 +12,9 @@ import pytest
 from botocore.exceptions import ClientError
 from moto import mock_aws
 
-from jwall_engineering_sites import tasks
-from jwall_engineering_sites.errors import ConfigError, PreflightError
-from jwall_engineering_sites.project import Project
+from jaws import tasks
+from jaws.errors import ConfigError, PreflightError
+from jaws.project import Project
 
 REGION = "us-east-1"
 LOG = logging.getLogger("test")

@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from jwall_engineering_sites.checks import databricks_config as cfg
-from jwall_engineering_sites.checks.framework import (
+from jaws.checks import databricks_config as cfg
+from jaws.checks.framework import (
     CheckContext,
     CheckResult,
     Outcome,
@@ -15,8 +15,8 @@ from jwall_engineering_sites.checks.framework import (
     Stage,
     registered,
 )
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.settings import (
+from jaws.project import Project
+from jaws.settings import (
     DatabricksPolicy,
     DatabricksProject,
     ProjectGuardrails,

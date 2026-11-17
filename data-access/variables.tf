@@ -1,4 +1,4 @@
-# Every variable is rendered by `jwall-engineering-sites access render` from
+# Every variable is rendered by `jaws access render` from
 # datasets/ and every project's file, into terraform.tfvars.json. Nothing here
 # is set by hand.
 
@@ -35,7 +35,7 @@ variable "fingerprint" {
 
   validation {
     condition     = can(regex("^[0-9a-f]{64}$", var.fingerprint))
-    error_message = "fingerprint must be a lowercase SHA-256 hex digest; render the variables with `jwall-engineering-sites access render`."
+    error_message = "fingerprint must be a lowercase SHA-256 hex digest; render the variables with `jaws access render`."
   }
 }
 
@@ -45,6 +45,6 @@ variable "owner_group_name" {
 
   validation {
     condition     = length(trimspace(var.owner_group_name)) > 0
-    error_message = "owner_group_name must not be empty; render the variables with `jwall-engineering-sites access render`."
+    error_message = "owner_group_name must not be empty; render the variables with `jaws access render`."
   }
 }

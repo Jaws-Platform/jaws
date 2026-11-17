@@ -28,6 +28,7 @@ import yaml
 
 from .components import DatabricksWorkspace, Dataset, check_prefixes
 from .errors import ConfigError
+from .legacy import LEGACY_SITE_FILE
 from .settings import default_config_path
 from .site import SITE_FILE, SiteConfig, load_site_config, site_config_from_text
 
@@ -39,13 +40,13 @@ if TYPE_CHECKING:
 #: characters under `<organization>-ds-`.
 ONBOARDING_KEY_MAX = 40
 #: The infra checkout the registry and the project registries are read from.
-ENV_INFRA_ROOT = "JES_INFRA_ROOT"
+ENV_INFRA_ROOT = "JAWS_INFRA_ROOT"
 #: The one file in datasets/ that is not a dataset.
 REGISTRY_README = "README.md"
 #: Every onboarded dataset's external volume, in its schema of its producer's catalog.
 ONBOARDED_VOLUME = "files"
 #: A directory of `<project>.yaml` read instead of GitHub (tests, local runs).
-ENV_PROJECT_FILES_DIR = "JES_PROJECT_FILES_DIR"
+ENV_PROJECT_FILES_DIR = "JAWS_PROJECT_FILES_DIR"
 #: The registries of projects and their repositories, one line per entry, as
 #: the workflows read them (bot-apply.yml, scripts/databricks-projects.sh).
 PROJECT_REGISTRIES = (
@@ -131,7 +132,7 @@ class OnboardedDataset:
 
 
 def infra_root() -> Path:
-    """The infra checkout: JES_INFRA_ROOT, else the directory of config.yaml."""
+    """The infra checkout: JAWS_INFRA_ROOT, else the directory of config.yaml."""
     if ENV_INFRA_ROOT in os.environ:
         return Path(os.environ[ENV_INFRA_ROOT])
     return default_config_path().parent
@@ -259,7 +260,7 @@ def _registry_entries(infra_root: Path) -> list[tuple[str, str, str]]:
 
 
 class ProjectFiles(Protocol):
-    """Where another project's jwall-engineering-sites.yaml is read from."""
+    """Where another project's jaws.yaml is read from."""
 
     def load(self, project: str) -> SiteConfig: ...
 
@@ -305,13 +306,28 @@ class GitHubProjectFiles:
                 f"{project}: not a registered project (foundation/bots.tf or "
                 "foundation/databricks.tf), so its file cannot be read"
             )
+        # The file's old name is read when the new one is not there (404), until
+        # every project has renamed its file. Any other failure is an error, and
+        # when neither name exists the error names the one to create.
         url = f"{GITHUB_API}/repos/{repository}/contents/{SITE_FILE.name}"
-        request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
-        if self.token:
-            request.add_header("Authorization", f"Bearer {self.token}")
+        legacy_url = f"{GITHUB_API}/repos/{repository}/contents/{LEGACY_SITE_FILE.name}"
         try:
-            with self.opener(request, timeout=FETCH_TIMEOUT) as response:
-                payload = json.load(response)
+            try:
+                payload = self._get(url)
+            except urllib.error.HTTPError as missing:
+                if missing.code != 404:
+                    raise
+                try:
+                    payload = self._get(legacy_url)
+                except urllib.error.HTTPError as legacy_missing:
+                    if legacy_missing.code == 404:
+                        raise missing from None
+                    url = legacy_url
+                    raise
+                except (urllib.error.URLError, OSError, ValueError):
+                    url = legacy_url
+                    raise
+                url = legacy_url
             text = base64.b64decode(payload["content"]).decode()
             sha = str(payload["sha"])
         except (
@@ -327,12 +343,19 @@ class GitHubProjectFiles:
         self.shas[project] = sha
         return config
 
+    def _get(self, url: str) -> Any:
+        request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+        if self.token:
+            request.add_header("Authorization", f"Bearer {self.token}")
+        with self.opener(request, timeout=FETCH_TIMEOUT) as response:
+            return json.load(response)
+
     def registered(self, project: str) -> bool:
         return project in self.repositories
 
 
 def project_files_from_env(infra_root: Path) -> ProjectFiles:
-    """JES_PROJECT_FILES_DIR when set, else GitHub, with GH_TOKEN or GITHUB_TOKEN if present."""
+    """JAWS_PROJECT_FILES_DIR when set, else GitHub, with GH_TOKEN or GITHUB_TOKEN if present."""
     if ENV_PROJECT_FILES_DIR in os.environ:
         return DirectoryProjectFiles(Path(os.environ[ENV_PROJECT_FILES_DIR]))
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or None

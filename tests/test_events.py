@@ -12,10 +12,10 @@ import pytest
 from botocore.exceptions import ClientError, EndpointConnectionError
 from moto import mock_aws
 
-from jwall_engineering_sites.events import EventLog, base_fields
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.settings import Settings
-from jwall_engineering_sites.site import load_site_config
+from jaws.events import EventLog, base_fields
+from jaws.project import Project
+from jaws.settings import Settings
+from jaws.site import load_site_config
 from tests.conftest import FIXTURES
 
 BUCKET = "audit-logs"

@@ -103,7 +103,7 @@ apply** check it out, and task instances fetch it anonymously.
 
 In the consumer, first:
 
-1. Merge the project file (`jwall-engineering-sites.yaml`) to the default
+1. Merge the project file (`jaws.yaml`) to the default
    branch. **Bot plan** and **Bot apply** read it from there, and from step 6 on
    every pull request here runs a plan that fails without it. Add no workflow
    that uses the CLI yet: no release carries the project's entry until step 6.
@@ -436,11 +436,11 @@ cannot be used: it trusts only GitHub's `environment:prod`. It also needs a
 checkout of this repository, not of the consumer, which holds no Terraform. The
 stack is here, and the rendered `terraform.tfvars.json` and `backend.hcl` exist
 only in a temporary directory that the CLI deletes unless the run failed and
-`JES_KEEP_WORKDIR=1` or debug logging is on. So render them with the CLI's code,
+`JAWS_KEEP_WORKDIR=1` or debug logging is on. So render them with the CLI's code,
 from this repository's root, and with the Terraform version in `config.yaml`:
 
 ```sh
-consumer_file=../math-prover/jwall-engineering-sites.yaml   # its default branch
+consumer_file=../math-prover/jaws.yaml   # its default branch
 work=$(mktemp -d)
 tar -C stacks/bot --exclude=.terraform -cf - . | tar -C "$work" -xf -
 uv run python - "$consumer_file" "$work" <<'PY'
@@ -448,10 +448,10 @@ import json
 import sys
 from pathlib import Path
 
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.settings import load_settings
-from jwall_engineering_sites.site import load_site_config
-from jwall_engineering_sites.stack import render_backend, render_tfvars
+from jaws.project import Project
+from jaws.settings import load_settings
+from jaws.site import load_site_config
+from jaws.stack import render_backend, render_tfvars
 
 settings = load_settings(Path("config.yaml"))
 project = Project.from_config(load_site_config(Path(sys.argv[1])), settings)

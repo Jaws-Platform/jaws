@@ -70,14 +70,14 @@ def test_the_role_is_built_from_config_with_a_long_enough_session() -> None:
 
 
 def test_the_task_step_runs_the_pr_head_and_gets_no_github_token() -> None:
-    step = _steps()[_index(lambda s: s.get("name") == "jwall-engineering-sites task run")]
+    step = _steps()[_index(lambda s: s.get("name") == "jaws task run")]
     assert "GITHUB_TOKEN" not in str(step.get("env", {}))
     assert step["env"]["REF"] == "${{ github.event.pull_request.head.sha || github.sha }}"
     assert '--run-id "$RUN_ID"' in step["run"] and '--task-id "$TASK_ID"' in step["run"]
     assert '-- "${argv[@]}"' in step["run"]
     # GitHub signals the step's own process on cancel: exec the CLI so that is
     # the CLI itself, not bash or uv, and its handlers terminate the instance.
-    assert "exec .jwall-engineering-infra/.venv/bin/jwall-engineering-sites" in step["run"]
+    assert "exec .jwall-engineering-infra/.venv/bin/jaws" in step["run"]
     env = _workflow()["jobs"]["task"]["env"]
     assert env["RUN_ID"] == "${{ github.run_id }}-${{ github.run_attempt }}"
     # Matrix legs already need distinct artifact names: they name the task too.
@@ -118,10 +118,7 @@ def test_outcome_and_interruption_are_outputs() -> None:
         "outcome": "${{ steps.task.outputs.outcome }}",
         "interrupted-at": "${{ steps.task.outputs.interrupted-at }}",
     }
-    assert (
-        _steps()[_index(lambda s: s.get("id") == "task")]["name"]
-        == "jwall-engineering-sites task run"
-    )
+    assert _steps()[_index(lambda s: s.get("id") == "task")]["name"] == "jaws task run"
 
 
 def test_the_outcome_description_lists_no_price() -> None:

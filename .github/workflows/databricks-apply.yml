@@ -59,6 +59,7 @@ jobs:
           repository: ${{ steps.project.outputs.repository }}
           path: .consumer
           sparse-checkout: |
+            jaws.yaml
             jwall-engineering-sites.yaml
           sparse-checkout-cone-mode: false
       - uses: hashicorp/setup-terraform@v4
@@ -83,9 +84,9 @@ jobs:
           role-to-assume: ${{ steps.role.outputs.arn }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: gha-databricks-apply-${{ inputs.project }}-${{ github.run_id }}
-      - name: jwall-engineering-sites ${{ inputs.action }}
+      - name: jaws ${{ inputs.action }}
         env:
-          JES_STACKS_ROOT: ${{ github.workspace }}/stacks
+          JAWS_STACKS_ROOT: ${{ github.workspace }}/stacks
           COMMAND: ${{ inputs.action == 'destroy' && 'destroy --yes' || inputs.action == 'doctor' && 'databricks doctor' || 'apply' }}
           # The CLI reads the producers' project files of the datasets the
           # workspace reads from GitHub to render its endpoint statements.
@@ -93,12 +94,12 @@ jobs:
         run: |
           # COMMAND is `apply`, `destroy --yes` or `databricks doctor`: words on purpose.
           # shellcheck disable=SC2086
-          uv run jwall-engineering-sites --file .consumer/jwall-engineering-sites.yaml $COMMAND
+          uv run jaws --file .consumer/jaws.yaml $COMMAND
       - name: Upload the run log and artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: databricks-apply-${{ inputs.project }}-${{ github.run_attempt }}
-          path: .jwall-engineering-sites/
+          path: .jaws/
           retention-days: 14
           if-no-files-found: ignore

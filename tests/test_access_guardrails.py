@@ -15,10 +15,10 @@ from typing import Any
 import pytest
 import yaml
 
-from jwall_engineering_sites import guardrails
-from jwall_engineering_sites.errors import ConfigError
-from jwall_engineering_sites.settings import Settings, load_settings
-from jwall_engineering_sites.site import SiteConfig, site_config_from_text
+from jaws import guardrails
+from jaws.errors import ConfigError
+from jaws.settings import Settings, load_settings
+from jaws.site import SiteConfig, site_config_from_text
 from tests.conftest import FIXTURES
 
 

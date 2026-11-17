@@ -38,7 +38,7 @@ def run_url() -> str | None:
 
 
 def head_sha() -> str | None:
-    return os.environ.get("JES_HEAD_SHA") or os.environ.get("GITHUB_SHA")
+    return os.environ.get("JAWS_HEAD_SHA") or os.environ.get("GITHUB_SHA")
 
 
 def commit_url(sha: str | None) -> str | None:

@@ -14,7 +14,7 @@
 # environment only when it is true (scripts/databricks-credentials.sh).
 #
 # The client secret is NOT created here: the owner writes the SSM parameter
-# with `jwall-engineering-sites databricks credentials set`, so it is in no
+# with `jaws databricks credentials set`, so it is in no
 # Terraform state. This stack only builds its ARN for the CI policies.
 #
 # The registry of Databricks workspace projects (a project file whose only

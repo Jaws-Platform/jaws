@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from jwall_engineering_sites.access import infra_root, load_registry
-from jwall_engineering_sites.errors import ConfigError
+from jaws.access import infra_root, load_registry
+from jaws.errors import ConfigError
 from tests.conftest import FIXTURES
 
 GOOD = "description: Braveheart self-play positions and label sets\nprefix: data/\n"
@@ -134,10 +134,10 @@ def test_the_readme_is_allowed_and_a_missing_directory_is_empty(tmp_path: Path) 
 def test_infra_root_is_the_env_override_else_the_configs_directory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("JES_INFRA_ROOT", str(tmp_path / "checkout"))
+    monkeypatch.setenv("JAWS_INFRA_ROOT", str(tmp_path / "checkout"))
     assert infra_root() == tmp_path / "checkout"
-    monkeypatch.delenv("JES_INFRA_ROOT")
-    monkeypatch.setenv("JES_CONFIG", str(tmp_path / "elsewhere" / "config.yaml"))
+    monkeypatch.delenv("JAWS_INFRA_ROOT")
+    monkeypatch.setenv("JAWS_CONFIG", str(tmp_path / "elsewhere" / "config.yaml"))
     assert infra_root() == tmp_path / "elsewhere"
 
 

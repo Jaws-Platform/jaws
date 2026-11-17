@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from jwall_engineering_sites.site import load_site_config
+from jaws.site import load_site_config
 from tests.conftest import FIXTURES, REPO_ROOT
 
 BOTS_TF = REPO_ROOT / "foundation" / "bots.tf"
@@ -118,9 +118,7 @@ def test_bot_apply_reads_the_project_file_from_a_ref_and_refuses_another_project
     assert checkout["with"]["ref"] == "${{ inputs.consumer-ref }}"
     names = [s.get("name", "") for s in steps]
     refuse = names.index("Refuse a project file that names another project")
-    run = next(
-        i for i, s in enumerate(steps) if "uv run jwall-engineering-sites" in s.get("run", "")
-    )
+    run = next(i for i, s in enumerate(steps) if "uv run jaws" in s.get("run", ""))
     assert refuse < run
     assert "exit 1" in steps[refuse]["run"]
 
@@ -228,7 +226,7 @@ def test_bot_plan_runs_without_a_variable_and_skips_until_roles_exist() -> None:
     steps = {s.get("id"): s for s in job["steps"] if "id" in s}
     assert steps["assume"]["continue-on-error"] is True
     # The steps that run the CLI (not the one that only reads the project file's name).
-    gated = [s for s in job["steps"] if "uv run jwall-engineering-sites" in str(s.get("run", ""))]
+    gated = [s for s in job["steps"] if "uv run jaws" in str(s.get("run", ""))]
     assert gated and all("steps.assume.outcome == 'success'" in s["if"] for s in gated)
 
 
@@ -618,9 +616,7 @@ def test_databricks_provider_authenticates_from_the_environment_only() -> None:
 def _reconcile_step() -> str:
     release: dict[Any, Any] = _yaml(".github/workflows/container-release.yml")
     steps = release["jobs"]["release"]["steps"]
-    script: str = next(
-        s["run"] for s in steps if s.get("name") == "jwall-engineering-sites bot reconcile"
-    )
+    script: str = next(s["run"] for s in steps if s.get("name") == "jaws bot reconcile")
     return script
 
 
@@ -637,7 +633,7 @@ def test_container_release_passes_the_release_tag_unless_the_bot_is_pinned(
     tmp_path: Path, track: str, version_input: str, expected: str
 ) -> None:
     """A pinned bot's release tag is its own repository's, not an engine release."""
-    (tmp_path / "jwall-engineering-sites.yaml").write_text(
+    (tmp_path / "jaws.yaml").write_text(
         f"components:\n  - kind: container-image\n  - kind: lichess-bot\n    track: {track}\n"
     )
     bin_dir = tmp_path / "bin"

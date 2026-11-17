@@ -4,9 +4,9 @@ from collections.abc import Iterator
 
 import pytest
 
-from jwall_engineering_sites.checks import load_builtin_checks
-from jwall_engineering_sites.checks.framework import Stage, registered
-from jwall_engineering_sites.diagnose import RUNBOOK_ANCHORS
+from jaws.checks import load_builtin_checks
+from jaws.checks.framework import Stage, registered
+from jaws.diagnose import RUNBOOK_ANCHORS
 
 
 @pytest.fixture(autouse=True)

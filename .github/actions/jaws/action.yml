@@ -1,6 +1,6 @@
-name: jwall-engineering-sites
+name: jaws
 description: >-
-  Runs one jwall-engineering-sites command from the versioned image in the
+  Runs one jaws command from the versioned image in the
   private ECR repository: assumes the given CI role through OIDC, logs in to
   ECR, pulls the image and runs it with the workspace mounted. The reusable
   site-*.yml workflows in this repository are built on this action.
@@ -46,10 +46,10 @@ runs:
       with:
         role-to-assume: ${{ inputs.role-arn }}
         aws-region: ${{ inputs.aws-region }}
-        role-session-name: jwall-engineering-sites-${{ github.run_id }}-${{ github.run_attempt }}
+        role-session-name: jaws-${{ github.run_id }}-${{ github.run_attempt }}
     - uses: aws-actions/amazon-ecr-login@v2
       id: ecr
-    - name: jwall-engineering-sites ${{ inputs.command }}
+    - name: jaws ${{ inputs.command }}
       id: run
       shell: bash
       env:
@@ -59,7 +59,7 @@ runs:
         REGISTRY: ${{ steps.ecr.outputs.registry }}
         COMMAND: ${{ inputs.command }}
         DEBUG: ${{ inputs.debug }}
-        JES_HEAD_SHA: ${{ inputs.head-sha || github.event.pull_request.head.sha || github.sha }}
+        JAWS_HEAD_SHA: ${{ inputs.head-sha || github.event.pull_request.head.sha || github.sha }}
       run: |
         image="$REGISTRY/jwall-engineering-sites:$IMAGE_TAG"
         echo "::group::docker pull $image"
@@ -73,7 +73,7 @@ runs:
           --env AWS_ACCESS_KEY_ID --env AWS_SECRET_ACCESS_KEY --env AWS_SESSION_TOKEN \
           --env AWS_REGION --env AWS_DEFAULT_REGION \
           --env GITHUB_ACTIONS --env GITHUB_SHA --env GITHUB_SERVER_URL --env GITHUB_REPOSITORY --env GITHUB_RUN_ID \
-          --env JES_HEAD_SHA \
+          --env JAWS_HEAD_SHA \
           --env GITHUB_OUTPUT=/github/output --volume "$GITHUB_OUTPUT:/github/output" \
           --env GITHUB_STEP_SUMMARY=/github/summary --volume "$GITHUB_STEP_SUMMARY:/github/summary" \
           "$image" $debug_flag $COMMAND

@@ -11,7 +11,7 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
-from jwall_engineering_sites import cli, tasks
+from jaws import cli, tasks
 from tests.test_cli import BOT_PLAN_ROLE, RESEARCH_PLAN_ROLE, _as_role
 
 runner = CliRunner()
@@ -408,7 +408,7 @@ def test_cleanup_commands_still_refuse_other_load_errors(
     research_fleet: list[str], research_workspace: Path, command: list[str]
 ) -> None:
     """Only the central guardrails are skipped: the file must still be valid."""
-    path = research_workspace / "jwall-engineering-sites.yaml"
+    path = research_workspace / "jaws.yaml"
     raw = yaml.safe_load(path.read_text())
     raw["tags"]["Organization"] = "someone-else"
     path.write_text(yaml.safe_dump(raw))

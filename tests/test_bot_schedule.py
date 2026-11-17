@@ -17,15 +17,15 @@ from botocore.exceptions import ClientError
 from moto import mock_aws
 from typer.testing import CliRunner
 
-from jwall_engineering_sites import bot as botlib
-from jwall_engineering_sites import cli
-from jwall_engineering_sites import rollout as rollout_module
-from jwall_engineering_sites.components import BotSchedule
-from jwall_engineering_sites.errors import ConfigError, PreflightError, RunError
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.settings import Settings
-from jwall_engineering_sites.site import load_site_config
-from jwall_engineering_sites.stack import render_tfvars
+from jaws import bot as botlib
+from jaws import cli
+from jaws import rollout as rollout_module
+from jaws.components import BotSchedule
+from jaws.errors import ConfigError, PreflightError, RunError
+from jaws.project import Project
+from jaws.settings import Settings
+from jaws.site import load_site_config
+from jaws.stack import render_tfvars
 
 from .conftest import FIXTURES
 
@@ -50,13 +50,13 @@ def _raw(schedule: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _project(tmp_path: Path, settings: Settings, schedule: dict[str, Any] | None) -> Project:
-    path = tmp_path / "jwall-engineering-sites.yaml"
+    path = tmp_path / "jaws.yaml"
     path.write_text(yaml.safe_dump(_raw(schedule)))
     return Project.from_config(load_site_config(path), settings)
 
 
 def _as_role(arn: str) -> AbstractContextManager[Any]:
-    return patch("jwall_engineering_sites.aws.caller_identity", return_value=("650503560686", arn))
+    return patch("jaws.aws.caller_identity", return_value=("650503560686", arn))
 
 
 def _instance(ec2: Any, state: str = "running") -> str:
@@ -175,7 +175,7 @@ def test_schedules_that_make_no_sense_are_refused(
 
 def test_a_yaml_time_must_be_quoted(tmp_path: Path, settings: Settings) -> None:
     # Unquoted, YAML 1.1 reads 08:00 as the integer 480: refused, not misread.
-    path = tmp_path / "jwall-engineering-sites.yaml"
+    path = tmp_path / "jaws.yaml"
     text = yaml.safe_dump(_raw(DAILY)).replace("'08:00'", "08:00").replace("'20:00'", "20:00")
     path.write_text(text)
     with pytest.raises(ConfigError):
@@ -351,7 +351,7 @@ def test_stop_of_a_stopped_instance_does_nothing(
 
 @pytest.fixture
 def scheduled_workspace(bot_workspace: Path) -> Path:
-    (bot_workspace / "jwall-engineering-sites.yaml").write_text(yaml.safe_dump(_raw(DAILY)))
+    (bot_workspace / "jaws.yaml").write_text(yaml.safe_dump(_raw(DAILY)))
     return bot_workspace
 
 

@@ -54,7 +54,7 @@ module "site_bucket" {
 # Each project's CI roles get their permissions as managed policies from the
 # library's ci-policies catalog. Plan only accepts read policies and preview
 # only static-site/previews, because both are assumable from any pull request.
-# Every role also pulls the jwall-engineering-sites CLI image (ecr/pull).
+# Every role also pulls the jaws CLI image (ecr/pull).
 locals {
   project_ci = {
     for key, project in local.projects : key => {

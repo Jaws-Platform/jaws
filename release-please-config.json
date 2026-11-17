@@ -61,10 +61,10 @@
   "packages": {
     ".": {
       "extra-files": [
-        "src/jwall_engineering_sites/__init__.py",
+        "src/jaws/__init__.py",
         {
           "type": "generic",
-          "path": ".github/actions/jwall-engineering-sites/action.yml"
+          "path": ".github/actions/jaws/action.yml"
         }
       ]
     }

@@ -1,5 +1,5 @@
-# The account stack jwall-engineering-sites renders for one Databricks project.
-# Every value comes from the project's jwall-engineering-sites.yaml or from
+# The account stack jaws renders for one Databricks project.
+# Every value comes from the project's jaws.yaml or from
 # config.yaml (projects.<project>.databricks and the databricks section); the
 # CLI writes them to terraform.tfvars.json. The service principal's secret is
 # not a variable: it reaches the provider through the environment.

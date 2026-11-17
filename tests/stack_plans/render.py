@@ -15,16 +15,16 @@ from typing import Any
 
 import yaml
 
-from jwall_engineering_sites.access import (
+from jaws.access import (
     Access,
     DirectoryProjectFiles,
     compute_access,
     load_registry,
 )
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.settings import Settings, load_settings
-from jwall_engineering_sites.site import SiteConfig
-from jwall_engineering_sites.stack import render_tfvars
+from jaws.project import Project
+from jaws.settings import Settings, load_settings
+from jaws.site import SiteConfig
+from jaws.stack import render_tfvars
 from tests.conftest import FIXTURES, MATH_PROVER_GUARDRAILS, REPO_ROOT, with_guardrails
 
 #: What the account stack's outputs look like after an apply (`terraform output -json`),

@@ -1,5 +1,5 @@
-# The site stack jwall-engineering-sites renders for one site. Every value
-# comes from the site repository's jwall-engineering-sites.yaml or from
+# The site stack jaws renders for one site. Every value
+# comes from the site repository's jaws.yaml or from
 # config.yaml; the CLI writes them to terraform.tfvars.json.
 
 variable "project" {

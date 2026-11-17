@@ -18,7 +18,7 @@ import pytest
 
 from tests.conftest import FIXTURES
 
-HELPER = Path(__file__).parents[1] / "src" / "jwall_engineering_sites" / "task_artifact.py"
+HELPER = Path(__file__).parents[1] / "src" / "jaws" / "task_artifact.py"
 #: TEST_HELPER_PYTHON runs the suite under another interpreter, such as a real 3.9.
 PYTHON = os.environ.get("TEST_HELPER_PYTHON", sys.executable)
 BUCKET = "research"
@@ -897,7 +897,7 @@ def test_helper_runs_on_python_39() -> None:
 
 
 def test_hashing_reads_in_one_mib_chunks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from jwall_engineering_sites import task_artifact
+    from jaws import task_artifact
 
     data = b"x" * (3 * 1024 * 1024 + 1)
     path = tmp_path / "f"

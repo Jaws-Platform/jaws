@@ -30,7 +30,7 @@ Organizations and Identity Center are free.
   `/aws-reserved/sso.amazonaws.com/`, and IAM refuses edits to it, so neither CI
   nor a stray apply can change your access.
 - **The infra CLI works as before.** Commands that check for a CI role still
-  need `JES_SKIP_ROLE_CHECK=1` from your shell; owner-shell commands
+  need `JAWS_SKIP_ROLE_CHECK=1` from your shell; owner-shell commands
   (`bot secrets set`, `cost report`, `databricks credentials set`) need nothing.
 
 ## Daily use
@@ -39,7 +39,7 @@ Organizations and Identity Center are free.
 aws sso login --profile jwall-admin     # browser opens; passkey; good for 12 hours
 export AWS_PROFILE=jwall-admin
 terraform plan                          # credentials renew on their own
-uv run jwall-engineering-sites cost report
+uv run jaws cost report
 aws sso logout                          # end the session early
 ```
 
@@ -210,7 +210,7 @@ With `AWS_PROFILE=jwall-admin`:
   exempts the role), and a plan in `foundation/` runs.
 - `aws s3 ls s3://jwall-engineering-tfstate/`, a site bucket and
   `s3://jwall-engineering-braveheart-nnue/data/` list.
-- `uv run jwall-engineering-sites cost report` prints the table.
+- `uv run jaws cost report` prints the table.
 - Through the portal, the console browses the state bucket and a site bucket.
 - An hour later a command still works without a prompt; after the sign-in has
   expired it asks for `aws sso login`; after `aws sso logout` commands fail.

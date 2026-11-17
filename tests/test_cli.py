@@ -12,8 +12,8 @@ import pytest
 from moto import mock_aws
 from typer.testing import CliRunner
 
-from jwall_engineering_sites import cli
-from jwall_engineering_sites.stack import PLAN_CHANGES
+from jaws import cli
+from jaws.stack import PLAN_CHANGES
 
 runner = CliRunner()
 PLAN_ROLE = (
@@ -31,7 +31,7 @@ BOT_APPLY_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-brave
 
 
 def _as_role(arn: str) -> AbstractContextManager[Any]:
-    return patch("jwall_engineering_sites.aws.caller_identity", return_value=("650503560686", arn))
+    return patch("jaws.aws.caller_identity", return_value=("650503560686", arn))
 
 
 def test_config_show(workspace: Path) -> None:
@@ -46,14 +46,14 @@ def test_validate_runs_terraform_offline(workspace: Path, fake_terraform: Path) 
     calls = [c for c in fake_terraform.read_text().splitlines() if not c.startswith("version")]
     assert calls == ["init -input=false -no-color -backend=false", "validate -no-color"]
     assert "stack validates" in result.output
-    assert (workspace / ".jwall-engineering-sites" / "jwall-engineering-sites.log").is_file()
+    assert (workspace / ".jaws" / "jaws.log").is_file()
 
 
 def test_invalid_site_file_exits_2(workspace: Path, fake_terraform: Path) -> None:
-    (workspace / "jwall-engineering-sites.yaml").write_text("version: 1\nproject: x\n")
+    (workspace / "jaws.yaml").write_text("version: 1\nproject: x\n")
     result = runner.invoke(cli.app, ["validate"])
     assert result.exit_code == 2
-    assert "jwall-engineering-sites.yaml" in result.output
+    assert "jaws.yaml" in result.output
 
 
 def test_missing_config_exits_2(workspace: Path) -> None:
@@ -72,10 +72,10 @@ def test_plan_writes_comment_and_outputs(
         boto3.client("s3", region_name="us-east-1").create_bucket(Bucket=BUCKET)
         result = runner.invoke(cli.app, ["plan"])
     assert result.exit_code == 0, result.output
-    artifacts = workspace / ".jwall-engineering-sites"
+    artifacts = workspace / ".jaws"
     assert "Plan: 1 to add" in (artifacts / "plan.txt").read_text()
     comment = (artifacts / "plan-comment.md").read_text()
-    assert "JWall Engineering Infra" in comment
+    assert "Jaws" in comment
     assert "> [!WARNING]" in comment and "Changes pending" in comment
     assert "`guitar.jwall.engineering`" in comment
     assert "result=changes\nchanges=true\n" in github_output.read_text()
@@ -102,7 +102,7 @@ def test_report_plan_comment_renders_a_plan_log(workspace: Path, tmp_path: Path)
     )
     assert result.exit_code == 0, result.output
     comment = out.read_text()
-    assert "JWall Engineering Infra" in comment
+    assert "Jaws" in comment
     assert "> [!NOTE]" in comment and "No changes" in comment
     assert "the foundation stack" in comment
 
@@ -134,8 +134,8 @@ def test_preview_deploy_and_remove(
         assert head["CacheControl"] == "public, max-age=0, must-revalidate"
         asset = s3.head_object(Bucket=BUCKET, Key="previews/pr-12/robots.txt")
         assert asset["CacheControl"] == "public, max-age=300"
-        comment = (workspace / ".jwall-engineering-sites" / "preview-comment.md").read_text()
-        assert "JWall Engineering Infra" in comment
+        comment = (workspace / ".jaws" / "preview-comment.md").read_text()
+        assert "Jaws" in comment
         assert "**https://pr-12.preview.guitar.jwall.engineering/**" in comment
         assert "#12" in comment
         assert (
@@ -146,8 +146,8 @@ def test_preview_deploy_and_remove(
         result = runner.invoke(cli.app, ["preview", "remove", "--pr", "12"])
         assert result.exit_code == 0, result.output
         assert "Contents" not in s3.list_objects_v2(Bucket=BUCKET, Prefix="previews/pr-12/")
-        removed = (workspace / ".jwall-engineering-sites" / "preview-comment.md").read_text()
-        assert "JWall Engineering Infra" in removed
+        removed = (workspace / ".jaws" / "preview-comment.md").read_text()
+        assert "Jaws" in removed
         assert "removed" in removed.lower() and "#12" in removed
 
 
@@ -164,9 +164,7 @@ def test_release_applies_then_publishes(workspace: Path, dist: Path, fake_terraf
     with (
         mock_aws(),
         _as_role(APPLY_ROLE),
-        patch(
-            "jwall_engineering_sites.aws.invalidate_distribution", return_value="I123"
-        ) as invalidate,
+        patch("jaws.aws.invalidate_distribution", return_value="I123") as invalidate,
     ):
         s3 = boto3.client("s3", region_name="us-east-1")
         s3.create_bucket(Bucket=BUCKET)
@@ -183,7 +181,7 @@ def test_release_applies_then_publishes(workspace: Path, dist: Path, fake_terraf
     calls = fake_terraform.read_text().splitlines()
     assert [c.split()[0] for c in calls] == ["version", "init", "plan", "apply", "output"]
     assert invalidate.call_args.args[1] == "E1PROD"
-    outputs = json.loads((workspace / ".jwall-engineering-sites" / "outputs.json").read_text())
+    outputs = json.loads((workspace / ".jaws" / "outputs.json").read_text())
     assert outputs["bucket_name"] == BUCKET
 
 
@@ -206,7 +204,7 @@ def test_outputs(workspace: Path, fake_terraform: Path) -> None:
 
 
 def test_unwritable_workspace_exits_2(workspace: Path) -> None:
-    (workspace / ".jwall-engineering-sites").write_text("not a directory")
+    (workspace / ".jaws").write_text("not a directory")
     result = runner.invoke(cli.app, ["config", "show"])
     assert result.exit_code == 2
     assert "must be writable" in result.output
@@ -234,7 +232,7 @@ def test_plan_bot_uses_the_bot_stack(
     tfvars = json.loads((tmp_path / "rendered.tfvars.json").read_text())
     assert tfvars["project"] == "braveheart"
     assert "records_enabled" in tfvars
-    comment = (bot_workspace / ".jwall-engineering-sites" / "plan-comment.md").read_text()
+    comment = (bot_workspace / ".jaws" / "plan-comment.md").read_text()
     assert "braveheart" in comment
 
 
@@ -420,9 +418,9 @@ import hashlib  # noqa: E402
 import io  # noqa: E402
 import tarfile  # noqa: E402
 
-from jwall_engineering_sites import image as image_module  # noqa: E402
-from jwall_engineering_sites import releases as releases_module  # noqa: E402
-from jwall_engineering_sites import rollout as rollout_module  # noqa: E402
+from jaws import image as image_module  # noqa: E402
+from jaws import releases as releases_module  # noqa: E402
+from jaws import rollout as rollout_module  # noqa: E402
 
 REPO = "jwall-engineering-braveheart"
 API_RELEASES = "https://api.github.com/repos/Braveheart-Chess/braveheart/releases?per_page=100"
@@ -538,7 +536,7 @@ def test_bot_build_verifies_and_smoke_tests(
 ) -> None:
     result = runner.invoke(cli.app, ["bot", "build", "--version", "v0.14.0"])
     assert result.exit_code == 0, result.output
-    record = json.loads((bot_workspace / ".jwall-engineering-sites" / "build.json").read_text())
+    record = json.loads((bot_workspace / ".jaws" / "build.json").read_text())
     assert record["tag"] == "v0.14.0"
     assert record["image"] == f"{REPO}:v0.14.0"
     assert record["nodes"] == "123456"
@@ -711,7 +709,7 @@ def test_reconcile_builds_pushes_and_deploys_the_newest(
 def test_bot_deploy_refuses_a_booting_instance(
     bot_workspace: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from jwall_engineering_sites import bot as bot_module
+    from jaws import bot as bot_module
 
     monkeypatch.setattr(
         bot_module,
@@ -750,7 +748,7 @@ def test_bot_build_reads_the_config_next_to_the_project_file(
         cli.app,
         [
             "--file",
-            str(bot_workspace / "jwall-engineering-sites.yaml"),
+            str(bot_workspace / "jaws.yaml"),
             "bot",
             "build",
             "--version",
@@ -765,7 +763,7 @@ def test_plan_bot_comment_names_bot_apply(bot_workspace: Path, fake_terraform: P
     with _as_role(BOT_PLAN_ROLE):
         result = runner.invoke(cli.app, ["plan"])
     assert result.exit_code == 0, result.output
-    comment = (bot_workspace / ".jwall-engineering-sites" / "plan-comment.md").read_text()
+    comment = (bot_workspace / ".jaws" / "plan-comment.md").read_text()
     assert "Merging will not touch AWS" not in comment
     assert "**Bot apply**" in comment
 
@@ -870,7 +868,7 @@ def test_plan_research_uses_the_bot_stack_and_names_the_manual_apply(
     assert calls[2].startswith("plan ")
     tfvars = json.loads((tmp_path / "rendered.tfvars.json").read_text())
     assert tfvars["bot_enabled"] is False
-    comment = (research_workspace / ".jwall-engineering-sites" / "plan-comment.md").read_text()
+    comment = (research_workspace / ".jaws" / "plan-comment.md").read_text()
     # Merging does not apply this stack: the comment must not say or imply it does.
     assert "**Bot apply**" in comment and "Merging this pull request will" not in comment
 
@@ -949,7 +947,7 @@ def test_destroy_of_datasets_alone_deletes_no_network(
     """A project of datasets alone has no VPC or task runner to delete."""
     import yaml
 
-    path = research_workspace / "jwall-engineering-sites.yaml"
+    path = research_workspace / "jaws.yaml"
     project = yaml.safe_load(path.read_text())
     project["components"] = [c for c in project["components"] if c["kind"] == "dataset"]
     path.write_text(yaml.safe_dump(project))
@@ -1051,7 +1049,7 @@ import yaml  # noqa: E402
 def pinned_workspace(bot_workspace: Path) -> Path:
     """The bot workspace as a bot repository that pins the engine repository's v0.13.0
     (v0.14.0 is newer, so following releases would pick it instead)."""
-    path = bot_workspace / "jwall-engineering-sites.yaml"
+    path = bot_workspace / "jaws.yaml"
     raw = yaml.safe_load(path.read_text())
     raw["repository"] = raw["tags"]["Repository"] = "Braveheart-Chess/braveheart-lichess-bot"
     for component in raw["components"]:
@@ -1153,7 +1151,7 @@ def test_reconcile_of_a_pinned_bot_builds_the_pin_and_deploys_its_tag(
     assert f"--tag {REPO}:{tag}" in build
     assert deployed == [tag]
     assert running == tag
-    record = json.loads((pinned_workspace / ".jwall-engineering-sites" / "build.json").read_text())
+    record = json.loads((pinned_workspace / ".jaws" / "build.json").read_text())
     assert (record["tag"], record["version"]) == (tag, "v0.13.0")
 
 
@@ -1240,7 +1238,7 @@ def test_plan_of_a_dropped_bot_explains_instead_of_failing_on_prevent_destroy(
     assert result.exit_code == 0, result.output
     calls = _calls(fake_terraform)
     assert not any(c.startswith(("plan ", TF_RM)) for c in calls)  # the plan role changes nothing
-    comment = (research_workspace / ".jwall-engineering-sites" / "plan-comment.md").read_text()
+    comment = (research_workspace / ".jaws" / "plan-comment.md").read_text()
     assert "jwall-engineering-math-prover-records" in comment and "Bot apply" in comment
 
 
@@ -1318,7 +1316,7 @@ def test_plan_of_a_dropped_dataset_explains_instead_of_failing_on_prevent_destro
     assert result.exit_code == 0, result.output
     calls = _calls(fake_terraform)
     assert not any(c.startswith(("plan ", TF_RM)) for c in calls)  # the plan role changes nothing
-    comment = (research_workspace / ".jwall-engineering-sites" / "plan-comment.md").read_text()
+    comment = (research_workspace / ".jaws" / "plan-comment.md").read_text()
     assert "jwall-engineering-math-prover-nnue" in comment and "Bot apply" in comment
 
 
@@ -1330,7 +1328,7 @@ def test_plan_of_a_dropped_dataset_config_still_approves_fails(
     with _as_role(RESEARCH_PLAN_ROLE):
         result = runner.invoke(cli.app, ["plan"])
     assert result.exit_code == 3
-    comment = (research_workspace / ".jwall-engineering-sites" / "plan-comment.md").read_text()
+    comment = (research_workspace / ".jaws" / "plan-comment.md").read_text()
     assert "still approves" in comment
 
 

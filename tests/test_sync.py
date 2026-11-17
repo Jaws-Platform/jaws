@@ -8,8 +8,8 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from jwall_engineering_sites.errors import PreflightError
-from jwall_engineering_sites.sync import (
+from jaws.errors import PreflightError
+from jaws.sync import (
     LocalFile,
     RemoteObject,
     content_type_for,

@@ -1,6 +1,6 @@
 [project]
-name = "jwall-engineering-sites"
-# The version lives in src/jwall_engineering_sites/__init__.py, bumped by
+name = "jaws"
+# The version lives in src/jaws/__init__.py, bumped by
 # Release Please. Keeping it out of pyproject.toml keeps it out of uv.lock, so
 # a release PR does not invalidate the lock.
 dynamic = ["version"]
@@ -17,7 +17,9 @@ dependencies = [
 ]
 
 [project.scripts]
-jwall-engineering-sites = "jwall_engineering_sites.cli:app"
+jaws = "jaws.cli:app"
+# The command's name before the tool was called Jaws; removed once no consumer calls it.
+jwall-engineering-sites = "jaws.cli:app"
 
 [dependency-groups]
 dev = [
@@ -34,10 +36,10 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
-path = "src/jwall_engineering_sites/__init__.py"
+path = "src/jaws/__init__.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/jwall_engineering_sites"]
+packages = ["src/jaws"]
 
 [tool.ruff]
 line-length = 100

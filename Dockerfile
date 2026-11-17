@@ -1,4 +1,4 @@
-# jwall-engineering-sites (JWall Engineering Infra): the CLI, a pinned Terraform, the site and bot stacks
+# jaws (Jaws): the CLI, a pinned Terraform, the site and bot stacks
 # with their modules and providers vendored, and config.yaml. Only the S3 backend touches
 # the network at run time.
 #
@@ -38,7 +38,7 @@ COPY --from=uv /uv /uvx /usr/local/bin/
 # shebangs are absolute, so a venv moved after creation does not start.
 # No bytecode compilation: it adds tens of MB for a start-up gain nobody notices.
 ENV UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never \
-    UV_PROJECT_ENVIRONMENT=/opt/jwall-engineering-sites/venv
+    UV_PROJECT_ENVIRONMENT=/opt/jaws/venv
 WORKDIR /src
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --locked --no-dev --no-install-project
@@ -47,13 +47,13 @@ COPY src ./src
 RUN uv sync --locked --no-dev --no-editable
 # botocore ships API definitions for every AWS service; the tool uses eight.
 # Keep those plus botocore's shared files (endpoints, partitions, retries).
-RUN cd /opt/jwall-engineering-sites/venv/lib/python3.13/site-packages/botocore/data \
+RUN cd /opt/jaws/venv/lib/python3.13/site-packages/botocore/data \
     && find . -mindepth 1 -maxdepth 1 -type d ! -name s3 ! -name sts ! -name cloudfront ! -name ssm ! -name ec2 ! -name logs ! -name ecr ! -name pricing -exec rm -rf {} + \
-    && find /opt/jwall-engineering-sites/venv -type d -name __pycache__ -prune -exec rm -rf {} +
+    && find /opt/jaws/venv -type d -name __pycache__ -prune -exec rm -rf {} +
 
 COPY --from=terraform /tmp/terraform/terraform /usr/local/bin/terraform
-COPY stacks/site /opt/jwall-engineering-sites/stacks/site
-COPY stacks/bot /opt/jwall-engineering-sites/stacks/bot
+COPY stacks/site /opt/jaws/stacks/site
+COPY stacks/bot /opt/jaws/stacks/bot
 # The Databricks stacks are not in the image: their plan and apply workflows
 # run the CLI with `uv run` from this repository, and their providers
 # (databricks, time) would put the image over its size budget for nothing.
@@ -63,9 +63,9 @@ COPY stacks/bot /opt/jwall-engineering-sites/stacks/bot
 # .terraform/providers are the single largest thing in the image and run time
 # never reads them, so they go. The modules stay.
 RUN for stack in site bot; do \
-      cd "/opt/jwall-engineering-sites/stacks/$stack" \
+      cd "/opt/jaws/stacks/$stack" \
       && terraform init -backend=false -input=false \
-      && terraform providers mirror /opt/jwall-engineering-sites/plugins \
+      && terraform providers mirror /opt/jaws/plugins \
       && rm -rf .terraform/providers \
       && find .terraform/modules -type d \( -name .git -o -name examples -o -name tests -o -name docs \) -prune -exec rm -rf {} + \
       || exit 1; \
@@ -74,7 +74,7 @@ RUN for stack in site bot; do \
 # --- stage 3: the runtime image --------------------------------------------------
 FROM python:${PYTHON_VERSION}-alpine
 ARG TERRAFORM_VERSION
-LABEL org.opencontainers.image.title="jwall-engineering-sites" \
+LABEL org.opencontainers.image.title="jaws" \
       org.opencontainers.image.source="https://github.com/jwallace145/jwall-engineering-infra" \
       org.opencontainers.image.description="Provisions jwall.engineering infrastructure (sites, bots, research projects and Databricks workspaces) with Terraform" \
       terraform.version="${TERRAFORM_VERSION}"
@@ -84,12 +84,12 @@ RUN apk add --no-cache ca-certificates \
     && python -m pip uninstall -y pip setuptools wheel >/dev/null 2>&1 || true \
     && rm -rf /usr/local/lib/python3.13/ensurepip /usr/local/lib/python3.13/idlelib \
        /usr/local/lib/python3.13/tkinter /usr/local/lib/python3.13/test /root/.cache
-COPY --from=build /opt/jwall-engineering-sites/venv /opt/jwall-engineering-sites/venv
+COPY --from=build /opt/jaws/venv /opt/jaws/venv
 COPY --from=build /usr/local/bin/terraform /usr/local/bin/terraform
-COPY --from=build /opt/jwall-engineering-sites/stacks /opt/jwall-engineering-sites/stacks
-COPY --from=build /opt/jwall-engineering-sites/plugins /opt/jwall-engineering-sites/plugins
-COPY config.yaml /etc/jwall-engineering-sites/config.yaml
-ENV PATH="/opt/jwall-engineering-sites/venv/bin:${PATH}" \
+COPY --from=build /opt/jaws/stacks /opt/jaws/stacks
+COPY --from=build /opt/jaws/plugins /opt/jaws/plugins
+COPY config.yaml /etc/jaws/config.yaml
+ENV PATH="/opt/jaws/venv/bin:${PATH}" \
     TF_IN_AUTOMATION=1 \
     TF_INPUT=0 \
     PYTHONUNBUFFERED=1 \
@@ -98,5 +98,5 @@ ENV PATH="/opt/jwall-engineering-sites/venv/bin:${PATH}" \
 # container so files it writes into the mounted workspace stay deletable by the
 # runner; nothing in the image needs privileges.
 WORKDIR /work
-ENTRYPOINT ["jwall-engineering-sites"]
+ENTRYPOINT ["jaws"]
 CMD ["--help"]

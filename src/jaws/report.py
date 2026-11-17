@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from .stack import PLAN_CHANGES, PLAN_NO_CHANGES
 from .sync import SyncResult
 
-PRODUCT = "JWall Engineering Infra"
-PRODUCT_MARK = "⚡"
+PRODUCT = "Jaws"
+PRODUCT_MARK = "🦈"
 MAX_RESOURCE_ROWS = 40
 _MIN_BODY_BYTES = 256
 _SEP = " &nbsp;·&nbsp; "

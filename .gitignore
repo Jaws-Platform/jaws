@@ -23,7 +23,7 @@ node_modules/
 .idea/
 .vscode/
 
-# Python (jwall-engineering-sites)
+# Python (jaws)
 .venv/
 __pycache__/
 *.pyc
@@ -32,9 +32,9 @@ __pycache__/
 .ruff_cache/
 dist/
 
-# jwall-engineering-sites run artifacts
-.jwall-engineering-sites/
+# jaws run artifacts
+.jaws/
 
-# data-access/'s inputs, rendered by `jwall-engineering-sites access render`
+# data-access/'s inputs, rendered by `jaws access render`
 data-access/terraform.tfvars.json
 data-access/access-summary.md

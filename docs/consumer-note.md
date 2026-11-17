@@ -2,7 +2,7 @@
 
 This repository runs permanently as a Lichess bot on infrastructure managed by
 [jwall-engineering-infra](https://github.com/jwallace145/jwall-engineering-infra).
-It declares itself in `jwall-engineering-sites.yaml` and keeps no Terraform
+It declares itself in `jaws.yaml` and keeps no Terraform
 and no AWS credentials.
 
 - **Releasing ships the bot.** Publishing a `vX.Y.Z` release runs

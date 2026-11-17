@@ -8,10 +8,10 @@ from typing import Any
 import pytest
 import yaml
 
-from jwall_engineering_sites.errors import ConfigError
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.settings import Settings
-from jwall_engineering_sites.site import load_site_config
+from jaws.errors import ConfigError
+from jaws.project import Project
+from jaws.settings import Settings
+from jaws.site import load_site_config
 from tests.conftest import FIXTURES
 
 BOT_FILE = FIXTURES / "bots" / "braveheart.yaml"
@@ -33,7 +33,7 @@ def _image(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _load(tmp_path: Path, raw: dict[str, Any], settings: Settings) -> Project:
-    path = tmp_path / "jwall-engineering-sites.yaml"
+    path = tmp_path / "jaws.yaml"
     path.write_text(yaml.safe_dump(raw))
     return Project.from_config(load_site_config(path), settings)
 

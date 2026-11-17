@@ -250,7 +250,7 @@ def members_exist(ctx: CheckContext) -> Iterable[CheckResult]:
         return
     for where, group in (
         (f"projects.{ctx.project.project}.databricks.admins in config.yaml", approved.admins),
-        ("users in the project's jwall-engineering-sites.yaml", users),
+        ("users in the project's jaws.yaml", users),
     ):
         placeholders = [e for e in group if e.lower().endswith("@example.com")]
         if placeholders:
@@ -268,7 +268,7 @@ def members_exist(ctx: CheckContext) -> Iterable[CheckResult]:
         yield LIVE_005.failed(
             f"add {', '.join(missing)} as account users in the account console, or remove them "
             f"from projects.{ctx.project.project}.databricks.admins in config.yaml or from "
-            "users in the project's jwall-engineering-sites.yaml",
+            "users in the project's jaws.yaml",
             missing=", ".join(missing),
         )
         return

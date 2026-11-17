@@ -5,7 +5,7 @@ component can run long, CPU-bound jobs,
 such as an engine SPRT or a match series, on real dedicated cores instead of
 a shared GitHub-hosted runner. The standard box is a 64-core `c8a.16xlarge`
 on spot. A GitHub Actions job calls the reusable `remote-task.yml` workflow,
-which runs `jwall-engineering-sites task run`. That command:
+which runs `jaws task run`. That command:
 
 1. checks the worst-case cost against the [ceiling](#cost-ceiling);
 2. waits for room under the project's vCPU cap;
@@ -30,7 +30,7 @@ dataset access, through [task profiles](#task-profiles-gpu-tasks).
 
 ## Turning it on
 
-Add the component to the bot's `jwall-engineering-sites.yaml`:
+Add the component to the bot's `jaws.yaml`:
 
 ```yaml
 components:

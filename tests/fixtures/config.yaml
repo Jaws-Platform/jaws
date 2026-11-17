@@ -1,13 +1,13 @@
-# Tool-level configuration for jwall-engineering-sites, the JWall Engineering
+# Tool-level configuration for jaws, the JWall Engineering
 # Infra CLI that provisions jwall.engineering infrastructure. One top-level knob
 # for everything about how the tool runs, as opposed to what one site is (that
-# lives in each site repository's jwall-engineering-sites.yaml). The foundation
+# lives in each site repository's jaws.yaml). The foundation
 # stack reads the `aws`, `ecr` and `projects` sections with yamldecode; the CLI
 # reads the whole file. Design:
 # https://github.com/jwallace145/jwall-engineering-infra/pull/26
 
 tool:
-  log_level: info # JES_LOG_LEVEL overrides, for local debugging
+  log_level: info # JAWS_LOG_LEVEL overrides, for local debugging
   log_format: console # json in CI
 
 terraform:

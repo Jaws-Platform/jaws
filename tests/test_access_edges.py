@@ -10,9 +10,9 @@ from typing import Any
 import pytest
 import yaml
 
-from jwall_engineering_sites.access import Access, Edge, OnboardedDataset, Pending, compute_access
-from jwall_engineering_sites.errors import ConfigError
-from jwall_engineering_sites.site import SiteConfig, site_config_from_text
+from jaws.access import Access, Edge, OnboardedDataset, Pending, compute_access
+from jaws.errors import ConfigError
+from jaws.site import SiteConfig, site_config_from_text
 from tests.conftest import FIXTURES
 
 POSITIONS = OnboardedDataset(

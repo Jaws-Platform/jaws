@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from mypy_boto3_ecr import ECRClient
 
 PLACEHOLDER = "LICHESS_TOKEN_PLACEHOLDER"
-KIND_PACKAGE = "jwall_engineering_sites.kinds.lichess_bot"
+KIND_PACKAGE = "jaws.kinds.lichess_bot"
 PLATFORMS = {"x86_64": "linux/amd64", "arm64": "linux/arm64"}
 _NODES = re.compile(r"^Nodes searched\s*:?\s*(\d+)", re.MULTILINE)
 #: Hex digits of the config digest in a pinned bot's tag.

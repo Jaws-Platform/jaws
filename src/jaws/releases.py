@@ -40,9 +40,7 @@ class Release:
 
 
 def _http_get(url: str, headers: dict[str, str]) -> bytes:
-    request = urllib.request.Request(
-        url, headers={"User-Agent": "jwall-engineering-sites", **headers}
-    )
+    request = urllib.request.Request(url, headers={"User-Agent": "jaws", **headers})
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             body: bytes = response.read()

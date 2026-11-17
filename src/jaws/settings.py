@@ -2,7 +2,7 @@
 
 It describes how the tool runs (Terraform version, library pin, state bucket,
 organisation constants, ECR, sync headers), as opposed to what one site is,
-which lives in each site repository's jwall-engineering-sites.yaml.
+which lives in each site repository's jaws.yaml.
 """
 
 from __future__ import annotations
@@ -26,8 +26,8 @@ from pydantic import (
 from .components import check_prefixes
 from .errors import ConfigError
 
-ENV_CONFIG_PATH = "JES_CONFIG"
-IMAGE_CONFIG_PATH = Path("/etc/jwall-engineering-sites/config.yaml")
+ENV_CONFIG_PATH = "JAWS_CONFIG"
+IMAGE_CONFIG_PATH = Path("/etc/jaws/config.yaml")
 LOCAL_CONFIG_PATH = Path("config.yaml")
 
 _DURATION = re.compile(r"^(\d+)([smh])$")
@@ -255,7 +255,7 @@ class DatabricksProject(_Section):
         if isinstance(data, dict) and "users" in data:
             raise ValueError(
                 "`users` no longer lives in config.yaml: list the workspace users in the "
-                "project's own jwall-engineering-sites.yaml, under the databricks-workspace "
+                "project's own jaws.yaml, under the databricks-workspace "
                 "component (users: [name@example.com]); only admins are set here"
             )
         return data
@@ -496,7 +496,7 @@ class Settings(_Section):
 
 
 def default_config_path() -> Path:
-    """JES_CONFIG, else the path baked into the image, else ./config.yaml."""
+    """JAWS_CONFIG, else the path baked into the image, else ./config.yaml."""
     if ENV_CONFIG_PATH in os.environ:
         return Path(os.environ[ENV_CONFIG_PATH])
     if IMAGE_CONFIG_PATH.is_file():
@@ -505,9 +505,9 @@ def default_config_path() -> Path:
 
 
 def load_settings(path: Path | None = None, environ: dict[str, str] | None = None) -> Settings:
-    """Load config.yaml and apply the JES_* overrides.
+    """Load config.yaml and apply the JAWS_* overrides.
 
-    Only `JES_LOG_LEVEL` and `JES_LOG_FORMAT` may be overridden: they are the
+    Only `JAWS_LOG_LEVEL` and `JAWS_LOG_FORMAT` may be overridden: they are the
     knobs a person debugging locally needs, and nothing else about how the
     tool runs should vary between runs of the same image.
     """
@@ -523,10 +523,10 @@ def load_settings(path: Path | None = None, environ: dict[str, str] | None = Non
         raise ConfigError(f"{path}: expected a mapping at the top level")
 
     tool = dict(raw.get("tool") or {})
-    if "JES_LOG_LEVEL" in env:
-        tool["log_level"] = env["JES_LOG_LEVEL"]
-    if "JES_LOG_FORMAT" in env:
-        tool["log_format"] = env["JES_LOG_FORMAT"]
+    if "JAWS_LOG_LEVEL" in env:
+        tool["log_level"] = env["JAWS_LOG_LEVEL"]
+    if "JAWS_LOG_FORMAT" in env:
+        tool["log_format"] = env["JAWS_LOG_FORMAT"]
     raw["tool"] = tool
 
     try:

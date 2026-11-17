@@ -189,7 +189,7 @@ def drain_instance(
             InstanceIds=[instance.id],
             DocumentName="AWS-RunShellScript",
             Parameters={"commands": [DRAIN_COMMAND], "executionTimeout": ["120"]},
-            Comment="jwall-engineering-sites bot stop",
+            Comment="jaws bot stop",
         )
     except ClientError as exc:
         raise RunError(

@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from jwall_engineering_sites import releases
-from jwall_engineering_sites.errors import PreflightError, RunError
-from jwall_engineering_sites.project import Project
+from jaws import releases
+from jaws.errors import PreflightError, RunError
+from jaws.project import Project
 
 ASSET = "braveheart-v0.14.0-x86_64-unknown-linux-gnu.tar.gz"
 

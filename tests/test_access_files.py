@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from jwall_engineering_sites.access import (
+from jaws.access import (
     DirectoryProjectFiles,
     GitHubProjectFiles,
     RegistryIds,
@@ -26,11 +26,11 @@ from jwall_engineering_sites.access import (
     project_registry_ids,
     project_repositories,
 )
-from jwall_engineering_sites.errors import ConfigError
+from jaws.errors import ConfigError
 from tests.conftest import FIXTURES, REPO_ROOT
 
 PROJECT_FILE = (FIXTURES / "registry" / "braveheart-selfplay.yaml").read_text()
-URL = "https://api.github.com/repos/Braveheart-Chess/braveheart-selfplay/contents/jwall-engineering-sites.yaml"
+URL = "https://api.github.com/repos/Braveheart-Chess/braveheart-selfplay/contents/jaws.yaml"
 
 
 def _shell_registry(block: str, file: str) -> dict[str, str]:
@@ -154,9 +154,9 @@ def test_a_directory_holds_one_file_per_project(tmp_path: Path) -> None:
 def test_the_environment_picks_a_directory_else_github(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("JES_PROJECT_FILES_DIR", str(tmp_path))
+    monkeypatch.setenv("JAWS_PROJECT_FILES_DIR", str(tmp_path))
     assert isinstance(project_files_from_env(REPO_ROOT), DirectoryProjectFiles)
-    monkeypatch.delenv("JES_PROJECT_FILES_DIR")
+    monkeypatch.delenv("JAWS_PROJECT_FILES_DIR")
     monkeypatch.delenv("GH_TOKEN", raising=False)
     monkeypatch.setenv("GITHUB_TOKEN", "from-github-token")
     files = project_files_from_env(REPO_ROOT)

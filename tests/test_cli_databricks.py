@@ -12,9 +12,9 @@ import pytest
 from moto import mock_aws
 from typer.testing import CliRunner
 
-from jwall_engineering_sites import cli, databricks_auth
-from jwall_engineering_sites.checks import framework
-from jwall_engineering_sites.checks.framework import (
+from jaws import cli, databricks_auth
+from jaws.checks import framework
+from jaws.checks.framework import (
     CheckContext,
     CheckResult,
     Outcome,
@@ -31,7 +31,7 @@ OWNER = "arn:aws:sts::650503560686:assumed-role/owner/s"
 
 
 def _as_role(arn: str) -> AbstractContextManager[Any]:
-    return patch("jwall_engineering_sites.aws.caller_identity", return_value=("650503560686", arn))
+    return patch("jaws.aws.caller_identity", return_value=("650503560686", arn))
 
 
 def _put_secret(value: str = SENTINEL) -> None:
@@ -89,7 +89,7 @@ def recorded() -> Iterator[list[tuple[Stage, CheckContext]]]:
                 f"DBX-TST-00{number}", f"{stage.value} check", stage, frozenset({"databricks"})
             )(make(stage, number))
         with (
-            patch("jwall_engineering_sites.checks.load_builtin_checks"),
+            patch("jaws.checks.load_builtin_checks"),
             patch.object(databricks_auth, "DatabricksClients", FakeClients),
         ):
             yield calls
@@ -125,9 +125,7 @@ def test_doctor_runs_all_read_only_stages(
     assert seen[Stage.AFTER] == seen[Stage.BETWEEN]
     assert FakeClients.instances[0].secret == SENTINEL
     assert "DBX-TST-001" in result.output and "DBX-TST-004" in result.output
-    written = json.loads(
-        (databricks_workspace / ".jwall-engineering-sites" / "checks.json").read_text()
-    )
+    written = json.loads((databricks_workspace / ".jaws" / "checks.json").read_text())
     assert [r["check_id"] for r in written] == [f"DBX-TST-00{n}" for n in (1, 2, 3, 4)]
     # Read-only: init and output of the account stack, nothing else.
     calls = [c for c in fake_terraform.read_text().splitlines() if not c.startswith("version")]
@@ -165,9 +163,7 @@ def test_doctor_skips_between_and_after_without_account_state(
         result = runner.invoke(cli.app, ["databricks", "doctor"])
     assert result.exit_code == 0, result.output
     assert [s for s, _ in recorded] == [Stage.CONFIG, Stage.LIVE]
-    written = json.loads(
-        (databricks_workspace / ".jwall-engineering-sites" / "checks.json").read_text()
-    )
+    written = json.loads((databricks_workspace / ".jaws" / "checks.json").read_text())
     skipped = [r for r in written if r["outcome"] == "skip"]
     assert [r["check_id"] for r in skipped] == ["DBX-TST-003", "DBX-TST-004"]
     assert "apply the account stack first" in result.output
@@ -200,7 +196,7 @@ def test_doctor_exit_3_on_error(
         result = runner.invoke(cli.app, ["databricks", "doctor"])
     assert result.exit_code == 3, result.output
     assert "DBX-TST-009" in result.output and "fix it" in result.output
-    assert (databricks_workspace / ".jwall-engineering-sites" / "checks.json").is_file()
+    assert (databricks_workspace / ".jaws" / "checks.json").is_file()
 
 
 def test_doctor_warnings_alone_do_not_fail(
@@ -303,7 +299,7 @@ def test_credentials_set_no_echo(
             "rotated-value"
         )
     assert SENTINEL not in result.output
-    log = databricks_workspace / ".jwall-engineering-sites" / "jwall-engineering-sites.log"
+    log = databricks_workspace / ".jaws" / "jaws.log"
     assert SENTINEL not in log.read_text()
     assert PARAM in result.output
 
@@ -327,12 +323,12 @@ def test_credentials_check_hides_value(
     assert present.exit_code == 0, present.output
     assert PARAM in present.output and "last modified" in present.output
     assert SENTINEL not in present.output
-    log = databricks_workspace / ".jwall-engineering-sites" / "jwall-engineering-sites.log"
+    log = databricks_workspace / ".jaws" / "jaws.log"
     assert SENTINEL not in log.read_text()
 
 
 def _written(workspace: Path) -> list[dict[str, Any]]:
-    path = workspace / ".jwall-engineering-sites" / "checks.json"
+    path = workspace / ".jaws" / "checks.json"
     return json.loads(path.read_text())  # type: ignore[no-any-return]
 
 
@@ -380,7 +376,7 @@ def test_credentials_commands_refuse_non_databricks_projects(bot_workspace: Path
 
 
 def _log(workspace: Path) -> str:
-    return (workspace / ".jwall-engineering-sites" / "jwall-engineering-sites.log").read_text()
+    return (workspace / ".jaws" / "jaws.log").read_text()
 
 
 def test_load_secret_masks_it_on_a_github_runner(

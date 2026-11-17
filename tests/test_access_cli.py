@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from jwall_engineering_sites import cli
+from jaws import cli
 from tests.conftest import FIXTURES
 from tests.test_cli import _as_role, _calls, runner
 
@@ -29,9 +29,7 @@ def selfplay_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
     """braveheart-selfplay's file, the registry fixtures, and a directory of counterpart files."""
     root = tmp_path / "selfplay-workspace"
     root.mkdir()
-    shutil.copy(
-        FIXTURES / "registry" / "braveheart-selfplay.yaml", root / "jwall-engineering-sites.yaml"
-    )
+    shutil.copy(FIXTURES / "registry" / "braveheart-selfplay.yaml", root / "jaws.yaml")
     shutil.copy(FIXTURES / "config.yaml", root / "config.yaml")
     files = tmp_path / "project-files"
     files.mkdir()
@@ -40,8 +38,8 @@ def selfplay_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
     )
     monkeypatch.chdir(root)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    monkeypatch.setenv("JES_INFRA_ROOT", str(FIXTURES))  # its datasets/ is the registry fixture
-    monkeypatch.setenv("JES_PROJECT_FILES_DIR", str(files))
+    monkeypatch.setenv("JAWS_INFRA_ROOT", str(FIXTURES))  # its datasets/ is the registry fixture
+    monkeypatch.setenv("JAWS_PROJECT_FILES_DIR", str(files))
     yield root
 
 
@@ -61,9 +59,7 @@ def test_plan_fails_when_a_counterpart_cannot_be_fetched(
     with _as_role(SELFPLAY_PLAN_ROLE):
         result = runner.invoke(cli.app, ["plan"])
     assert result.exit_code == 2, result.output
-    log = (
-        selfplay_workspace / ".jwall-engineering-sites" / "jwall-engineering-sites.log"
-    ).read_text()
+    log = (selfplay_workspace / ".jaws" / "jaws.log").read_text()
     assert "braveheart-databricks" in log
     assert not (fake_terraform.parent / "rendered.tfvars.json").exists()
     assert _calls(fake_terraform) == []
@@ -79,9 +75,7 @@ def test_plan_logs_the_projects_pending_handshakes(
     with _as_role(SELFPLAY_PLAN_ROLE):
         result = runner.invoke(cli.app, ["plan"])
     assert result.exit_code == 0, result.output
-    log = (
-        selfplay_workspace / ".jwall-engineering-sites" / "jwall-engineering-sites.log"
-    ).read_text()
+    log = (selfplay_workspace / ".jaws" / "jaws.log").read_text()
     assert "braveheart-selfplay/positions" in log
     assert "the consumer does not read the dataset" in log
     rendered = json.loads((fake_terraform.parent / "rendered.tfvars.json").read_text())

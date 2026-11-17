@@ -8,13 +8,13 @@ import pytest
 from botocore.stub import Stubber
 from moto import mock_aws
 
-from jwall_engineering_sites.aws import (
+from jaws.aws import (
     check_bucket,
     check_role,
     invalidate_distribution,
     role_name_from_arn,
 )
-from jwall_engineering_sites.errors import PreflightError
+from jaws.errors import PreflightError
 
 if TYPE_CHECKING:
     from mypy_boto3_sts import STSClient
@@ -70,9 +70,9 @@ def test_check_role_can_be_skipped_with_a_warning(
 ) -> None:
     sts, _ = _sts(USER_ARN)
     with caplog.at_level(logging.WARNING, logger=logger.name):
-        arn = check_role(sts, "any-role", logger, environ={"JES_SKIP_ROLE_CHECK": "1"})
+        arn = check_role(sts, "any-role", logger, environ={"JAWS_SKIP_ROLE_CHECK": "1"})
     assert arn == USER_ARN
-    assert "JES_SKIP_ROLE_CHECK=1" in caplog.text
+    assert "JAWS_SKIP_ROLE_CHECK=1" in caplog.text
 
 
 @mock_aws

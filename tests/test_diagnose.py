@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from jwall_engineering_sites.diagnose import (
+from jaws.diagnose import (
     CATALOGUE,
     RUNBOOK_ANCHORS,
     diagnose,

@@ -847,7 +847,7 @@ def send(
     response = ssm.send_command(
         InstanceIds=[instance_id],
         DocumentName="AWS-RunShellScript",
-        Comment="jwall-engineering-sites task run",
+        Comment="jaws task run",
         Parameters={"commands": commands, "executionTimeout": [str(max_hours * 3600)]},
         CloudWatchOutputConfig={
             "CloudWatchLogGroupName": log_group,

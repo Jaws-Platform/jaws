@@ -252,7 +252,7 @@ position. So 100 million positions are about 1.8 GB, and a billion about
 
 ## Adding a dataset
 
-1. Add the component to the project's `jwall-engineering-sites.yaml`.
+1. Add the component to the project's `jaws.yaml`.
 2. Add the bucket under `projects.<name>.datasets` in `config.yaml`, with its
    approved retention (`{}` for none), and release. `foundation/bots.tf` reads
    the bucket names from it and gives the project's plan and apply roles
