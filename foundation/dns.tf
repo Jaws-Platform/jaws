@@ -33,7 +33,7 @@ module "zone" {
   version = "0.27.0"
 
   name        = local.zone_name
-  comment     = "jwall-engineering: zone owned by ${local.context.repository}; records owned by project repos"
+  comment     = "${local.context.organization}: zone owned by ${local.context.repository}; records owned by project repos"
   caa_issuers = local.caa_issuers
   txt_records = local.txt_records
   name_tag    = "${local.name_prefix}-dns-zone"

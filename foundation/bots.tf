@@ -69,11 +69,18 @@ locals {
 
   # Bots with dataset components, and their buckets, <Organization>-<project>-<name>.
   # Their plan and apply roles may read and configure these buckets, never
-  # their objects.
-  bot_datasets = { for k, p in local.tool_config.projects : k => keys(p.datasets) if length(try(p.datasets, {})) > 0 }
+  # their objects. Only the buckets that carry this account's prefix: a project
+  # that is moving has its old buckets approved in the management account and
+  # its new ones in production, and each account's roles manage their own.
+  bot_dataset_names = {
+    for k, p in local.tool_config.projects : k => [
+      for name in keys(try(p.datasets, {})) : name if startswith(name, "${local.context.organization}-")
+    ]
+  }
+  bot_datasets = { for k, names in local.bot_dataset_names : k => names if length(names) > 0 }
 
   bot_tfstate = {
-    for key, bot in local.bots : key => {
+    for key, bot in local.served_bots : key => {
       bucket_arn = module.state_bucket.arn
       prefix     = "project=${key}/"
     }
@@ -81,11 +88,12 @@ locals {
 }
 
 module "bot_ci_plan" {
-  for_each = local.bots
+  for_each = local.served_bots
   source   = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
   version  = "0.27.0"
 
   project            = each.key
+  name_root          = local.context.organization
   repository         = local.context.repository
   repository_aliases = local.context.repository_aliases
   owner_id           = local.github.owner_id
@@ -104,11 +112,12 @@ module "bot_ci_plan" {
 }
 
 module "bot_ci_apply" {
-  for_each = local.bots
+  for_each = local.served_bots
   source   = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
   version  = "0.27.0"
 
   project            = each.key
+  name_root          = local.context.organization
   repository         = local.context.repository
   repository_aliases = local.context.repository_aliases
   owner_id           = local.github.owner_id
@@ -128,11 +137,12 @@ module "bot_ci_apply" {
 }
 
 module "bot_ci_release" {
-  for_each = { for key, bot in local.bots : key => bot if !contains(local.research_projects, key) }
+  for_each = { for key, bot in local.served_bots : key => bot if !contains(local.research_projects, key) }
   source   = "jwallace145/jwall-engineering/aws//modules/ci-release-role"
   version  = "0.27.0"
 
   project           = each.key
+  name_root         = local.context.organization
   repository        = each.value.repository
   owner_id          = try(each.value.owner_id, local.github_owner_id)
   repository_id     = each.value.repository_id
@@ -146,11 +156,12 @@ module "bot_ci_release" {
 # pull_request and main events only: GitHub issues no OIDC token to fork
 # pull requests, and the remote-task workflow refuses every other event.
 module "bot_ci_task" {
-  for_each = local.bot_task_types
+  for_each = { for key, types in local.bot_task_types : key => types if try(local.serves[key], false) }
   source   = "jwallace145/jwall-engineering/aws//modules/ci-task-role"
   version  = "0.27.0"
 
   project           = each.key
+  name_root         = local.context.organization
   repository        = local.bots[each.key].repository
   owner_id          = try(local.bots[each.key].owner_id, local.github_owner_id)
   repository_id     = local.bots[each.key].repository_id

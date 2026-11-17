@@ -146,7 +146,7 @@ def test_registry_matches_each_projects_file() -> None:
 
 def test_bot_state_prefixes_are_in_the_state_bucket_policy() -> None:
     state = (REPO_ROOT / "foundation" / "state.tf").read_text()
-    assert "local.bots" in state and "project=${key}/" in state
+    assert "local.served_bots" in state and "project=${key}/" in state
     assert "module.bot_ci_plan[key].role_arn" in state
     assert "module.bot_ci_apply[key].role_arn" in state
 
@@ -290,7 +290,9 @@ def test_bot_plan_and_apply_carry_the_task_policies() -> None:
 def test_task_role_is_the_launch_role_for_the_bot_repository() -> None:
     block = _module("bot_ci_task")
     assert 'source   = "jwallace145/jwall-engineering/aws//modules/ci-task-role"' in block
-    assert "for_each = local.bot_task_types" in block
+    # The projects with a task runner that this account serves (accounts.tf).
+    assert "for key, types in local.bot_task_types : key => types if" in block
+    assert "local.serves[key]" in block
     assert "repository        = local.bots[each.key].repository" in block
     assert "repository_id     = local.bots[each.key].repository_id" in block
     assert _policies(block) == ["task/launch"]
@@ -371,7 +373,13 @@ def test_foundation_reads_lists_from_config() -> None:
     assert not re.search(r"\b(?:c8a|g6e?|p[345])\.\w+", text), "instance types live in config.yaml"
     for name in ("bot_task_types", "bot_task_profiles", "bot_datasets"):
         match = re.search(rf"^\s+{name}\s*=\s*(.*)$", text, re.MULTILINE)
-        assert match and "local.tool_config.projects" in match.group(1), name
+        assert match, name
+        # bot_datasets is the per-account selection of bot_dataset_names, which reads config.
+        source = (
+            "local.bot_dataset_names" if name == "bot_datasets" else "local.tool_config.projects"
+        )
+        assert source in match.group(1), name
+    assert re.search(r"bot_dataset_names = \{\s*for k, p in local\.tool_config\.projects", text)
     # A project with only a `databricks` entry is a workspace project, not a bot.
     bots = {k for k, p in _projects().items() if set(p) - {"databricks"}}
     assert bots <= set(registry())
@@ -402,7 +410,7 @@ def test_foundation_gives_research_projects_no_release_role() -> None:
     match = re.search(r"^\s*for_each\s*=\s*(.+)$", _module("bot_ci_release"), re.MULTILINE)
     assert match, "bot_ci_release has no for_each"
     comprehension = re.fullmatch(
-        r"\{\s*for (\w+), (\w+) in local\.bots\s*:\s*\1\s*=>\s*\2\s*"
+        r"\{\s*for (\w+), (\w+) in local\.served_bots\s*:\s*\1\s*=>\s*\2\s*"
         r"if !contains\(local\.research_projects,\s*\1\)\s*\}",
         match.group(1).strip(),
     )
@@ -509,7 +517,7 @@ def test_databricks_projects_get_plan_and_apply_roles_with_databricks_policies()
     apply = _module("databricks_ci_apply", DATABRICKS_TF)
     assert "modules/ci-plan-role" in plan and "modules/ci-apply-role" in apply
     for block in map(_squashed, (plan, apply)):
-        assert "for_each = local.databricks_projects" in block
+        assert "for_each = local.served_databricks_projects" in block
         # Planned and applied from this repository, as bots are.
         assert "repository = local.context.repository" in block
         assert "tfstate = local.databricks_ci[each.key].tfstate" in block
@@ -528,13 +536,14 @@ def test_databricks_projects_get_plan_and_apply_roles_with_databricks_policies()
 def test_databricks_projects_get_no_release_or_task_role() -> None:
     text = DATABRICKS_TF.read_text()
     assert "ci-release-role" not in text and "ci-task-role" not in text
-    # Only state.tf (the state prefixes) reads the registry outside databricks.tf.
+    # Only state.tf (the state prefixes) and accounts.tf (which account serves
+    # each project) read the registry outside databricks.tf.
     readers = {
         p.name
         for p in (REPO_ROOT / "foundation").glob("*.tf")
         if "databricks_projects" in p.read_text()
     }
-    assert readers == {"databricks.tf", "state.tf"}
+    assert readers == {"accounts.tf", "databricks.tf", "state.tf"}
 
 
 def test_databricks_policy_inputs_point_at_the_secret_and_the_projects_events() -> None:
@@ -554,7 +563,7 @@ def test_databricks_policy_inputs_point_at_the_secret_and_the_projects_events() 
 
 def test_databricks_project_state_prefixes_are_in_the_state_bucket_policy() -> None:
     state = (REPO_ROOT / "foundation" / "state.tf").read_text()
-    assert "for key, project in local.databricks_projects" in state
+    assert "for key, project in local.served_databricks_projects" in state
     assert "module.databricks_ci_plan[key].role_arn" in state
     assert "module.databricks_ci_apply[key].role_arn" in state
 
