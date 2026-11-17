@@ -129,7 +129,7 @@ def test_the_production_view_is_the_production_account() -> None:
     assert settings.account == "production"
     assert settings.aws.account_id == PRODUCTION
     assert settings.context.organization == "jaws"
-    assert settings.state.bucket == "jaws-terraform-state"
+    assert settings.state.bucket == "jaws-terraform-state-570327089884"
     assert settings.ecr.repository == "jaws-cli"
     assert settings.databricks is not None and settings.databricks.enabled is False
 
@@ -278,7 +278,7 @@ def test_config_env_for_a_moving_project_is_production(workspace: Path) -> None:
         "account": "production",
         "account_id": PRODUCTION,
         "organization": "jaws",
-        "state_bucket": "jaws-terraform-state",
+        "state_bucket": "jaws-terraform-state-570327089884",
         "ecr_repository": "jaws-cli",
         "bootstrapped": "false",
     }
@@ -419,7 +419,7 @@ def test_a_bootstrapped_production_account_is_listed_after_management(workspace:
         "account": "production",
         "account_id": PRODUCTION,
         "organization": "jaws",
-        "state_bucket": "jaws-terraform-state",
+        "state_bucket": "jaws-terraform-state-570327089884",
         "ecr_repository": "jaws-cli",
     }
 

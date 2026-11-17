@@ -222,7 +222,9 @@ production:
     context:
       organization: jaws
     state:
-      bucket: jaws-terraform-state
+      # Suffixed with the account ID: the plain jaws-terraform-state was refused
+      # at the bootstrap (BucketAlreadyExists) although it looked free.
+      bucket: jaws-terraform-state-570327089884
     ecr:
       repository: jaws-cli
     # dns: {zone_id: ...}  # known once the bootstrap creates the zone; required when bootstrapped

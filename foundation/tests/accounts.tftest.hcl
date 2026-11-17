@@ -173,8 +173,8 @@ run "production_starts_empty" {
   }
 
   assert {
-    condition     = local.state_bucket_name == "jaws-terraform-state"
-    error_message = "production's state bucket is jaws-terraform-state"
+    condition     = local.state_bucket_name == "jaws-terraform-state-570327089884"
+    error_message = "production's state bucket is jaws-terraform-state-570327089884"
   }
 
   assert {
