@@ -1,6 +1,6 @@
 """The composite action pins the image tag; Release Please bumps it with the
 package version. The reusable workflows carry no version at all: they check
-this repository out at `github.job_workflow_sha`, the commit of the reusable
+this repository out at `job.workflow_sha`, the commit of the reusable
 workflow itself, and use the action from that checkout, so a site's one pin
 (the workflow ref) selects the action and the image together.
 """
@@ -77,7 +77,7 @@ def test_action_yml_uses_the_generic_updater() -> None:
 def test_workflows_use_the_action_from_their_own_commit() -> None:
     for name in WORKFLOWS:
         text = (REPO_ROOT / ".github" / "workflows" / name).read_text()
-        assert "ref: ${{ github.job_workflow_sha }}" in text, name
+        assert "ref: ${{ job.workflow_sha }}" in text, name
         assert LOCAL_ACTION in text, name
         assert "jaws@v" not in text, f"{name} pins the action by tag"
 

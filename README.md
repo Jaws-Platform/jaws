@@ -86,6 +86,13 @@ bumps. The workflow at tag `vX.Y.Z` runs image `vX.Y.Z` (the composite action
 `.github/actions/jaws` pins the tag, and Release Please
 bumps it with the package version), so one pin covers both.
 
+That holds because each reusable workflow checks this repository out at its
+own commit, `job.workflow_sha`, and the next step stops the job unless the
+checkout is at exactly that commit. (`github.job_workflow_sha` is empty inside
+a reusable workflow, and a checkout without a ref falls back to `main`; a
+consumer pinned to v0.50.0 or earlier therefore runs `main`'s action and
+image tag, whatever it pinned.)
+
 | Workflow | Calls | Caller needs |
 | --- | --- | --- |
 | `site-plan.yml` | `validate`, then `plan`, and posts the sticky plan comment | `plan-role-arn`; `id-token: write`, `pull-requests: write`; optionally `app-client-id` and the `app-private-key` secret |
