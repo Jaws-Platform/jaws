@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.51.0](https://github.com/jwallace145/jaws/compare/v0.50.1...v0.51.0) (2026-11-17)
+
+
+### Features
+
+* **bot:** name secrets relative to the project ([#204](https://github.com/jwallace145/jaws/issues/204)) ([fb63f02](https://github.com/jwallace145/jaws/commit/fb63f0207f8733b774562e6579296a8a6c5eb400))
+* **config:** stamp Organization and ManagedBy from the account ([#202](https://github.com/jwallace145/jaws/issues/202)) ([1603dcf](https://github.com/jwallace145/jaws/commit/1603dcf760bf90924699ecc3e3aae773d8fc3b89))
+
 ## [0.50.1](https://github.com/jwallace145/jaws/compare/v0.50.0...v0.50.1) (2026-11-17)
 
 
