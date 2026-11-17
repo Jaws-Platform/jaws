@@ -178,7 +178,7 @@ def test_bot_plan_and_apply_use_the_bots_roles() -> None:
 
 def test_container_release_runs_this_commit_and_pins_nothing() -> None:
     text = (REPO_ROOT / ".github/workflows/container-release.yml").read_text()
-    assert "ref: ${{ github.job_workflow_sha }}" in text
+    assert "ref: ${{ job.workflow_sha }}" in text
     assert "@v0." not in text and "x-release-please-version" not in text
     assert 'bot reconcile "${version_args[@]}"' in text
     assert 'version_args=(--version "$VERSION")' in text

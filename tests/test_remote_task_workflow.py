@@ -104,7 +104,7 @@ def test_upload_and_cleanup_always_run() -> None:
 
 def test_runs_the_cli_from_this_workflow_commit() -> None:
     text = WORKFLOW.read_text()
-    assert "ref: ${{ github.job_workflow_sha }}" in text
+    assert "ref: ${{ job.workflow_sha }}" in text
     assert "--config .jaws-tool/config.yaml" in text
 
 

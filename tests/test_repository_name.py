@@ -47,7 +47,7 @@ def test_every_literal_checkout_is_of_this_repository_under_its_name() -> None:
     for name, step in checkouts:
         assert step["with"]["repository"] == REPOSITORY, name
         assert step["with"]["path"] == TOOL_DIR, name
-        assert step["with"]["ref"] == "${{ github.job_workflow_sha }}", name
+        assert step["with"]["ref"] == "${{ job.workflow_sha }}", name
 
 
 def test_no_step_uses_the_old_checkout_directory() -> None:
