@@ -116,10 +116,10 @@ run "the_positions_get_their_producer_catalog" {
   }
 }
 
-# The repository was renamed to jaws. The roles its own workflows assume trust
-# both names until the old one is dropped (tests/test_repository_trust.py checks
-# which modules get the alias).
-run "the_repository_is_trusted_under_its_old_name_too" {
+# The repository is jaws. Its own workflows' tokens name it, and only it: the
+# old name is no longer trusted. (The roles keep the repository_aliases input
+# for a future rename: tests/test_repository_trust.py.)
+run "the_repository_is_trusted_under_its_name_only" {
   command = plan
 
   assert {
@@ -128,7 +128,7 @@ run "the_repository_is_trusted_under_its_old_name_too" {
   }
 
   assert {
-    condition     = jsonencode(local.context.repository_aliases) == jsonencode(["jwallace145/jwall-engineering-infra"])
-    error_message = "the roles must still trust jwallace145/jwall-engineering-infra, the name the repository had"
+    condition     = length(local.context.repository_aliases) == 0
+    error_message = "no other name of the repository is trusted: jwallace145/jwall-engineering-infra was renamed on 2026-11-17 and no token can name it any more"
   }
 }
