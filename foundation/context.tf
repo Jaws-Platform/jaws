@@ -21,10 +21,10 @@ locals {
     repository_tag = local.in_production ? "jwallace145/jaws" : "jwallace145/jwall-engineering-infra"
     owner          = "jwallace145"
 
-    # The name this repository had until it was renamed. The roles its own
-    # workflows assume still trust it, because GitHub's OIDC subject contains
-    # the name; it is dropped once nothing can present a token with it.
-    repository_aliases = ["jwallace145/jwall-engineering-infra"]
+    # Other names the roles its own workflows assume also trust, because
+    # GitHub's OIDC subject contains the name: set the new name here before a
+    # rename, and clear it once the rename is done. Empty since jaws.
+    repository_aliases = []
   }
 
   # Numeric GitHub IDs for the immutable OIDC subject form
