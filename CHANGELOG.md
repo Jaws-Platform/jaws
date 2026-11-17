@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.46.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.45.0...v0.46.0) (2026-11-17)
+
+
+### Features
+
+* **foundation:** trust the tool's repository under its new name too ([#184](https://github.com/jwallace145/jwall-engineering-infra/issues/184)) ([a7f6824](https://github.com/jwallace145/jwall-engineering-infra/commit/a7f68247a7179f2c19428268461b91fd7e3de0ff))
+
 ## [0.45.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.44.0...v0.45.0) (2026-11-17)
 
 
