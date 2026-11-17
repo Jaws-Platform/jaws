@@ -982,6 +982,20 @@ def test_a_deployer_without_registry_ids_is_refused(
         _databricks_account_tfvars(project, settings)
 
 
+def test_a_deployer_with_an_empty_or_non_numeric_id_is_refused(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _databricks_with_deployer(tmp_path, settings)
+    for name, ids in {
+        "empty": 'repository_id = "1111", owner_id = ""',
+        "text": 'repository_id = "abc", owner_id = "2222"',
+    }.items():
+        entry = f'databricks-poc = {{ repository = "example-org/databricks-poc", {ids} }}'
+        monkeypatch.setenv("JES_INFRA_ROOT", _registry(tmp_path / name, entry))
+        with pytest.raises(ConfigError, match=r"databricks-poc.*foundation/databricks\.tf"):
+            _databricks_account_tfvars(project, settings)
+
+
 def test_a_deployer_whose_registry_repository_differs_is_refused(
     tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:

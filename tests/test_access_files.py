@@ -187,3 +187,17 @@ def test_registry_ids_tolerate_a_missing_owner_id(tmp_path: Path) -> None:
         "  }\n}\n"
     )
     assert project_registry_ids(tmp_path) == {"a-b": RegistryIds("o/a-b", "12", None)}
+
+
+def test_registry_ids_ignore_a_comment_after_the_entry(tmp_path: Path) -> None:
+    # Terraform ignores the comment; reading a value out of it would put an ID GitHub
+    # never issues into a deployer's federation subject.
+    (tmp_path / "foundation").mkdir()
+    (tmp_path / "foundation" / "bots.tf").write_text("locals {\n  bots = {\n  }\n}\n")
+    (tmp_path / "foundation" / "databricks.tf").write_text(
+        "locals {\n  databricks_projects = {\n"
+        '    a-b = { repository = "o/a-b", repository_id = "12", owner_id = "34" } '
+        '# was owner_id = "99", repository_id = "77"\n'
+        "  }\n}\n"
+    )
+    assert project_registry_ids(tmp_path) == {"a-b": RegistryIds("o/a-b", "12", "34")}

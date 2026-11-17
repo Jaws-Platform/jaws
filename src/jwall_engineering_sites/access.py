@@ -57,6 +57,8 @@ GITHUB_API = "https://api.github.com"
 FETCH_TIMEOUT = 20
 _REGISTRY_ENTRY = re.compile(r'^ *([a-z0-9-]+) *= *\{ *repository *= *"([^"]*)"')
 _REGISTRY_FIELD = re.compile(r'([a-z_]+) *= *"([^"]*)"')
+#: An entry's object, between its braces: a comment after it is not read.
+_REGISTRY_BODY = re.compile(r"\{([^}]*)\}")
 
 _KEBAB = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _FIELDS = ("description", "prefix")
@@ -223,7 +225,8 @@ def project_registry_ids(infra_root: Path) -> dict[str, RegistryIds]:
     is built from them."""
     ids: dict[str, RegistryIds] = {}
     for key, repository, line in _registry_entries(infra_root):
-        fields = dict(_REGISTRY_FIELD.findall(line))
+        body = _REGISTRY_BODY.search(line)
+        fields = dict(_REGISTRY_FIELD.findall(body.group(1) if body else ""))
         ids[key] = RegistryIds(repository, fields.get("repository_id"), fields.get("owner_id"))
     return ids
 
