@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.43.0...v0.43.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **registry:** read a deployer's IDs from the entry, never from a comment after it ([#178](https://github.com/jwallace145/jwall-engineering-infra/issues/178)) ([b5d98f5](https://github.com/jwallace145/jwall-engineering-infra/commit/b5d98f5afad0a6f5e6c32c2ad91a3250dd44c46b))
+
 ## [0.43.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.42.2...v0.43.0) (2026-11-17)
 
 
