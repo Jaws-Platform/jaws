@@ -333,3 +333,62 @@ def test_config_env_refuses_a_named_project_where_it_has_no_stack(workspace: Pat
     assert result.exit_code == 2
     assert "braveheart-bot is not in production" in result.stderr
     assert result.stdout == ""
+
+
+# -- the accounts the foundation is planned and applied for --------------------------------
+
+
+def _bootstrapped_config(directory: Path) -> Path:
+    raw = _raw()
+    raw["production"]["bootstrapped"] = True
+    raw["production"]["overrides"]["dns"] = {"zone_id": "Z0PRODUCTIONZONE0000"}
+    raw["production"]["overrides"]["aws"]["admin_role_arn"] = (
+        f"arn:aws:iam::{PRODUCTION}:role/aws-reserved/sso.amazonaws.com/"
+        "AWSReservedSSO_AdministratorAccess_0123456789abcdef"
+    )
+    return _write(directory / "config.yaml", raw)
+
+
+def test_only_management_is_listed_until_production_is_bootstrapped(workspace: Path) -> None:
+    result = runner.invoke(cli.app, ["config", "accounts"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == [
+        {
+            "account": "management",
+            "account_id": MANAGEMENT,
+            "organization": "jwall-engineering",
+            "state_bucket": "jwall-engineering-tfstate",
+            "ecr_repository": "jwall-engineering-sites",
+        }
+    ]
+
+
+def test_a_bootstrapped_production_account_is_listed_after_management(workspace: Path) -> None:
+    _bootstrapped_config(workspace)
+    result = runner.invoke(cli.app, ["config", "accounts"])
+    assert result.exit_code == 0, result.output
+    management, production = json.loads(result.stdout)
+    assert management["account"] == "management" and management["account_id"] == MANAGEMENT
+    assert production == {
+        "account": "production",
+        "account_id": PRODUCTION,
+        "organization": "jaws",
+        "state_bucket": "jaws-terraform-state",
+        "ecr_repository": "jaws-cli",
+    }
+
+
+def test_the_accounts_are_one_line_of_json_for_a_workflow_output(workspace: Path) -> None:
+    """A workflow writes `accounts=<this>` to GITHUB_OUTPUT: one line, nothing else."""
+    _bootstrapped_config(workspace)
+    result = runner.invoke(cli.app, ["config", "accounts"])
+    assert result.stdout.count("\n") == 1 and result.stdout.endswith("\n")
+
+
+def test_the_accounts_do_not_depend_on_the_project_in_the_directory(workspace: Path) -> None:
+    _bootstrapped_config(workspace)
+    raw = yaml.safe_load((workspace / "config.yaml").read_text())
+    raw["production"]["projects"] = {SITE: "moved"}
+    _write(workspace / "config.yaml", raw)
+    accounts = json.loads(runner.invoke(cli.app, ["config", "accounts"]).stdout)
+    assert [a["account"] for a in accounts] == ["management", "production"]

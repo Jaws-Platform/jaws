@@ -2,9 +2,11 @@
 # Sourced, not executed, by the foundation's `terraform plan` and `terraform
 # apply` steps (ci.yml terraform-plan, release-please.yml apply):
 #
-#   source ../scripts/databricks-credentials.sh ../config.yaml
+#   source ../scripts/databricks-credentials.sh ../config.yaml [management|production]
 #
-# When config.yaml's databricks.enabled is true it reads the service
+# The second argument is the account being planned (management by default):
+# for production, `production.overrides.databricks.enabled` decides when
+# config.yaml gives it one. When Databricks is enabled for the account it reads the service
 # principal's client secret from SSM (with the AWS role already assumed),
 # masks it, and exports DATABRICKS_ACCOUNT_ID, DATABRICKS_CLIENT_ID and
 # DATABRICKS_CLIENT_SECRET into the sourcing step's shell only, where the
@@ -13,10 +15,25 @@
 # secret. While databricks.enabled is false it does nothing.
 
 _dbx_config=${1:-config.yaml}
+_dbx_account=${2:-management}
+case "$_dbx_account" in
+  management | production) ;;
+  *)
+    echo "::error::databricks-credentials.sh: account must be management or production, got $_dbx_account"
+    unset _dbx_config _dbx_account
+    return 1
+    ;;
+esac
 _dbx_enabled=$(yq -r .databricks.enabled "$_dbx_config") || return 1
+if [ "$_dbx_account" = "production" ]; then
+  # Production's own setting, when config.yaml gives it one (production.overrides).
+  _dbx_override=$(yq -r .production.overrides.databricks.enabled "$_dbx_config") || return 1
+  if [ "$_dbx_override" != "null" ]; then _dbx_enabled=$_dbx_override; fi
+  unset _dbx_override
+fi
 if [ "$_dbx_enabled" != "true" ]; then
-  echo "databricks.enabled is $_dbx_enabled in $_dbx_config: no Databricks credential is needed"
-  unset _dbx_config _dbx_enabled
+  echo "databricks.enabled is $_dbx_enabled for the $_dbx_account account in $_dbx_config: no Databricks credential is needed"
+  unset _dbx_config _dbx_enabled _dbx_account
   return 0
 fi
 _dbx_parameter=$(yq -r .databricks.secret_parameter "$_dbx_config") || return 1
@@ -35,4 +52,4 @@ DATABRICKS_CLIENT_ID=$(yq -r .databricks.client_id "$_dbx_config") || return 1
 DATABRICKS_CLIENT_SECRET=$_dbx_secret
 export DATABRICKS_ACCOUNT_ID DATABRICKS_CLIENT_ID DATABRICKS_CLIENT_SECRET
 echo "Databricks credential for account $DATABRICKS_ACCOUNT_ID loaded for this step (masked)"
-unset _dbx_config _dbx_enabled _dbx_parameter _dbx_secret
+unset _dbx_config _dbx_enabled _dbx_account _dbx_parameter _dbx_secret
