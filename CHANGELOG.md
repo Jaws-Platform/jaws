@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.44.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.43.1...v0.44.0) (2026-11-17)
+
+
+### Features
+
+* **cli:** rename the tool to Jaws, with the old command, file name and variables still accepted ([#180](https://github.com/jwallace145/jwall-engineering-infra/issues/180)) ([0e2246a](https://github.com/jwallace145/jwall-engineering-infra/commit/0e2246a777e3195a39a7a90b5a8e48503d742122))
+
 ## [0.43.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.43.0...v0.43.1) (2026-11-17)
 
 
