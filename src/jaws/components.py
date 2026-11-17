@@ -434,7 +434,7 @@ class Dataset(_Model):
     #: Databricks workspace projects this project agrees may read the dataset,
     #: read-only: its half of each handshake. A workspace reads only while it also
     #: lists `<project>/<name>` under its `reads` and the dataset is onboarded
-    #: (jwall-engineering-infra's datasets/<project>/<name>.yaml); the dataset's
+    #: (jaws's datasets/<project>/<name>.yaml); the dataset's
     #: role is then added to the bucket policy's readers.
     consumers: tuple[str, ...] = ()
 
@@ -500,7 +500,7 @@ READ_PURPOSE_MAX = 200
 class DatasetRead(_Model):
     """One dataset a workspace reads: an onboarded `<owner>/<name>`, and why."""
 
-    #: The onboarded dataset (jwall-engineering-infra's datasets/<owner>/<name>.yaml).
+    #: The onboarded dataset (jaws's datasets/<owner>/<name>.yaml).
     dataset: str
     #: Why the workspace reads it, recorded with the handshake.
     purpose: str

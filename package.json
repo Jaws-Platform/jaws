@@ -1,5 +1,5 @@
 {
-  "name": "jwall-engineering-infra",
+  "name": "jaws",
   "version": "0.0.0",
   "private": true,
   "description": "Tooling for commit message linting. The infrastructure itself is Terraform; see README.md.",

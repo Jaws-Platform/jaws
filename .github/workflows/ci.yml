@@ -485,7 +485,7 @@ jobs:
           uv run jaws report plan-comment \
             --exit-code "${{ steps.plan.outputs.exitcode }}" \
             --plan foundation/plan.log \
-            --subject "jwall-engineering-infra/foundation${SUFFIX}" \
+            --subject "jaws/foundation${SUFFIX}" \
             --out foundation/plan-comment.md
       - name: Mint a comment token for the Jaws app
         id: app-token

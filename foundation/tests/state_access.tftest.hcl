@@ -116,18 +116,19 @@ run "the_positions_get_their_producer_catalog" {
   }
 }
 
-# While the repository is renamed, the roles its own workflows assume trust both
-# names (tests/test_repository_trust.py checks which modules get the alias).
-run "the_repository_is_trusted_under_its_new_name_too" {
+# The repository was renamed to jaws. The roles its own workflows assume trust
+# both names until the old one is dropped (tests/test_repository_trust.py checks
+# which modules get the alias).
+run "the_repository_is_trusted_under_its_old_name_too" {
   command = plan
 
   assert {
-    condition     = local.context.repository == "jwallace145/jwall-engineering-infra"
-    error_message = "until the rename, the repository's own name is jwall-engineering-infra"
+    condition     = local.context.repository == "jwallace145/jaws"
+    error_message = "the repository's own name is jaws"
   }
 
   assert {
-    condition     = jsonencode(local.context.repository_aliases) == jsonencode(["jwallace145/jaws"])
-    error_message = "the roles must also trust jwallace145/jaws, the name the repository is about to take"
+    condition     = jsonencode(local.context.repository_aliases) == jsonencode(["jwallace145/jwall-engineering-infra"])
+    error_message = "the roles must still trust jwallace145/jwall-engineering-infra, the name the repository had"
   }
 }

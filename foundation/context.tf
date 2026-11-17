@@ -13,13 +13,13 @@ locals {
     # Project tag value, and the prefix of this stack's Name tags.
     project     = local.in_production ? "jaws" : "jwall-engineering-infra"
     environment = "prod"
-    repository  = "jwallace145/jwall-engineering-infra"
+    repository  = "jwallace145/jaws"
     owner       = "jwallace145"
 
-    # The name this repository is about to take. The roles its own workflows
-    # assume trust both until the rename is done, because GitHub's OIDC
-    # subject contains the name; then the old name is dropped.
-    repository_aliases = ["jwallace145/jaws"]
+    # The name this repository had until it was renamed. The roles its own
+    # workflows assume still trust it, because GitHub's OIDC subject contains
+    # the name; it is dropped once nothing can present a token with it.
+    repository_aliases = ["jwallace145/jwall-engineering-infra"]
   }
 
   # Numeric GitHub IDs for the immutable OIDC subject form

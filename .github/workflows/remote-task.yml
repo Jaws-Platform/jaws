@@ -21,7 +21,7 @@ name: Remote task
 #   permissions: {}
 #   jobs:
 #     sprt:
-#       uses: jwallace145/jwall-engineering-infra/.github/workflows/remote-task.yml@vX.Y.Z
+#       uses: jwallace145/jaws/.github/workflows/remote-task.yml@vX.Y.Z
 #       with:
 #         project: braveheart
 #         script: scripts/sprt.sh
@@ -115,7 +115,7 @@ jobs:
     env:
       RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
       TASK_ID: ${{ inputs.task-id || inputs.artifact }}
-      CLI: uv run --no-dev --project .jwall-engineering-infra jaws --config .jwall-engineering-infra/config.yaml
+      CLI: uv run --no-dev --project .jaws-tool jaws --config .jaws-tool/config.yaml
     steps:
       - name: Refuse fork pull requests and other events
         env:
@@ -144,25 +144,25 @@ jobs:
             jaws.yaml
             jwall-engineering-sites.yaml
           sparse-checkout-cone-mode: false
-      - name: Check out jwall-engineering-infra at this workflow's own commit
+      - name: Check out jaws at this workflow's own commit
         uses: actions/checkout@v7
         with:
-          repository: jwallace145/jwall-engineering-infra
+          repository: jwallace145/jaws
           ref: ${{ github.job_workflow_sha }}
-          path: .jwall-engineering-infra
+          path: .jaws-tool
           persist-credentials: false
       - uses: astral-sh/setup-uv@v7
-      - run: uv sync --locked --no-dev --project .jwall-engineering-infra
+      - run: uv sync --locked --no-dev --project .jaws-tool
       - name: Resolve the task role and its session length
         id: role
         env:
           PROJECT: ${{ inputs.project }}
           PROFILE: ${{ inputs.profile }}
           MAX_HOURS: ${{ inputs.max-hours }}
-          CONFIG: .jwall-engineering-infra/config.yaml
+          CONFIG: .jaws-tool/config.yaml
         run: |
           # The tool says which account this is (config.yaml: management, or `production`).
-          resolved=$(uv run --no-dev --project .jwall-engineering-infra jaws --config "$CONFIG" config env --project "$PROJECT")
+          resolved=$(uv run --no-dev --project .jaws-tool jaws --config "$CONFIG" config env --project "$PROJECT")
           account=$(sed -n 's/^account_id=//p' <<<"$resolved")
           organization=$(sed -n 's/^organization=//p' <<<"$resolved")
           [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
@@ -218,8 +218,8 @@ jobs:
           if [ -n "$PULL_REQUEST" ]; then flags+=(--pull-request "$PULL_REQUEST"); fi
           # exec: on cancel GitHub signals this step's process, which must be the
           # CLI itself (not bash or uv) so its handlers terminate the instance.
-          exec .jwall-engineering-infra/.venv/bin/jaws \
-            --config .jwall-engineering-infra/config.yaml "${options[@]}" \
+          exec .jaws-tool/.venv/bin/jaws \
+            --config .jaws-tool/config.yaml "${options[@]}" \
             task run --script "$SCRIPT" --ref "$REF" --out "$OUT" \
             --run-id "$RUN_ID" --task-id "$TASK_ID" "${flags[@]}" -- "${argv[@]}"
       - name: Upload the task's outputs

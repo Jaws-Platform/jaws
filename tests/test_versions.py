@@ -18,7 +18,7 @@ from tests.conftest import REPO_ROOT
 
 ANNOTATION = "# x-release-please-version"
 WORKFLOWS = ("site-plan.yml", "site-preview.yml", "site-deploy.yml")
-LOCAL_ACTION = "uses: ./.jwall-engineering-infra/.github/actions/jaws"
+LOCAL_ACTION = "uses: ./.jaws-tool/.github/actions/jaws"
 
 
 def _annotated_versions(path: Path) -> list[str]:

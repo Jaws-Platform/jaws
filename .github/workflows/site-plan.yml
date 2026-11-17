@@ -40,21 +40,21 @@ jobs:
       pull-requests: write # the sticky plan comment
     steps:
       - uses: actions/checkout@v7
-      - name: Check out jwall-engineering-infra at this workflow's own commit
+      - name: Check out jaws at this workflow's own commit
         uses: actions/checkout@v7
         with:
-          repository: jwallace145/jwall-engineering-infra
+          repository: jwallace145/jaws
           ref: ${{ github.job_workflow_sha }}
-          path: .jwall-engineering-infra
+          path: .jaws-tool
       - name: validate
-        uses: ./.jwall-engineering-infra/.github/actions/jaws
+        uses: ./.jaws-tool/.github/actions/jaws
         with:
           command: validate
           role-arn: ${{ inputs.plan-role-arn }}
           debug: ${{ inputs.debug }}
       - name: plan
         id: plan
-        uses: ./.jwall-engineering-infra/.github/actions/jaws
+        uses: ./.jaws-tool/.github/actions/jaws
         with:
           command: plan
           role-arn: ${{ inputs.plan-role-arn }}

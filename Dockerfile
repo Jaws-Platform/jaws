@@ -75,7 +75,7 @@ RUN for stack in site bot; do \
 FROM python:${PYTHON_VERSION}-alpine
 ARG TERRAFORM_VERSION
 LABEL org.opencontainers.image.title="jaws" \
-      org.opencontainers.image.source="https://github.com/jwallace145/jwall-engineering-infra" \
+      org.opencontainers.image.source="https://github.com/jwallace145/jaws" \
       org.opencontainers.image.description="Provisions jwall.engineering infrastructure (sites, bots, research projects and Databricks workspaces) with Terraform" \
       terraform.version="${TERRAFORM_VERSION}"
 # No git at run time: the library modules are already in the image. No pip

@@ -127,7 +127,7 @@ run "management_is_unchanged_by_default" {
       Organization = "jwall-engineering"
       Project      = "jwall-engineering-infra"
       Environment  = "prod"
-      Repository   = "jwallace145/jwall-engineering-infra"
+      Repository   = "jwallace145/jaws"
       ManagedBy    = "jwall-engineering-infra"
       Owner        = "jwallace145"
     })
@@ -217,7 +217,7 @@ run "production_starts_empty" {
       Organization = "jaws"
       Project      = "jaws"
       Environment  = "prod"
-      Repository   = "jwallace145/jwall-engineering-infra"
+      Repository   = "jwallace145/jaws"
       ManagedBy    = "jaws"
       Owner        = "jwallace145"
     })

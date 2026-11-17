@@ -77,7 +77,7 @@ def test_the_task_step_runs_the_pr_head_and_gets_no_github_token() -> None:
     assert '-- "${argv[@]}"' in step["run"]
     # GitHub signals the step's own process on cancel: exec the CLI so that is
     # the CLI itself, not bash or uv, and its handlers terminate the instance.
-    assert "exec .jwall-engineering-infra/.venv/bin/jaws" in step["run"]
+    assert "exec .jaws-tool/.venv/bin/jaws" in step["run"]
     env = _workflow()["jobs"]["task"]["env"]
     assert env["RUN_ID"] == "${{ github.run_id }}-${{ github.run_attempt }}"
     # Matrix legs already need distinct artifact names: they name the task too.
@@ -105,7 +105,7 @@ def test_upload_and_cleanup_always_run() -> None:
 def test_runs_the_cli_from_this_workflow_commit() -> None:
     text = WORKFLOW.read_text()
     assert "ref: ${{ github.job_workflow_sha }}" in text
-    assert "--config .jwall-engineering-infra/config.yaml" in text
+    assert "--config .jaws-tool/config.yaml" in text
 
 
 def test_outcome_and_interruption_are_outputs() -> None:

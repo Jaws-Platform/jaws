@@ -34,7 +34,7 @@ def check(config: SiteConfig, settings: Settings) -> list[str]:
         return [
             f"project {project!r} has no entry under projects in config.yaml; add its "
             "instance types, task profiles and datasets there (reviewed in "
-            "jwall-engineering-infra)"
+            "jaws)"
         ]
     problems: list[str] = []
     problems += _databricks_problems(config, approved)
@@ -112,7 +112,7 @@ def _databricks_problems(config: SiteConfig, approved: ProjectGuardrails) -> lis
         problems.append(
             f"project {project!r} has a databricks-workspace but no "
             f"projects.{project}.databricks entry in config.yaml; add its cost center, VPC "
-            "range, admins and compute policies there (reviewed in jwall-engineering-infra)"
+            "range, admins and compute policies there (reviewed in jaws)"
         )
         return problems
     admins = {admin.lower() for admin in approved.databricks.admins}

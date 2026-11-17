@@ -182,7 +182,7 @@ def test_container_release_runs_this_commit_and_pins_nothing() -> None:
     assert "@v0." not in text and "x-release-please-version" not in text
     assert 'bot reconcile "${version_args[@]}"' in text
     assert 'version_args=(--version "$VERSION")' in text
-    assert "--config .jwall-engineering-infra/config.yaml" in text
+    assert "--config .jaws-tool/config.yaml" in text
     release: dict[Any, Any] = _yaml(".github/workflows/container-release.yml")
     assert release["permissions"] == {}
     job = release["jobs"]["release"]

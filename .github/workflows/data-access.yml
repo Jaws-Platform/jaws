@@ -118,7 +118,7 @@ jobs:
           uv run jaws report plan-comment \
             --exit-code "$EXIT_CODE" \
             --plan data-access/plan.log \
-            --subject jwall-engineering-infra/data-access \
+            --subject jaws/data-access \
             --out data-access/plan-comment.md
           { echo; cat data-access/access-summary.md; } >> data-access/plan-comment.md
       - name: Mint a comment token for the Jaws app
