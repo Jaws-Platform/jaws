@@ -52,14 +52,15 @@ locals {
 
 module "infra_ci_plan" {
   source  = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version = "0.26.0"
+  version = "0.27.0"
 
-  project           = local.infra_ci.project
-  name_root         = local.context.organization
-  repository        = local.context.repository
-  owner_id          = local.github.owner_id
-  repository_id     = local.github.repository_id
-  oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
+  project            = local.infra_ci.project
+  name_root          = local.context.organization
+  repository         = local.context.repository
+  repository_aliases = local.context.repository_aliases
+  owner_id           = local.github.owner_id
+  repository_id      = local.github.repository_id
+  oidc_provider_arn  = data.aws_iam_openid_connect_provider.github.arn
 
   policies = ["tfstate/read", "foundation/read", "databricks/read"]
 
@@ -72,15 +73,16 @@ module "infra_ci_plan" {
 
 module "infra_ci_apply" {
   source  = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version = "0.26.0"
+  version = "0.27.0"
 
-  project           = local.infra_ci.project
-  name_root         = local.context.organization
-  repository        = local.context.repository
-  owner_id          = local.github.owner_id
-  repository_id     = local.github.repository_id
-  oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
-  environment       = "prod"
+  project            = local.infra_ci.project
+  name_root          = local.context.organization
+  repository         = local.context.repository
+  repository_aliases = local.context.repository_aliases
+  owner_id           = local.github.owner_id
+  repository_id      = local.github.repository_id
+  oidc_provider_arn  = data.aws_iam_openid_connect_provider.github.arn
+  environment        = "prod"
 
   policies = ["tfstate/write", "foundation/read", "foundation/manage", "ecr/push", "databricks/read"]
 
@@ -120,14 +122,15 @@ locals {
 
 module "data_access_ci_plan" {
   source  = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version = "0.26.0"
+  version = "0.27.0"
 
-  project           = local.data_access_ci.project
-  name_root         = local.context.organization
-  repository        = local.context.repository
-  owner_id          = local.github.owner_id
-  repository_id     = local.github.repository_id
-  oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
+  project            = local.data_access_ci.project
+  name_root          = local.context.organization
+  repository         = local.context.repository
+  repository_aliases = local.context.repository_aliases
+  owner_id           = local.github.owner_id
+  repository_id      = local.github.repository_id
+  oidc_provider_arn  = data.aws_iam_openid_connect_provider.github.arn
 
   policies = ["tfstate/read", "databricks/read"]
 
@@ -139,15 +142,16 @@ module "data_access_ci_plan" {
 
 module "data_access_ci_apply" {
   source  = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version = "0.26.0"
+  version = "0.27.0"
 
-  project           = local.data_access_ci.project
-  name_root         = local.context.organization
-  repository        = local.context.repository
-  owner_id          = local.github.owner_id
-  repository_id     = local.github.repository_id
-  oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
-  environment       = "prod"
+  project            = local.data_access_ci.project
+  name_root          = local.context.organization
+  repository         = local.context.repository
+  repository_aliases = local.context.repository_aliases
+  owner_id           = local.github.owner_id
+  repository_id      = local.github.repository_id
+  oidc_provider_arn  = data.aws_iam_openid_connect_provider.github.arn
+  environment        = "prod"
 
   policies = ["tfstate/write", "databricks/read"]
 

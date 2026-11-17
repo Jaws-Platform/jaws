@@ -105,7 +105,7 @@ def test_a_repository_outside_this_account_names_its_owner() -> None:
     assert "owner_id          = try(local.bots[each.key].owner_id, local.github_owner_id)" in task
     # The plan and apply roles are assumed from this repository, whoever owns the bot's.
     for name in ("bot_ci_plan", "bot_ci_apply"):
-        assert "owner_id          = local.github.owner_id" in _module(name)
+        assert re.search(r"^  owner_id += local\.github\.owner_id$", _module(name), re.M), name
     assert text.count("owner_id =") == len(registry())
 
 
