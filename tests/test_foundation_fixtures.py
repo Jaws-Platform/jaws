@@ -29,9 +29,12 @@ PRODUCTION_ADMIN = (
 
 
 def _bootstrapped(config: dict[str, Any]) -> dict[str, Any]:
-    """What `config.yaml` says once the owner has bootstrapped production."""
+    """What `config.yaml` says once the owner has bootstrapped production, before
+    any project moves: the projects are stated here, not read from the file, so
+    these fixtures survive each pull request that moves a project."""
     production = config["production"]
     production["bootstrapped"] = True
+    production["projects"] = {}
     production["overrides"]["aws"]["admin_role_arn"] = PRODUCTION_ADMIN
     production["overrides"]["dns"] = {"zone_id": "Z0PRODUCTIONZONE0000"}
     return config
