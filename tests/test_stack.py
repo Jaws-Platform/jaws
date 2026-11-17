@@ -12,13 +12,13 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from jwall_engineering_sites import stack as stack_module
-from jwall_engineering_sites.databricks_auth import terraform_env
-from jwall_engineering_sites.errors import ConfigError, RunError
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.settings import Settings
-from jwall_engineering_sites.site import Site, load_site_config
-from jwall_engineering_sites.stack import (
+from jaws import stack as stack_module
+from jaws.databricks_auth import terraform_env
+from jaws.errors import ConfigError, RunError
+from jaws.project import Project
+from jaws.settings import Settings
+from jaws.site import Site, load_site_config
+from jaws.stack import (
     PLAN_CHANGES,
     PLAN_NO_CHANGES,
     Terraform,
@@ -222,11 +222,11 @@ def test_site_project_renders_the_site_tfvars(site: Site, settings: Settings) ->
 
 
 def test_stack_dir_by_kind(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("JES_STACK_DIR", raising=False)
-    monkeypatch.setenv("JES_STACKS_ROOT", "/somewhere/stacks")
+    monkeypatch.delenv("JAWS_STACK_DIR", raising=False)
+    monkeypatch.setenv("JAWS_STACKS_ROOT", "/somewhere/stacks")
     assert default_stack_dir("bot") == Path("/somewhere/stacks/bot")
     assert default_stack_dir("site") == Path("/somewhere/stacks/site")
-    monkeypatch.setenv("JES_STACK_DIR", "/explicit")
+    monkeypatch.setenv("JAWS_STACK_DIR", "/explicit")
     assert default_stack_dir("bot") == Path("/explicit")
 
 
@@ -254,7 +254,7 @@ def _debug_file_logger(console_level: int) -> logging.Logger:
     [
         (logging.INFO, None, False),  # the debug log file alone must not keep it
         (logging.DEBUG, None, True),  # debug output on the console keeps it
-        (logging.INFO, "1", True),  # so does JES_KEEP_WORKDIR=1
+        (logging.INFO, "1", True),  # so does JAWS_KEEP_WORKDIR=1
     ],
 )
 def test_a_failed_run_keeps_its_workdir_only_when_asked(
@@ -267,9 +267,9 @@ def test_a_failed_run_keeps_its_workdir_only_when_asked(
     kept: bool,
 ) -> None:
     if keep_env is None:
-        monkeypatch.delenv("JES_KEEP_WORKDIR", raising=False)
+        monkeypatch.delenv("JAWS_KEEP_WORKDIR", raising=False)
     else:
-        monkeypatch.setenv("JES_KEEP_WORKDIR", keep_env)
+        monkeypatch.setenv("JAWS_KEEP_WORKDIR", keep_env)
     terraform = _terraform(guitar, settings, _debug_file_logger(console_level))
     workdir = terraform.prepare()
     terraform.cleanup(failed=True)
@@ -458,7 +458,7 @@ def test_failed_run_keeps_workdir_when_asked(
     fake_terraform: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("JES_KEEP_WORKDIR", "1")
+    monkeypatch.setenv("JAWS_KEEP_WORKDIR", "1")
     terraform = _terraform(guitar, settings, logger)
     workdir = terraform.prepare()
     terraform.cleanup(failed=True)
@@ -777,8 +777,8 @@ def test_research_uses_the_bot_stack(
     logger: logging.Logger,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("JES_STACK_DIR", raising=False)
-    monkeypatch.setenv("JES_STACKS_ROOT", "/somewhere/stacks")
+    monkeypatch.delenv("JAWS_STACK_DIR", raising=False)
+    monkeypatch.setenv("JAWS_STACKS_ROOT", "/somewhere/stacks")
     terraform = Terraform(research, settings, logger, plugin_dir=None)
     assert terraform.stack_dir == Path("/somewhere/stacks/bot")
 
@@ -945,7 +945,7 @@ def _registry(root: Path, entry: str) -> str:
 def _databricks_with_deployer(tmp_path: Path, settings: Settings) -> Project:
     raw = yaml.safe_load((FIXTURES / "bots" / "databricks-poc.yaml").read_text())
     raw["components"][0]["deployer"] = True
-    path = tmp_path / "jwall-engineering-sites.yaml"
+    path = tmp_path / "jaws.yaml"
     path.write_text(yaml.safe_dump(raw))
     return Project.from_config(load_site_config(path), settings)
 
@@ -957,7 +957,7 @@ def test_databricks_account_tfvars_deployer_comes_from_the_registry(
         'databricks-poc = { repository = "example-org/databricks-poc", '
         'repository_id = "1111", owner_id = "2222" }'
     )
-    monkeypatch.setenv("JES_INFRA_ROOT", _registry(tmp_path / "infra", entry))
+    monkeypatch.setenv("JAWS_INFRA_ROOT", _registry(tmp_path / "infra", entry))
     project = _databricks_with_deployer(tmp_path, settings)
     assert _databricks_account_tfvars(project, settings)["deployer"] == {
         "repository": "example-org/databricks-poc",
@@ -973,11 +973,11 @@ def test_a_deployer_without_registry_ids_is_refused(
     no_owner = (
         'databricks-poc = { repository = "example-org/databricks-poc", repository_id = "1111" }'
     )
-    monkeypatch.setenv("JES_INFRA_ROOT", _registry(tmp_path / "no-owner", no_owner))
+    monkeypatch.setenv("JAWS_INFRA_ROOT", _registry(tmp_path / "no-owner", no_owner))
     with pytest.raises(ConfigError, match=r"databricks-poc.*owner_id.*foundation/databricks\.tf"):
         _databricks_account_tfvars(project, settings)
     absent = 'other = { repository = "o/other", repository_id = "1", owner_id = "2" }'
-    monkeypatch.setenv("JES_INFRA_ROOT", _registry(tmp_path / "absent", absent))
+    monkeypatch.setenv("JAWS_INFRA_ROOT", _registry(tmp_path / "absent", absent))
     with pytest.raises(ConfigError, match=r"databricks-poc.*foundation/databricks\.tf"):
         _databricks_account_tfvars(project, settings)
 
@@ -991,7 +991,7 @@ def test_a_deployer_with_an_empty_or_non_numeric_id_is_refused(
         "text": 'repository_id = "abc", owner_id = "2222"',
     }.items():
         entry = f'databricks-poc = {{ repository = "example-org/databricks-poc", {ids} }}'
-        monkeypatch.setenv("JES_INFRA_ROOT", _registry(tmp_path / name, entry))
+        monkeypatch.setenv("JAWS_INFRA_ROOT", _registry(tmp_path / name, entry))
         with pytest.raises(ConfigError, match=r"databricks-poc.*foundation/databricks\.tf"):
             _databricks_account_tfvars(project, settings)
 
@@ -1003,7 +1003,7 @@ def test_a_deployer_whose_registry_repository_differs_is_refused(
         'databricks-poc = { repository = "someone-else/databricks-poc", '
         'repository_id = "1111", owner_id = "2222" }'
     )
-    monkeypatch.setenv("JES_INFRA_ROOT", _registry(tmp_path / "infra", entry))
+    monkeypatch.setenv("JAWS_INFRA_ROOT", _registry(tmp_path / "infra", entry))
     project = _databricks_with_deployer(tmp_path, settings)
     with pytest.raises(
         ConfigError, match=r"example-org/databricks-poc.*someone-else/databricks-poc"
@@ -1014,7 +1014,7 @@ def test_a_deployer_whose_registry_repository_differs_is_refused(
 def test_without_a_deployer_the_registry_is_not_read(
     databricks: Project, settings: Settings, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setenv("JES_INFRA_ROOT", str(tmp_path / "nowhere"))
+    monkeypatch.setenv("JAWS_INFRA_ROOT", str(tmp_path / "nowhere"))
     assert _databricks_account_tfvars(databricks, settings)["deployer"] is None
 
 
@@ -1255,8 +1255,8 @@ def test_existing_kinds_ignore_the_new_arguments(
 def test_per_stack_state_keys(
     databricks: Project, settings: Settings, logger: logging.Logger, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("JES_STACK_DIR", raising=False)
-    monkeypatch.setenv("JES_STACKS_ROOT", "/somewhere/stacks")
+    monkeypatch.delenv("JAWS_STACK_DIR", raising=False)
+    monkeypatch.setenv("JAWS_STACKS_ROOT", "/somewhere/stacks")
     account = Terraform(databricks, settings, logger, plugin_dir=None, stack="account")
     workspace = Terraform(
         databricks,
@@ -1380,7 +1380,7 @@ def _registry_project(name: str, settings: Settings) -> Project:
 
 
 def _access(consumer_reads: bool = True) -> Any:
-    from jwall_engineering_sites.access import compute_access, load_registry
+    from jaws.access import compute_access, load_registry
 
     consumer = load_site_config(FIXTURES / "registry" / "braveheart-databricks.yaml")
     if not consumer_reads:

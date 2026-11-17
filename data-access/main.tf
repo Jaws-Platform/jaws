@@ -1,7 +1,7 @@
 # The reconcile: binds and grants each agreed handshake on every dataset the
 # foundation onboarded (datasets/). An edge exists only while the producer
 # lists the consumer under the dataset's `consumers` and the consumer lists the
-# dataset under its workspace's `reads`; `jwall-engineering-sites access
+# dataset under its workspace's `reads`; `jaws access
 # render` derives the variables from datasets/ and every project's file. This
 # stack creates bindings and grants only: the roles, credentials and locations
 # are the foundation's, and each bucket policy is its producer's.

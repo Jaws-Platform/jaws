@@ -10,8 +10,8 @@ import pytest
 from botocore.exceptions import DataNotFoundError, UnknownServiceError
 from moto import mock_aws
 
-from jwall_engineering_sites.checks import databricks_live  # noqa: F401  (registers the checks)
-from jwall_engineering_sites.checks.framework import (
+from jaws.checks import databricks_live  # noqa: F401  (registers the checks)
+from jaws.checks.framework import (
     CheckContext,
     CheckResult,
     Outcome,
@@ -19,9 +19,9 @@ from jwall_engineering_sites.checks.framework import (
     Stage,
     registered,
 )
-from jwall_engineering_sites.databricks_names import derived_names
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.settings import Settings
+from jaws.databricks_names import derived_names
+from jaws.project import Project
+from jaws.settings import Settings
 from tests.checks.fakes import (
     FakeAccount,
     FakeDatabricks,
@@ -282,7 +282,7 @@ def test_live005_rejects_a_placeholder_user_in_the_project_file(
     result = _run("DBX-LIVE-005", project, s, None, None)
     assert result.outcome is Outcome.FAIL
     assert "user@example.com" in (result.remediation or "")
-    assert "jwall-engineering-sites.yaml" in (result.remediation or "")
+    assert "jaws.yaml" in (result.remediation or "")
 
 
 def test_live005_rejects_placeholder_metastore_admins(databricks: Project, live: Settings) -> None:
@@ -576,7 +576,7 @@ def test_live003_remediation_says_group_admin_is_not_detected(
 def test_live001_without_a_session_is_not_a_missing_secret(
     databricks: Project, live: Settings
 ) -> None:
-    from jwall_engineering_sites.errors import PreflightError
+    from jaws.errors import PreflightError
 
     with pytest.raises(PreflightError, match="AWS session"):
         _run("DBX-LIVE-001", databricks, live, None)

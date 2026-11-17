@@ -7,7 +7,7 @@ from typing import Any
 
 import yaml
 
-from jwall_engineering_sites.settings import ProjectGuardrails
+from jaws.settings import ProjectGuardrails
 from tests.conftest import FIXTURES, MATH_PROVER_GUARDRAILS, REPO_ROOT
 
 

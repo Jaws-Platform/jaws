@@ -1,7 +1,7 @@
 # Bot projects: the `container-image` and `lichess-bot` kinds
 
 A repository that publishes a chess engine as GitHub releases can run it
-permanently as a Lichess bot with one file, `jwall-engineering-sites.yaml`,
+permanently as a Lichess bot with one file, `jaws.yaml`,
 plus its existing lichess-bot config and a short release workflow. The tool
 builds an image from each release, pushes it to ECR under the release tag,
 and rolls the bot to it on one EC2 instance without ever interrupting a game.
@@ -256,8 +256,8 @@ the account's default `aws/ssm` key. It is never in a file, a log, Terraform
 state or an image.
 
 ```sh
-jwall-engineering-sites bot secrets set LICHESS_TOKEN    # prompts, no echo
-jwall-engineering-sites bot secrets check LICHESS_TOKEN  # exit 0 if set
+jaws bot secrets set LICHESS_TOKEN    # prompts, no echo
+jaws bot secrets check LICHESS_TOKEN  # exit 0 if set
 ```
 
 Run these from your own shell with admin credentials. Only the instance role
@@ -268,7 +268,7 @@ can read the value. The release role can't: it writes only `.../bot/*`.
 There is no SSH and no open port. Use Session Manager:
 
 ```sh
-aws ssm start-session --target "$(jwall-engineering-sites bot status | awk '/^instance:/ {print $2}')"
+aws ssm start-session --target "$(jaws bot status | awk '/^instance:/ {print $2}')"
 sudo journalctl -u 'container-reconcile*' -u container-records-sync --since today
 sudo docker ps; sudo docker logs --tail 100 app
 ```
@@ -278,7 +278,7 @@ sudo docker ps; sudo docker logs --tail 100 app
 The commands check that they run as the role in the table. In CI the
 workflows assume it. From your own shell with admin credentials (the
 `jwall-admin` profile, [owner access](owner-access.md)), either
-assume the role, or set `JES_SKIP_ROLE_CHECK=1` for read-only commands such
+assume the role, or set `JAWS_SKIP_ROLE_CHECK=1` for read-only commands such
 as `bot status` and `bot logs`, and for `bot start` and `bot stop`.
 `bot secrets` needs no role.
 
@@ -389,8 +389,8 @@ the time. A change takes effect at the next **Bot apply**.
 From your shell, with admin credentials ([owner access](owner-access.md)):
 
 ```sh
-JES_SKIP_ROLE_CHECK=1 jwall-engineering-sites bot start
-JES_SKIP_ROLE_CHECK=1 jwall-engineering-sites bot stop --wait
+JAWS_SKIP_ROLE_CHECK=1 jaws bot start
+JAWS_SKIP_ROLE_CHECK=1 jaws bot stop --wait
 ```
 
 **Saving.** 12 hours a day halves the instance's hours: about $19.50 a month
@@ -533,4 +533,4 @@ from `aws.account_id` and `context.organization` in this tool's
 6. **Ship the newest release.** Publish a new release, which runs the caller
    workflow. Or, for a release published before the workflow existed, run
    `bot reconcile --version <tag>` from your shell with admin credentials
-   and `JES_SKIP_ROLE_CHECK=1`; this needs Docker.
+   and `JAWS_SKIP_ROLE_CHECK=1`; this needs Docker.

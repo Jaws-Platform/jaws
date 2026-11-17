@@ -9,17 +9,17 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from jwall_engineering_sites import guardrails
-from jwall_engineering_sites.components import DatasetAccess
-from jwall_engineering_sites.errors import ConfigError
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.settings import (
+from jaws import guardrails
+from jaws.components import DatasetAccess
+from jaws.errors import ConfigError
+from jaws.project import Project
+from jaws.settings import (
     DatasetRetention,
     ProjectGuardrails,
     Settings,
     TaskLimits,
 )
-from jwall_engineering_sites.site import SiteConfig, load_site_config
+from jaws.site import SiteConfig, load_site_config
 from tests.conftest import FIXTURES, with_guardrails
 
 BOT_FILE = FIXTURES / "bots" / "braveheart.yaml"

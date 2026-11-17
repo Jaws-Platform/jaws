@@ -34,7 +34,7 @@ on:
   workflow_call:
     inputs:
       project:
-        description: The project name in jwall-engineering-sites.yaml. The release role is derived from it.
+        description: The project name in jaws.yaml. The release role is derived from it.
         required: true
         type: string
       version:
@@ -106,21 +106,22 @@ jobs:
           role-to-assume: ${{ steps.role.outputs.arn }}
           aws-region: us-east-1
           role-session-name: container-release-${{ github.run_id }}-${{ github.run_attempt }}
-      - name: jwall-engineering-sites bot reconcile
+      - name: jaws bot reconcile
         env:
           GITHUB_TOKEN: ${{ github.token }} # release listing (rate limits)
-          JES_HEAD_SHA: ${{ github.sha }}
+          JAWS_HEAD_SHA: ${{ github.sha }}
           DEBUG: ${{ inputs.debug }}
         run: |
           debug_flag=""
           if [ "$DEBUG" = "true" ]; then debug_flag="--debug"; fi
           # A pinned bot's release tag is the bot repository's, not an engine
           # release: let the project file's pin decide, unless a version was given.
-          track=$(yq -r '.components[] | select(.kind == "lichess-bot") | .track // "latest-release"' jwall-engineering-sites.yaml)
+          file=jaws.yaml; [ -f "$file" ] || file=jwall-engineering-sites.yaml # its name before the rename
+          track=$(yq -r '.components[] | select(.kind == "lichess-bot") | .track // "latest-release"' "$file")
           version_args=(--version "$VERSION")
           if [ "$track" = "pinned" ] && [ -z "$VERSION_INPUT" ]; then version_args=(); fi
           # shellcheck disable=SC2086
-          uv run --no-dev --project .jwall-engineering-infra jwall-engineering-sites \
+          uv run --no-dev --project .jwall-engineering-infra jaws \
             --config .jwall-engineering-infra/config.yaml $debug_flag \
             bot reconcile "${version_args[@]}"
       - name: Upload the run log and artifacts
@@ -128,6 +129,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: container-release-${{ github.run_attempt }}
-          path: .jwall-engineering-sites/
+          path: .jaws/
           retention-days: 14
           if-no-files-found: ignore

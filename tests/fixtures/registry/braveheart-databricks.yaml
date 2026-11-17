@@ -1,4 +1,4 @@
-# jwall-engineering-sites project file: a Databricks workspace for Braveheart.
+# jaws project file: a Databricks workspace for Braveheart.
 # The VPC range, cost center, compute policies it may use and the workspace
 # admins are set centrally (projects.braveheart-databricks.databricks in config.yaml).
 # Fields and behaviour:

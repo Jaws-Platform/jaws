@@ -35,7 +35,7 @@ permissions: {}
 
 jobs:
   deploy:
-    name: jwall-engineering-sites release
+    name: jaws release
     runs-on: ubuntu-latest
     environment:
       name: prod
@@ -56,11 +56,11 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.artifact }}
-          path: .jwall-engineering-sites-dist
+          path: .jaws-dist
       - name: release
-        uses: ./.jwall-engineering-infra/.github/actions/jwall-engineering-sites
+        uses: ./.jwall-engineering-infra/.github/actions/jaws
         with:
-          command: release --dist .jwall-engineering-sites-dist
+          command: release --dist .jaws-dist
           role-arn: ${{ inputs.apply-role-arn }}
           head-sha: ${{ github.sha }}
           debug: ${{ inputs.debug }}
@@ -68,7 +68,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: jwall-engineering-sites-${{ github.job }}-${{ github.run_attempt }}
-          path: .jwall-engineering-sites/
+          name: jaws-${{ github.job }}-${{ github.run_attempt }}
+          path: .jaws/
           retention-days: 14
           if-no-files-found: ignore

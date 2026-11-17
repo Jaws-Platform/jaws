@@ -9,7 +9,7 @@ example `jwall-engineering-ds-braveheart-selfplay-positions`).
 while both of these hold, a handshake:
 
 - the producing project lists the workspace's project under the dataset's
-  `consumers` (its own `jwall-engineering-sites.yaml`);
+  `consumers` (its own `jaws.yaml`);
 - the consuming project lists the dataset under its workspace's `reads`, with
   a `purpose`.
 

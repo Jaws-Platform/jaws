@@ -1,4 +1,4 @@
-"""The `jwall-engineering-sites` command line.
+"""The `jaws` command line.
 
 Every command loads config.yaml (baked into the image) and the site file
 (from the working directory), derives the rest, runs its preflight checks and
@@ -56,6 +56,7 @@ from .checks.framework import (
 from .components import CPU_PROFILE, TaskRunner
 from .errors import ConfigError, PreflightError, RunError, SitesError
 from .events import EventLog, base_fields
+from .legacy import adopt_legacy_environment, announce, notices, resolve_project_file
 from .log import annotate_error, artifacts_dir, phase, setup_logging
 from .project import Project, Role
 from .settings import (
@@ -68,8 +69,8 @@ from .settings import (
 from .site import DEV_PREFIX, ENVIRONMENT, PROD_PREFIX, SITE_FILE, Site, load_site_config
 
 app = typer.Typer(
-    name="jwall-engineering-sites",
-    help="Provisions and publishes a jwall.engineering site from jwall-engineering-sites.yaml.",
+    name="jaws",
+    help="Provisions and publishes a jwall.engineering site from jaws.yaml.",
     no_args_is_help=True,
     add_completion=False,
     rich_markup_mode=None,
@@ -116,12 +117,12 @@ app.add_typer(databricks_app, name="databricks")
 app.add_typer(access_app, name="access")
 databricks_app.add_typer(credentials_app, name="credentials")
 
-LOG_FILE = "jwall-engineering-sites.log"
+LOG_FILE = "jaws.log"
 
 
 def tool_version() -> str:
     try:
-        return package_version("jwall-engineering-sites")
+        return package_version("jaws")
     except PackageNotFoundError:
         return "0.0.0+local"
 
@@ -173,6 +174,8 @@ def main(
     debug: Annotated[bool, typer.Option("--debug", help="Console log at debug level.")] = False,
 ) -> None:
     try:
+        adopted = adopt_legacy_environment()
+        file = resolve_project_file(file)
         artifacts = artifacts_dir()
         settings = load_settings(config)
     except SitesError as exc:
@@ -181,9 +184,8 @@ def main(
         raise typer.Exit(exc.exit_code) from exc
     level = "debug" if debug else settings.tool.log_level
     logger = setup_logging(level, settings.tool.log_format, artifacts / LOG_FILE)
-    logger.debug(
-        "jwall-engineering-sites %s, config %s", tool_version(), config or default_config_path()
-    )
+    announce(notices(file, adopted))
+    logger.debug("jaws %s, config %s", tool_version(), config or default_config_path())
     ctx.obj = Run(settings=settings, site_file=file, artifacts=artifacts, logger=logger)
 
 
@@ -693,7 +695,7 @@ def _publish(run: Run, outputs: dict[str, object], environment: str, dist: Path)
         invalidation = aws.invalidate_distribution(
             session.client("cloudfront"),
             str(distribution_id),
-            reference=f"jwall-engineering-sites-{github.head_sha() or 'local'}-{environment}",
+            reference=f"jaws-{github.head_sha() or 'local'}-{environment}",
         )
         run.logger.info("invalidation %s created on %s", invalidation, distribution_id)
     url = str(
@@ -1985,7 +1987,7 @@ def databricks_doctor(
                                 "Databricks credential loadable",
                                 exc,
                                 "The live, between and after checks did not run. Run "
-                                "`jwall-engineering-sites databricks credentials set` as the "
+                                "`jaws databricks credentials set` as the "
                                 "owner, then `databricks credentials check`.",
                                 "credentials",
                             )
@@ -2008,7 +2010,7 @@ def databricks_doctor(
                                 exc,
                                 "The between and after checks did not run. Check that the "
                                 "CI role (ci-plan or ci-apply) can read the state bucket; run "
-                                "`jwall-engineering-sites plan` to see Terraform's own error.",
+                                "`jaws plan` to see Terraform's own error.",
                                 "account-state",
                             )
                         )

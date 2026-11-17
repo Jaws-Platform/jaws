@@ -7,7 +7,7 @@ from typing import Any
 
 import yaml
 
-from jwall_engineering_sites.settings import Settings, load_settings
+from jaws.settings import Settings, load_settings
 from tests.conftest import REPO_ROOT
 from tests.stack_plans.render import cases
 

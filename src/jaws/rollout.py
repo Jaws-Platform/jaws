@@ -115,7 +115,7 @@ def send_reconcile(ssm: SSMClient, instance_id: str, restart: bool = False) -> s
             InstanceIds=[instance_id],
             DocumentName="AWS-RunShellScript",
             Parameters={"commands": [command], "executionTimeout": ["120"]},
-            Comment="jwall-engineering-sites deploy",
+            Comment="jaws deploy",
         )
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "")

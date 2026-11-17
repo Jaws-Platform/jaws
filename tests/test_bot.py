@@ -9,9 +9,9 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from jwall_engineering_sites import bot as botlib
-from jwall_engineering_sites.errors import PreflightError
-from jwall_engineering_sites.project import Project
+from jaws import bot as botlib
+from jaws.errors import PreflightError
+from jaws.project import Project
 
 REGION = "us-east-1"
 

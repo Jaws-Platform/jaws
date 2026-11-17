@@ -6,8 +6,8 @@ from typing import Any
 import pytest
 import yaml
 
-from jwall_engineering_sites.errors import ConfigError
-from jwall_engineering_sites.settings import (
+from jaws.errors import ConfigError
+from jaws.settings import (
     ProjectGuardrails,
     Settings,
     load_settings,
@@ -74,7 +74,7 @@ def test_bad_duration_is_a_config_error(tmp_path: Path) -> None:
 def test_env_overrides_only_logging(tmp_path: Path) -> None:
     settings = load_settings(
         FIXTURES / "config.yaml",
-        environ={"JES_LOG_LEVEL": "debug", "JES_LOG_FORMAT": "json", "JES_STATE_BUCKET": "evil"},
+        environ={"JAWS_LOG_LEVEL": "debug", "JAWS_LOG_FORMAT": "json", "JAWS_STATE_BUCKET": "evil"},
     )
     assert settings.tool.log_level == "debug"
     assert settings.tool.log_format == "json"
@@ -353,9 +353,7 @@ def test_databricks_section_parses(settings: Settings) -> None:
 def test_users_in_config_yaml_are_refused_with_the_migration_message(tmp_path: Path) -> None:
     raw = _databricks_raw()
     raw["projects"]["databricks-poc"]["databricks"]["users"] = ["a@corp.test"]
-    with pytest.raises(
-        ConfigError, match=r"own jwall-engineering-sites\.yaml.*databricks-workspace"
-    ):
+    with pytest.raises(ConfigError, match=r"own jaws\.yaml.*databricks-workspace"):
         _load_raw(tmp_path, raw)
 
 

@@ -14,16 +14,16 @@ from botocore.exceptions import (
 from databricks.sdk import AccountClient, WorkspaceClient
 from moto import mock_aws
 
-from jwall_engineering_sites.checks.framework import DatabricksApi
-from jwall_engineering_sites.databricks_auth import (
+from jaws.checks.framework import DatabricksApi
+from jaws.databricks_auth import (
     ACCOUNTS_HOST,
     RUNBOOK,
     DatabricksClients,
     load_secret,
     terraform_env,
 )
-from jwall_engineering_sites.errors import ConfigError, PreflightError
-from jwall_engineering_sites.settings import Settings
+from jaws.errors import ConfigError, PreflightError
+from jaws.settings import Settings
 
 SENTINEL = "S3CR3T-SENTINEL"
 PARAMETER = "/jwall-engineering/databricks/client-secret"

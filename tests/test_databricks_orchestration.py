@@ -21,19 +21,19 @@ import yaml
 from moto import mock_aws
 from typer.testing import CliRunner
 
-from jwall_engineering_sites import cli, databricks_auth, databricks_destroy
-from jwall_engineering_sites.checks import framework
-from jwall_engineering_sites.checks.framework import (
+from jaws import cli, databricks_auth, databricks_destroy
+from jaws.checks import framework
+from jaws.checks.framework import (
     CheckContext,
     CheckResult,
     Outcome,
     Severity,
     Stage,
 )
-from jwall_engineering_sites.databricks import DatabricksDeployment, workspace_plan_stale
-from jwall_engineering_sites.databricks_names import derived_names
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.site import load_site_config
+from jaws.databricks import DatabricksDeployment, workspace_plan_stale
+from jaws.databricks_names import derived_names
+from jaws.project import Project
+from jaws.site import load_site_config
 
 from .conftest import FIXTURES
 
@@ -78,7 +78,7 @@ class FakeClients:
 
 
 def _as_role(arn: str) -> AbstractContextManager[Any]:
-    return patch("jwall_engineering_sites.aws.caller_identity", return_value=("650503560686", arn))
+    return patch("jaws.aws.caller_identity", return_value=("650503560686", arn))
 
 
 def _outputs_file(path: Path, values: dict[str, Any]) -> Path:
@@ -116,7 +116,7 @@ def loaded() -> Iterator[MagicMock]:
                 f"DBX-TST-00{number}", f"{stage.value} check", stage, frozenset({"databricks"})
             )(make(stage, number))
         with (
-            patch("jwall_engineering_sites.checks.load_builtin_checks") as load,
+            patch("jaws.checks.load_builtin_checks") as load,
             patch.object(databricks_auth, "DatabricksClients", FakeClients),
         ):
             yield load
@@ -175,11 +175,11 @@ def _steps(events: list[dict[str, Any]]) -> list[tuple[str, str]]:
 
 
 def _artifact(root: Path, name: str) -> str:
-    return (root / ".jwall-engineering-sites" / name).read_text()
+    return (root / ".jaws" / name).read_text()
 
 
 def _project() -> Project:
-    from jwall_engineering_sites.settings import load_settings
+    from jaws.settings import load_settings
 
     settings = load_settings(FIXTURES / "config.yaml", environ={})
     return Project.from_config(
@@ -475,7 +475,7 @@ def test_secret_never_in_outputs_or_comment(
     # Terraform did get it, and printed it.
     assert SENTINEL in (tmp_path / "terraform-env").read_text()
     assert "provider debug: token request for ***" in planned.output
-    artifacts = dbx / ".jwall-engineering-sites"
+    artifacts = dbx / ".jaws"
     texts = {
         "plan console": planned.output,
         "apply console": applied.output,
@@ -484,7 +484,7 @@ def test_secret_never_in_outputs_or_comment(
         **{p.name: p.read_text() for p in artifacts.rglob("*") if p.is_file()},
         **{p.name: p.read_text() for p in (tmp_path / "tfvars").iterdir()},
     }
-    assert "jwall-engineering-sites.log" in texts and "plan-comment.md" in texts
+    assert "jaws.log" in texts and "plan-comment.md" in texts
     leaks = [name for name, text in texts.items() if SENTINEL in text]
     assert leaks == []
     assert "invalid_client" in texts["failure.md"]  # the error itself survives, masked
@@ -493,7 +493,7 @@ def test_secret_never_in_outputs_or_comment(
 def test_redaction_filter_is_removed_afterwards(dbx: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     with _as_role(PLAN_ROLE):
         runner.invoke(cli.app, ["plan"])
-    assert logging.getLogger("jwall-engineering-sites").filters == []
+    assert logging.getLogger("jaws").filters == []
 
 
 # -- destroy --------------------------------------------------------------------
@@ -832,7 +832,7 @@ def test_empty_bucket_reports_per_object_errors(logger: logging.Logger) -> None:
         def delete_objects(self, Bucket: str, Delete: dict[str, Any]) -> dict[str, Any]:  # noqa: N803
             return {"Errors": [{"Key": "k1", "Code": "AccessDenied", "Message": "no"}]}
 
-    from jwall_engineering_sites.errors import RunError
+    from jaws.errors import RunError
 
     with pytest.raises(RunError, match="AccessDenied"):
         databricks_destroy.empty_bucket(Failing(3), "b", logger)
@@ -943,7 +943,7 @@ def test_preflight_logs_both_state_keys(dbx: Path, tmp_path: Path) -> None:
     with _as_role(APPLY_ROLE):
         result = runner.invoke(cli.app, ["apply"])
     assert result.exit_code == 0, result.output
-    log = _artifact(dbx, "jwall-engineering-sites.log")
+    log = _artifact(dbx, "jaws.log")
     assert (
         "databricks databricks-poc: state "
         "project=databricks-poc/env=prod/databricks-poc-prod-account.tfstate and "

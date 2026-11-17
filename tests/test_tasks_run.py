@@ -19,9 +19,9 @@ import pytest
 from botocore.exceptions import ClientError, EndpointConnectionError
 from moto import mock_aws
 
-from jwall_engineering_sites import tasks
-from jwall_engineering_sites.errors import ConfigError, PreflightError, RunError
-from jwall_engineering_sites.project import Project
+from jaws import tasks
+from jaws.errors import ConfigError, PreflightError, RunError
+from jaws.project import Project
 from tests.test_tasks_launch import _gpu_spec, _spec
 
 LOG = logging.getLogger("test")

@@ -10,6 +10,6 @@ tests
 foundation
 owner-access
 docs
-.jwall-engineering-sites
+.jaws
 __pycache__
 *.pyc

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from jwall_engineering_sites import github
+from jaws import github
 
 
 def test_commit_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -22,7 +22,7 @@ def test_provenance_reads_the_environment(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("GITHUB_SERVER_URL", "https://github.com")
     monkeypatch.setenv("GITHUB_REPOSITORY", "o/r")
     monkeypatch.setenv("GITHUB_RUN_ID", "7")
-    monkeypatch.setenv("JES_HEAD_SHA", "abc")
+    monkeypatch.setenv("JAWS_HEAD_SHA", "abc")
     provenance = github.provenance("1.2.3")
     assert provenance.version == "1.2.3"
     assert provenance.sha == "abc"

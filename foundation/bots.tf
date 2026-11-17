@@ -1,4 +1,4 @@
-# The registry of bot projects (jwall-engineering-sites.yaml with
+# The registry of bot projects (jaws.yaml with
 # `components`: a container image and a Lichess bot). Adding a bot means
 # adding a line here; each entry gets three CI roles, and a fourth with a
 # task runner (config.yaml, projects.*.instance_types):

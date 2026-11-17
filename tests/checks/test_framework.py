@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from jwall_engineering_sites.checks.framework import (
+from jaws.checks.framework import (
     CheckContext,
     CheckResult,
     Outcome,
@@ -18,10 +18,10 @@ from jwall_engineering_sites.checks.framework import (
     registered,
     run_stage,
 )
-from jwall_engineering_sites.checks.render import console_table, markdown_table, write_json
-from jwall_engineering_sites.errors import PreflightError
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.settings import Settings
+from jaws.checks.render import console_table, markdown_table, write_json
+from jaws.errors import PreflightError
+from jaws.project import Project
+from jaws.settings import Settings
 
 ALL = frozenset({"site", "bot", "research", "databricks"})
 
@@ -94,7 +94,7 @@ def test_isolated_registry_does_not_leak() -> None:
     def fn(ctx: CheckContext) -> Iterable[CheckResult]:
         return []
 
-    from jwall_engineering_sites.checks.framework import isolated_registry
+    from jaws.checks.framework import isolated_registry
 
     with isolated_registry():
         assert registered(Stage.CONFIG, "databricks") == []
@@ -206,7 +206,7 @@ def test_json_round_trip(tmp_path: Path) -> None:
         _result(facts={"a": "1"}),
         _result("DBX-CFG-002", Outcome.SKIP, Severity.WARNING, None, None),
     ]
-    path = tmp_path / ".jwall-engineering-sites" / "checks.json"
+    path = tmp_path / ".jaws" / "checks.json"
     write_json(results, path)
     data = json.loads(path.read_text())
     assert [

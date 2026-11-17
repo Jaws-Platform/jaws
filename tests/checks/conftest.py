@@ -4,10 +4,10 @@ from collections.abc import Iterator
 
 import pytest
 
-from jwall_engineering_sites.checks.framework import isolated_registry
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.settings import Settings
-from jwall_engineering_sites.site import load_site_config
+from jaws.checks.framework import isolated_registry
+from jaws.project import Project
+from jaws.settings import Settings
+from jaws.site import load_site_config
 
 
 @pytest.fixture(autouse=True)

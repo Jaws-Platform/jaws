@@ -363,7 +363,7 @@ jobs:
           context: .
           push: false
           load: true
-          tags: jwall-engineering-sites:ci
+          tags: jaws:ci
           build-args: TERRAFORM_VERSION=${{ steps.config.outputs.terraform_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -373,13 +373,13 @@ jobs:
           cp -r tests/fixtures/sites "$RUNNER_TEMP/site"
           docker run --rm --network none \
             -v "$RUNNER_TEMP/site:/work" \
-            jwall-engineering-sites:ci --file guitar-knowledge-base.yaml validate
-          test -s "$RUNNER_TEMP/site/.jwall-engineering-sites/jwall-engineering-sites.log"
+            jaws:ci --file guitar-knowledge-base.yaml validate
+          test -s "$RUNNER_TEMP/site/.jaws/jaws.log"
       - name: Smoke test (the image's Terraform matches config.yaml)
-        run: docker run --rm --network none --entrypoint terraform jwall-engineering-sites:ci version
+        run: docker run --rm --network none --entrypoint terraform jaws:ci version
       - name: Smoke test (the pruned botocore still serves the clients the tool uses)
         run: |
-          docker run --rm --network none --entrypoint python jwall-engineering-sites:ci -c '
+          docker run --rm --network none --entrypoint python jaws:ci -c '
           import boto3
           for service in ("s3", "sts", "cloudfront", "ssm", "ec2", "logs", "ecr", "pricing"):
               boto3.session.Session(region_name="us-east-1").client(service)
@@ -388,8 +388,8 @@ jobs:
         env:
           MAX_COMPRESSED_MB: "250" # what a consumer downloads; the AWS provider archive alone is ~130 MB
         run: |
-          uncompressed=$(docker image inspect jwall-engineering-sites:ci --format '{{.Size}}')
-          compressed=$(docker save jwall-engineering-sites:ci | gzip -1 | wc -c)
+          uncompressed=$(docker image inspect jaws:ci --format '{{.Size}}')
+          compressed=$(docker save jaws:ci | gzip -1 | wc -c)
           u_mb=$((uncompressed / 1024 / 1024)); c_mb=$((compressed / 1024 / 1024))
           printf '## Image size\n\n- compressed (network): %s MB (budget %s MB)\n- uncompressed: %s MB\n' "$c_mb" "$MAX_COMPRESSED_MB" "$u_mb" >> "$GITHUB_STEP_SUMMARY"
           echo "compressed ${c_mb} MB, uncompressed ${u_mb} MB"
@@ -447,15 +447,15 @@ jobs:
         if: always() && steps.plan.outcome != 'skipped'
         working-directory: .
         env:
-          JES_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          JAWS_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           uv sync --locked
-          uv run jwall-engineering-sites report plan-comment \
+          uv run jaws report plan-comment \
             --exit-code "${{ steps.plan.outputs.exitcode }}" \
             --plan foundation/plan.log \
             --subject jwall-engineering-infra/foundation \
             --out foundation/plan-comment.md
-      - name: Mint a comment token for the JWall Engineering Infra app
+      - name: Mint a comment token for the Jaws app
         id: app-token
         if: always() && steps.plan.outcome != 'skipped' && vars.JES_APP_CLIENT_ID != ''
         continue-on-error: true # a misconfigured app falls back to github-actions
@@ -499,6 +499,7 @@ jobs:
           repository: ${{ matrix.repository }}
           path: .consumer
           sparse-checkout: |
+            jaws.yaml
             jwall-engineering-sites.yaml
             lichess
           sparse-checkout-cone-mode: false
@@ -527,7 +528,8 @@ jobs:
         env:
           PROJECT: ${{ matrix.project }}
         run: |
-          named=$(yq -r .project .consumer/jwall-engineering-sites.yaml)
+          file=.consumer/jaws.yaml; [ -f "$file" ] || file=.consumer/jwall-engineering-sites.yaml # its name before the rename
+          named=$(yq -r .project "$file")
           if [ "$named" = "$PROJECT" ]; then
             echo "matches=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -558,16 +560,16 @@ jobs:
             echo
             echo "$ROLE cannot be assumed yet. It is created by the foundation apply of the release that registers the bot."
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: jwall-engineering-sites plan
+      - name: jaws plan
         if: steps.assume.outcome == 'success'
         env:
-          JES_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          JES_STACKS_ROOT: ${{ github.workspace }}/stacks
+          JAWS_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          JAWS_STACKS_ROOT: ${{ github.workspace }}/stacks
           # The CLI reads each counterpart's project file from GitHub (the
           # consumers of a project's datasets, or the producers a workspace reads).
           GH_TOKEN: ${{ github.token }}
-        run: uv run jwall-engineering-sites --file .consumer/jwall-engineering-sites.yaml plan
-      - name: Mint a comment token for the JWall Engineering Infra app
+        run: uv run jaws --file .consumer/jaws.yaml plan
+      - name: Mint a comment token for the Jaws app
         id: app-token
         if: always() && vars.JES_APP_CLIENT_ID != ''
         continue-on-error: true
@@ -576,18 +578,18 @@ jobs:
           client-id: ${{ vars.JES_APP_CLIENT_ID }}
           private-key: ${{ secrets.JES_APP_PRIVATE_KEY }}
       - name: Post plan comment (updated on each push)
-        if: always() && hashFiles('.jwall-engineering-sites/plan-comment.md') != ''
+        if: always() && hashFiles('.jaws/plan-comment.md') != ''
         uses: marocchino/sticky-pull-request-comment@v3
         with:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           header: bot-plan-${{ matrix.project }}
-          path: .jwall-engineering-sites/plan-comment.md
+          path: .jaws/plan-comment.md
       - name: Upload the run log and artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: bot-plan-${{ matrix.project }}-${{ github.run_attempt }}
-          path: .jwall-engineering-sites/
+          path: .jaws/
           retention-days: 14
           if-no-files-found: ignore
 
@@ -642,6 +644,7 @@ jobs:
           repository: ${{ matrix.repository }}
           path: .consumer
           sparse-checkout: |
+            jaws.yaml
             jwall-engineering-sites.yaml
           sparse-checkout-cone-mode: false
       - uses: hashicorp/setup-terraform@v4
@@ -681,16 +684,16 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       # The CLI reads the Databricks secret from SSM itself, with the plan role,
       # and hands it to Terraform's environment only.
-      - name: jwall-engineering-sites plan
+      - name: jaws plan
         if: steps.assume.outcome == 'success'
         env:
-          JES_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          JES_STACKS_ROOT: ${{ github.workspace }}/stacks
+          JAWS_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          JAWS_STACKS_ROOT: ${{ github.workspace }}/stacks
           # The CLI reads each counterpart's project file from GitHub (the
           # consumers of a project's datasets, or the producers a workspace reads).
           GH_TOKEN: ${{ github.token }}
-        run: uv run jwall-engineering-sites --file .consumer/jwall-engineering-sites.yaml plan
-      - name: Mint a comment token for the JWall Engineering Infra app
+        run: uv run jaws --file .consumer/jaws.yaml plan
+      - name: Mint a comment token for the Jaws app
         id: app-token
         if: always() && vars.JES_APP_CLIENT_ID != ''
         continue-on-error: true
@@ -699,17 +702,17 @@ jobs:
           client-id: ${{ vars.JES_APP_CLIENT_ID }}
           private-key: ${{ secrets.JES_APP_PRIVATE_KEY }}
       - name: Post plan comment (updated on each push)
-        if: always() && hashFiles('.jwall-engineering-sites/plan-comment.md') != ''
+        if: always() && hashFiles('.jaws/plan-comment.md') != ''
         uses: marocchino/sticky-pull-request-comment@v3
         with:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           header: databricks-plan-${{ matrix.project }}
-          path: .jwall-engineering-sites/plan-comment.md
+          path: .jaws/plan-comment.md
       - name: Upload the run log and artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: databricks-plan-${{ matrix.project }}-${{ github.run_attempt }}
-          path: .jwall-engineering-sites/
+          path: .jaws/
           retention-days: 14
           if-no-files-found: ignore

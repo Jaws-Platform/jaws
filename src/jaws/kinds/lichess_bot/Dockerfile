@@ -1,4 +1,4 @@
-# The lichess-bot image jwall-engineering-sites builds for a `lichess-bot`
+# The lichess-bot image jaws builds for a `lichess-bot`
 # project: lichess-bot at a pinned commit, the engine binary from the
 # project's GitHub release (verified against its .sha256 before the build),
 # the project's lichess/config.yml as a template with the token placeholder,

@@ -1,4 +1,4 @@
-# jwall-engineering-sites project file: the engine's remote CI tasks (SPRT,
+# jaws project file: the engine's remote CI tasks (SPRT,
 # matches, datagen, training) and its NNUE dataset. Everything else (region,
 # account, VPC, AMI, names, state, CI roles) is derived by the tool. Fields and
 # behaviour:

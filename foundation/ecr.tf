@@ -1,4 +1,4 @@
-# The private ECR repository that holds the jwall-engineering-sites CLI image.
+# The private ECR repository that holds the jaws CLI image.
 # Every site's CI roles pull it (ecr/pull); this repo's apply role pushes a
 # tagged image on each release (ecr/push). Name and lifecycle come from
 # config.yaml, the tool's configuration, so the CLI and the repository that

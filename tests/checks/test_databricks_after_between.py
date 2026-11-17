@@ -31,8 +31,8 @@ from databricks.sdk.service.iam import WorkspacePermission
 from databricks.sdk.service.provisioning import WorkspaceStatus
 from moto import mock_aws
 
-from jwall_engineering_sites.checks import databricks_after, databricks_between  # noqa: F401
-from jwall_engineering_sites.checks.framework import (
+from jaws.checks import databricks_after, databricks_between  # noqa: F401
+from jaws.checks.framework import (
     CheckContext,
     CheckResult,
     Outcome,
@@ -41,9 +41,9 @@ from jwall_engineering_sites.checks.framework import (
     registered,
     run_stage,
 )
-from jwall_engineering_sites.databricks_names import derived_names
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.settings import Settings
+from jaws.databricks_names import derived_names
+from jaws.project import Project
+from jaws.settings import Settings
 from tests.checks.fakes import (
     FakeAccount,
     FakeDatabricks,

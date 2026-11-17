@@ -86,7 +86,7 @@ jobs:
         working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
-        run: uv run jwall-engineering-sites access render --out data-access --base-registry .base/datasets
+        run: uv run jaws access render --out data-access --base-registry .base/datasets
       - name: terraform init
         uses: ./.github/actions/terraform-init
         with:
@@ -110,16 +110,16 @@ jobs:
         if: always() && steps.plan.outcome != 'skipped'
         working-directory: .
         env:
-          JES_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          JAWS_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           EXIT_CODE: ${{ steps.plan.outputs.exitcode }}
         run: |
-          uv run jwall-engineering-sites report plan-comment \
+          uv run jaws report plan-comment \
             --exit-code "$EXIT_CODE" \
             --plan data-access/plan.log \
             --subject jwall-engineering-infra/data-access \
             --out data-access/plan-comment.md
           { echo; cat data-access/access-summary.md; } >> data-access/plan-comment.md
-      - name: Mint a comment token for the JWall Engineering Infra app
+      - name: Mint a comment token for the Jaws app
         id: app-token
         if: always() && steps.plan.outcome != 'skipped' && vars.JES_APP_CLIENT_ID != ''
         continue-on-error: true # a misconfigured app falls back to github-actions
@@ -177,7 +177,7 @@ jobs:
         working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
-        run: uv run jwall-engineering-sites access render --out data-access
+        run: uv run jaws access render --out data-access
       - name: terraform init
         uses: ./.github/actions/terraform-init
         with:

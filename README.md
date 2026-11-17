@@ -7,23 +7,27 @@ The foundation stack for every [jwall.engineering](https://jwall.engineering) si
 - the `jwall.engineering` Route 53 hosted zone (zone-level records only)
 - for each site in the `projects` registry, an S3 bucket and three CI roles
 - its own plan and apply CI roles
-- the `jwall-engineering-sites` CLI that every site repository's CI runs to plan, preview, apply and publish, its image in a private ECR repository, and the reusable workflows that run it
+- the `jaws` CLI that every site repository's CI runs to plan, preview, apply and publish, its image in a private ECR repository, and the reusable workflows that run it
 - the owner's admin access: an IAM Identity Center user with the AdministratorAccess permission set, in its own stack that only the owner applies ([guide](docs/owner-access.md))
 - bot and research projects: for each entry in the `bots` registry, CI roles (a research project has no release role), and the bot stack (`stacks/bot`) that runs a repository's GitHub releases as a permanent Lichess bot ([guide](docs/lichess-bot.md))
 
 Everything is in `us-east-1`, managed with Terraform `>= 1.11` and the AWS provider `~> 6.0`. The shared building blocks are consumed from the public Terraform Registry, see [Shared modules](#shared-modules-from-the-terraform-registry). Releases are cut and applied by [Release Please](#releases-and-applies). Contribution rules are in [CONTRIBUTING.md](CONTRIBUTING.md); the rules for coding agents are in [AGENTS.md](AGENTS.md).
 
-## JWall Engineering Infra: the `jwall-engineering-sites` CLI
+## Jaws: the `jaws` CLI
 
-JWall Engineering Infra started as a static-site tool and now provisions every
+Jaws 🦈 started as a static-site tool and now provisions every
 kind of project here: sites, bots, research projects and Databricks
-workspaces. The command, the Python package, the ECR repository, the composite
-action and the `JES_*` variables keep their original `jwall-engineering-sites`
-names so existing consumers keep working.
+workspaces. It was called JWall Engineering Infra, with the command
+`jwall-engineering-sites`, until v0.44. The old command, the old project file
+name (`jwall-engineering-sites.yaml`) and the old `JES_*` variables still work
+and print a warning naming their replacement; they are removed once every
+consumer has moved. The cloud resources (the ECR repository
+`jwall-engineering-sites`, every `jwall-engineering-` name) and this
+repository's name have not moved yet.
 
-`jwall-engineering-sites` is the Python CLI (Typer, managed with `uv`) that
+`jaws` is the Python CLI (Typer, managed with `uv`) that
 provisions and publishes every site from one YAML file in its repository,
-`jwall-engineering-sites.yaml`. It wraps Terraform and S3: it renders the
+`jaws.yaml`. It wraps Terraform and S3: it renders the
 bundled site stack in `stacks/site/` from that file and `config.yaml`, runs
 `terraform` against the shared state bucket, syncs built content and
 invalidates CloudFront. Site repositories keep no Terraform. It ships as a
@@ -64,13 +68,13 @@ Every command checks that the credentials are the role it expects, that the
 built site and bucket exist, and that the Terraform in the image is the
 version `config.yaml` pins, before touching anything. Failures exit 1
 (Terraform or AWS), 2 (configuration) or 3 (preflight). Run artifacts and a
-debug log go to `./.jwall-engineering-sites/`.
+debug log go to `./.jaws/`.
 
 ```sh
 uv sync                                  # the CLI and its dev tools
-uv run jwall-engineering-sites --help
+uv run jaws --help
 uv run ruff check && uv run mypy && uv run pytest
-docker build --build-arg "TERRAFORM_VERSION=$(yq -r .terraform.version config.yaml)" -t jwall-engineering-sites:local .
+docker build --build-arg "TERRAFORM_VERSION=$(yq -r .terraform.version config.yaml)" -t jaws:local .
 ```
 
 ### Reusable workflows for site repositories
@@ -78,7 +82,7 @@ docker build --build-arg "TERRAFORM_VERSION=$(yq -r .terraform.version config.ya
 Site repositories do not run the image themselves. They call the reusable
 workflows this repository publishes, pinned to an exact tag that Dependabot
 bumps. The workflow at tag `vX.Y.Z` runs image `vX.Y.Z` (the composite action
-`.github/actions/jwall-engineering-sites` pins the tag, and Release Please
+`.github/actions/jaws` pins the tag, and Release Please
 bumps it with the package version), so one pin covers both.
 
 | Workflow | Calls | Caller needs |
@@ -88,7 +92,7 @@ bumps it with the package version), so one pin covers both.
 | `site-release-please.yml` | Release Please with the release bot; outputs `release_created` and `tag` | `secrets: inherit` |
 | `site-deploy.yml` | `release` in the caller's `prod` environment at the tag | `artifact`, `tag`, `apply-role-arn`; `id-token: write` |
 
-Every job uploads `.jwall-engineering-sites/` (the debug log, plan text and
+Every job uploads `.jaws/` (the debug log, plan text and
 comment files) as an artifact. A site's preview workflow is a build job plus
 one call:
 
@@ -121,7 +125,7 @@ jobs:
 
 ### Bot projects
 
-A repository whose `jwall-engineering-sites.yaml` has `components` (one
+A repository whose `jaws.yaml` has `components` (one
 `container-image` and one `lichess-bot`) instead of `domain` and `site` is a
 bot project. `validate`, `plan`, `apply` and `outputs` work on it with the
 bot stack, `stacks/bot`. That stack holds the image repository, a VPC with
@@ -182,7 +186,7 @@ setup, the checks and the runbook, costs and known gaps:
 
 The plan and preview comments are the product's face in a site repository, so
 the CLI renders them (`report.py`) as one branded card rather than raw plan
-text: a centred **JWall Engineering Infra** header naming the site, one
+text: a centred **Jaws** header naming the site, one
 GitHub alert that carries the verdict, the detail a reviewer needs without
 expanding anything, the full Terraform output folded away, and a footer with
 the tool version, the commit and the workflow run. The alert is conditional
@@ -205,7 +209,7 @@ foundation plan and the site plans look the same.
 `github-actions[bot]`. Pass `app-client-id` (and the `app-private-key`
 secret) to `site-plan.yml` and `site-preview.yml`, or set `JES_APP_CLIENT_ID`
 and `JES_APP_PRIVATE_KEY` in this repository, and the workflows mint a
-short-lived installation token for the **JWall Engineering Infra** GitHub
+short-lived installation token for the **Jaws** GitHub
 App and post as it, with the app's name and avatar. The app needs only
 *Pull requests: read and write* and has to be installed on every repository
 that posts. If the token cannot be minted the step warns and the comment
@@ -228,7 +232,7 @@ This stack is a consumer of [`jwallace145/jwall-engineering/aws`](https://regist
 | `//modules/ci-preview-role` | Preview role per project, with `static-site/previews` | `projects.tf` |
 | `//modules/ci-apply-role` | Apply roles for this repo and each project, with read and write policies from the `ci-policies` catalog | `ci-roles.tf`, `projects.tf` |
 | `//modules/site-bucket` | One S3 bucket per project, `jwall-engineering-<project>` | `projects.tf` |
-| `//modules/ecr-repository` | The private repository for the `jwall-engineering-sites` CLI image, configured from `config.yaml` | `ecr.tf` |
+| `//modules/ecr-repository` | The private repository for the `jaws` CLI image, configured from `config.yaml` | `ecr.tf` |
 | `//modules/identity-center-access` | The owner's Identity Center user and `AdministratorAccess` permission set | `owner-access/main.tf` (its own stack) |
 
 The root module itself creates no resources directly. It is the composition: identity, the `projects` map, module calls, and outputs.
@@ -252,7 +256,7 @@ Versions are pinned exactly, not with `~>`, because Terraform records provider v
 ## Layout
 
 The foundation Terraform stack lives in `foundation/`; every `.tf` path below
-is relative to it. The repository root holds the `jwall-engineering-sites`
+is relative to it. The repository root holds the `jaws`
 CLI and `config.yaml`, the tool configuration shared by the stack and the CLI
 ([design](https://github.com/jwallace145/jwall-engineering-infra/pull/26)).
 
@@ -266,10 +270,10 @@ CLI and `config.yaml`, the tool configuration shared by the stack and the CLI
 | `ci-roles.tf` | This repo's own plan and apply roles (`ci-plan-role` and `ci-apply-role` modules) |
 | `ecr.tf` | The ECR repository for the infra CLI image, configured from `config.yaml` at the repository root |
 | `config.yaml` (root) | Tool configuration for the infra CLI and the foundation stack: Terraform version, library pin, state bucket, DNS zone, ECR lifecycle, sync headers, and the central guardrails (`tasks.limits`, `tasks.max_run_cost_usd`, and per project the instance types, task profiles and dataset retention) |
-| `src/jwall_engineering_sites/`, `tests/`, `pyproject.toml` | The infra CLI, its tests and its `uv` project |
+| `src/jaws/`, `tests/`, `pyproject.toml` | The infra CLI, its tests and its `uv` project |
 | `stacks/site/` | The site stack the CLI renders for each site, pinned to the library like any consumer |
 | `stacks/bot/` | The bot stack the CLI renders for each bot or research project: ECR repository, VPC, records bucket, bot instance (the image and bot are off for a research project), task runner and dataset buckets |
-| `src/jwall_engineering_sites/kinds/lichess_bot/` | The harness Dockerfile and entrypoint of the bot image |
+| `src/jaws/kinds/lichess_bot/` | The harness Dockerfile and entrypoint of the bot image |
 | `bots.tf` | The `bots` map: one entry per bot or research project, each with plan and apply roles, a release role for bots, and a task role where `config.yaml` lists instance types |
 | `docs/lichess-bot.md`, `docs/consumer-note.md` | The bot projects guide and the note a bot repository links to |
 | `docs/remote-tasks.md`, `docs/datasets.md`, `docs/research-projects.md`, `docs/costs.md` | Task instances, dataset buckets, research projects, and cost reports |
@@ -441,7 +445,7 @@ The state bucket does not exist before the first apply, so the first apply uses 
 - `Commit messages`: commitlint over every commit in `base..head`
 - `PR title`: Conventional Commit check on the title
 - `Terraform fmt, validate, tflint` (`foundation/`) and `Site stack validate, tflint` (`stacks/site/`)
-- `Terraform plan`: assumes the plan role through OIDC and posts the foundation plan as the branded sticky PR comment (rendered by `jwall-engineering-sites report plan-comment`), updated on every push
+- `Terraform plan`: assumes the plan role through OIDC and posts the foundation plan as the branded sticky PR comment (rendered by `jaws report plan-comment`), updated on every push
 - `Python lint, types, tests`: ruff, mypy and pytest for the infra CLI
 - `Image build and smoke test`: builds the CLI image, runs `validate` inside it offline, checks its Terraform version and enforces the compressed-size budget
 - `Bot stack validate, tflint` (`stacks/bot/`), `Databricks account stack validate, tflint` (`stacks/databricks-account/`) and `Databricks workspace stack validate, tflint` (`stacks/databricks-workspace/`)
@@ -453,7 +457,7 @@ Every `terraform init` goes through `.github/actions/terraform-init`, which retr
 
 **Releases, applies and the image** (`.github/workflows/release-please.yml`, on push to `main`):
 
-Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`; then the `image` job, also in `prod`, builds the CLI image and pushes it to ECR as `jwall-engineering-sites:<tag>`. Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jwall_engineering_sites/__init__.py` and the image tag the composite action runs (`.github/actions/jwall-engineering-sites/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
+Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`; then the `image` job, also in `prod`, builds the CLI image and pushes it to ECR as `jwall-engineering-sites:<tag>`. Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
 
 Role ARNs are **repository variables**, not secrets: `AWS_PLAN_ROLE_ARN` and `AWS_APPLY_ROLE_ARN`. Bot role ARNs need no variable: the workflows build them from `aws.account_id` and `context.organization` in `config.yaml` and the bot's name.
 
@@ -493,13 +497,13 @@ Not automated; these need the owner's credentials or the GitHub UI.
 - Run the bootstrap steps above.
 - Create the GitHub `prod` environment with a deployment branch restriction to `main`.
 - Set repository variables from `terraform output`: `AWS_PLAN_ROLE_ARN` and `AWS_APPLY_ROLE_ARN` here, and each project's role ARNs and bucket name (from `terraform output projects`) in that project's repo.
-- Optional, for comments authored by the product rather than `github-actions[bot]`: create a GitHub App named **JWall Engineering Infra** (no webhook; permissions *Pull requests: read and write*; upload an avatar), generate a private key, and install it on this repo and every site repo. In each of those repos set the variable `JES_APP_CLIENT_ID` to the app's client ID and the secret `JES_APP_PRIVATE_KEY` to the full `.pem` contents, and pass them to the reusable workflows as shown above.
+- Optional, for comments authored by the product rather than `github-actions[bot]`: create a GitHub App for the tool (the owner's is still named **JWall Engineering Infra**; the name shown beside a comment is the app's, and renaming it is the owner's; no webhook; permissions *Pull requests: read and write*; upload an avatar), generate a private key, and install it on this repo and every site repo. In each of those repos set the variable `JES_APP_CLIENT_ID` to the app's client ID and the secret `JES_APP_PRIVATE_KEY` to the full `.pem` contents, and pass them to the reusable workflows as shown above.
 - Activate cost allocation tags in Billing: `Organization`, `Project`, `Environment`, `Repository`, `ManagedBy`, `Owner`, `Component`, `Purpose`, `Profile` and `Lifecycle` (task instances carry `Purpose=ci-task`, `Profile=cpu|gpu` and `Lifecycle=spot|on-demand`, for the later tag-based cost tooling).
 - For GPU task profiles, raise the EC2 quotas in Service Quotas (us-east-1) as needed: *Running On-Demand G and VT instances* (5 vCPUs today, one `g6.xlarge` at a time) and *All G and VT Spot Instance Requests* (0 today). See [docs/remote-tasks.md](docs/remote-tasks.md#quotas).
 - For bot projects, after the release that creates their roles:
   - commit the project file and the caller workflow in the bot repository;
   - run the **Bot apply** workflow;
-  - set the token with `jwall-engineering-sites bot secrets set LICHESS_TOKEN`.
+  - set the token with `jaws bot secrets set LICHESS_TOKEN`.
 
   The [guide](docs/lichess-bot.md#owner-setup-once) has the full list.
 - For bot projects with a `task-runner`, after the release that creates the `ci-task` role:

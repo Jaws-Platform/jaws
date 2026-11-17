@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
     from mypy_boto3_sts import STSClient
 
-ENV_SKIP_ROLE_CHECK = "JES_SKIP_ROLE_CHECK"
+ENV_SKIP_ROLE_CHECK = "JAWS_SKIP_ROLE_CHECK"
 
 _ASSUMED_ROLE = re.compile(r"^arn:aws:sts::\d{12}:assumed-role/([^/]+)/")
 
@@ -48,7 +48,7 @@ def check_role(
 ) -> str:
     """Fail unless the credentials are an assumed-role session of `expected_role`.
 
-    `JES_SKIP_ROLE_CHECK=1` disables the check for local runs with admin
+    `JAWS_SKIP_ROLE_CHECK=1` disables the check for local runs with admin
     credentials; it is logged as a warning so it never passes unnoticed.
     Returns the caller ARN.
     """

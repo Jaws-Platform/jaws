@@ -13,12 +13,12 @@ from pathlib import Path
 
 import yaml
 
-from jwall_engineering_sites import __version__
+from jaws import __version__
 from tests.conftest import REPO_ROOT
 
 ANNOTATION = "# x-release-please-version"
 WORKFLOWS = ("site-plan.yml", "site-preview.yml", "site-deploy.yml")
-LOCAL_ACTION = "uses: ./.jwall-engineering-infra/.github/actions/jwall-engineering-sites"
+LOCAL_ACTION = "uses: ./.jwall-engineering-infra/.github/actions/jaws"
 
 
 def _annotated_versions(path: Path) -> list[str]:
@@ -79,7 +79,7 @@ def test_workflows_use_the_action_from_their_own_commit() -> None:
         text = (REPO_ROOT / ".github" / "workflows" / name).read_text()
         assert "ref: ${{ github.job_workflow_sha }}" in text, name
         assert LOCAL_ACTION in text, name
-        assert "jwall-engineering-sites@v" not in text, f"{name} pins the action by tag"
+        assert "jaws@v" not in text, f"{name} pins the action by tag"
 
 
 def test_site_stack_pins_the_configured_library_version() -> None:

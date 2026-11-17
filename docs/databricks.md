@@ -51,13 +51,13 @@ pointer back here.
    shell with AWS credentials:
 
    ```sh
-   uv run jwall-engineering-sites --file tests/fixtures/bots/databricks-poc.yaml databricks credentials set
-   uv run jwall-engineering-sites --file tests/fixtures/bots/databricks-poc.yaml databricks credentials check
+   uv run jaws --file tests/fixtures/bots/databricks-poc.yaml databricks credentials set
+   uv run jaws --file tests/fixtures/bots/databricks-poc.yaml databricks credentials check
    ```
 
    `--file` is any Databricks project's file (the commands refuse other
    kinds). The sample `tests/fixtures/bots/databricks-poc.yaml` works before
-   any project repository exists; a project's own `jwall-engineering-sites.yaml`
+   any project repository exists; a project's own `jaws.yaml`
    works too. The secret is account-wide, so the project only tells the CLI
    which `config.yaml` section and region to use.
    `set` prompts without echo and writes a SecureString at
@@ -107,7 +107,7 @@ In this order:
    the project's `jwall-engineering-<name>-ci-plan` and `-ci-apply` roles
    (`compute/*` and `databricks/*` policies; no release or task role). A
    Databricks project must not also be a site or a bot.
-3. Commit `jwall-engineering-sites.yaml` in the project repository (below).
+3. Commit `jaws.yaml` in the project repository (below).
 4. Open a pull request here. The `Databricks plan` job posts one comment for
    both stacks.
 5. After the owner reads it, run the **Databricks apply** workflow with the
@@ -324,7 +324,7 @@ where it stopped.
 ## Doctor
 
 ```sh
-jwall-engineering-sites --file jwall-engineering-sites.yaml databricks doctor [--stage config|live|between|after]
+jaws --file jaws.yaml databricks doctor [--stage config|live|between|after]
 ```
 
 `doctor` runs the same read-only checks against the live project and prints the
@@ -360,7 +360,7 @@ own one piece, and nothing in `config.yaml` names a consumer:
    under the dataset's `consumers`, in its own file:
 
    ```yaml
-   # braveheart-selfplay's jwall-engineering-sites.yaml
+   # braveheart-selfplay's jaws.yaml
      - kind: dataset
        name: positions
        bucket: jwall-engineering-braveheart-selfplay-positions
@@ -373,7 +373,7 @@ own one piece, and nothing in `config.yaml` names a consumer:
    workspace's `reads`, saying why:
 
    ```yaml
-   # braveheart-databricks's jwall-engineering-sites.yaml
+   # braveheart-databricks's jaws.yaml
      - kind: databricks-workspace
        # ...
        reads:
@@ -427,7 +427,7 @@ hold. Either side ends it alone by removing its half.
   by the **Data access** workflow (`.github/workflows/data-access.yml`) with
   the roles `jwall-engineering-data-access-ci-plan` and
   `jwall-engineering-data-access-ci-apply`, which reach only that state and the
-  Databricks secret. `jwall-engineering-sites access render` reads `datasets/`,
+  Databricks secret. `jaws access render` reads `datasets/`,
   every Databricks workspace project's file and every onboarded dataset's
   owner's file (each repository's default branch, through GitHub's API) and
   writes the stack's variables and a summary. A file that cannot be read fails
@@ -862,7 +862,7 @@ import the existing assignment into the account stack's state:
    `DATABRICKS_ACCOUNT_ID` and `DATABRICKS_CLIENT_ID` (from `config.yaml`) and
    `DATABRICKS_CLIENT_SECRET` (from `/jwall-engineering/databricks/client-secret`).
 2. In the project's repository, run
-   `JES_KEEP_WORKDIR=1 JES_SKIP_ROLE_CHECK=1 jwall-engineering-sites --file jwall-engineering-sites.yaml apply`.
+   `JAWS_KEEP_WORKDIR=1 JAWS_SKIP_ROLE_CHECK=1 jaws --file jaws.yaml apply`.
    It fails at the same assignment and keeps the account stack's working
    directory ("keeping working directory ..."), which holds the stack, its
    `terraform.tfvars.json` and its `backend.hcl` (the account stack's state,

@@ -7,10 +7,10 @@ from typing import Any
 
 import pytest
 
-from jwall_engineering_sites import rollout
-from jwall_engineering_sites.errors import PreflightError, RunError
-from jwall_engineering_sites.project import Project
-from jwall_engineering_sites.releases import Release
+from jaws import rollout
+from jaws.errors import PreflightError, RunError
+from jaws.project import Project
+from jaws.releases import Release
 
 RELEASES = [Release("v0.15.0"), Release("v0.14.0"), Release("v0.13.0")]
 

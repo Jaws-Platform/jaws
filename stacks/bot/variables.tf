@@ -1,6 +1,6 @@
-# The bot stack jwall-engineering-sites renders for one bot project: the
+# The bot stack jaws renders for one bot project: the
 # image repository, a VPC, the records bucket and the bot instance. Every
-# value comes from the project's jwall-engineering-sites.yaml (components)
+# value comes from the project's jaws.yaml (components)
 # or from config.yaml; the CLI writes them to terraform.tfvars.json.
 #
 # A research project renders bot_enabled false and leaves the bot's variables

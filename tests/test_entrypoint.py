@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from jwall_engineering_sites.kinds.lichess_bot import entrypoint
+from jaws.kinds.lichess_bot import entrypoint
 
 TEMPLATE: dict[str, Any] = {
     "token": "LICHESS_TOKEN_PLACEHOLDER",

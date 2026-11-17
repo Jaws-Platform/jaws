@@ -13,8 +13,8 @@ import pytest
 from botocore.exceptions import ClientError
 from typer.testing import CliRunner
 
-from jwall_engineering_sites import cli, costs
-from jwall_engineering_sites.errors import PreflightError, RunError
+from jaws import cli, costs
+from jaws.errors import PreflightError, RunError
 from tests.test_cli import _as_role
 
 OWNER = "arn:aws:iam::650503560686:user/owner"
@@ -336,7 +336,7 @@ def test_cost_report_rejects_bad_options(ce: FakeCE, args: list[str]) -> None:
 def test_cost_report_needs_no_ci_role(ce: FakeCE) -> None:
     """Any credentials that can read Cost Explorer will do: the owner's own."""
     ce.responses = []
-    with patch("jwall_engineering_sites.aws.caller_identity", return_value=("1", OWNER)):
+    with patch("jaws.aws.caller_identity", return_value=("1", OWNER)):
         result = CliRunner().invoke(cli.app, ["cost", "report", "--project", "braveheart"])
     assert result.exit_code == 0, result.output
 

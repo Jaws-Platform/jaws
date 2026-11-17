@@ -1,4 +1,4 @@
-# jwall-engineering-sites project file: runs the Braveheart engine as a
+# jaws project file: runs the Braveheart engine as a
 # permanent Lichess bot, deployed from this repository. The engine release it
 # plays is pinned below; everything else (region, account, VPC, AMI, names,
 # state, CI roles) is derived by the tool. Fields and behaviour:
