@@ -23,6 +23,7 @@ from typing import Annotated, Literal
 
 import boto3
 import typer
+import yaml
 
 from . import (
     access,
@@ -60,11 +61,13 @@ from .legacy import adopt_legacy_environment, announce, notices, resolve_project
 from .log import annotate_error, artifacts_dir, phase, setup_logging
 from .project import Project, Role
 from .settings import (
+    Account,
     DatabricksSection,
     Settings,
     default_config_path,
     load_settings,
     parse_duration,
+    resolve_account,
 )
 from .site import DEV_PREFIX, ENVIRONMENT, PROD_PREFIX, SITE_FILE, Site, load_site_config
 
@@ -171,6 +174,14 @@ def main(
     ctx: typer.Context,
     file: Annotated[Path, typer.Option("--file", "-f", help="Path to the site file.")] = SITE_FILE,
     config: Annotated[Path | None, typer.Option("--config", help="Path to config.yaml.")] = None,
+    account: Annotated[
+        Account | None,
+        typer.Option(
+            "--account",
+            help="The account to address. Default: production for a project listed "
+            "under production.projects in config.yaml, management otherwise.",
+        ),
+    ] = None,
     debug: Annotated[bool, typer.Option("--debug", help="Console log at debug level.")] = False,
 ) -> None:
     try:
@@ -178,6 +189,9 @@ def main(
         file = resolve_project_file(file)
         artifacts = artifacts_dir()
         settings = load_settings(config)
+        where = resolve_account(_project_named_in(file), settings.production, account)
+        if where != settings.account:
+            settings = load_settings(config, account=where)
     except SitesError as exc:
         # Logging is not configured yet: report plainly.
         print(f"error: {exc}", file=sys.stderr)
@@ -187,6 +201,17 @@ def main(
     announce(notices(file, adopted))
     logger.debug("jaws %s, config %s", tool_version(), config or default_config_path())
     ctx.obj = Run(settings=settings, site_file=file, artifacts=artifacts, logger=logger)
+
+
+def _project_named_in(file: Path) -> str | None:
+    """The `project` a project file names, or None when there is no readable
+    file: the command that needs the file reports what is wrong with it."""
+    try:
+        raw = yaml.safe_load(file.read_text())
+    except (OSError, yaml.YAMLError):
+        return None
+    project = raw.get("project") if isinstance(raw, dict) else None
+    return project if isinstance(project, str) else None
 
 
 def _command(body: Callable[[Run], None]) -> Callable[[typer.Context], None]:
@@ -926,6 +951,24 @@ def outputs(ctx: typer.Context) -> None:
         _with_terraform(run, tf)
 
     _command(body)(ctx)
+
+
+@config_app.command("env")
+def config_env(ctx: typer.Context) -> None:
+    """Print the account this run addresses as `key=value` lines, for a
+    workflow to append to GITHUB_OUTPUT: every workflow resolves a project's
+    account, and so its role, here and nowhere else."""
+    settings = ctx.obj.settings
+    production = settings.production
+    for key, value in (
+        ("account", settings.account),
+        ("account_id", settings.aws.account_id),
+        ("organization", settings.context.organization),
+        ("state_bucket", settings.state.bucket),
+        ("ecr_repository", settings.ecr.repository),
+        ("bootstrapped", str(bool(production and production.bootstrapped)).lower()),
+    ):
+        print(f"{key}={value}")
 
 
 @config_app.command("show")
