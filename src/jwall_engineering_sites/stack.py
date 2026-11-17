@@ -358,10 +358,11 @@ def _deployer(project: Project) -> dict[str, str] | None:
         raise ConfigError(
             f"{project.project}: a deployer needs {project.project} registered in {registry}"
         )
-    if entry.repository_id is None or entry.owner_id is None:
+    repository_id, owner_id = entry.repository_id or "", entry.owner_id or ""
+    if not (re.fullmatch(r"[0-9]+", repository_id) and re.fullmatch(r"[0-9]+", owner_id)):
         raise ConfigError(
-            f"{project.project}: a deployer needs repository_id and owner_id in {registry} "
-            "(gh api repos/<owner>/<repo> --jq '.id, .owner.id')"
+            f"{project.project}: a deployer needs numeric repository_id and owner_id in "
+            f"{registry} (gh api repos/<owner>/<repo> --jq '.id, .owner.id')"
         )
     if entry.repository != project.config.repository:
         raise ConfigError(
@@ -370,8 +371,8 @@ def _deployer(project: Project) -> dict[str, str] | None:
         )
     return {
         "repository": entry.repository,
-        "repository_id": entry.repository_id,
-        "owner_id": entry.owner_id,
+        "repository_id": repository_id,
+        "owner_id": owner_id,
     }
 
 
