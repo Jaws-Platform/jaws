@@ -73,9 +73,11 @@ jobs:
         id: role
         working-directory: .
         run: |
-          account=$(yq -r .aws.account_id config.yaml)
-          organization=$(yq -r .context.organization config.yaml)
-          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" && "$organization" != null ]] || { echo "::error::config.yaml has no aws.account_id or context.organization"; exit 1; }
+          # The tool says which account this is (config.yaml: management, or `production`).
+          resolved=$(uv run jaws config env)
+          account=$(sed -n 's/^account_id=//p' <<<"$resolved")
+          organization=$(sed -n 's/^organization=//p' <<<"$resolved")
+          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization"; exit 1; }
           echo "arn=arn:aws:iam::${account}:role/${organization}-data-access-ci-plan" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -164,9 +166,11 @@ jobs:
         id: role
         working-directory: .
         run: |
-          account=$(yq -r .aws.account_id config.yaml)
-          organization=$(yq -r .context.organization config.yaml)
-          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" && "$organization" != null ]] || { echo "::error::config.yaml has no aws.account_id or context.organization"; exit 1; }
+          # The tool says which account this is (config.yaml: management, or `production`).
+          resolved=$(uv run jaws config env)
+          account=$(sed -n 's/^account_id=//p' <<<"$resolved")
+          organization=$(sed -n 's/^organization=//p' <<<"$resolved")
+          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization"; exit 1; }
           echo "arn=arn:aws:iam::${account}:role/${organization}-data-access-ci-apply" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6
         with:

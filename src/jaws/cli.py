@@ -136,6 +136,10 @@ class Run:
     site_file: Path
     artifacts: Path
     logger: logging.Logger
+    #: `--config` and `--account` as given, for a command that resolves the
+    #: account of a project it is told about (`config env --project`).
+    config_path: Path | None = None
+    requested_account: Account | None = None
     #: Off for the cleanup commands (`_cleanup_project`).
     check_guardrails: bool = True
     _site: Site | None = None
@@ -200,7 +204,14 @@ def main(
     logger = setup_logging(level, settings.tool.log_format, artifacts / LOG_FILE)
     announce(notices(file, adopted))
     logger.debug("jaws %s, config %s", tool_version(), config or default_config_path())
-    ctx.obj = Run(settings=settings, site_file=file, artifacts=artifacts, logger=logger)
+    ctx.obj = Run(
+        settings=settings,
+        site_file=file,
+        artifacts=artifacts,
+        logger=logger,
+        config_path=config,
+        requested_account=account,
+    )
 
 
 def _project_named_in(file: Path) -> str | None:
@@ -954,11 +965,29 @@ def outputs(ctx: typer.Context) -> None:
 
 
 @config_app.command("env")
-def config_env(ctx: typer.Context) -> None:
+def config_env(
+    ctx: typer.Context,
+    project: Annotated[
+        str | None,
+        typer.Option(
+            "--project",
+            help="Resolve this project's account, whatever project file is in the directory.",
+        ),
+    ] = None,
+) -> None:
     """Print the account this run addresses as `key=value` lines, for a
     workflow to append to GITHUB_OUTPUT: every workflow resolves a project's
     account, and so its role, here and nowhere else."""
-    settings = ctx.obj.settings
+    run: Run = ctx.obj
+    settings = run.settings
+    if project is not None:
+        try:
+            where = resolve_account(project, settings.production, run.requested_account)
+            settings = load_settings(run.config_path, account=where)
+        except SitesError as exc:
+            # On stderr, never stdout: the caller appends stdout to GITHUB_OUTPUT.
+            print(f"error: {exc}", file=sys.stderr)
+            raise typer.Exit(exc.exit_code) from exc
     production = settings.production
     for key, value in (
         ("account", settings.account),

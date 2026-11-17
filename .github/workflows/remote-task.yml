@@ -161,9 +161,11 @@ jobs:
           MAX_HOURS: ${{ inputs.max-hours }}
           CONFIG: .jwall-engineering-infra/config.yaml
         run: |
-          account=$(yq -r .aws.account_id "$CONFIG")
-          organization=$(yq -r .context.organization "$CONFIG")
-          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" && "$organization" != null ]] || { echo "::error::$CONFIG has no aws.account_id or context.organization"; exit 1; }
+          # The tool says which account this is (config.yaml: management, or `production`).
+          resolved=$(uv run --no-dev --project .jwall-engineering-infra jaws --config "$CONFIG" config env --project "$PROJECT")
+          account=$(sed -n 's/^account_id=//p' <<<"$resolved")
+          organization=$(sed -n 's/^organization=//p' <<<"$resolved")
+          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
           [[ "$PROFILE" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "::error::profile must be kebab-case, got $PROFILE"; exit 2; }
           file=jaws.yaml; [ -f "$file" ] || file=jwall-engineering-sites.yaml # its name before the rename
           hours="$MAX_HOURS"

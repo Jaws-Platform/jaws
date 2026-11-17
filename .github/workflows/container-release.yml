@@ -95,9 +95,11 @@ jobs:
           if [ -n "$OVERRIDE" ]; then
             arn="$OVERRIDE"
           else
-            account=$(yq -r .aws.account_id "$CONFIG")
-            organization=$(yq -r .context.organization "$CONFIG")
-            [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" && "$organization" != null ]] || { echo "::error::$CONFIG has no aws.account_id or context.organization"; exit 1; }
+            # The tool says which account this is (config.yaml: management, or `production`).
+            resolved=$(uv run --no-dev --project .jwall-engineering-infra jaws --config "$CONFIG" config env --project "$PROJECT")
+            account=$(sed -n 's/^account_id=//p' <<<"$resolved")
+            organization=$(sed -n 's/^organization=//p' <<<"$resolved")
+            [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
             arn="arn:aws:iam::${account}:role/${organization}-${PROJECT}-ci-release"
           fi
           echo "arn=$arn" >> "$GITHUB_OUTPUT"

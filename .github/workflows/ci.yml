@@ -516,9 +516,11 @@ jobs:
         env:
           PROJECT: ${{ matrix.project }}
         run: |
-          account=$(yq -r .aws.account_id config.yaml)
-          organization=$(yq -r .context.organization config.yaml)
-          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" && "$organization" != null ]] || { echo "::error::config.yaml has no aws.account_id or context.organization"; exit 1; }
+          # The tool says which account this is (config.yaml: management, or `production`).
+          resolved=$(uv run jaws config env --project "$PROJECT")
+          account=$(sed -n 's/^account_id=//p' <<<"$resolved")
+          organization=$(sed -n 's/^organization=//p' <<<"$resolved")
+          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
           echo "arn=arn:aws:iam::${account}:role/${organization}-${PROJECT}-ci-plan" >> "$GITHUB_OUTPUT"
       # Two registry entries can share one repository while a project is being
       # renamed, and its file names only one of them. The other entry's plan is
@@ -660,9 +662,11 @@ jobs:
         env:
           PROJECT: ${{ matrix.project }}
         run: |
-          account=$(yq -r .aws.account_id config.yaml)
-          organization=$(yq -r .context.organization config.yaml)
-          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" && "$organization" != null ]] || { echo "::error::config.yaml has no aws.account_id or context.organization"; exit 1; }
+          # The tool says which account this is (config.yaml: management, or `production`).
+          resolved=$(uv run jaws config env --project "$PROJECT")
+          account=$(sed -n 's/^account_id=//p' <<<"$resolved")
+          organization=$(sed -n 's/^organization=//p' <<<"$resolved")
+          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
           echo "arn=arn:aws:iam::${account}:role/${organization}-${PROJECT}-ci-plan" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6
         id: assume

@@ -292,3 +292,44 @@ def test_config_show_says_which_account_it_shows(workspace: Path) -> None:
     assert shown["account"] == "production"
     assert shown["aws"]["account_id"] == PRODUCTION
     assert shown["production"]["projects"] == {SITE: "moving"}
+
+
+# -- a workflow names the project itself ---------------------------------------------------
+
+
+def test_config_env_for_a_named_project_ignores_the_file_in_the_directory(workspace: Path) -> None:
+    """Bot apply and the plan jobs run from the tool's checkout and name the
+    project from their matrix or input, before any project file is trusted."""
+    _config(workspace, {"braveheart-trainer": "moving"})
+    env = _env(runner.invoke(cli.app, ["config", "env", "--project", "braveheart-trainer"]))
+    assert env["account"] == "production"
+    assert env["organization"] == "jaws"
+    assert _env(runner.invoke(cli.app, ["config", "env"]))["account"] == "management"
+
+
+def test_config_env_for_a_named_project_honours_the_requested_account(workspace: Path) -> None:
+    (workspace / "jaws.yaml").unlink()
+    _config(workspace, {"braveheart-trainer": "moving"})
+    env = _env(
+        runner.invoke(
+            cli.app, ["--account", "management", "config", "env", "--project", "braveheart-trainer"]
+        )
+    )
+    assert env["account"] == "management"
+    assert env["account_id"] == MANAGEMENT
+
+
+def test_config_env_for_a_named_project_that_has_not_moved_is_management(workspace: Path) -> None:
+    _config(workspace, {"braveheart-trainer": "moving"})
+    env = _env(runner.invoke(cli.app, ["config", "env", "--project", "braveheart-bot"]))
+    assert env["account"] == "management"
+
+
+def test_config_env_refuses_a_named_project_where_it_has_no_stack(workspace: Path) -> None:
+    (workspace / "jaws.yaml").unlink()
+    result = runner.invoke(
+        cli.app, ["--account", "production", "config", "env", "--project", "braveheart-bot"]
+    )
+    assert result.exit_code == 2
+    assert "braveheart-bot is not in production" in result.stderr
+    assert result.stdout == ""

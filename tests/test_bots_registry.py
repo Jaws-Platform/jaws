@@ -118,7 +118,7 @@ def test_bot_apply_reads_the_project_file_from_a_ref_and_refuses_another_project
     assert checkout["with"]["ref"] == "${{ inputs.consumer-ref }}"
     names = [s.get("name", "") for s in steps]
     refuse = names.index("Refuse a project file that names another project")
-    run = next(i for i, s in enumerate(steps) if "uv run jaws" in s.get("run", ""))
+    run = next(i for i, s in enumerate(steps) if "$COMMAND" in s.get("run", ""))
     assert refuse < run
     assert "exit 1" in steps[refuse]["run"]
 
@@ -207,11 +207,6 @@ def test_no_workflow_needs_account_or_role_variables() -> None:
         assert "AWS_RELEASE_ROLE_ARN" not in text, path.name
 
 
-def test_bot_workflows_read_the_account_from_config() -> None:
-    for name in ("ci.yml", "bot-apply.yml", "container-release.yml"):
-        assert ".aws.account_id" in (WORKFLOWS_DIR / name).read_text(), name
-
-
 def test_container_release_role_is_optional() -> None:
     release: dict[Any, Any] = _yaml(".github/workflows/container-release.yml")
     role = release[True]["workflow_call"]["inputs"]["release-role-arn"]
@@ -226,7 +221,12 @@ def test_bot_plan_runs_without_a_variable_and_skips_until_roles_exist() -> None:
     steps = {s.get("id"): s for s in job["steps"] if "id" in s}
     assert steps["assume"]["continue-on-error"] is True
     # The steps that run the CLI (not the one that only reads the project file's name).
-    gated = [s for s in job["steps"] if "uv run jaws" in str(s.get("run", ""))]
+    # Every command that needs the role; `config env` runs before it, to name it.
+    gated = [
+        s
+        for s in job["steps"]
+        if "uv run jaws" in str(s.get("run", "")) and "config env" not in s["run"]
+    ]
     assert gated and all("steps.assume.outcome == 'success'" in s["if"] for s in gated)
 
 

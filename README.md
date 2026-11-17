@@ -235,7 +235,10 @@ account:
   (to destroy it), and `--account production` a run without a project file.
 
 `jaws config show` prints the view a run would use, and `jaws config env` the
-few values a workflow needs to build a role ARN. No project is listed yet, so
+few values a workflow needs to build a role ARN: every workflow gets a
+project's account from it (`config env --project <name>`), never from its own
+reading of `config.yaml`. **Bot apply** and **Databricks apply** take an
+`account` input for the same choice. No project is listed yet, so
 every run addresses the management account, exactly as before.
 
 ## Shared modules from the Terraform Registry
