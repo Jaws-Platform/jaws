@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.47.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.46.0...v0.47.0) (2026-11-17)
+
+
+### Features
+
+* **foundation:** one root for the management and the production account ([#185](https://github.com/jwallace145/jwall-engineering-infra/issues/185)) ([7fc4f38](https://github.com/jwallace145/jwall-engineering-infra/commit/7fc4f386c8f071f4c63de7a1b195514a8872c6e3))
+* **owner-access:** the owner's admin access in the production account, and the bootstrap runbook ([#186](https://github.com/jwallace145/jwall-engineering-infra/issues/186)) ([eb08d67](https://github.com/jwallace145/jwall-engineering-infra/commit/eb08d67f5c68895106f005ef3754328ff4e12f55))
+
 ## [0.46.0](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.45.0...v0.46.0) (2026-11-17)
 
 
