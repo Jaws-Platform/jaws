@@ -1,0 +1,198 @@
+# Generated from config.yaml by tests/test_foundation_fixtures.py: do not edit.
+tool:
+  log_level: info
+  log_format: console
+terraform:
+  version: 1.14.7
+  lock_timeout: 120s
+  plan_timeout: 15m
+library:
+  source: jwallace145/jwall-engineering/aws
+  version: 0.27.0
+state:
+  bucket: jwall-engineering-tfstate
+  region: us-east-1
+  key_template: project={project}/env={environment}/{project}-{environment}.tfstate
+aws:
+  account_id: '650503560686'
+  admin_role_arn: arn:aws:iam::650503560686:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_22a17d3bc2bca2d3
+context:
+  organization: jwall-engineering
+  owner: jwallace145
+  managed_by: jwall-engineering-infra
+dns:
+  zone: jwall.engineering
+  zone_id: Z029546536VUFGDCPXZ21
+ecr:
+  repository: jwall-engineering-sites
+  keep_release_images: 20
+  expire_untagged_after_days: 7
+sync:
+  cache_control: public, max-age=3600
+  preview_cache_control: public, max-age=300
+  html_cache_control: public, max-age=0, must-revalidate
+  immutable_cache_control: public, max-age=31536000, immutable
+plan:
+  comment_max_bytes: 60000
+bot:
+  health_log_pattern: awaiting challenges
+  health_seconds: 90
+  asset_wait: 30m
+  records_prefix: records/
+  availability_zones:
+  - us-east-1a
+  - us-east-1b
+  - us-east-1c
+  - us-east-1d
+  - us-east-1f
+  amis:
+    x86_64: al2023-ami-2023.12.20261026.1-kernel-6.18-x86_64
+tasks:
+  rust_toolchain: 1.99.1
+  poll_seconds: 5
+  images:
+    deep-learning-gpu: Deep Learning Base OSS Nvidia Driver GPU AMI (Amazon Linux
+      2023) 20261027
+  limits:
+    max_hours: 6
+    max_vcpus: 256
+    root_volume_gb: 200
+  max_run_cost_usd: 50
+projects:
+  braveheart:
+    instance_types:
+    - c8a.xlarge
+    - c8a.8xlarge
+    - c8a.16xlarge
+    - g6.xlarge
+    - g6.2xlarge
+    - g6e.xlarge
+    task_profiles:
+    - cpu
+    - gpu
+    - sprt
+    - match
+    - datagen
+    - relabel
+    datasets:
+      jwall-engineering-braveheart-nnue: {}
+  braveheart-selfplay:
+    instance_types:
+    - c8a.xlarge
+    - c8a.8xlarge
+    - c8a.16xlarge
+    task_profiles:
+    - cpu
+    - datagen
+    - relabel
+    datasets:
+      jwall-engineering-braveheart-selfplay-positions:
+        prefix: data/
+        versioning: true
+  braveheart-trainer:
+    instance_types:
+    - c8a.xlarge
+    - g6.xlarge
+    - g6.2xlarge
+    - g6e.xlarge
+    task_profiles:
+    - cpu
+    - gpu
+    datasets:
+      jwall-engineering-braveheart-trainer-nets:
+        prefix: data/
+        versioning: true
+  braveheart-bot: {}
+  databricks-poc:
+    databricks:
+      compute_policies:
+      - small-interactive
+      - jobs
+      cost_center: cc-0000
+      vpc_cidr: 10.40.0.0/16
+      admins:
+      - jimmy.wallace145@gmail.com
+  braveheart-databricks:
+    databricks:
+      compute_policies:
+      - small-interactive
+      - jobs
+      cost_center: braveheart
+      vpc_cidr: 10.48.0.0/16
+      admins:
+      - jimmy.wallace145@gmail.com
+databricks:
+  enabled: true
+  account_id: 64826090-46b0-471f-b2d6-f3e7490b992c
+  client_id: 59a6c509-4d02-4622-b907-d42da61b2119
+  secret_parameter: /jwall-engineering/databricks/client-secret
+  metastore_name: jwall-engineering-us-east-1
+  metastore_admins:
+  - jimmy.wallace145@gmail.com
+  nat_ami: al2023-ami-2023.12.20261026.1-kernel-6.18-arm64
+  deployment_name_prefix: null
+  audit_bucket: jwall-engineering-databricks-audit-logs
+  events_prefix: events/
+  readiness_timeout: 20m
+  shared_host_url: https://dbc-46322154-036c.cloud.databricks.com
+  compute_policies:
+    small-interactive:
+      description: Small interactive clusters on cheap Graviton spot nodes
+      definition:
+        num_workers:
+          type: range
+          maxValue: 2
+        autotermination_minutes:
+          type: fixed
+          value: 30
+          hidden: false
+        node_type_id:
+          type: allowlist
+          values:
+          - m7g.large
+          - m7g.xlarge
+        aws_attributes.availability:
+          type: fixed
+          value: SPOT_WITH_FALLBACK
+    jobs:
+      description: Job clusters, up to four workers
+      definition:
+        cluster_type:
+          type: fixed
+          value: job
+        num_workers:
+          type: range
+          maxValue: 4
+        autotermination_minutes:
+          type: fixed
+          value: 30
+          hidden: true
+        node_type_id:
+          type: allowlist
+          values:
+          - m7g.large
+          - m7g.xlarge
+        aws_attributes.availability:
+          type: fixed
+          value: SPOT_WITH_FALLBACK
+production:
+  bootstrapped: true
+  projects: {}
+  overrides:
+    aws:
+      account_id: '570327089884'
+      admin_role_arn: arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_0123456789abcdef
+    context:
+      organization: jaws
+      managed_by: jaws-relabelled
+    state:
+      bucket: jaws-terraform-state-570327089884
+    ecr:
+      repository: jaws-cli
+    dns:
+      zone_id: Z0PRODUCTIONZONE0000
+    databricks:
+      enabled: false
+      secret_parameter: /jaws/databricks/client-secret
+      metastore_name: jaws-us-east-1
+      audit_bucket: jaws-databricks-audit-logs

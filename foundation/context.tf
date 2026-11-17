@@ -52,5 +52,5 @@ module "context" {
   owner        = local.context.owner
   organization = local.context.organization
   name_root    = local.context.organization
-  managed_by   = local.in_production ? "jaws" : "jwall-engineering-infra"
+  managed_by   = local.account.context.managed_by
 }

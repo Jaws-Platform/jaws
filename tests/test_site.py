@@ -9,7 +9,7 @@ import yaml
 from jaws.errors import ConfigError
 from jaws.settings import Settings
 from jaws.site import (
-    MANAGED_BY,
+    MANAGED_BY_VALUES,
     REQUIRED_TAGS,
     Site,
     SiteConfig,
@@ -95,11 +95,11 @@ def test_cross_checked_tags(tmp_path: Path, tag: str, value: str) -> None:
         load_site_config(_write(tmp_path, _raw({f"tags.{tag}": value})))
 
 
-@pytest.mark.parametrize("stated", [None, MANAGED_BY, "terraform"])
-def test_the_tool_owns_managed_by(tmp_path: Path, stated: str | None) -> None:
+@pytest.mark.parametrize("stated", [None, *MANAGED_BY_VALUES, "terraform"])
+def test_the_tool_owns_managed_by(tmp_path: Path, settings: Settings, stated: str | None) -> None:
     raw = _raw() if stated is None else _raw({"tags.ManagedBy": stated})
     config = load_site_config(_write(tmp_path, raw))
-    assert config.tags["ManagedBy"] == "jwall-engineering-infra"
+    assert Site.from_config(config, settings).tags["ManagedBy"] == "jwall-engineering-infra"
 
 
 def test_empty_tag_value(tmp_path: Path) -> None:

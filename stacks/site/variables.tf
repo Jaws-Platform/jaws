@@ -72,7 +72,7 @@ variable "tags" {
   }
 
   validation {
-    condition     = lookup(var.tags, "ManagedBy", null) == "jwall-engineering-infra" && lookup(var.tags, "Environment", null) == "prod"
-    error_message = "tags.ManagedBy must be `jwall-engineering-infra` and tags.Environment must be `prod`."
+    condition     = contains(["jwall-engineering-infra", "jaws"], lookup(var.tags, "ManagedBy", "")) && lookup(var.tags, "Environment", null) == "prod"
+    error_message = "tags.ManagedBy must be `jwall-engineering-infra` or `jaws` (the account's, stamped by the CLI) and tags.Environment must be `prod`."
   }
 }

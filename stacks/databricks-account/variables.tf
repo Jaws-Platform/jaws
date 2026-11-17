@@ -53,11 +53,11 @@ variable "tags" {
 
   validation {
     condition = (
-      lookup(var.tags, "ManagedBy", null) == "jwall-engineering-infra" &&
+      contains(["jwall-engineering-infra", "jaws"], lookup(var.tags, "ManagedBy", "")) &&
       lookup(var.tags, "Environment", null) == var.environment &&
       lookup(var.tags, "Workspace", null) == "${var.project}-${var.environment}"
     )
-    error_message = "tags.ManagedBy must be `jwall-engineering-infra`, tags.Environment must equal environment and tags.Workspace must be `<project>-<environment>`."
+    error_message = "tags.ManagedBy must be `jwall-engineering-infra` or `jaws` (the account's, stamped by the CLI), tags.Environment must equal environment and tags.Workspace must be `<project>-<environment>`."
   }
 }
 

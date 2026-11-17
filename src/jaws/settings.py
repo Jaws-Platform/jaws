@@ -101,6 +101,8 @@ class AwsSection(_Section):
 class ContextSection(_Section):
     organization: str = Field(pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")
     owner: str = Field(pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$")
+    #: The ManagedBy tag the tool stamps on everything it renders in this account.
+    managed_by: str = Field(default="jwall-engineering-infra", pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 
 class DnsSection(_Section):
@@ -490,6 +492,9 @@ def resolve_account(
 class Settings(_Section):
     #: Which account's view of the configuration this is (never read from the file).
     account: Account = "management"
+    #: Every account's organization, management's first (never read from the file):
+    #: what a project file may state as its Organization tag while it moves.
+    organizations: tuple[str, ...] = ()
     """The whole of config.yaml."""
 
     tool: ToolSection = ToolSection()
@@ -612,6 +617,10 @@ def load_settings(
 
     if "account" in raw:
         raise ConfigError(f"{path}: account is chosen per run (--account), not in the file")
+    if "organizations" in raw:
+        raise ConfigError(
+            f"{path}: organizations are each account's context.organization, not a key of the file"
+        )
     try:
         management = Settings.model_validate(raw)
     except ValidationError as exc:
@@ -619,7 +628,7 @@ def load_settings(
     if management.production is None:
         if account == "production":
             raise ConfigError(f"{path}: no production section, so nothing is in production")
-        return management
+        return management.model_copy(update={"organizations": (management.context.organization,)})
     try:
         production = Settings.model_validate(
             {**_production_view(raw, management.production, path), "account": "production"}
@@ -628,7 +637,11 @@ def load_settings(
         raise ConfigError(
             f"{path}: in the production view: {_format_validation_error(exc)}"
         ) from exc
-    return production if account == "production" else management
+    organizations = tuple(
+        dict.fromkeys((management.context.organization, production.context.organization))
+    )
+    view = production if account == "production" else management
+    return view.model_copy(update={"organizations": organizations})
 
 
 #: The sections `production.overrides` may replace keys of: what genuinely

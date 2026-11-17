@@ -233,6 +233,40 @@ run "production_starts_empty" {
   }
 }
 
+run "production_takes_its_managed_by_from_the_configuration" {
+  command = plan
+
+  # production.overrides.context.managed_by is a value no code spells.
+  variables {
+    account     = "production"
+    config_file = "tests/fixtures/relabelled.yaml"
+  }
+
+  override_data {
+    target = data.aws_caller_identity.current
+    values = {
+      account_id = "570327089884"
+    }
+  }
+
+  override_module {
+    target = module.sites_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-cli"
+    }
+  }
+
+  assert {
+    condition     = module.context.tags["ManagedBy"] == "jaws-relabelled"
+    error_message = "production's ManagedBy tag is config.yaml's production.overrides.context.managed_by, as the CLI stamps it on every stack it renders"
+  }
+
+  assert {
+    condition     = module.context.tags["Organization"] == "jaws" && module.context.tags["Project"] == "jaws"
+    error_message = "only ManagedBy differs from production's usual tags"
+  }
+}
+
 run "a_moving_project_has_roles_in_production" {
   command = plan
 

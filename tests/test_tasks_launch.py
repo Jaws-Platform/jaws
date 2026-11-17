@@ -105,7 +105,12 @@ def _launch(ec2: FakeEC2, spec: tasks.TaskSpec, clock: Clock | None = None) -> t
 def test_task_tags(bot: Project) -> None:
     tags = tasks.task_tags(_spec(bot, pull_request="84"), "spot")
     assert tags == {
-        **bot.config.tags,
+        "Organization": "jwall-engineering",
+        "Project": "braveheart",
+        "Environment": "prod",
+        "Repository": "Braveheart-Chess/braveheart",
+        "Owner": "jwallace145",
+        "ManagedBy": "jwall-engineering-infra",
         "Component": "task-runner",
         "Purpose": "ci-task",
         "Profile": "cpu",

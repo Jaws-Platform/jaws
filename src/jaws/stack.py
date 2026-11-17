@@ -129,7 +129,7 @@ def _site_tfvars(site: Site) -> dict[str, Any]:
         "dev_domain_name": site.config.dev.domain if site.config.dev else None,
         "enable_preview": site.config.preview.enabled,
         "zone_id": site.zone_id,
-        "tags": dict(site.config.tags),
+        "tags": site.tags,
     }
 
 
@@ -142,7 +142,7 @@ def _site_tfvars_from_project(project: Project) -> dict[str, Any]:
         "dev_domain_name": config.dev.domain if config.dev else None,
         "enable_preview": config.preview.enabled,
         "zone_id": project.zone_id,
-        "tags": dict(config.tags),
+        "tags": project.tags,
     }
 
 
@@ -200,7 +200,7 @@ def _bot_tfvars(
     return {
         "project": project.project,
         "repository": project.config.repository,
-        "tags": dict(project.config.tags),
+        "tags": project.tags,
         **kind_tfvars,
         "availability_zones": list(settings.bot.availability_zones),
         # Without a task runner the stack creates none of its resources; the

@@ -58,9 +58,18 @@ def _unbootstrapped(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
+def _relabelled(config: dict[str, Any]) -> dict[str, Any]:
+    """Production with a ManagedBy of its own that no code spells: the
+    foundation must take it from the configuration."""
+    config = _bootstrapped(config)
+    config["production"]["overrides"]["context"]["managed_by"] = "jaws-relabelled"
+    return config
+
+
 FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "unbootstrapped.yaml": _unbootstrapped,
     "production.yaml": _bootstrapped,
+    "relabelled.yaml": _relabelled,
     # A research project with a stack in both accounts, and a site that has left.
     "moving.yaml": _with_projects({"braveheart-trainer": "moving", "main-site": "moved"}),
     "unregistered.yaml": _with_projects({"not-a-project": "moving"}),

@@ -23,7 +23,7 @@ from .components import (
 )
 from .errors import ConfigError
 from .settings import DatabricksProject, Settings
-from .site import ENVIRONMENT, Site, SiteConfig
+from .site import ENVIRONMENT, Site, SiteConfig, account_tags, organization_problems
 
 Role = Literal["plan", "preview", "apply", "release", "task"]
 
@@ -36,6 +36,7 @@ class Project(BaseModel):
 
     config: SiteConfig
     organization: str
+    managed_by: str
     state_bucket: str
     state_key: str
     region: str
@@ -54,17 +55,14 @@ class Project(BaseModel):
             return cls(
                 config=config,
                 organization=site.organization,
+                managed_by=site.managed_by,
                 state_bucket=site.state_bucket,
                 state_key=site.state_key,
                 region=site.region,
                 zone_id=site.zone_id,
             )
         organization = settings.context.organization
-        problems = []
-        if config.tags["Organization"] != organization:
-            problems.append(
-                f"tags.Organization must be {organization!r}, got {config.tags['Organization']!r}"
-            )
+        problems = organization_problems(config.tags, settings)
         own = f"/{organization}/{config.project}/"
         if config.kind == "databricks":
             reserved = sorted(set(config.tags) & set(DATABRICKS_RESERVED_TAGS))
@@ -104,6 +102,7 @@ class Project(BaseModel):
         return cls(
             config=config,
             organization=organization,
+            managed_by=settings.context.managed_by,
             state_bucket=settings.state.bucket,
             state_key=settings.state_key(config.project, ENVIRONMENT),
             region=settings.state.region,
@@ -122,6 +121,11 @@ class Project(BaseModel):
     @property
     def kind(self) -> Literal["site", "bot", "research", "databricks"]:
         return self.config.kind
+
+    @property
+    def tags(self) -> dict[str, str]:
+        """The tags every resource of the project carries, as this account stamps them."""
+        return account_tags(self.config.tags, self.organization, self.managed_by)
 
     @property
     def has_components(self) -> bool:
@@ -156,7 +160,7 @@ class Project(BaseModel):
         (from config.yaml) and the workspace's name."""
         self._require("databricks")
         return {
-            **self.config.tags,
+            **self.tags,
             "CostCenter": self._databricks_guardrails().cost_center,
             "Workspace": f"{self.project}-{ENVIRONMENT}",
         }

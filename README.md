@@ -241,6 +241,13 @@ account:
 - `--account management` addresses the old stack of a project that is `moving`
   (to destroy it), and `--account production` a run without a project file.
 
+The tags that differ between the accounts are the account's, never the project
+file's: every stack the tool renders and every task instance it launches gets
+`Organization` and `ManagedBy` from the view's `context.organization` and
+`context.managed_by` (`jwall-engineering` and `jwall-engineering-infra` in
+management, `jaws` and `jaws` in production), so one project file, which may
+state either organization, plans in both accounts while its project moves.
+
 The foundation is one root for both accounts: `terraform plan -var
 account=production` plans the production account (state in
 `backend/production.hcl`), and the default plans the management account. Each

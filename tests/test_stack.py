@@ -100,7 +100,14 @@ def test_render_tfvars_for_bot(bot: Project, settings: Settings) -> None:
     assert render_tfvars(bot, settings) == {
         "project": "braveheart",
         "repository": "Braveheart-Chess/braveheart",
-        "tags": dict(bot.config.tags),
+        "tags": {
+            "Organization": "jwall-engineering",
+            "Project": "braveheart",
+            "Environment": "prod",
+            "Repository": "Braveheart-Chess/braveheart",
+            "Owner": "jwallace145",
+            "ManagedBy": "jwall-engineering-infra",
+        },
         "bot_enabled": True,
         "instance_type": "t3.micro",
         "architecture": "x86_64",
