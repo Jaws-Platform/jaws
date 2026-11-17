@@ -48,6 +48,9 @@ module "owner_admin" {
   identity_store_id = one(data.aws_ssoadmin_instances.this.identity_store_ids)
   account_id        = data.aws_organizations_organization.this.master_account_id
 
+  # The same permission set in the organization's production account.
+  additional_account_ids = [local.production_account_id]
+
   user = local.owner
 
   permission_set_name = "AdministratorAccess"

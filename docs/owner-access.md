@@ -115,6 +115,13 @@ permission set gives its role a new suffix, which locks the old ARN out of the
 bucket policies; recreating the user drops its passkeys. Do either only on
 purpose, and expect to update `foundation/state.tf`.
 
+The stack also assigns the same permission set in the production account
+(`production.overrides.aws.account_id` in `config.yaml`), where everything is
+moving, and `terraform output -raw aws_config` prints a `jaws-prod` profile for
+it beside `jwall-admin`. The role Identity Center provisions there has its own
+suffix; [production-bootstrap.md](production-bootstrap.md) reads it. The
+development account gets no assignment: nothing is built there.
+
 ## First sign-in and the CLI profile
 
 1. Open `terraform output -raw access_portal_url`. Sign in as `jwallace145`
