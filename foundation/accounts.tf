@@ -61,7 +61,15 @@ locals {
     )
   }
 
-  served_sites               = { for key, project in local.projects : key => project if local.serves[key] }
+  served_sites = { for key, project in local.projects : key => project if local.serves[key] }
+
+  # A site that has moved keeps its old bucket here. A move never destroys a
+  # bucket: the owner deletes it by hand when satisfied. Only the bucket stays;
+  # its roles, its state prefix and its policy inputs go with the site.
+  retained_site_buckets = toset([
+    for key in keys(local.projects) : key
+    if !local.in_production && try(local.production_projects[key], "") == "moved"
+  ])
   served_bots                = { for key, bot in local.bots : key => bot if local.serves[key] }
   served_databricks_projects = { for key, project in local.databricks_projects : key => project if local.serves[key] }
 }

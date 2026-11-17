@@ -61,7 +61,10 @@ Correct: one ARN, `arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com
 
 It goes into `config.yaml` as `production.overrides.aws.admin_role_arn` (and
 the same line in `tests/fixtures/config.yaml`), in a pull request merged before
-step 5. The foundation refuses to plan for production without it.
+step 5. The foundation refuses to plan for production without it, and step 5
+starts by checking the file against this command's output: a wrong suffix
+would lock you out of the new state bucket, and only the account's root user
+could let you back in.
 
 ## 3. Ask for the quotas production will need
 
@@ -121,10 +124,24 @@ local file. Step 2's pull request must be merged and pulled first.
 ```sh
 cd foundation
 export AWS_PROFILE=jaws-prod
+test "$(yq -r .production.overrides.aws.admin_role_arn ../config.yaml)" = \
+  "$(aws iam list-roles --path-prefix /aws-reserved/sso.amazonaws.com/ \
+     --query 'Roles[?starts_with(RoleName, `AWSReservedSSO_AdministratorAccess_`)].Arn' --output text)" \
+  && echo "admin role matches"
+```
+
+Correct: it prints `admin role matches`. If it prints nothing, stop: the ARN
+in `config.yaml` is not your role in this account.
+
+```sh
 printf 'terraform {\n  backend "local" {}\n}\n' > backend_override.tf
-terraform init
+terraform init -reconfigure
 terraform plan -var account=production -out=bootstrap.tfplan
 ```
+
+`-reconfigure` because `foundation/` may already be initialised for the
+management account's backend; without it, `init` stops and suggests migrating
+that state, which must not happen.
 
 If the plan stops with "These credentials belong to account …", the profile is
 wrong; with "no admin_role_arn …", step 2 is not merged.
@@ -140,8 +157,11 @@ these:
 - the image repository `jaws-cli` and its lifecycle policy (2);
 - a hosted zone `jwall.engineering`, with its CAA record and one TXT record (3).
 
-No site bucket, no project role, nothing from Databricks, and nothing whose name
-starts with `jwall-engineering-`. Then:
+No site bucket, no project role, no Databricks resource, and no resource
+*named* `jwall-engineering-…`. (The `Repository` tag carries this repository's
+name, whatever it is on the day. Four of the policies are for Databricks, which
+is off in production: they name `jaws-databricks-audit-logs` and
+`/jaws/databricks/client-secret`, which do not exist yet.) Then:
 
 ```sh
 terraform apply bootstrap.tfplan

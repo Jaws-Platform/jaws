@@ -44,7 +44,12 @@ def test_the_tool_lists_the_accounts(workflow: str) -> None:
     job = _jobs(workflow)["accounts"]
     assert job["outputs"] == {"accounts": "${{ steps.list.outputs.accounts }}"}
     step = _step(job, lambda s: s.get("id") == "list")
-    assert 'echo "accounts=$(uv run jaws config accounts)" >> "$GITHUB_OUTPUT"' in step["run"]
+    # Two commands, so that a failing `jaws` fails the step instead of writing
+    # an empty list (a command substitution inside `echo` hides its exit code).
+    assert step["run"].splitlines() == [
+        "accounts=$(uv run jaws config accounts)",
+        'echo "accounts=$accounts" >> "$GITHUB_OUTPUT"',
+    ]
     assert job["permissions"] == {"contents": "read"}
 
 
@@ -149,3 +154,22 @@ def test_each_account_has_a_backend_file_for_its_own_state_bucket(account: str) 
     assert values["bucket"] == settings.state.bucket
     assert values["region"] == settings.state.region
     assert values["key"] == "project=infra/env=prod/infra-prod.tfstate"
+
+
+def test_the_apply_runs_only_for_a_release() -> None:
+    job = _jobs("release-please.yml")["apply"]
+    assert job["if"] == (
+        "github.event_name == 'push' && needs.release-please.outputs.release_created == 'true'"
+    )
+    assert job["environment"]["name"] == "prod"
+
+
+def test_the_image_is_published_after_every_apply_or_for_a_republished_tag() -> None:
+    job = _jobs("release-please.yml")["image"]
+    condition = " ".join(str(job["if"]).split())
+    assert condition == (
+        "!cancelled() && ( (github.event_name == 'push' && needs.apply.result == 'success' && "
+        "needs.release-please.outputs.release_created == 'true') || "
+        "(github.event_name == 'workflow_dispatch' && inputs.tag != '') )"
+    )
+    assert job["environment"]["name"] == "prod"

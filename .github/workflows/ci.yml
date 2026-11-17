@@ -415,7 +415,9 @@ jobs:
       - run: uv sync --locked
       - name: List the accounts (management, and production once it is bootstrapped)
         id: list
-        run: echo "accounts=$(uv run jaws config accounts)" >> "$GITHUB_OUTPUT"
+        run: |
+          accounts=$(uv run jaws config accounts)
+          echo "accounts=$accounts" >> "$GITHUB_OUTPUT"
 
   terraform-plan:
     # The management leg keeps the name the `main` ruleset requires.

@@ -33,13 +33,14 @@ on:
         default: ""
       account:
         description: >-
-          The account to address. Empty uses the one config.yaml gives the
+          The account to address. `auto` uses the one config.yaml gives the
           project (production once it is listed under production.projects);
-          `management` addresses the old stack of a project that is moving.
+          `management` addresses the old stack of a project that is moving. A
+          destroy of a moving project must name its account.
         required: false
         type: choice
-        options: ["", management, production]
-        default: ""
+        options: [auto, management, production]
+        default: auto
 
 concurrency:
   group: bot-apply-${{ inputs.project }}
@@ -92,7 +93,7 @@ jobs:
         id: role
         env:
           PROJECT: ${{ inputs.project }}
-          ACCOUNT: ${{ inputs.account }}
+          ACCOUNT: ${{ inputs.account != 'auto' && inputs.account || '' }}
         run: |
           # The tool says which account this is (config.yaml: management, or `production`).
           resolved=$(uv run jaws ${ACCOUNT:+--account "$ACCOUNT"} config env --project "$PROJECT")
@@ -118,7 +119,7 @@ jobs:
       - name: jaws ${{ inputs.destroy && 'destroy' || 'apply' }}
         env:
           JAWS_STACKS_ROOT: ${{ github.workspace }}/stacks
-          ACCOUNT: ${{ inputs.account }}
+          ACCOUNT: ${{ inputs.account != 'auto' && inputs.account || '' }}
           COMMAND: ${{ inputs.destroy && 'destroy --yes' || 'apply' }}
           # The CLI reads each counterpart's project file (consumers of the
           # project's datasets) from GitHub to render its bucket readers.

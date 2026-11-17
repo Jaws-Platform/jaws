@@ -46,7 +46,20 @@ def _with_projects(projects: dict[str, str]) -> Callable[[dict[str, Any]], dict[
     return transform
 
 
+def _unbootstrapped(config: dict[str, Any]) -> dict[str, Any]:
+    """What `config.yaml` says before the bootstrap: production has no admin
+    role and no zone of its own yet. Stated here, not read from the file, so
+    the tests that need this state survive the pull request that ends it."""
+    production = config["production"]
+    production["bootstrapped"] = False
+    production["projects"] = {}
+    production["overrides"]["aws"].pop("admin_role_arn", None)
+    production["overrides"].pop("dns", None)
+    return config
+
+
 FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+    "unbootstrapped.yaml": _unbootstrapped,
     "production.yaml": _bootstrapped,
     # A research project with a stack in both accounts, and a site that has left.
     "moving.yaml": _with_projects({"braveheart-trainer": "moving", "main-site": "moved"}),

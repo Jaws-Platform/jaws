@@ -9,6 +9,7 @@ account per run, and every workflow asks the tool which (`config env`).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -28,9 +29,24 @@ SITE = "guitar-knowledge-base"  # the project of the `workspace` fixture
 
 
 def _raw() -> dict[str, Any]:
+    """config.yaml before production is bootstrapped and before anything moves,
+    whatever the repository's own file says today: these tests must not start
+    failing on the pull request that records the bootstrap."""
     raw = yaml.safe_load((FIXTURES / "config.yaml").read_text())
     assert isinstance(raw, dict)
+    production = raw["production"]
+    production["bootstrapped"] = False
+    production["projects"] = {}
+    production["overrides"]["aws"].pop("admin_role_arn", None)
+    production["overrides"].pop("dns", None)
     return raw
+
+
+@pytest.fixture(autouse=True)
+def _before_the_bootstrap(request: pytest.FixtureRequest) -> None:
+    """Every command-line test starts from that same baseline."""
+    if "workspace" in request.fixturenames:
+        _write(request.getfixturevalue("workspace") / "config.yaml", _raw())
 
 
 def _write(path: Path, raw: dict[str, Any]) -> Path:
@@ -132,12 +148,42 @@ def test_the_production_view_shares_everything_it_does_not_override() -> None:
     assert production.production == management.production
 
 
-def test_the_repository_starts_with_no_project_in_production() -> None:
-    settings = load_settings(REPO_ROOT / "config.yaml", environ={})
-    assert settings.aws.account_id == MANAGEMENT
-    assert settings.production is not None
-    assert settings.production.projects == {}
-    assert settings.production.bootstrapped is False
+def test_production_names_its_own_databricks_resources() -> None:
+    """Databricks is off in production, but its roles' policies are created
+    there at the bootstrap and must not name the management account's."""
+    production = load_settings(REPO_ROOT / "config.yaml", environ={}, account="production")
+    assert production.databricks is not None
+    assert production.databricks.secret_parameter == "/jaws/databricks/client-secret"
+    assert production.databricks.audit_bucket == "jaws-databricks-audit-logs"
+    assert production.databricks.metastore_name == "jaws-us-east-1"
+    management = load_settings(REPO_ROOT / "config.yaml", environ={})
+    assert management.databricks is not None
+    assert management.databricks.secret_parameter == "/jwall-engineering/databricks/client-secret"
+
+
+@pytest.mark.parametrize("section", ["tasks", "projects", "bot", "terraform", "library"])
+def test_only_what_differs_between_accounts_can_be_overridden(tmp_path: Path, section: str) -> None:
+    """The foundation applies the same overrides (foundation/accounts.tf); a
+    section it does not read per account must not differ for the tool either,
+    or the tool's guardrails and the roles' IAM would disagree."""
+    raw = _raw()
+    raw["production"]["overrides"][section] = {}
+    with pytest.raises(ConfigError, match=rf"production\.overrides\.{section}.*cannot differ"):
+        load_settings(_write(tmp_path / "config.yaml", raw), environ={})
+
+
+def test_the_tool_and_the_foundation_override_the_same_sections() -> None:
+    from jaws.settings import OVERRIDABLE_SECTIONS
+
+    accounts_tf = (REPO_ROOT / "foundation" / "accounts.tf").read_text()
+    block = accounts_tf[
+        accounts_tf.index("  account = {") : accounts_tf.index(
+            "  }\n", accounts_tf.index("  account = {")
+        )
+    ]
+    in_foundation = set(re.findall(r"^    (\w+)\s+=", block, re.MULTILINE))
+    # `dns` is the tool's alone: the foundation creates the zone, it does not read its ID.
+    assert in_foundation == set(OVERRIDABLE_SECTIONS) - {"dns"}
 
 
 def test_an_override_for_a_section_that_does_not_exist_is_refused(tmp_path: Path) -> None:
@@ -392,3 +438,29 @@ def test_the_accounts_do_not_depend_on_the_project_in_the_directory(workspace: P
     _write(workspace / "config.yaml", raw)
     accounts = json.loads(runner.invoke(cli.app, ["config", "accounts"]).stdout)
     assert [a["account"] for a in accounts] == ["management", "production"]
+
+
+# -- destroying a project that is moving -----------------------------------------------------
+
+
+def test_destroying_a_moving_project_needs_the_account_named(bot_workspace: Path) -> None:
+    """Both stacks exist; the default (production) is the new one, and the one
+    usually meant is the old. Never guess."""
+    _config(bot_workspace, {"braveheart": "moving"})
+    result = runner.invoke(cli.app, ["destroy", "--yes"])
+    assert result.exit_code == 2
+    assert "braveheart has a stack in both accounts" in result.output
+    assert "--account management" in result.output and "--account production" in result.output
+
+
+@pytest.mark.parametrize("account", ["management", "production"])
+def test_a_named_account_gets_past_that_refusal(bot_workspace: Path, account: str) -> None:
+    _config(bot_workspace, {"braveheart": "moving"})
+    result = runner.invoke(cli.app, ["--account", account, "destroy", "--yes"])
+    assert "has a stack in both accounts" not in result.output
+
+
+def test_destroying_a_project_in_one_account_needs_no_flag(bot_workspace: Path) -> None:
+    _write(bot_workspace / "config.yaml", _raw())
+    result = runner.invoke(cli.app, ["destroy", "--yes"])
+    assert "has a stack in both accounts" not in result.output

@@ -32,7 +32,7 @@ locals {
 }
 
 module "site_bucket" {
-  for_each = local.served_sites
+  for_each = merge(local.served_sites, { for key in local.retained_site_buckets : key => local.projects[key] })
   source   = "jwallace145/jwall-engineering/aws//modules/site-bucket"
   version  = "0.27.0"
 
@@ -45,7 +45,8 @@ module "site_bucket" {
   # configuration. Reads are unrestricted; the content is public through
   # CloudFront.
   admin_principal_arns = local.bucket_admin_principal_arns
-  prefix_writers = {
+  # A retained bucket (accounts.tf) has no writers left: its roles are gone.
+  prefix_writers = contains(local.retained_site_buckets, each.key) ? {} : {
     "prod/"     = [module.site_ci_apply[each.key].role_arn]
     "dev/"      = [module.site_ci_apply[each.key].role_arn]
     "previews/" = [module.site_ci_preview[each.key].role_arn]

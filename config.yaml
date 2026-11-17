@@ -227,3 +227,8 @@ production:
     # dns: {zone_id: ...}  # known once the bootstrap creates the zone; required when bootstrapped
     databricks:
       enabled: false # Databricks moves last, as a whole
+      # Its names there, so that nothing created in production (the roles'
+      # policies, at the bootstrap) names the management account's.
+      secret_parameter: /jaws/databricks/client-secret
+      metastore_name: jaws-us-east-1
+      audit_bucket: jaws-databricks-audit-logs

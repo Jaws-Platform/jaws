@@ -28,6 +28,9 @@ APPLY_ROLE = (
 BUCKET = "jwall-engineering-guitar-knowledge-base"
 BOT_PLAN_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-braveheart-ci-plan/s"
 BOT_APPLY_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-braveheart-ci-apply/s"
+# The owner's shell: admin credentials in the account the project lives in. The
+# commands that accept any role still refuse another account's credentials.
+OWNER = "arn:aws:sts::650503560686:assumed-role/AWSReservedSSO_AdministratorAccess_0f/owner"
 
 
 def _as_role(arn: str) -> AbstractContextManager[Any]:
@@ -338,7 +341,7 @@ TOKEN_PARAM = "/jwall-engineering/braveheart/lichess-token"
 
 
 def test_secrets_set_prompts_hidden(bot_workspace: Path) -> None:
-    with mock_aws():
+    with mock_aws(), _as_role(OWNER):
         result = runner.invoke(
             cli.app, ["bot", "secrets", "set", "LICHESS_TOKEN"], input="lip_t0k\n"
         )
@@ -359,7 +362,7 @@ def test_secrets_set_refuses_an_undeclared_name(bot_workspace: Path) -> None:
 
 
 def test_secrets_check_exit_codes(bot_workspace: Path) -> None:
-    with mock_aws():
+    with mock_aws(), _as_role(OWNER):
         missing = runner.invoke(cli.app, ["bot", "secrets", "check", "LICHESS_TOKEN"])
         boto3.client("ssm", region_name="us-east-1").put_parameter(
             Name=TOKEN_PARAM, Value="x", Type="SecureString"
@@ -639,7 +642,7 @@ def test_bot_deploy_success(bot_workspace: Path, monkeypatch: pytest.MonkeyPatch
 def test_bot_reconcile_dry_run_prints_plan(
     bot_workspace: Path, fake_github: dict[str, bytes]
 ) -> None:
-    with mock_aws():
+    with mock_aws(), _as_role(OWNER):
         _ecr_with("v0.13.0")
         _put_param("running-version", "v0.13.0")
         result = runner.invoke(cli.app, ["bot", "reconcile", "--dry-run"])
@@ -1071,7 +1074,7 @@ def _pinned_tag(workspace: Path) -> str:
 def test_reconcile_dry_run_of_a_pinned_bot_ships_the_pin(
     pinned_workspace: Path, fake_github: dict[str, bytes]
 ) -> None:
-    with mock_aws():
+    with mock_aws(), _as_role(OWNER):
         _ecr_with("v0.14.0")
         _put_param("running-version", "v0.14.0")
         result = runner.invoke(cli.app, ["bot", "reconcile", "--dry-run"])
@@ -1085,7 +1088,7 @@ def test_reconcile_dry_run_of_a_pinned_bot_ships_the_pin(
 def test_reconcile_of_a_pinned_bot_refuses_another_version(
     pinned_workspace: Path, fake_github: dict[str, bytes]
 ) -> None:
-    with mock_aws():
+    with mock_aws(), _as_role(OWNER):
         _ecr_with()
         result = runner.invoke(cli.app, ["bot", "reconcile", "--dry-run", "--version", "v0.14.0"])
     assert result.exit_code == 3

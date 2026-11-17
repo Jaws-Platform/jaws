@@ -631,6 +631,13 @@ def load_settings(
     return production if account == "production" else management
 
 
+#: The sections `production.overrides` may replace keys of: what genuinely
+#: differs between the two accounts. The foundation applies the same ones
+#: (foundation/accounts.tf); a guardrail that differed here but not there
+#: would let the tool and the roles' IAM disagree.
+OVERRIDABLE_SECTIONS = ("aws", "context", "state", "ecr", "dns", "databricks")
+
+
 def _production_view(
     raw: dict[str, Any], production: ProductionSection, path: Path
 ) -> dict[str, Any]:
@@ -640,6 +647,11 @@ def _production_view(
         if name in ("production", "account") or name not in Settings.model_fields:
             raise ConfigError(
                 f"{path}: production.overrides.{name}: config.yaml has no section of that name"
+            )
+        if name not in OVERRIDABLE_SECTIONS:
+            raise ConfigError(
+                f"{path}: production.overrides.{name}: {name} cannot differ between the "
+                f"accounts (only {', '.join(OVERRIDABLE_SECTIONS)} can)"
             )
         section = raw.get(name)
         if section is None:
