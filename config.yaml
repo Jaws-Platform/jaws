@@ -217,7 +217,8 @@ production:
   overrides:
     aws:
       account_id: "570327089884"
-      # admin_role_arn: known once owner-access is applied; required when bootstrapped
+      # The owner's Identity Center admin role in production (docs/production-bootstrap.md, step 2).
+      admin_role_arn: arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_013589f39f92382a
     context:
       organization: jaws
     state:
