@@ -18,6 +18,9 @@ _ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _GITHUB_REPOSITORY = r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?/[A-Za-z0-9._-]+$"
 _RELEASE_TAG = r"^v\d+\.\d+\.\d+$"
 _PARAMETER = re.compile(r"^/[a-z0-9-]+(/[a-z0-9-]+)+$")
+#: A secret named relative to the project: the parameter `/<organization>/<project>/<name>`
+#: of whichever account a run addresses (`Project.secret_parameters`).
+_RELATIVE_SECRET = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 RetentionDays = Literal[
     1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731,
@@ -196,8 +199,15 @@ class LichessBot(_Model):
         for name, parameter in value.items():
             if not _ENV_NAME.match(name):
                 raise ValueError(f"{name!r} is not an environment variable name")
-            if not _PARAMETER.match(parameter):
-                raise ValueError(f"{parameter!r} is not an SSM parameter path like /a/b/c")
+            if parameter.startswith("/"):
+                if not _PARAMETER.match(parameter):
+                    raise ValueError(f"{parameter!r} is not an SSM parameter path like /a/b/c")
+            elif not _RELATIVE_SECRET.match(parameter) or parameter == "bot":
+                raise ValueError(
+                    f"{parameter!r} is neither a name under the project's parameters "
+                    "(like lichess-token; not bot, which the release role writes under) "
+                    "nor an SSM parameter path like /a/b/c"
+                )
         return value
 
 

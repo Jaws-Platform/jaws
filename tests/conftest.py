@@ -6,6 +6,7 @@ import os
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -43,6 +44,15 @@ MATH_PROVER_GUARDRAILS = ProjectGuardrails(
 def with_guardrails(settings: Settings, project: str, guardrails: ProjectGuardrails) -> Settings:
     """`settings` with `guardrails` as the central entry for `project`."""
     return settings.model_copy(update={"projects": {**settings.projects, project: guardrails}})
+
+
+@pytest.fixture(autouse=True)
+def _restore_environment() -> Iterator[None]:
+    """Each test gets the environment back as it found it. A command adopts the old
+    JES_* variables by writing os.environ (jaws.legacy), which monkeypatch does not
+    undo, so without this a JES_CONFIG set by one test chose the next test's config."""
+    with patch.dict(os.environ):
+        yield
 
 
 @pytest.fixture

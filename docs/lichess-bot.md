@@ -53,7 +53,7 @@ components:
     config: lichess/config.yml
     lichess_user: rusty-chess-bot
     secrets:
-      LICHESS_TOKEN: /jwall-engineering/braveheart/lichess-token
+      LICHESS_TOKEN: lichess-token     # /<organization>/<project>/lichess-token in the account
     engine:
       hash_mb: 128
       move_overhead_ms: 500
@@ -75,7 +75,7 @@ A file is either a site (`domain` and `site`) or a bot project
 | `version` | `1` | File format version. |
 | `project` | kebab-case, ≤ 30 | The project; every name below is derived from it. A bot project registered in `foundation/bots.tf` takes at most 15 characters (a research project up to 30: its policies are much smaller): its apply role's `container/manage` policy repeats the name in 17 ARNs and IAM caps a managed policy at 6,144 characters. The project can differ from the repository name (`braveheart-bot` deploys from `Braveheart-Chess/braveheart-lichess-bot`). |
 | `repository` | `owner/repo` | Where the releases are published. Must match `tags.Repository`. |
-| `tags` | five required keys | Applied to every AWS resource for cost allocation. `Project`, `Repository` and `Environment: prod` are cross-checked; extra keys pass through. The tool adds `ManagedBy: jwall-engineering-infra` itself, so leave it out (a legacy `ManagedBy: terraform` is accepted and replaced). |
+| `tags` | five required keys | Applied to every AWS resource for cost allocation. `Project`, `Repository` and `Environment: prod` are cross-checked; extra keys pass through. `Organization` and `ManagedBy` are the account's: the tool stamps `jwall-engineering` / `jwall-engineering-infra` in the management account and `jaws` / `jaws` in production, whatever the file says, so one file serves both while a project moves. A stated `Organization` must be one of the two; leave `ManagedBy` out. |
 | `container-image.architecture` | `x86_64` \| `arm64`, `x86_64` | Must match the release asset. `arm64` also needs a `t4g` instance type. |
 | `container-image.artifact.asset` | file name with `{version}` | The release asset that holds the binary. `{version}` is the release tag. |
 | `container-image.artifact.checksum` | file name with `{version}` | Its `sha256sum` file. The build stops if the digest differs. |
@@ -87,7 +87,7 @@ A file is either a site (`domain` and `site`) or a bot project
 | `lichess-bot.instance_type` | `t3.micro` | EC2 instance type. Changing it replaces the instance. |
 | `lichess-bot.config` | relative `.yml` path | Your lichess-bot config. It must contain the token as `LICHESS_TOKEN_PLACEHOLDER`. |
 | `lichess-bot.lichess_user` | Lichess user name, none | Shown by `bot status` and written into every game record. |
-| `lichess-bot.secrets` | map | Environment variable to SSM parameter. Must include `LICHESS_TOKEN`. Paths live under `/jwall-engineering/<project>/` and never under `.../bot/`. |
+| `lichess-bot.secrets` | map | Environment variable to SSM parameter. Must include `LICHESS_TOKEN`. Name the parameter relative to the project (`lichess-token`): it is `/<organization>/<project>/lichess-token` in whichever account a run addresses. An absolute path also works, in the one account whose prefix it carries. Never `bot` or under `.../bot/`, which the release role writes. |
 | `lichess-bot.engine.hash_mb` | 1–4096, 128 | UCI `Hash`. |
 | `lichess-bot.engine.move_overhead_ms` | 0–5000, 500 | UCI `Move Overhead`, when the engine offers it. lichess-bot's own `move_overhead` stays in your config. |
 | `lichess-bot.records.s3` | bool, `true` | Ship finished games to S3. |
@@ -156,6 +156,10 @@ components:
   against the release's `.sha256` and smoke-tested before the push.
 
 ## Names the tool derives
+
+`jwall-engineering` below is the management account's organization; in the
+production account every name starts with `jaws` instead (`jaws-<project>`,
+`/jaws/<project>/...`, state in `jaws-terraform-state-570327089884`).
 
 | What | Name |
 |---|---|
@@ -262,6 +266,45 @@ jaws bot secrets check LICHESS_TOKEN  # exit 0 if set
 
 Run these from your own shell with admin credentials. Only the instance role
 can read the value. The release role can't: it writes only `.../bot/*`.
+
+The parameter is the one the account addresses: `--account production bot
+secrets set LICHESS_TOKEN` writes `/jaws/<project>/lichess-token` for a
+project named `lichess-token` in its file.
+
+## Moving a bot to the production account
+
+A bot moves whole: its image repository, instance, records bucket and
+schedules are created in production, its records are copied, and the old stack
+is destroyed with its records bucket released and kept. Exactly one bot may hold
+the token at a time, so the old one is drained before the new one starts.
+
+1. **The file serves both accounts.** In the bot repository, name the secret
+   relatively (`LICHESS_TOKEN: lichess-token`) and pin a release of this tool
+   that has relative secrets. The management Bot plan stays "No changes".
+2. **Register it in production.** `production.projects: {<project>: moving}` in
+   this repository's `config.yaml`; the release applies the project's CI roles
+   in production. From now on, a run for the project addresses production
+   unless it says `--account management`.
+3. **Apply the new stack.** Bot apply with `account: production`. The new
+   instance has neither a token nor an image yet, so it plays nothing.
+4. **Cut over, inside the running hours, while the bot is idle:**
+   - `jaws --account management bot stop --wait`: the old bot finishes its
+     game, ships its records and powers off;
+   - copy the records through a local directory, `aws s3 sync` down with the
+     management profile and up with the production one, and compare the two
+     listings (key, size, ETag);
+   - `jaws --account production bot secrets set LICHESS_TOKEN`;
+   - `jaws --account production bot reconcile --version <tag>`, then
+     `bot status` until `ok`, and a game on Lichess.
+5. **Destroy the old stack** after a day of games: delete the old image
+   repository's images, then Bot apply `destroy` with `account: management`.
+   The old records bucket is released and kept; the old token parameter stays
+   until the owner deletes it.
+6. **Mark it moved.** `<project>: moved`; the management foundation drops its
+   roles.
+
+Until step 5, rolling back is `--account production bot stop` and
+`--account management bot start`.
 
 ## Getting a shell
 

@@ -1182,7 +1182,7 @@ def _project_session(run: Run, roles: list[Role] | None) -> boto3.session.Sessio
 
 def _secret_parameter(project: Project, name: str) -> str:
     try:
-        return project.bot.secrets[name]
+        return project.secret_parameters[name]
     except KeyError:
         declared = ", ".join(sorted(project.bot.secrets))
         raise ConfigError(
