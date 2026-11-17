@@ -127,11 +127,11 @@ run "management_is_unchanged_by_default" {
       Organization = "jwall-engineering"
       Project      = "jwall-engineering-infra"
       Environment  = "prod"
-      Repository   = "jwallace145/jaws"
+      Repository   = "jwallace145/jwall-engineering-infra"
       ManagedBy    = "jwall-engineering-infra"
       Owner        = "jwallace145"
     })
-    error_message = "management's tags must not change"
+    error_message = "management's tags must not change, the Repository tag included: the rename does not retag the account"
   }
 
   assert {

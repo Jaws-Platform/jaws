@@ -14,7 +14,12 @@ locals {
     project     = local.in_production ? "jaws" : "jwall-engineering-infra"
     environment = "prod"
     repository  = "jwallace145/jaws"
-    owner       = "jwallace145"
+
+    # The `Repository` tag. Unchanged in the management account: its resources
+    # leave with the move to production, and retagging 144 of them (a
+    # Databricks workspace and a storage credential among them) would buy nothing.
+    repository_tag = local.in_production ? "jwallace145/jaws" : "jwallace145/jwall-engineering-infra"
+    owner          = "jwallace145"
 
     # The name this repository had until it was renamed. The roles its own
     # workflows assume still trust it, because GitHub's OIDC subject contains
@@ -43,7 +48,7 @@ module "context" {
 
   project      = local.context.project
   environment  = local.context.environment
-  repository   = local.context.repository
+  repository   = local.context.repository_tag
   owner        = local.context.owner
   organization = local.context.organization
   name_root    = local.context.organization
