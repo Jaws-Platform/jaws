@@ -14,6 +14,11 @@ locals {
     environment  = "prod"
     repository   = "jwallace145/jwall-engineering-infra"
     owner        = "jwallace145"
+
+    # The name this repository is about to take. The roles its own workflows
+    # assume trust both until the rename is done, because GitHub's OIDC
+    # subject contains the name; then the old name is dropped.
+    repository_aliases = ["jwallace145/jaws"]
   }
 
   # Numeric GitHub IDs for the immutable OIDC subject form
@@ -33,7 +38,7 @@ locals {
 
 module "context" {
   source  = "jwallace145/jwall-engineering/aws//modules/context"
-  version = "0.26.0"
+  version = "0.27.0"
 
   project      = local.context.project
   environment  = local.context.environment

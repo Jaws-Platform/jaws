@@ -9,7 +9,7 @@
 
 module "catalog" {
   source  = "jwallace145/jwall-engineering/aws//modules/databricks-catalog"
-  version = "0.26.0"
+  version = "0.27.0"
 
   providers = {
     databricks = databricks.workspace
@@ -29,7 +29,7 @@ module "catalog" {
 
 module "workspace_config" {
   source  = "jwallace145/jwall-engineering/aws//modules/databricks-workspace-config"
-  version = "0.26.0"
+  version = "0.27.0"
 
   providers = {
     databricks = databricks.workspace
