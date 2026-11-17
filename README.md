@@ -240,6 +240,9 @@ account=production` plans the production account (state in
 creates roles and buckets only for the projects with a stack in its account,
 and a plan made with the other account's credentials stops before it starts.
 
+The production account is bootstrapped once by the owner:
+[docs/production-bootstrap.md](docs/production-bootstrap.md).
+
 `jaws config show` prints the view a run would use, and `jaws config env` the
 few values a workflow needs to build a role ARN: every workflow gets a
 project's account from it (`config env --project <name>`), never from its own

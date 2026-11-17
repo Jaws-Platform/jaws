@@ -6,6 +6,11 @@ locals {
   tool_config = yamldecode(file("${path.module}/../config.yaml"))
   account_id  = local.tool_config.aws.account_id
 
+  # The production account, where everything is moving (config.yaml,
+  # `production`). The owner has the same admin access there. Nothing is being
+  # built in the development account, so it gets none.
+  production_account_id = local.tool_config.production.overrides.aws.account_id
+
   context = {
     organization = local.tool_config.context.organization
     project      = "jwall-engineering-infra" # Project tag value

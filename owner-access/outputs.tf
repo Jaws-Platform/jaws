@@ -18,7 +18,7 @@ output "permission_set_arn" {
 }
 
 output "aws_config" {
-  description = "The ~/.aws/config blocks for the jwall-admin profile: terraform output -raw aws_config."
+  description = "The ~/.aws/config blocks for the jwall-admin profile (the management account) and the jaws-prod profile (production): terraform output -raw aws_config."
   value       = <<-EOT
     [sso-session jwall-engineering]
     sso_start_url = ${local.access_portal_url}
@@ -28,6 +28,12 @@ output "aws_config" {
     [profile jwall-admin]
     sso_session = jwall-engineering
     sso_account_id = ${local.account_id}
+    sso_role_name = ${module.owner_admin.permission_set_name}
+    region = ${local.region}
+
+    [profile jaws-prod]
+    sso_session = jwall-engineering
+    sso_account_id = ${local.production_account_id}
     sso_role_name = ${module.owner_admin.permission_set_name}
     region = ${local.region}
   EOT

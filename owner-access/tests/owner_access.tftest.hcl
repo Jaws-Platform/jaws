@@ -75,6 +75,37 @@ run "outputs_render_the_cli_profile" {
   }
 }
 
+# Everything is moving to the production account, so the owner needs the same
+# admin access there. Nothing is being built in the development account.
+run "the_owner_has_the_same_access_in_production" {
+  command = plan
+
+  assert {
+    condition     = jsonencode(module.owner_admin.account_ids) == jsonencode(["650503560686", "570327089884"])
+    error_message = "the owner must have AdministratorAccess in the management account and in production (570327089884), and nowhere else"
+  }
+
+  assert {
+    condition     = !contains(module.owner_admin.account_ids, "859674017655")
+    error_message = "the development account gets no assignment: nothing is built there"
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(output.aws_config, "[profile jaws-prod]"),
+      strcontains(output.aws_config, "sso_account_id = 570327089884"),
+      strcontains(output.aws_config, "[profile jwall-admin]"),
+      strcontains(output.aws_config, "sso_account_id = 650503560686"),
+    ])
+    error_message = "aws_config must render a jaws-prod profile for the production account beside the jwall-admin profile"
+  }
+
+  assert {
+    condition     = length(regexall("sso_session = jwall-engineering", output.aws_config)) == 2
+    error_message = "both profiles sign in through the one Identity Center session"
+  }
+}
+
 run "refuses_without_an_identity_center_instance" {
   command = plan
 
