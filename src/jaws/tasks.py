@@ -160,11 +160,11 @@ def _tag_value(value: str) -> str:
 
 def task_tags(spec: TaskSpec, lifecycle: str) -> dict[str, str]:
     """Every tag a task instance and its volume carry: the project's six
-    tags (RunInstances does not apply the provider's default tags), the
-    launch template's three, and the run's."""
+    tags as the account stamps them (RunInstances does not apply the
+    provider's default tags), the launch template's three, and the run's."""
     project = spec.project
     tags = {
-        **project.config.tags,
+        **project.tags,
         "Component": TASK_COMPONENT,
         "Purpose": TASK_PURPOSE,
         "Profile": spec.profile,

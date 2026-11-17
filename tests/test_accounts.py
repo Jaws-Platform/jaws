@@ -118,8 +118,10 @@ def test_the_management_view_is_the_configuration_as_written() -> None:
     before = Settings.model_validate(raw).model_dump()
     now = load_settings(FIXTURES / "config.yaml", environ={}).model_dump()
     assert now.pop("account") == "management"
+    assert now.pop("organizations") == ("jwall-engineering", "jaws")
     now.pop("production")
     before.pop("account")
+    before.pop("organizations")
     before.pop("production")
     assert now == before
 

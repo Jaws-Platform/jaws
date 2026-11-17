@@ -65,6 +65,16 @@ def _scheduled() -> dict[str, Any]:
     return raw
 
 
+def _bot_in_production() -> dict[str, Any]:
+    """braveheart-bot's live file as the production view renders it while it moves:
+    its tags as the file states them (Organization: jwall-engineering), its token
+    parameter under production's prefix (an absolute secret path is one account's)."""
+    raw = _registered("braveheart-bot")
+    bot = next(c for c in raw["components"] if c["kind"] == "lichess-bot")
+    bot["secrets"] = {"LICHESS_TOKEN": "/jaws/braveheart-bot/lichess-token"}
+    return raw
+
+
 def _project(raw: dict[str, Any], settings: Settings) -> Project:
     """`Project.from_config` runs the guardrails."""
     return Project.from_config(SiteConfig.model_validate(raw), settings)
@@ -81,6 +91,7 @@ def _handshakes() -> Access:
 def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
     """Each test file's inputs: by stack (its directory under stacks/), then by case name."""
     research = with_guardrails(settings, "math-prover", MATH_PROVER_GUARDRAILS)
+    production = load_settings(REPO_ROOT / "config.yaml", environ={}, account="production")
     handshakes = _handshakes()
     bots = {
         "braveheart": (_file("braveheart"), settings),
@@ -89,6 +100,7 @@ def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
         "trainer": (_registered("braveheart-trainer"), settings),
         "math_prover": (_file("math-prover"), research),
         "dataset_only": (_dataset_only(), research),
+        "production_bot": (_bot_in_production(), production),
     }
     databricks = _project(_file("databricks-poc"), settings)
     return {

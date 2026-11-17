@@ -7,6 +7,7 @@ URLs are derived here, which is what guarantees they follow the convention.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
@@ -29,9 +30,11 @@ SITE_FILE = Path("jaws.yaml")
 #: The tags the site file must state. Every resource also carries ManagedBy.
 REQUIRED_TAGS = ("Organization", "Project", "Environment", "Repository", "Owner")
 
-#: The ManagedBy tag value. The tool owns it: a site file may leave it out, and
-#: the value project files stated before the tool owned it is still accepted.
-MANAGED_BY = "jwall-engineering-infra"
+#: The ManagedBy values the accounts stamp (`context.managed_by` of each view of
+#: config.yaml); the stacks' variables accept exactly these. The tool owns the tag:
+#: a file is parsed without config.yaml, so it may state any of them, or the value
+#: project files stated before the tool owned it, or leave it out.
+MANAGED_BY_VALUES = ("jwall-engineering-infra", "jaws")
 LEGACY_MANAGED_BY = "terraform"
 
 ENVIRONMENT = "prod"
@@ -101,10 +104,13 @@ class SiteConfig(_Model):
     @field_validator("tags")
     @classmethod
     def _managed_by(cls, value: dict[str, str]) -> dict[str, str]:
-        stated = value.get("ManagedBy", MANAGED_BY)
-        if stated not in (MANAGED_BY, LEGACY_MANAGED_BY):
-            raise ValueError(f"ManagedBy must be {MANAGED_BY!r} or left out, got {stated!r}")
-        return {**value, "ManagedBy": MANAGED_BY}
+        stated = value.get("ManagedBy")
+        if stated is not None and stated not in (*MANAGED_BY_VALUES, LEGACY_MANAGED_BY):
+            raise ValueError(
+                f"ManagedBy must be {_either(MANAGED_BY_VALUES)} or left out (the tool sets "
+                f"it), got {stated!r}"
+            )
+        return value
 
     @model_validator(mode="after")
     def _one_kind(self) -> SiteConfig:
@@ -261,11 +267,32 @@ def _format_validation_error(exc: ValidationError) -> str:
     return "; ".join(lines)
 
 
+def _either(values: tuple[str, ...]) -> str:
+    return " or ".join(repr(value) for value in values)
+
+
+def account_tags(tags: Mapping[str, str], organization: str, managed_by: str) -> dict[str, str]:
+    """`tags` with the two the account decides, whatever the file states: a file is
+    valid in both accounts' views while its project moves, so it cannot decide them."""
+    return {**tags, "Organization": organization, "ManagedBy": managed_by}
+
+
+def organization_problems(tags: Mapping[str, str], settings: Settings) -> list[str]:
+    """A stated Organization must be one of the accounts' organizations; the view's
+    own is stamped at render (`account_tags`)."""
+    stated = tags.get("Organization")
+    known = settings.organizations or (settings.context.organization,)
+    if stated is None or stated in known:
+        return []
+    return [f"tags.Organization must be {_either(known)}, got {stated!r}"]
+
+
 class Site(_Model):
     """A validated site plus everything derived from it and config.yaml."""
 
     config: SiteConfig
     organization: str
+    managed_by: str
     zone_id: str
     state_bucket: str
     state_key: str
@@ -278,12 +305,7 @@ class Site(_Model):
                 f"{config.project} is a {config.kind} project, not a site; "
                 "this command works on sites only"
             )
-        problems = []
-        if config.tags["Organization"] != settings.context.organization:
-            problems.append(
-                f"tags.Organization must be {settings.context.organization!r}, "
-                f"got {config.tags['Organization']!r}"
-            )
+        problems = organization_problems(config.tags, settings)
         zone_suffix = "." + settings.dns.zone
         for label, domain in (
             ("domain", config.domain),
@@ -296,6 +318,7 @@ class Site(_Model):
         return cls(
             config=config,
             organization=settings.context.organization,
+            managed_by=settings.context.managed_by,
             zone_id=settings.dns.zone_id,
             state_bucket=settings.state.bucket,
             state_key=settings.state_key(config.project, ENVIRONMENT),
@@ -305,6 +328,11 @@ class Site(_Model):
     @property
     def project(self) -> str:
         return self.config.project
+
+    @property
+    def tags(self) -> dict[str, str]:
+        """The tags every resource of the site carries, as this account stamps them."""
+        return account_tags(self.config.tags, self.organization, self.managed_by)
 
     @property
     def bucket(self) -> str:

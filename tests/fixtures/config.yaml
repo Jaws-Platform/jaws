@@ -37,6 +37,9 @@ aws:
 context:
   organization: jwall-engineering
   owner: jwallace145
+  # The ManagedBy tag the tool stamps on everything it renders, like Organization
+  # above: the account's, never the project file's.
+  managed_by: jwall-engineering-infra
 
 dns:
   zone: jwall.engineering
@@ -221,6 +224,7 @@ production:
       admin_role_arn: arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_013589f39f92382a
     context:
       organization: jaws
+      managed_by: jaws
     state:
       # Suffixed with the account ID: the plain jaws-terraform-state was refused
       # at the bootstrap (BucketAlreadyExists) although it looked free.

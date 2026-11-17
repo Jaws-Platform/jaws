@@ -19,6 +19,7 @@ aws:
 context:
   organization: jwall-engineering
   owner: jwallace145
+  managed_by: jwall-engineering-infra
 dns:
   zone: jwall.engineering
   zone_id: Z029546536VUFGDCPXZ21
@@ -184,6 +185,7 @@ production:
       admin_role_arn: arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_0123456789abcdef
     context:
       organization: jaws
+      managed_by: jaws
     state:
       bucket: jaws-terraform-state-570327089884
     ecr:

@@ -1,0 +1,566 @@
+{
+  "bot/braveheart": {
+    "ami_name": "al2023-ami-2023.12.20261026.1-kernel-6.18-x86_64",
+    "architecture": "x86_64",
+    "availability_zones": [
+      "us-east-1a",
+      "us-east-1b",
+      "us-east-1c",
+      "us-east-1d",
+      "us-east-1f"
+    ],
+    "bot_enabled": false,
+    "datasets": [
+      {
+        "bucket": "jwall-engineering-braveheart-nnue",
+        "expire_noncurrent_days": null,
+        "expire_prefixes": {},
+        "name": "nnue",
+        "prefix": "data/",
+        "readers": [],
+        "transition_days": 0,
+        "versioning": false,
+        "writers": [
+          "task-runner"
+        ]
+      }
+    ],
+    "project": "braveheart",
+    "records_enabled": false,
+    "repository": "Braveheart-Chess/braveheart",
+    "tags": {
+      "Environment": "prod",
+      "ManagedBy": "jwall-engineering-infra",
+      "Organization": "jwall-engineering",
+      "Owner": "jwallace145",
+      "Project": "braveheart",
+      "Repository": "Braveheart-Chess/braveheart"
+    },
+    "task_instance_type": "c8a.16xlarge",
+    "task_log_retention_days": 14,
+    "task_max_lifetime_hours": 6,
+    "task_profiles": [
+      {
+        "ami_name": "Deep Learning Base OSS Nvidia Driver GPU AMI (Amazon Linux 2023) 20261027",
+        "datasets": [
+          {
+            "name": "nnue",
+            "read": [
+              "selfplay/"
+            ],
+            "write": [
+              "nets/"
+            ],
+            "write_once": []
+          }
+        ],
+        "default_instance_type": "g6.xlarge",
+        "gpu": true,
+        "max_hours": 6,
+        "name": "gpu",
+        "root_volume_gb": 200,
+        "rust": true
+      },
+      {
+        "ami_name": null,
+        "datasets": [],
+        "default_instance_type": "c8a.16xlarge",
+        "gpu": false,
+        "max_hours": 6,
+        "name": "sprt",
+        "root_volume_gb": 40,
+        "rust": true
+      },
+      {
+        "ami_name": null,
+        "datasets": [],
+        "default_instance_type": "c8a.16xlarge",
+        "gpu": false,
+        "max_hours": 6,
+        "name": "match",
+        "root_volume_gb": 40,
+        "rust": true
+      },
+      {
+        "ami_name": null,
+        "datasets": [
+          {
+            "name": "nnue",
+            "read": [],
+            "write": [
+              "selfplay/"
+            ],
+            "write_once": []
+          }
+        ],
+        "default_instance_type": "c8a.16xlarge",
+        "gpu": false,
+        "max_hours": 6,
+        "name": "datagen",
+        "root_volume_gb": 40,
+        "rust": true
+      },
+      {
+        "ami_name": null,
+        "datasets": [
+          {
+            "name": "nnue",
+            "read": [
+              "selfplay/"
+            ],
+            "write": [
+              "selfplay/relabel/"
+            ],
+            "write_once": []
+          }
+        ],
+        "default_instance_type": "c8a.16xlarge",
+        "gpu": false,
+        "max_hours": 6,
+        "name": "relabel",
+        "root_volume_gb": 40,
+        "rust": true
+      }
+    ],
+    "task_results_days": 7,
+    "task_runner_enabled": true,
+    "task_rust": true,
+    "task_rust_toolchain": "1.99.1"
+  },
+  "bot/braveheart-bot": {
+    "ami_name": "al2023-ami-2023.12.20261026.1-kernel-6.18-x86_64",
+    "architecture": "x86_64",
+    "availability_zones": [
+      "us-east-1a",
+      "us-east-1b",
+      "us-east-1c",
+      "us-east-1d",
+      "us-east-1f"
+    ],
+    "bot_enabled": true,
+    "bot_name": "jwallace145",
+    "container_environment": {
+      "ENGINE_HASH_MB": "256",
+      "ENGINE_MOVE_OVERHEAD_MS": "500"
+    },
+    "datasets": [],
+    "expire_untagged_after_days": 7,
+    "health_log_pattern": "awaiting challenges",
+    "health_seconds": 90,
+    "instance_type": "c8a.medium",
+    "keep_release_images": 20,
+    "log_retention_days": 30,
+    "project": "braveheart-bot",
+    "records_container_path": "/opt/lichess-bot/game_records",
+    "records_enabled": true,
+    "records_prefix": "records/",
+    "repository": "Braveheart-Chess/braveheart-lichess-bot",
+    "schedule": null,
+    "secret_parameters": {
+      "LICHESS_TOKEN": "/jwall-engineering/braveheart-bot/lichess-token"
+    },
+    "tags": {
+      "Environment": "prod",
+      "ManagedBy": "jwall-engineering-infra",
+      "Organization": "jwall-engineering",
+      "Owner": "jwallace145",
+      "Project": "braveheart-bot",
+      "Repository": "Braveheart-Chess/braveheart-lichess-bot"
+    },
+    "task_instance_type": "c8a.16xlarge",
+    "task_log_retention_days": 14,
+    "task_max_lifetime_hours": 6,
+    "task_profiles": [],
+    "task_results_days": 7,
+    "task_runner_enabled": false,
+    "task_rust": true,
+    "task_rust_toolchain": "1.99.1"
+  },
+  "bot/braveheart-selfplay": {
+    "ami_name": "al2023-ami-2023.12.20261026.1-kernel-6.18-x86_64",
+    "architecture": "x86_64",
+    "availability_zones": [
+      "us-east-1a",
+      "us-east-1b",
+      "us-east-1c",
+      "us-east-1d",
+      "us-east-1f"
+    ],
+    "bot_enabled": false,
+    "datasets": [
+      {
+        "bucket": "jwall-engineering-braveheart-selfplay-positions",
+        "expire_noncurrent_days": null,
+        "expire_prefixes": {},
+        "name": "positions",
+        "prefix": "data/",
+        "readers": [
+          "arn:aws:iam::650503560686:role/jwall-engineering-braveheart-trainer-task-gpu",
+          "arn:aws:iam::650503560686:role/jwall-engineering-ds-braveheart-selfplay-positions"
+        ],
+        "transition_days": 0,
+        "versioning": true,
+        "writers": []
+      }
+    ],
+    "project": "braveheart-selfplay",
+    "records_enabled": false,
+    "repository": "Braveheart-Chess/braveheart-selfplay",
+    "tags": {
+      "Environment": "prod",
+      "ManagedBy": "jwall-engineering-infra",
+      "Organization": "jwall-engineering",
+      "Owner": "jwallace145",
+      "Project": "braveheart-selfplay",
+      "Repository": "Braveheart-Chess/braveheart-selfplay"
+    },
+    "task_instance_type": "c8a.xlarge",
+    "task_log_retention_days": 14,
+    "task_max_lifetime_hours": 6,
+    "task_profiles": [
+      {
+        "ami_name": null,
+        "datasets": [
+          {
+            "name": "positions",
+            "read": [],
+            "write": [
+              "selfplay/"
+            ],
+            "write_once": []
+          }
+        ],
+        "default_instance_type": "c8a.16xlarge",
+        "gpu": false,
+        "max_hours": 6,
+        "name": "datagen",
+        "root_volume_gb": 40,
+        "rust": true
+      },
+      {
+        "ami_name": null,
+        "datasets": [
+          {
+            "name": "positions",
+            "read": [
+              "selfplay/"
+            ],
+            "write": [
+              "selfplay/relabel/"
+            ],
+            "write_once": []
+          }
+        ],
+        "default_instance_type": "c8a.16xlarge",
+        "gpu": false,
+        "max_hours": 6,
+        "name": "relabel",
+        "root_volume_gb": 40,
+        "rust": true
+      }
+    ],
+    "task_results_days": 7,
+    "task_runner_enabled": true,
+    "task_rust": true,
+    "task_rust_toolchain": "1.99.1"
+  },
+  "bot/braveheart-trainer": {
+    "ami_name": "al2023-ami-2023.12.20261026.1-kernel-6.18-x86_64",
+    "architecture": "x86_64",
+    "availability_zones": [
+      "us-east-1a",
+      "us-east-1b",
+      "us-east-1c",
+      "us-east-1d",
+      "us-east-1f"
+    ],
+    "bot_enabled": false,
+    "datasets": [
+      {
+        "bucket": "jwall-engineering-braveheart-trainer-nets",
+        "expire_noncurrent_days": null,
+        "expire_prefixes": {},
+        "name": "nets",
+        "prefix": "data/",
+        "readers": [
+          "arn:aws:iam::650503560686:role/jwall-engineering-braveheart-selfplay-task-relabel"
+        ],
+        "transition_days": 0,
+        "versioning": true,
+        "writers": []
+      }
+    ],
+    "project": "braveheart-trainer",
+    "records_enabled": false,
+    "repository": "Braveheart-Chess/braveheart-trainer",
+    "tags": {
+      "Environment": "prod",
+      "ManagedBy": "jwall-engineering-infra",
+      "Organization": "jwall-engineering",
+      "Owner": "jwallace145",
+      "Project": "braveheart-trainer",
+      "Repository": "Braveheart-Chess/braveheart-trainer"
+    },
+    "task_instance_type": "c8a.xlarge",
+    "task_log_retention_days": 14,
+    "task_max_lifetime_hours": 2,
+    "task_profiles": [
+      {
+        "ami_name": "Deep Learning Base OSS Nvidia Driver GPU AMI (Amazon Linux 2023) 20261027",
+        "datasets": [
+          {
+            "name": "nets",
+            "read": [],
+            "write": [
+              "nets/"
+            ],
+            "write_once": []
+          }
+        ],
+        "default_instance_type": "g6.xlarge",
+        "gpu": true,
+        "max_hours": 6,
+        "name": "gpu",
+        "root_volume_gb": 200,
+        "rust": true
+      }
+    ],
+    "task_results_days": 7,
+    "task_runner_enabled": true,
+    "task_rust": true,
+    "task_rust_toolchain": "1.99.1"
+  },
+  "databricks-account/braveheart-databricks": {
+    "account_id": "64826090-46b0-471f-b2d6-f3e7490b992c",
+    "admin_user_names": [
+      "jimmy.wallace145@gmail.com"
+    ],
+    "deployer": null,
+    "deployment_name": null,
+    "environment": "prod",
+    "metastore_name": "jwall-engineering-us-east-1",
+    "nat_ami_name": "al2023-ami-2023.12.20261026.1-kernel-6.18-arm64",
+    "project": "braveheart-databricks",
+    "read_only_datasets": {
+      "braveheart-selfplay-positions": {
+        "bucket": "jwall-engineering-braveheart-selfplay-positions",
+        "prefix": "data/",
+        "role_arn": "arn:aws:iam::650503560686:role/jwall-engineering-ds-braveheart-selfplay-positions"
+      }
+    },
+    "repository": "Braveheart-Chess/braveheart-databricks",
+    "service_principal_application_id": "59a6c509-4d02-4622-b907-d42da61b2119",
+    "tags": {
+      "CostCenter": "braveheart",
+      "Environment": "prod",
+      "ManagedBy": "jwall-engineering-infra",
+      "Organization": "jwall-engineering",
+      "Owner": "jwallace145",
+      "Project": "braveheart-databricks",
+      "Repository": "Braveheart-Chess/braveheart-databricks",
+      "Workspace": "braveheart-databricks-prod"
+    },
+    "user_names": [],
+    "vpc_cidr": "10.48.0.0/16"
+  },
+  "databricks-workspace/braveheart-databricks": {
+    "admin_group_name": "databricks-poc-workspace-admins",
+    "apply_role_arn": "arn:aws:iam::650503560686:role/jwall-engineering-braveheart-databricks-ci-apply",
+    "catalog_tags": {
+      "Owner": "jwallace145",
+      "Project": "braveheart-databricks"
+    },
+    "compute_policies": {
+      "jobs": {
+        "definition": "{\"autotermination_minutes\": {\"hidden\": true, \"type\": \"fixed\", \"value\": 30}, \"aws_attributes.availability\": {\"type\": \"fixed\", \"value\": \"SPOT_WITH_FALLBACK\"}, \"cluster_type\": {\"type\": \"fixed\", \"value\": \"job\"}, \"node_type_id\": {\"type\": \"allowlist\", \"values\": [\"m7g.large\", \"m7g.xlarge\"]}, \"num_workers\": {\"maxValue\": 4, \"type\": \"range\"}}",
+        "description": "Job clusters, up to four workers"
+      },
+      "small-interactive": {
+        "definition": "{\"autotermination_minutes\": {\"hidden\": false, \"type\": \"fixed\", \"value\": 30}, \"aws_attributes.availability\": {\"type\": \"fixed\", \"value\": \"SPOT_WITH_FALLBACK\"}, \"node_type_id\": {\"type\": \"allowlist\", \"values\": [\"m7g.large\", \"m7g.xlarge\"]}, \"num_workers\": {\"maxValue\": 2, \"type\": \"range\"}}",
+        "description": "Small interactive clusters on cheap Graviton spot nodes"
+      }
+    },
+    "environment": "prod",
+    "fixed_tags": {
+      "CostCenter": "braveheart",
+      "Environment": "prod",
+      "ManagedBy": "jwall-engineering-infra",
+      "Organization": "jwall-engineering",
+      "Owner": "jwallace145",
+      "Project": "braveheart-databricks",
+      "Repository": "Braveheart-Chess/braveheart-databricks",
+      "Workspace": "braveheart-databricks-prod"
+    },
+    "management_role_arns": [
+      "arn:aws:iam::650503560686:role/jwall-engineering-braveheart-databricks-ci-plan"
+    ],
+    "metastore_id": "abcdef01-2345-6789-abcd-ef0123456789",
+    "project": "braveheart-databricks",
+    "repository": "Braveheart-Chess/braveheart-databricks",
+    "tags": {
+      "CostCenter": "braveheart",
+      "Environment": "prod",
+      "ManagedBy": "jwall-engineering-infra",
+      "Organization": "jwall-engineering",
+      "Owner": "jwallace145",
+      "Project": "braveheart-databricks",
+      "Repository": "Braveheart-Chess/braveheart-databricks",
+      "Workspace": "braveheart-databricks-prod"
+    },
+    "users_group_name": "databricks-poc-workspace-users",
+    "workspace_id": 1234567890123456,
+    "workspace_url": "https://dbc-01234567-89ab.cloud.databricks.com"
+  },
+  "site-project/cs-survival-guide": {
+    "dev_domain_name": null,
+    "domain_name": "survival-guide.jwall.engineering",
+    "enable_preview": true,
+    "project": "cs-survival-guide",
+    "repository": "jwallace145/cs-survival-guide",
+    "tags": {
+      "Environment": "prod",
+      "ManagedBy": "jwall-engineering-infra",
+      "Organization": "jwall-engineering",
+      "Owner": "jwallace145",
+      "Project": "cs-survival-guide",
+      "Repository": "jwallace145/cs-survival-guide"
+    },
+    "zone_id": "Z029546536VUFGDCPXZ21"
+  },
+  "site-project/guitar-knowledge-base": {
+    "dev_domain_name": null,
+    "domain_name": "guitar.jwall.engineering",
+    "enable_preview": true,
+    "project": "guitar-knowledge-base",
+    "repository": "jwallace145/guitar-knowledge-base",
+    "tags": {
+      "Environment": "prod",
+      "ManagedBy": "jwall-engineering-infra",
+      "Organization": "jwall-engineering",
+      "Owner": "jwallace145",
+      "Project": "guitar-knowledge-base",
+      "Repository": "jwallace145/guitar-knowledge-base"
+    },
+    "zone_id": "Z029546536VUFGDCPXZ21"
+  },
+  "site-project/main-site": {
+    "dev_domain_name": null,
+    "domain_name": "jwall.engineering",
+    "enable_preview": true,
+    "project": "main-site",
+    "repository": "jwallace145/site",
+    "tags": {
+      "CostCenter": "personal",
+      "Environment": "prod",
+      "ManagedBy": "jwall-engineering-infra",
+      "Organization": "jwall-engineering",
+      "Owner": "jwallace145",
+      "Project": "main-site",
+      "Repository": "jwallace145/site"
+    },
+    "zone_id": "Z029546536VUFGDCPXZ21"
+  },
+  "site/cs-survival-guide": {
+    "dev_domain_name": null,
+    "domain_name": "survival-guide.jwall.engineering",
+    "enable_preview": true,
+    "project": "cs-survival-guide",
+    "repository": "jwallace145/cs-survival-guide",
+    "tags": {
+      "Environment": "prod",
+      "ManagedBy": "jwall-engineering-infra",
+      "Organization": "jwall-engineering",
+      "Owner": "jwallace145",
+      "Project": "cs-survival-guide",
+      "Repository": "jwallace145/cs-survival-guide"
+    },
+    "zone_id": "Z029546536VUFGDCPXZ21"
+  },
+  "site/guitar-knowledge-base": {
+    "dev_domain_name": null,
+    "domain_name": "guitar.jwall.engineering",
+    "enable_preview": true,
+    "project": "guitar-knowledge-base",
+    "repository": "jwallace145/guitar-knowledge-base",
+    "tags": {
+      "Environment": "prod",
+      "ManagedBy": "jwall-engineering-infra",
+      "Organization": "jwall-engineering",
+      "Owner": "jwallace145",
+      "Project": "guitar-knowledge-base",
+      "Repository": "jwallace145/guitar-knowledge-base"
+    },
+    "zone_id": "Z029546536VUFGDCPXZ21"
+  },
+  "site/main-site": {
+    "dev_domain_name": null,
+    "domain_name": "jwall.engineering",
+    "enable_preview": true,
+    "project": "main-site",
+    "repository": "jwallace145/site",
+    "tags": {
+      "CostCenter": "personal",
+      "Environment": "prod",
+      "ManagedBy": "jwall-engineering-infra",
+      "Organization": "jwall-engineering",
+      "Owner": "jwallace145",
+      "Project": "main-site",
+      "Repository": "jwallace145/site"
+    },
+    "zone_id": "Z029546536VUFGDCPXZ21"
+  },
+  "task/braveheart": {
+    "Component": "task-runner",
+    "Environment": "prod",
+    "Lifecycle": "spot",
+    "ManagedBy": "jwall-engineering-infra",
+    "MaxLifetimeHours": "6",
+    "Name": "jwall-engineering-braveheart-task-123-1-sprt-0",
+    "Organization": "jwall-engineering",
+    "Owner": "jwallace145",
+    "Profile": "cpu",
+    "Project": "braveheart",
+    "PullRequest": "84",
+    "Purpose": "ci-task",
+    "Repository": "Braveheart-Chess/braveheart",
+    "RunId": "123-1",
+    "TaskId": "sprt-0",
+    "Workflow": "SPRT"
+  },
+  "task/braveheart-selfplay": {
+    "Component": "task-runner",
+    "Environment": "prod",
+    "Lifecycle": "spot",
+    "ManagedBy": "jwall-engineering-infra",
+    "MaxLifetimeHours": "6",
+    "Name": "jwall-engineering-braveheart-selfplay-task-123-1-sprt-0",
+    "Organization": "jwall-engineering",
+    "Owner": "jwallace145",
+    "Profile": "cpu",
+    "Project": "braveheart-selfplay",
+    "PullRequest": "84",
+    "Purpose": "ci-task",
+    "Repository": "Braveheart-Chess/braveheart-selfplay",
+    "RunId": "123-1",
+    "TaskId": "sprt-0",
+    "Workflow": "SPRT"
+  },
+  "task/braveheart-trainer": {
+    "Component": "task-runner",
+    "Environment": "prod",
+    "Lifecycle": "spot",
+    "ManagedBy": "jwall-engineering-infra",
+    "MaxLifetimeHours": "6",
+    "Name": "jwall-engineering-braveheart-trainer-task-123-1-sprt-0",
+    "Organization": "jwall-engineering",
+    "Owner": "jwallace145",
+    "Profile": "cpu",
+    "Project": "braveheart-trainer",
+    "PullRequest": "84",
+    "Purpose": "ci-task",
+    "Repository": "Braveheart-Chess/braveheart-trainer",
+    "RunId": "123-1",
+    "TaskId": "sprt-0",
+    "Workflow": "SPRT"
+  }
+}
