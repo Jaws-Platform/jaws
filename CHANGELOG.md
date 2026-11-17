@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.1](https://github.com/jwallace145/jaws/compare/v0.50.0...v0.50.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **workflows:** check the tool out at the reusable workflow's own commit ([#200](https://github.com/jwallace145/jaws/issues/200)) ([2a30f3e](https://github.com/jwallace145/jaws/commit/2a30f3e3f151f752c49115f2b7b6e37d711cace5))
+
 ## [0.50.0](https://github.com/jwallace145/jaws/compare/v0.49.0...v0.50.0) (2026-11-17)
 
 
