@@ -189,8 +189,8 @@ def test_databricks_tags_differ_between_the_views_only_in_the_account_s_tags() -
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=ConfigError,
-                reason="its absolute secret path is management's until G2 names secrets "
-                "relative to the project",
+                reason="its secret is still the absolute management path; the bot "
+                "repository names it relative (lichess-token) before the move (runbook M1)",
             ),
         ),
     ],

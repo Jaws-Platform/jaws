@@ -153,7 +153,7 @@ def _lichess_bot_tfvars(project: Project, settings: Settings) -> dict[str, Any]:
         "bot_enabled": True,
         "instance_type": bot.instance_type,
         "architecture": image.architecture,
-        "secret_parameters": dict(bot.secrets),
+        "secret_parameters": project.secret_parameters,
         "container_environment": {
             "ENGINE_HASH_MB": str(bot.engine.hash_mb),
             "ENGINE_MOVE_OVERHEAD_MS": str(bot.engine.move_overhead_ms),

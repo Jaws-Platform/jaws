@@ -72,6 +72,8 @@ class Project(BaseModel):
                 )
         if config.kind == "bot":  # a research project has no lichess-bot to hold secrets
             for name, parameter in config.bot.secrets.items():
+                if not parameter.startswith("/"):
+                    continue  # relative: under own by construction; `bot` is refused at parse
                 if not parameter.startswith(own):
                     problems.append(f"secrets.{name} must start with {own}, got {parameter!r}")
                 elif parameter.startswith(f"{own}bot/"):
@@ -148,6 +150,16 @@ class Project(BaseModel):
     def bot(self) -> LichessBot:
         self._require("bot")
         return self.config.bot
+
+    @property
+    def secret_parameters(self) -> dict[str, str]:
+        """Each secret's SSM parameter in this account: a name relative to the project
+        is `/<organization>/<project>/<name>`; an absolute path is itself."""
+        own = f"/{self.organization}/{self.config.project}/"
+        return {
+            name: value if value.startswith("/") else f"{own}{value}"
+            for name, value in self.bot.secrets.items()
+        }
 
     @property
     def databricks(self) -> DatabricksWorkspace:
