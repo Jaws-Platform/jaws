@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.48.0](https://github.com/jwallace145/jaws/compare/v0.47.1...v0.48.0) (2026-11-17)
+
+
+### Features
+
+* **repo:** the repository is jwallace145/jaws ([#190](https://github.com/jwallace145/jaws/issues/190)) ([877f53d](https://github.com/jwallace145/jaws/commit/877f53d267a5b4eef9463bb71266be84582f4be5))
+
 ## [0.47.1](https://github.com/jwallace145/jwall-engineering-infra/compare/v0.47.0...v0.47.1) (2026-11-17)
 
 
