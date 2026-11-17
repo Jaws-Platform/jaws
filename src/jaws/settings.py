@@ -90,6 +90,12 @@ class StateSection(_Section):
 
 class AwsSection(_Section):
     account_id: str = Field(pattern=r"^\d{12}$")
+    #: The owner's Identity Center admin role in the account: the break-glass
+    #: principal of the hardened bucket policies.
+    admin_role_arn: str | None = Field(
+        default=None,
+        pattern=r"^arn:aws:iam::\d{12}:role/aws-reserved/sso\.amazonaws\.com/AWSReservedSSO_[A-Za-z0-9_-]+$",
+    )
 
 
 class ContextSection(_Section):
@@ -419,7 +425,71 @@ class PlanSection(_Section):
     comment_max_bytes: int = Field(ge=1024, le=65000)
 
 
+#: The account a run addresses. `management` is where everything lives until it
+#: has moved; `production` is where it is moving to.
+Account = Literal["management", "production"]
+
+
+class ProductionSection(_Section):
+    """The production account (the `production:` section): what differs there,
+    and which projects have a stack there."""
+
+    #: True once the owner has bootstrapped the account's foundation.
+    bootstrapped: bool = False
+    #: `moving` while the project's old stack still exists in the management
+    #: account, `moved` once it has been destroyed.
+    projects: dict[str, Literal["moving", "moved"]] = {}
+    #: Section name to the keys that differ in production.
+    overrides: dict[str, dict[str, Any]] = {}
+
+    @model_validator(mode="after")
+    def _bootstrapped_is_complete(self) -> ProductionSection:
+        if not self.bootstrapped:
+            return self
+        missing = [
+            f"{section}.{key}"
+            for section, key in (("dns", "zone_id"), ("aws", "admin_role_arn"))
+            if not self.overrides.get(section, {}).get(key)
+        ]
+        if missing:
+            raise ValueError(
+                f"bootstrapped is true but overrides lacks {', '.join(missing)}: "
+                "both are known once the bootstrap has run"
+            )
+        return self
+
+
+def resolve_account(
+    project: str | None, production: ProductionSection | None, requested: Account | None
+) -> Account:
+    """The account a run addresses: production for a project listed under
+    `production.projects`, management otherwise. `requested` (`--account`)
+    chooses the old stack of a project that is moving, or an account for a run
+    without a project; it cannot address a project where it has no stack."""
+    if production is None:
+        if requested == "production":
+            raise ConfigError("config.yaml has no production section, so nothing is in production")
+        return "management"
+    if project is None:
+        return requested or "management"
+    state = production.projects.get(project)
+    if state is None:
+        if requested == "production":
+            raise ConfigError(
+                f"{project} is not in production: list it under production.projects "
+                "in config.yaml first"
+            )
+        return "management"
+    if state == "moved" and requested == "management":
+        raise ConfigError(
+            f"{project} has left the management account: its stack there has been destroyed"
+        )
+    return requested or "production"
+
+
 class Settings(_Section):
+    #: Which account's view of the configuration this is (never read from the file).
+    account: Account = "management"
     """The whole of config.yaml."""
 
     tool: ToolSection = ToolSection()
@@ -436,6 +506,7 @@ class Settings(_Section):
     tasks: TasksSection
     projects: dict[str, ProjectGuardrails] = {}
     databricks: DatabricksSection | None = None
+    production: ProductionSection | None = None
 
     @model_validator(mode="after")
     def _databricks_consistency(self) -> Settings:
@@ -504,8 +575,18 @@ def default_config_path() -> Path:
     return LOCAL_CONFIG_PATH
 
 
-def load_settings(path: Path | None = None, environ: dict[str, str] | None = None) -> Settings:
-    """Load config.yaml and apply the JAWS_* overrides.
+def load_settings(
+    path: Path | None = None,
+    environ: dict[str, str] | None = None,
+    *,
+    account: Account = "management",
+) -> Settings:
+    """Load config.yaml for one account and apply the JAWS_* overrides.
+
+    The management view is the file as written. The production view is the same
+    file with each `production.overrides` section merged over the section of
+    that name. Both are validated whichever is asked for, so a mistake in
+    either fails every run of the pull request that makes it.
 
     Only `JAWS_LOG_LEVEL` and `JAWS_LOG_FORMAT` may be overridden: they are the
     knobs a person debugging locally needs, and nothing else about how the
@@ -529,10 +610,44 @@ def load_settings(path: Path | None = None, environ: dict[str, str] | None = Non
         tool["log_format"] = env["JAWS_LOG_FORMAT"]
     raw["tool"] = tool
 
+    if "account" in raw:
+        raise ConfigError(f"{path}: account is chosen per run (--account), not in the file")
     try:
-        return Settings.model_validate(raw)
+        management = Settings.model_validate(raw)
     except ValidationError as exc:
         raise ConfigError(f"{path}: {_format_validation_error(exc)}") from exc
+    if management.production is None:
+        if account == "production":
+            raise ConfigError(f"{path}: no production section, so nothing is in production")
+        return management
+    try:
+        production = Settings.model_validate(
+            {**_production_view(raw, management.production, path), "account": "production"}
+        )
+    except ValidationError as exc:
+        raise ConfigError(
+            f"{path}: in the production view: {_format_validation_error(exc)}"
+        ) from exc
+    return production if account == "production" else management
+
+
+def _production_view(
+    raw: dict[str, Any], production: ProductionSection, path: Path
+) -> dict[str, Any]:
+    """`raw` with each override section merged over the section of that name."""
+    view = dict(raw)
+    for name, override in production.overrides.items():
+        if name in ("production", "account") or name not in Settings.model_fields:
+            raise ConfigError(
+                f"{path}: production.overrides.{name}: config.yaml has no section of that name"
+            )
+        section = raw.get(name)
+        if section is None:
+            continue  # an optional section the file leaves out: nothing to override
+        if not isinstance(section, dict):
+            raise ConfigError(f"{path}: production.overrides.{name}: {name} is not a section")
+        view[name] = {**section, **override}
+    return view
 
 
 def _format_validation_error(exc: ValidationError) -> str:

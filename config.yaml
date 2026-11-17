@@ -25,9 +25,14 @@ state:
   key_template: project={project}/env={environment}/{project}-{environment}.tfstate
 
 aws:
-  # The one account everything runs in. Workflows build role ARNs from it and
-  # the project name, so no repository needs an account or role variable.
+  # The management account, where everything lives until it has moved to
+  # production (the `production` section at the end of this file). Workflows
+  # build role ARNs from the account and the project name, through
+  # `jaws config env`, so no repository needs an account or role variable.
   account_id: "650503560686" # quoted: an account ID is a 12-digit string
+  # The owner's Identity Center admin role in this account, exempt from the
+  # hardened bucket policies (owner-access/, `terraform output -raw admin_role_arn`).
+  admin_role_arn: arn:aws:iam::650503560686:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_22a17d3bc2bca2d3
 
 context:
   organization: jwall-engineering
@@ -197,3 +202,28 @@ databricks:
         autotermination_minutes: {type: fixed, value: 30, hidden: true}
         node_type_id: {type: allowlist, values: [m7g.large, m7g.xlarge]}
         aws_attributes.availability: {type: fixed, value: SPOT_WITH_FALLBACK}
+
+# The production account, where everything is moving from the management
+# account described above. A section under `overrides` replaces the same keys
+# of the section with that name; everything else is shared. A run addresses one
+# account: production for a project listed here, management otherwise
+# (`--account` chooses for a project that is moving). This whole section is
+# folded into the top level when the last project has moved.
+production:
+  bootstrapped: false # true once the owner has run docs/production-bootstrap.md
+  # Projects with a stack in production: `moving` while the old stack still
+  # exists in the management account, `moved` once it has been destroyed.
+  projects: {}
+  overrides:
+    aws:
+      account_id: "570327089884"
+      # admin_role_arn: known once owner-access is applied; required when bootstrapped
+    context:
+      organization: jaws
+    state:
+      bucket: jaws-terraform-state
+    ecr:
+      repository: jaws-cli
+    # dns: {zone_id: ...}  # known once the bootstrap creates the zone; required when bootstrapped
+    databricks:
+      enabled: false # Databricks moves last, as a whole

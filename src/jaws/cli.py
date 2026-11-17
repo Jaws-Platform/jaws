@@ -23,6 +23,7 @@ from typing import Annotated, Literal
 
 import boto3
 import typer
+import yaml
 
 from . import (
     access,
@@ -60,11 +61,13 @@ from .legacy import adopt_legacy_environment, announce, notices, resolve_project
 from .log import annotate_error, artifacts_dir, phase, setup_logging
 from .project import Project, Role
 from .settings import (
+    Account,
     DatabricksSection,
     Settings,
     default_config_path,
     load_settings,
     parse_duration,
+    resolve_account,
 )
 from .site import DEV_PREFIX, ENVIRONMENT, PROD_PREFIX, SITE_FILE, Site, load_site_config
 
@@ -133,6 +136,10 @@ class Run:
     site_file: Path
     artifacts: Path
     logger: logging.Logger
+    #: `--config` and `--account` as given, for a command that resolves the
+    #: account of a project it is told about (`config env --project`).
+    config_path: Path | None = None
+    requested_account: Account | None = None
     #: Off for the cleanup commands (`_cleanup_project`).
     check_guardrails: bool = True
     _site: Site | None = None
@@ -171,6 +178,14 @@ def main(
     ctx: typer.Context,
     file: Annotated[Path, typer.Option("--file", "-f", help="Path to the site file.")] = SITE_FILE,
     config: Annotated[Path | None, typer.Option("--config", help="Path to config.yaml.")] = None,
+    account: Annotated[
+        Account | None,
+        typer.Option(
+            "--account",
+            help="The account to address. Default: production for a project listed "
+            "under production.projects in config.yaml, management otherwise.",
+        ),
+    ] = None,
     debug: Annotated[bool, typer.Option("--debug", help="Console log at debug level.")] = False,
 ) -> None:
     try:
@@ -178,6 +193,9 @@ def main(
         file = resolve_project_file(file)
         artifacts = artifacts_dir()
         settings = load_settings(config)
+        where = resolve_account(_project_named_in(file), settings.production, account)
+        if where != settings.account:
+            settings = load_settings(config, account=where)
     except SitesError as exc:
         # Logging is not configured yet: report plainly.
         print(f"error: {exc}", file=sys.stderr)
@@ -186,7 +204,25 @@ def main(
     logger = setup_logging(level, settings.tool.log_format, artifacts / LOG_FILE)
     announce(notices(file, adopted))
     logger.debug("jaws %s, config %s", tool_version(), config or default_config_path())
-    ctx.obj = Run(settings=settings, site_file=file, artifacts=artifacts, logger=logger)
+    ctx.obj = Run(
+        settings=settings,
+        site_file=file,
+        artifacts=artifacts,
+        logger=logger,
+        config_path=config,
+        requested_account=account,
+    )
+
+
+def _project_named_in(file: Path) -> str | None:
+    """The `project` a project file names, or None when there is no readable
+    file: the command that needs the file reports what is wrong with it."""
+    try:
+        raw = yaml.safe_load(file.read_text())
+    except (OSError, yaml.YAMLError):
+        return None
+    project = raw.get("project") if isinstance(raw, dict) else None
+    return project if isinstance(project, str) else None
 
 
 def _command(body: Callable[[Run], None]) -> Callable[[typer.Context], None]:
@@ -926,6 +962,42 @@ def outputs(ctx: typer.Context) -> None:
         _with_terraform(run, tf)
 
     _command(body)(ctx)
+
+
+@config_app.command("env")
+def config_env(
+    ctx: typer.Context,
+    project: Annotated[
+        str | None,
+        typer.Option(
+            "--project",
+            help="Resolve this project's account, whatever project file is in the directory.",
+        ),
+    ] = None,
+) -> None:
+    """Print the account this run addresses as `key=value` lines, for a
+    workflow to append to GITHUB_OUTPUT: every workflow resolves a project's
+    account, and so its role, here and nowhere else."""
+    run: Run = ctx.obj
+    settings = run.settings
+    if project is not None:
+        try:
+            where = resolve_account(project, settings.production, run.requested_account)
+            settings = load_settings(run.config_path, account=where)
+        except SitesError as exc:
+            # On stderr, never stdout: the caller appends stdout to GITHUB_OUTPUT.
+            print(f"error: {exc}", file=sys.stderr)
+            raise typer.Exit(exc.exit_code) from exc
+    production = settings.production
+    for key, value in (
+        ("account", settings.account),
+        ("account_id", settings.aws.account_id),
+        ("organization", settings.context.organization),
+        ("state_bucket", settings.state.bucket),
+        ("ecr_repository", settings.ecr.repository),
+        ("bootstrapped", str(bool(production and production.bootstrapped)).lower()),
+    ):
+        print(f"{key}={value}")
 
 
 @config_app.command("show")

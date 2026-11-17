@@ -45,6 +45,7 @@ reusable workflows this repository publishes. The design is in
 | `publish --dist DIR [--environment prod\|dev]` | `ci-apply` | Sync content and invalidate the distribution |
 | `release --dist DIR` | `ci-apply` | `apply` then `publish` |
 | `outputs`, `config show` | `ci-plan` / none | Stack outputs as JSON; the effective tool configuration |
+| `config env` | none | The account this run addresses, as `key=value` lines for a workflow's `GITHUB_OUTPUT` |
 | `report plan-comment --exit-code N --plan FILE --subject S` | none | Render the branded plan comment from a saved plan log (this repo's own CI uses it) |
 | `access render --out DIR [--base-registry DIR]` | none (`GH_TOKEN`) | Render `data-access/`'s variables and summary from `datasets/` and every project's file; refuses dropping a dataset that a handshake still names ([guide](docs/databricks.md#datasets-and-access)) |
 | `destroy --yes` | `ci-apply` | Bot and research projects: destroy the stack (the records, dataset and task results buckets and the secret are kept; refuses while tasks run) |
@@ -218,6 +219,27 @@ request keeps its original author; the app shows up on new pull requests.
 
 The release workflow (`workflow_dispatch` with a `tag`) can re-publish the
 image for an existing tag without cutting a release.
+
+## Two accounts, while everything moves
+
+Everything is moving from the management account to a production account.
+`config.yaml` describes the management account, and its `production` section
+holds what differs in production (account, name prefix `jaws`, state bucket,
+image repository) and which projects have a stack there. A run addresses one
+account:
+
+- production, for a project listed under `production.projects` (`moving` while
+  its old stack still exists, `moved` once that is destroyed);
+- management, for every other project and for a run without a project file;
+- `--account management` addresses the old stack of a project that is `moving`
+  (to destroy it), and `--account production` a run without a project file.
+
+`jaws config show` prints the view a run would use, and `jaws config env` the
+few values a workflow needs to build a role ARN: every workflow gets a
+project's account from it (`config env --project <name>`), never from its own
+reading of `config.yaml`. **Bot apply** and **Databricks apply** take an
+`account` input for the same choice. No project is listed yet, so
+every run addresses the management account, exactly as before.
 
 ## Shared modules from the Terraform Registry
 

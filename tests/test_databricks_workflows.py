@@ -262,12 +262,12 @@ def test_the_plan_job_never_runs_for_forks_and_waits_for_projects() -> None:
 def test_the_plan_job_uses_the_projects_plan_role_and_skips_until_it_exists() -> None:
     steps = _steps("ci.yml", "databricks-plan")
     role = steps[_index(steps, lambda s: s.get("id") == "role")]
-    assert ".aws.account_id" in role["run"] and ".context.organization" in role["run"]
+    assert 'uv run jaws config env --project "$PROJECT"' in role["run"]
     assert ':role/${organization}-${PROJECT}-ci-plan"' in role["run"]
     assume = steps[_index(steps, lambda s: s.get("id") == "assume")]
     assert assume["continue-on-error"] is True
     assert assume["with"]["role-to-assume"] == "${{ steps.role.outputs.arn }}"
-    plan = steps[_index(steps, lambda s: "jaws" in str(s.get("run", "")))]
+    plan = steps[_index(steps, lambda s: str(s.get("run", "")).endswith(" plan"))]
     assert plan["if"] == "steps.assume.outcome == 'success'"
     assert plan["run"].endswith("--file .consumer/jaws.yaml plan")
     # The CLI reads the secret itself, with the project's plan role.
@@ -280,7 +280,7 @@ def test_the_plan_job_uses_the_projects_plan_role_and_skips_until_it_exists() ->
 def test_databricks_apply_is_a_manual_prod_run() -> None:
     apply = _yaml(WORKFLOWS / "databricks-apply.yml")
     inputs = apply[True]["workflow_dispatch"]["inputs"]
-    assert set(inputs) == {"project", "action"}
+    assert set(inputs) == {"project", "action", "account"}
     assert inputs["project"]["required"] is True
     assert inputs["action"] == {
         "description": inputs["action"]["description"],
@@ -304,12 +304,12 @@ def test_databricks_apply_runs_the_projects_file_with_its_apply_role() -> None:
     assert checkout["with"]["repository"] == "${{ steps.project.outputs.repository }}"
     role = steps[_index(steps, lambda s: s.get("id") == "role")]
     assert ':role/${organization}-${PROJECT}-ci-apply"' in role["run"]
-    run = steps[_index(steps, lambda s: "jaws" in str(s.get("run", "")))]
+    run = steps[_index(steps, lambda s: "$COMMAND" in str(s.get("run", "")))]
     assert run["env"]["COMMAND"] == (
         "${{ inputs.action == 'destroy' && 'destroy --yes' || "
         "inputs.action == 'doctor' && 'databricks doctor' || 'apply' }}"
     )
-    assert "--file .consumer/jaws.yaml $COMMAND" in run["run"]
+    assert '--file .consumer/jaws.yaml ${ACCOUNT:+--account "$ACCOUNT"} $COMMAND' in run["run"]
     upload = steps[-1]
     assert upload["if"] == "always()"
     assert upload["with"]["path"] == ".jaws/"

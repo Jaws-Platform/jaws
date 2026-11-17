@@ -31,6 +31,15 @@ on:
         required: false
         type: string
         default: ""
+      account:
+        description: >-
+          The account to address. Empty uses the one config.yaml gives the
+          project (production once it is listed under production.projects);
+          `management` addresses the old stack of a project that is moving.
+        required: false
+        type: choice
+        options: ["", management, production]
+        default: ""
 
 concurrency:
   group: bot-apply-${{ inputs.project }}
@@ -83,10 +92,13 @@ jobs:
         id: role
         env:
           PROJECT: ${{ inputs.project }}
+          ACCOUNT: ${{ inputs.account }}
         run: |
-          account=$(yq -r .aws.account_id config.yaml)
-          organization=$(yq -r .context.organization config.yaml)
-          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" && "$organization" != null ]] || { echo "::error::config.yaml has no aws.account_id or context.organization"; exit 1; }
+          # The tool says which account this is (config.yaml: management, or `production`).
+          resolved=$(uv run jaws ${ACCOUNT:+--account "$ACCOUNT"} config env --project "$PROJECT")
+          account=$(sed -n 's/^account_id=//p' <<<"$resolved")
+          organization=$(sed -n 's/^organization=//p' <<<"$resolved")
+          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
           echo "arn=arn:aws:iam::${account}:role/${organization}-${PROJECT}-ci-apply" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -106,6 +118,7 @@ jobs:
       - name: jaws ${{ inputs.destroy && 'destroy' || 'apply' }}
         env:
           JAWS_STACKS_ROOT: ${{ github.workspace }}/stacks
+          ACCOUNT: ${{ inputs.account }}
           COMMAND: ${{ inputs.destroy && 'destroy --yes' || 'apply' }}
           # The CLI reads each counterpart's project file (consumers of the
           # project's datasets) from GitHub to render its bucket readers.
@@ -113,7 +126,7 @@ jobs:
         run: |
           # COMMAND is `apply` or `destroy --yes`: two words on purpose.
           # shellcheck disable=SC2086
-          uv run jaws --file .consumer/jaws.yaml $COMMAND
+          uv run jaws --file .consumer/jaws.yaml ${ACCOUNT:+--account "$ACCOUNT"} $COMMAND
       - name: Upload the run log and artifacts
         if: always()
         uses: actions/upload-artifact@v7
