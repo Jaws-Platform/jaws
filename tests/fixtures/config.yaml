@@ -204,6 +204,13 @@ databricks:
         node_type_id: {type: allowlist, values: [m7g.large, m7g.xlarge]}
         aws_attributes.availability: {type: fixed, value: SPOT_WITH_FALLBACK}
 
+# The organization's development account. jaws records it and builds nothing in
+# it yet: no foundation, no state bucket (all state lives in production), and no
+# run addresses it. The owner signs in to it through owner-access, as the
+# jaws-dev profile (docs/owner-access.md).
+development:
+  account_id: "859674017655"
+
 # The production account, where everything is moving from the management
 # account described above. A section under `overrides` replaces the same keys
 # of the section with that name; everything else is shared. A run addresses one

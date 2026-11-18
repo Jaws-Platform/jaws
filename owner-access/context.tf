@@ -7,9 +7,10 @@ locals {
   account_id  = local.tool_config.aws.account_id
 
   # The production account, where everything is moving (config.yaml,
-  # `production`). The owner has the same admin access there. Nothing is being
-  # built in the development account, so it gets none.
-  production_account_id = local.tool_config.production.overrides.aws.account_id
+  # `production`), and the development account (config.yaml, `development`),
+  # where nothing is built yet. The owner has the same admin access in both.
+  production_account_id  = local.tool_config.production.overrides.aws.account_id
+  development_account_id = try(local.tool_config.development.account_id, null)
 
   context = {
     organization = local.tool_config.context.organization

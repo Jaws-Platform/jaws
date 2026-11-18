@@ -76,33 +76,36 @@ run "outputs_render_the_cli_profile" {
 }
 
 # Everything is moving to the production account, so the owner needs the same
-# admin access there. Nothing is being built in the development account.
-run "the_owner_has_the_same_access_in_production" {
+# admin access there. The development account is in config.yaml too: nothing is
+# built there yet, but the owner can sign in to it (quota requests, the console).
+run "the_owner_has_the_same_access_in_production_and_development" {
   command = plan
 
   assert {
-    condition     = jsonencode(module.owner_admin.account_ids) == jsonencode(["650503560686", "570327089884"])
-    error_message = "the owner must have AdministratorAccess in the management account and in production (570327089884), and nowhere else"
-  }
-
-  assert {
-    condition     = !contains(module.owner_admin.account_ids, "859674017655")
-    error_message = "the development account gets no assignment: nothing is built there"
+    condition     = jsonencode(module.owner_admin.account_ids) == jsonencode(["650503560686", "570327089884", "859674017655"])
+    error_message = "the owner must have AdministratorAccess in the management account, production (570327089884) and development (859674017655), and nowhere else"
   }
 
   assert {
     condition = alltrue([
-      strcontains(output.aws_config, "[profile jaws-prod]"),
-      strcontains(output.aws_config, "sso_account_id = 570327089884"),
       strcontains(output.aws_config, "[profile jwall-admin]"),
       strcontains(output.aws_config, "sso_account_id = 650503560686"),
+      strcontains(output.aws_config, "[profile jaws-prod]"),
+      strcontains(output.aws_config, "sso_account_id = 570327089884"),
+      strcontains(output.aws_config, "[profile jaws-dev]"),
+      strcontains(output.aws_config, "sso_account_id = 859674017655"),
     ])
-    error_message = "aws_config must render a jaws-prod profile for the production account beside the jwall-admin profile"
+    error_message = "aws_config must render the jwall-admin, jaws-prod and jaws-dev profiles"
   }
 
   assert {
-    condition     = length(regexall("sso_session = jwall-engineering", output.aws_config)) == 2
-    error_message = "both profiles sign in through the one Identity Center session"
+    condition     = length(regexall("sso_session = jwall-engineering", output.aws_config)) == 3
+    error_message = "all three profiles sign in through the one Identity Center session"
+  }
+
+  assert {
+    condition     = length(regexall("(?m)^[ \\t]+\\S", output.aws_config)) == 0 && !strcontains(output.aws_config, "\n\n\n")
+    error_message = "aws_config is pasted into ~/.aws/config, where an indented line continues the one before: no line may be indented, and blocks are one blank line apart"
   }
 }
 

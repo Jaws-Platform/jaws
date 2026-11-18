@@ -9,7 +9,7 @@ credentials. There is no IAM user and no access key. Root is the backup.
 | The organization, the Identity Center instance, MFA rules, sign-in length, email OTP | The console, set once ([below](#one-time-console-setup)) |
 | The Identity Center user, the `AdministratorAccess` permission set and its assignment to this account | [`owner-access/`](../owner-access), from the library's [`identity-center-access`](https://registry.terraform.io/modules/jwallace145/jwall-engineering/aws/latest/submodules/identity-center-access) module, **applied only by the owner** |
 | The admin role's exemption from the hardened state and site bucket policies | `bucket_admin_principal_arns` in `foundation/state.tf`, applied by CI on release |
-| The `jwall-admin` CLI profile | The owner's `~/.aws/config`, from `terraform output -raw aws_config` |
+| The `jwall-admin`, `jaws-prod` and `jaws-dev` CLI profiles | The owner's `~/.aws/config`, from `terraform output -raw aws_config` |
 
 Organizations and Identity Center are free.
 
@@ -119,8 +119,24 @@ The stack also assigns the same permission set in the production account
 (`production.overrides.aws.account_id` in `config.yaml`), where everything is
 moving, and `terraform output -raw aws_config` prints a `jaws-prod` profile for
 it beside `jwall-admin`. The role Identity Center provisions there has its own
-suffix; [production-bootstrap.md](production-bootstrap.md) reads it. The
-development account gets no assignment: nothing is built there.
+suffix; [production-bootstrap.md](production-bootstrap.md) reads it.
+
+It assigns it in the development account too (`development.account_id` in
+`config.yaml`), and prints a `jaws-dev` profile for it. Nothing is built there
+yet; the access is for the console and the CLI, such as asking for its EC2
+quotas ahead of a move. All three profiles share the one `jwall-engineering`
+SSO session, so one sign-in covers them:
+
+```sh
+aws sso login --sso-session jwall-engineering
+aws sts get-caller-identity --profile jwall-admin   # 650503560686, management
+aws sts get-caller-identity --profile jaws-prod     # 570327089884, production
+aws sts get-caller-identity --profile jaws-dev      # 859674017655, development
+```
+
+Adding a profile to an existing `~/.aws/config`: copy only its block from
+`terraform output -raw aws_config`, since appending the whole output repeats the
+others.
 
 ## First sign-in and the CLI profile
 

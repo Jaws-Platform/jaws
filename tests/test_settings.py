@@ -109,6 +109,25 @@ def test_aws_account_is_configured(settings: Settings) -> None:
     assert settings.aws.account_id == "650503560686"
 
 
+def test_the_development_account_is_recorded(settings: Settings) -> None:
+    """The organization's third account: jaws knows it, and builds nothing in it."""
+    assert settings.development is not None
+    assert settings.development.account_id == "859674017655"
+
+
+def test_a_development_account_id_must_be_twelve_digits(tmp_path: Path) -> None:
+    path = _write(tmp_path, {"development.account_id": "85967401765"})
+    with pytest.raises(ConfigError, match=r"development\.account_id"):
+        load_settings(path, environ={})
+
+
+@pytest.mark.parametrize("other", ["650503560686", "570327089884"])
+def test_the_development_account_is_neither_other_account(tmp_path: Path, other: str) -> None:
+    path = _write(tmp_path, {"development.account_id": other})
+    with pytest.raises(ConfigError, match=r"development\.account_id"):
+        load_settings(path, environ={})
+
+
 def test_aws_account_must_be_twelve_digits(tmp_path: Path) -> None:
     raw = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
     raw["aws"]["account_id"] = "65050356068"

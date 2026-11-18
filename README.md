@@ -234,7 +234,10 @@ image for an existing tag without cutting a release.
 Everything is moving from the management account to a production account.
 `config.yaml` describes the management account, and its `production` section
 holds what differs in production (account, name prefix `jaws`, state bucket,
-image repository) and which projects have a stack there. A run addresses one
+image repository) and which projects have a stack there. Its `development`
+section records the organization's third account, where nothing is built yet:
+no run addresses it, `config accounts` never lists it, and the owner reaches it
+through [owner access](docs/owner-access.md) (the `jaws-dev` profile). A run addresses one
 account:
 
 - production, for a project listed under `production.projects` (`moving` while

@@ -528,3 +528,20 @@ def test_the_old_stack_of_a_moving_site_is_destroyed(workspace: Path, fake_terra
     assert not any(c.startswith("state rm") for c in calls)
     rendered = json.loads(Path(os.environ["FAKE_TF_TFVARS"]).read_text())
     assert rendered["tags"]["Organization"] == "jwall-engineering"  # the management stack
+
+
+# -- the development account ------------------------------------------------------------------
+
+
+def test_the_foundation_is_never_planned_in_development(workspace: Path) -> None:
+    """config.yaml records the development account, but nothing is built there."""
+    raw = _raw()
+    raw["production"]["bootstrapped"] = True
+    raw["production"]["overrides"]["aws"]["admin_role_arn"] = (
+        f"arn:aws:iam::{PRODUCTION}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_0f"
+    )
+    raw["production"]["overrides"]["dns"] = {"zone_id": "Z0PRODUCTIONZONE0000"}
+    _write(workspace / "config.yaml", raw)
+    accounts = json.loads(runner.invoke(cli.app, ["config", "accounts"]).stdout)
+    assert [a["account"] for a in accounts] == ["management", "production"]
+    assert "859674017655" not in {a["account_id"] for a in accounts}

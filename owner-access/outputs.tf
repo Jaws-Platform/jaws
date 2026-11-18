@@ -17,9 +17,11 @@ output "permission_set_arn" {
   value       = module.owner_admin.permission_set_arn
 }
 
-output "aws_config" {
-  description = "The ~/.aws/config blocks for the jwall-admin profile (the management account) and the jaws-prod profile (production): terraform output -raw aws_config."
-  value       = <<-EOT
+locals {
+  # Built from plain heredocs: a template directive inside a `<<-` heredoc stops
+  # Terraform stripping its indentation, and ~/.aws/config reads an indented line
+  # as the continuation of the one before.
+  aws_config_management_and_production = <<-EOT
     [sso-session jwall-engineering]
     sso_start_url = ${local.access_portal_url}
     sso_region = ${local.region}
@@ -37,4 +39,18 @@ output "aws_config" {
     sso_role_name = ${module.owner_admin.permission_set_name}
     region = ${local.region}
   EOT
+
+  aws_config_development = local.development_account_id == null ? "" : <<-EOT
+
+    [profile jaws-dev]
+    sso_session = jwall-engineering
+    sso_account_id = ${local.development_account_id}
+    sso_role_name = ${module.owner_admin.permission_set_name}
+    region = ${local.region}
+  EOT
+}
+
+output "aws_config" {
+  description = "The ~/.aws/config blocks for the jwall-admin profile (the management account), the jaws-prod profile (production) and the jaws-dev profile (development): terraform output -raw aws_config."
+  value       = "${local.aws_config_management_and_production}${local.aws_config_development}"
 }

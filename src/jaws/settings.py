@@ -461,6 +461,15 @@ class ProductionSection(_Section):
         return self
 
 
+class DevelopmentSection(_Section):
+    """The organization's development account (the `development:` section). jaws
+    records it and builds nothing in it: no foundation, no state bucket (all state
+    lives in production), and no run addresses it. The owner signs in to it
+    through owner-access, as the jaws-dev profile."""
+
+    account_id: str = Field(pattern=r"^\d{12}$")
+
+
 def resolve_account(
     project: str | None, production: ProductionSection | None, requested: Account | None
 ) -> Account:
@@ -512,6 +521,23 @@ class Settings(_Section):
     projects: dict[str, ProjectGuardrails] = {}
     databricks: DatabricksSection | None = None
     production: ProductionSection | None = None
+    development: DevelopmentSection | None = None
+
+    @model_validator(mode="after")
+    def _development_is_its_own_account(self) -> Settings:
+        if self.development is None:
+            return self
+        others = {self.aws.account_id}
+        if self.production is not None and self.production.overrides.get("aws", {}).get(
+            "account_id"
+        ):
+            others.add(str(self.production.overrides["aws"]["account_id"]))
+        if self.development.account_id in others:
+            raise ValueError(
+                f"development.account_id {self.development.account_id} is the management or "
+                "production account's; the development account is the organization's third"
+            )
+        return self
 
     @model_validator(mode="after")
     def _databricks_consistency(self) -> Settings:
