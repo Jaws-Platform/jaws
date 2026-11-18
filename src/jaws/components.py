@@ -410,8 +410,17 @@ class TaskRunner(_Model):
 
 
 _ROLE_ARN = re.compile(r"^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$")
+#: A reader named by project: `<project>/<role>`, the role
+#: `<Organization>-<project>-<role>` in whichever account the run addresses.
+_PROJECT_ROLE = re.compile(r"^([a-z0-9]+(?:-[a-z0-9]+)*)/([a-z0-9]+(?:-[a-z0-9]+)*)$")
 #: Names whose buckets the project already has: <Organization>-<project>-<name>.
 _RESERVED_DATASET_NAMES = ("records", "tasks")
+
+
+def project_reader(reader: str) -> tuple[str, str] | None:
+    """`(project, role)` for a reader named `<project>/<role>`; None for a role ARN."""
+    match = _PROJECT_ROLE.match(reader)
+    return (match.group(1), match.group(2)) if match else None
 
 
 class Dataset(_Model):
@@ -419,8 +428,11 @@ class Dataset(_Model):
 
     kind: Literal["dataset"]
     name: str
-    #: The derived bucket name, written out so workflows can read it without
-    #: the tool; checked against the derivation in `project.py`.
+    #: Where the project's workflows read and write, written out so they can
+    #: read it without the tool: the derived name in the account they run in
+    #: (`project.py` accepts either account's). The tool always uses the
+    #: addressed account's derivation, so the file renders in both while the
+    #: project moves; the consumer flips this at its cutover.
     bucket: str
     #: Everything the project writes lives under it; writers and readers get
     #: this prefix only.
@@ -428,8 +440,10 @@ class Dataset(_Model):
     #: Components whose roles may add objects under the prefix (never read or
     #: delete them): `task-runner`, the task instances.
     writers: tuple[Literal["task-runner"], ...] = ()
-    #: IAM role ARNs that may read under the prefix. Administrators can
-    #: always read.
+    #: Roles that may read under the prefix: an IAM role ARN, or
+    #: `<project>/<role>` (for example `braveheart-trainer/task-gpu`) for a
+    #: project's role in whichever account the run addresses, named only once
+    #: that project has a stack there. Administrators can always read.
     readers: tuple[str, ...] = ()
     #: Days before objects move to Intelligent-Tiering; 0 moves them at once.
     transition_days: int = Field(default=0, ge=0, le=3650)
@@ -496,9 +510,12 @@ class Dataset(_Model):
     @field_validator("readers")
     @classmethod
     def _readers(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        for arn in value:
-            if not _ROLE_ARN.match(arn):
-                raise ValueError(f"readers: {arn!r} is not an IAM role ARN")
+        for reader in value:
+            if not _ROLE_ARN.match(reader) and project_reader(reader) is None:
+                raise ValueError(
+                    f"readers: {reader!r} is neither an IAM role ARN nor <project>/<role> "
+                    "(for example braveheart-trainer/task-gpu)"
+                )
         return value
 
 

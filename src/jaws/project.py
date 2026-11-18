@@ -20,6 +20,7 @@ from .components import (
     Dataset,
     LichessBot,
     TaskRunner,
+    project_reader,
 )
 from .errors import ConfigError
 from .settings import DatabricksProject, Settings
@@ -82,14 +83,31 @@ class Project(BaseModel):
                         "which the release role can write"
                     )
         for dataset in config.datasets:
-            bucket = f"{organization}-{config.project}-{dataset.name}"
-            if dataset.bucket != bucket:
+            # Either account's name: the file names where its workflows point,
+            # which flips at the project's cutover; the tool always uses this
+            # account's (Project.dataset_bucket).
+            names = [
+                f"{org}-{config.project}-{dataset.name}"
+                for org in settings.organizations or (organization,)
+            ]
+            if dataset.bucket not in names:
                 problems.append(
-                    f"dataset {dataset.name}: bucket must be {bucket!r} "
+                    f"dataset {dataset.name}: bucket must be "
+                    f"{' or '.join(repr(n) for n in names)} "
                     f"(<Organization>-<project>-<name>), got {dataset.bucket!r}"
                 )
-            elif len(bucket) > 63:
-                problems.append(f"dataset {dataset.name}: bucket {bucket!r} exceeds 63 characters")
+            for name in names:
+                if len(name) > 63:
+                    problems.append(
+                        f"dataset {dataset.name}: bucket {name!r} exceeds 63 characters"
+                    )
+            for reader in dataset.readers:
+                named = project_reader(reader)
+                if named is not None and named[0] not in settings.projects:
+                    problems.append(
+                        f"dataset {dataset.name}: reader {reader!r} names project "
+                        f"{named[0]!r}, which has no entry under projects in config.yaml"
+                    )
         runner = config.task_runner
         for name, profile in (runner.profiles if runner else {}).items():
             if profile.image is not None and profile.image not in settings.tasks.images:

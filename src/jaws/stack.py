@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from .access import Access, infra_root, project_registry_ids
-from .components import TaskRunner
+from .components import Dataset, TaskRunner, project_reader
 from .errors import ConfigError, RunError
 from .project import Project
 from .settings import DatabricksProject, DatabricksSection, Settings
@@ -237,12 +237,11 @@ def _bot_tfvars(
         "datasets": [
             {
                 "name": d.name,
-                "bucket": d.bucket,
+                # This account's bucket, whichever account's the file names.
+                "bucket": project.dataset_bucket(d.name),
                 "prefix": d.prefix,
                 "writers": list(d.writers),
-                # An onboarded dataset some workspace reads, by both projects'
-                # agreement: its role reads through this bucket policy.
-                "readers": list(d.readers) + _edge_readers(project, d.name, settings, access),
+                "readers": _dataset_readers(project, d, settings, access),
                 "transition_days": d.transition_days,
                 "versioning": d.versioning,
                 "expire_noncurrent_days": d.expire_noncurrent_days,
@@ -253,11 +252,50 @@ def _bot_tfvars(
     }
 
 
+def _dataset_readers(
+    project: Project, dataset: Dataset, settings: Settings, access: Access | None
+) -> list[str]:
+    """Every role the dataset's bucket policy lets read, in this account."""
+    readers = [
+        arn for arn in (_reader_arn(r, settings) for r in dataset.readers) if arn is not None
+    ]
+    return (
+        readers
+        + _copy_readers(project, settings)
+        + _edge_readers(project, dataset.name, settings, access)
+    )
+
+
+def _reader_arn(reader: str, settings: Settings) -> str | None:
+    """A reader's role ARN in this account. A `<project>/<role>` reader is named
+    only once that project has a stack here: a bucket policy cannot name a role
+    that does not exist, and its first apply in an account creates it."""
+    named = project_reader(reader)
+    if named is None:
+        return reader
+    owner, role = named
+    if not settings.has_stack(owner):
+        return None
+    name = f"{settings.context.organization}-{owner}-{role}"
+    return f"arn:aws:iam::{settings.aws.account_id}:role/{name}"
+
+
+def _copy_readers(project: Project, settings: Settings) -> list[str]:
+    """Production's admin role, on a moving project's management buckets: the
+    owner copies them server-side into production's as that role."""
+    if settings.account != "management" or settings.project_state(project.project) != "moving":
+        return []
+    assert settings.production is not None  # a project is moving only with a production section
+    admin = settings.production.overrides.get("aws", {}).get("admin_role_arn")
+    return [str(admin)] if admin else []
+
+
 def _edge_readers(
     project: Project, dataset: str, settings: Settings, access: Access | None
 ) -> list[str]:
-    """The dataset's platform role, when an agreed handshake shares it; else nothing."""
-    if access is None:
+    """The dataset's platform role, when an agreed handshake shares it; else nothing.
+    Nothing where Databricks is off, whose foundation creates no such role."""
+    if access is None or settings.databricks is None or not settings.databricks.enabled:
         return []
     for edge in access.edges:
         if edge.dataset.owner == project.project and edge.dataset.name == dataset:

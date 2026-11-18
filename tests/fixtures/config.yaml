@@ -241,8 +241,8 @@ production:
     ecr:
       repository: jaws-cli
     dns:
-      # The jwall.engineering zone the bootstrap created. Not authoritative yet: the
-      # registrar still names management's zone until every record is copied.
+      # The jwall.engineering zone the bootstrap created, authoritative since the
+      # registrar switched to its name servers (2026-11-18).
       zone_id: Z0644006DW6W2HALU9BI
     databricks:
       enabled: false # Databricks moves last, as a whole

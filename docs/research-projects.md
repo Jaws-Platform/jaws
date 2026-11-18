@@ -422,6 +422,10 @@ grants stay in state and are destroyed with the roles they sit on. It refuses
 while task instances run. It also refuses a file that `config.yaml` no longer
 allows, so destroy before removing the project's central entry.
 
+Moving to production ends the same way: `destroy --account management` removes
+the old stack and keeps its buckets. The whole move, with the data copy, is in
+[Moving a dataset project to production](datasets.md#moving-a-dataset-project-to-production).
+
 Applying the project again afterwards is not automated. The kept buckets
 exist in AWS but not in state, so an administrator imports them first.
 

@@ -49,7 +49,7 @@ def check(config: SiteConfig, settings: Settings) -> list[str]:
                     "in config.yaml"
                 )
             problems += _profile_problems(name, profile, approved, limits, project)
-    problems += _dataset_problems(config, approved)
+    problems += _dataset_problems(config, approved, settings.context.organization)
     problems += _access_problems(config, settings)
     return problems
 
@@ -160,19 +160,25 @@ def _profile_problems(
     return problems
 
 
-def _dataset_problems(config: SiteConfig, approved: ProjectGuardrails) -> list[str]:
+def _dataset_problems(
+    config: SiteConfig, approved: ProjectGuardrails, organization: str
+) -> list[str]:
+    """Each dataset against the retention approved for its bucket in this account,
+    `<organization>-<project>-<name>` (not the file's `bucket`, which names either
+    account's while the project moves)."""
     problems: list[str] = []
     protected_by_name: dict[str, tuple[str, ...]] = {}
     for dataset in config.datasets:
-        retention = approved.datasets.get(dataset.bucket)
+        bucket = f"{organization}-{config.project}-{dataset.name}"
+        retention = approved.datasets.get(bucket)
         if retention is None:
             problems.append(
-                f"dataset {dataset.name}: bucket {dataset.bucket!r} is not in "
+                f"dataset {dataset.name}: bucket {bucket!r} is not in "
                 f"projects.{config.project}.datasets in config.yaml"
             )
             continue
         protected_by_name[dataset.name] = retention.write_once
-        problems += _retention_problems(dataset, retention)
+        problems += _retention_problems(dataset, retention, bucket)
 
     runner = config.task_runner
     for profile_name in runner.profile_names if runner else ():
@@ -202,8 +208,8 @@ def _dataset_problems(config: SiteConfig, approved: ProjectGuardrails) -> list[s
     return problems
 
 
-def _retention_problems(dataset: Dataset, retention: DatasetRetention) -> list[str]:
-    where = f"dataset {dataset.name} ({dataset.bucket})"
+def _retention_problems(dataset: Dataset, retention: DatasetRetention, bucket: str) -> list[str]:
+    where = f"dataset {dataset.name} ({bucket})"
     problems: list[str] = []
     if retention.prefix is not None and dataset.prefix != retention.prefix:
         problems.append(
