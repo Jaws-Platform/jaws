@@ -343,6 +343,14 @@ def test_bots_output_names_the_task_role() -> None:
     assert "task_role_arn" in outputs and "module.bot_ci_task[key].role_arn" in outputs
 
 
+def _in_production() -> set[str]:
+    """The projects config.yaml lists under production.projects."""
+    import yaml
+
+    config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
+    return set((config.get("production") or {}).get("projects") or {})
+
+
 def _bot_datasets() -> dict[str, list[str]]:
     return {k: list(p["datasets"]) for k, p in _projects().items() if p.get("datasets")}
 
@@ -351,13 +359,19 @@ def test_dataset_buckets_match_the_project_files() -> None:
     expected = {}
     for project in registry():
         components = project_file(project)["components"]
-        buckets = [c["bucket"] for c in components if c["kind"] == "dataset"]
+        names = [c["name"] for c in components if c["kind"] == "dataset"]
+        # Approved under each account's name where the project has a stack: the
+        # management account's, and production's too once it is moving there.
+        organizations = ["jwall-engineering"] + (["jaws"] if project in _in_production() else [])
+        buckets = [f"{org}-{project}-{name}" for name in names for org in organizations]
         if buckets:
             expected[project] = buckets
     # The engine gave its dataset up at the split's cutover; the data is the satellites'.
     assert "braveheart" not in expected
     assert {"braveheart-selfplay", "braveheart-trainer"} <= set(expected)
-    assert _bot_datasets() == expected
+    assert {k: sorted(v) for k, v in _bot_datasets().items()} == {
+        k: sorted(v) for k, v in expected.items()
+    }
     assert set(_bot_datasets()) <= set(registry())
 
 

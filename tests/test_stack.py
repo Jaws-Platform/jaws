@@ -31,7 +31,7 @@ from jaws.stack import (
     render_backend,
     render_tfvars,
 )
-from tests.conftest import FIXTURES, REPO_ROOT
+from tests.conftest import FIXTURES, REPO_ROOT, management_only
 
 #: What each site's infra/ directory produced before the migration, by project.
 #: Step 6's "no changes" plan depends on these staying identical.
@@ -1407,6 +1407,7 @@ def _access(consumer_reads: bool = True) -> Any:
 
 
 def test_a_shared_dataset_names_its_platform_role_as_a_reader(settings: Settings) -> None:
+    settings = management_only(settings, "braveheart-selfplay")
     tfvars = render_tfvars(
         _registry_project("braveheart-selfplay", settings), settings, access=_access()
     )
@@ -1415,6 +1416,7 @@ def test_a_shared_dataset_names_its_platform_role_as_a_reader(settings: Settings
 
 
 def test_a_pending_handshake_adds_no_reader(settings: Settings) -> None:
+    settings = management_only(settings, "braveheart-selfplay")
     project = _registry_project("braveheart-selfplay", settings)
     for access in (_access(consumer_reads=False), None):
         (dataset,) = render_tfvars(project, settings, access=access)["datasets"]
