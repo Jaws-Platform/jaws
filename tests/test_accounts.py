@@ -9,9 +9,11 @@ account per run, and every workflow asks the tool which (`config env`).
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -466,3 +468,63 @@ def test_destroying_a_project_in_one_account_needs_no_flag(bot_workspace: Path) 
     _write(bot_workspace / "config.yaml", _raw())
     result = runner.invoke(cli.app, ["destroy", "--yes"])
     assert "has a stack in both accounts" not in result.output
+
+
+# -- the old stack of a site that is moving --------------------------------------------------
+
+SITE_APPLY_ROLE = f"arn:aws:sts::{MANAGEMENT}:assumed-role/jwall-engineering-{SITE}-ci-apply/s"
+
+
+def _calls(log: Path) -> list[str]:
+    return log.read_text().splitlines() if log.exists() else []
+
+
+def test_a_site_that_is_not_moving_is_not_destroyed(workspace: Path, fake_terraform: Path) -> None:
+    with patch("jaws.aws.caller_identity", return_value=(MANAGEMENT, SITE_APPLY_ROLE)):
+        result = runner.invoke(cli.app, ["--account", "management", "destroy", "--yes"])
+    assert result.exit_code == 3
+    assert "not supported for sites" in result.output
+    assert not any(c.startswith("destroy") for c in _calls(fake_terraform))
+
+
+def test_destroying_a_moving_site_needs_the_account_named(workspace: Path) -> None:
+    _config(workspace, {SITE: "moving"})
+    result = runner.invoke(cli.app, ["destroy", "--yes"])
+    assert result.exit_code == 2
+    assert f"{SITE} has a stack in both accounts" in result.output
+
+
+def test_a_moving_site_s_production_stack_is_not_destroyed(
+    workspace: Path, fake_terraform: Path
+) -> None:
+    _config(workspace, {SITE: "moving"})
+    result = runner.invoke(cli.app, ["--account", "production", "destroy", "--yes"])
+    assert result.exit_code == 3
+    assert "a site's production stack is not destroyed by the tool" in result.output
+    assert not any(c.startswith("destroy") for c in _calls(fake_terraform))
+
+
+def test_destroying_a_moving_site_s_old_stack_needs_yes(
+    workspace: Path, fake_terraform: Path
+) -> None:
+    _config(workspace, {SITE: "moving"})
+    with patch("jaws.aws.caller_identity", return_value=(MANAGEMENT, SITE_APPLY_ROLE)):
+        result = runner.invoke(cli.app, ["--account", "management", "destroy"])
+    assert result.exit_code == 3
+    assert "pass --yes" in result.output
+    for goes in ("distributions", "certificates", "records"):
+        assert goes in result.output
+    assert "jwall-engineering-guitar-knowledge-base" in result.output  # the bucket, which stays
+    assert not any(c.startswith("destroy") for c in _calls(fake_terraform))
+
+
+def test_the_old_stack_of_a_moving_site_is_destroyed(workspace: Path, fake_terraform: Path) -> None:
+    _config(workspace, {SITE: "moving"})
+    with patch("jaws.aws.caller_identity", return_value=(MANAGEMENT, SITE_APPLY_ROLE)):
+        result = runner.invoke(cli.app, ["--account", "management", "destroy", "--yes"])
+    assert result.exit_code == 0, result.output
+    calls = _calls(fake_terraform)
+    assert any(c.startswith("destroy") for c in calls)
+    assert not any(c.startswith("state rm") for c in calls)
+    rendered = json.loads(Path(os.environ["FAKE_TF_TFVARS"]).read_text())
+    assert rendered["tags"]["Organization"] == "jwall-engineering"  # the management stack

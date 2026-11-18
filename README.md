@@ -50,7 +50,7 @@ this repository publishes. The design is in
 | `config env` | none | The account this run addresses, as `key=value` lines for a workflow's `GITHUB_OUTPUT` |
 | `report plan-comment --exit-code N --plan FILE --subject S` | none | Render the branded plan comment from a saved plan log (this repo's own CI uses it) |
 | `access render --out DIR [--base-registry DIR]` | none (`GH_TOKEN`) | Render `data-access/`'s variables and summary from `datasets/` and every project's file; refuses dropping a dataset that a handshake still names ([guide](docs/databricks.md#datasets-and-access)) |
-| `destroy --yes` | `ci-apply` | Bot and research projects: destroy the stack (the records, dataset and task results buckets and the secret are kept; refuses while tasks run) |
+| `destroy --yes` | `ci-apply` | Bot and research projects: destroy the stack (the records, dataset and task results buckets and the secret are kept; refuses while tasks run). A site: only the old stack of a site that is `moving`, with `--account management` (its distributions, certificates and old-zone records; the bucket stays) |
 | `bot build --version vX.Y.Z` | none | Bot projects: download and verify the release asset, build and smoke-test the image (Docker) |
 | `bot push --version vX.Y.Z` | `ci-release` | Push the image under the release tag; refuses an existing tag |
 | `bot deploy --version vX.Y.Z [--restart]` | `ci-release` | Roll the bot to a pushed tag and follow the swap (waits for the game in progress) |
@@ -270,12 +270,35 @@ account: both stacks exist, and the default is the new one.
 A site that has moved keeps its old bucket in the management account (without
 roles or writers) until the owner deletes it; a move never destroys a bucket.
 
+**Moving a site.** The production zone answers for `jwall.engineering` since
+2026-11-18. Every site record was copied into it first, still pointing at the
+old distributions. A CloudFront hostname belongs to one distribution at a time,
+so a site is down from its old stack's destroy until its new stack is deployed,
+about 20–30 minutes:
+
+1. `production.projects: {<site>: moving}`; the release creates the site's
+   bucket (`jaws-<site>`) and roles in production. Nothing changes for the site
+   yet.
+2. In the site's repository, set `AWS_PLAN_ROLE_ARN`, `AWS_PREVIEW_ROLE_ARN`
+   and `AWS_APPLY_ROLE_ARN` to
+   `arn:aws:iam::<production>:role/jaws-<site>-ci-{plan,preview,apply}`, and
+   pin the reusable workflows at that release. Merging the pin deploys nothing.
+3. The outage. From the site's checkout, with admin credentials:
+   `jaws --account management destroy --yes` removes the old stack (its
+   distributions, certificates and old-zone records; the bucket is the
+   foundation's and stays). Then dispatch the site's **Release** workflow
+   without a tag: it applies the production stack, whose records take over the
+   copies, and publishes the latest release.
+4. `<site>: moved`. The management foundation drops the site's roles and keeps
+   its old bucket for the owner, and the copied validation records of the old
+   certificates are deleted from the zone.
+
 `jaws config show` prints the view a run would use, and `jaws config env` the
 few values a workflow needs to build a role ARN: every workflow gets a
 project's account from it (`config env --project <name>`), never from its own
 reading of `config.yaml`. **Bot apply** and **Databricks apply** take an
-`account` input for the same choice. No project is listed yet, so
-every run addresses the management account, exactly as before.
+`account` input for the same choice. `braveheart-bot` has run in production
+since 2026-11-18; every other project still addresses the management account.
 
 ## Shared modules from the Terraform Registry
 

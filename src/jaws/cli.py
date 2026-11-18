@@ -229,6 +229,46 @@ def _require_account_to_destroy(run: Run) -> None:
         )
 
 
+def _destroy_old_site(run: Run, yes: bool) -> None:
+    """Destroy the management stack of a site that is moving to production: its
+    distributions, certificates and its records in the old zone. That frees the
+    site's hostnames for the new stack. The site's bucket belongs to the
+    foundation, not to this stack, and stays. Nothing else about a site is
+    destroyed by the tool."""
+    site = run.site
+    production = run.settings.production
+    moving = production is not None and production.projects.get(site.project) == "moving"
+    if run.settings.account == "production":
+        raise PreflightError(
+            "a site's production stack is not destroyed by the tool: only the old stack "
+            "of a site that is moving, with --account management"
+        )
+    if not moving:
+        raise PreflightError(
+            "destroy is not supported for sites, except the old stack of a site that is "
+            "moving to production (config.yaml production.projects), with --account management"
+        )
+    if not yes:
+        raise PreflightError(
+            f"pass --yes to destroy {site.project}'s stack in the management account: its "
+            f"CloudFront distributions (the site is down until its production stack is "
+            f"deployed), their certificates and its records in the management zone go; "
+            f"its bucket {site.bucket} is the foundation's and stays"
+        )
+    _preflight(run, "apply", prefix=None)
+
+    def tf(terraform: stack.Terraform) -> None:
+        with phase("init"):
+            terraform.init()
+        with phase("destroy"):
+            terraform.destroy()
+
+    _with_terraform(run, tf)
+    run.logger.info(
+        "destroyed %s's management stack; its bucket %s is kept", site.project, site.bucket
+    )
+
+
 def _project_named_in(file: Path) -> str | None:
     """The `project` a project file names, or None when there is no readable
     file: the command that needs the file reports what is wrong with it."""
@@ -883,11 +923,15 @@ def destroy(
 ) -> None:
     """Destroy a project's stacks. A bot or research project keeps its buckets and
     secrets; a Databricks project loses both its buckets and their data, and the
-    full deletion list is printed first."""
+    full deletion list is printed first. A site only while it moves: its old
+    stack, with --account management; its bucket stays."""
 
     def body(run: Run) -> None:
         _require_account_to_destroy(run)
         project = run.project
+        if project.kind == "site":
+            _destroy_old_site(run, yes)
+            return
         if not project.has_components:
             raise PreflightError("destroy is not supported for sites")
         if project.kind == "databricks":
