@@ -34,7 +34,7 @@ locals {
 module "site_bucket" {
   for_each = merge(local.served_sites, { for key in local.retained_site_buckets : key => local.projects[key] })
   source   = "jwallace145/jwall-engineering/aws//modules/site-bucket"
-  version  = "0.27.0"
+  version  = "0.28.0"
 
   project   = each.key
   name_root = local.context.organization
@@ -82,7 +82,7 @@ locals {
 module "site_ci_plan" {
   for_each = local.served_sites
   source   = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version  = "0.27.0"
+  version  = "0.28.0"
 
   project           = each.key
   name_root         = local.context.organization
@@ -103,7 +103,7 @@ module "site_ci_plan" {
 module "site_ci_preview" {
   for_each = local.served_sites
   source   = "jwallace145/jwall-engineering/aws//modules/ci-preview-role"
-  version  = "0.27.0"
+  version  = "0.28.0"
 
   project           = each.key
   name_root         = local.context.organization
@@ -123,7 +123,7 @@ module "site_ci_preview" {
 module "site_ci_apply" {
   for_each = local.served_sites
   source   = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version  = "0.27.0"
+  version  = "0.28.0"
 
   project           = each.key
   name_root         = local.context.organization

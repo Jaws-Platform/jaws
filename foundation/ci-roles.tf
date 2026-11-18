@@ -52,7 +52,7 @@ locals {
 
 module "infra_ci_plan" {
   source  = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version = "0.27.0"
+  version = "0.28.0"
 
   project            = local.infra_ci.project
   name_root          = local.context.organization
@@ -73,7 +73,7 @@ module "infra_ci_plan" {
 
 module "infra_ci_apply" {
   source  = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version = "0.27.0"
+  version = "0.28.0"
 
   project            = local.infra_ci.project
   name_root          = local.context.organization
@@ -122,7 +122,7 @@ locals {
 
 module "data_access_ci_plan" {
   source  = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version = "0.27.0"
+  version = "0.28.0"
 
   project            = local.data_access_ci.project
   name_root          = local.context.organization
@@ -142,7 +142,7 @@ module "data_access_ci_plan" {
 
 module "data_access_ci_apply" {
   source  = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version = "0.27.0"
+  version = "0.28.0"
 
   project            = local.data_access_ci.project
   name_root          = local.context.organization
