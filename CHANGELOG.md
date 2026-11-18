@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.54.0](https://github.com/jwallace145/jaws/compare/v0.53.0...v0.54.0) (2026-11-18)
+
+
+### Features
+
+* **action:** pull the CLI image from the role's own account ([#211](https://github.com/jwallace145/jaws/issues/211)) ([3bd2b37](https://github.com/jwallace145/jaws/commit/3bd2b37f9b1053a186003a9d781aef177d58c0dc))
+* **cli:** destroy the old stack of a site that is moving to production ([#212](https://github.com/jwallace145/jaws/issues/212)) ([604abc1](https://github.com/jwallace145/jaws/commit/604abc152bef1c0fba64cd465d4a1d6434d15665))
+
 ## [0.53.0](https://github.com/jwallace145/jaws/compare/v0.52.0...v0.53.0) (2026-11-18)
 
 
