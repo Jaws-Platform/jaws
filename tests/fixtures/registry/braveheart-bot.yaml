@@ -46,7 +46,7 @@ components:
     config: config.yml              # lichess-bot config with LICHESS_TOKEN_PLACEHOLDER
     lichess_user: jwallace145       # the bot account, for the profile URL in `bot status`
     secrets:
-      LICHESS_TOKEN: /jwall-engineering/braveheart-bot/lichess-token
+      LICHESS_TOKEN: lichess-token    # /<organization>/braveheart-bot/lichess-token in the account
     engine:
       hash_mb: 256                  # UCI Hash; c8a.medium has 2 GiB
       move_overhead_ms: 500         # UCI Move Overhead (lichess-bot's own move_overhead stays in config.yml)
