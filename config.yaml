@@ -218,6 +218,7 @@ production:
   # exists in the management account, `moved` once it has been destroyed.
   projects:
     braveheart-bot: moved # moved 2026-11-18; old stack destroyed (docs/lichess-bot.md, "Moving a bot to the production account")
+    guitar-knowledge-base: moving # README, "Moving a site"
   overrides:
     aws:
       account_id: "570327089884"
