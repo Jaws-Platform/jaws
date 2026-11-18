@@ -30,6 +30,7 @@ from tests.conftest import (
     FIXTURES,
     MATH_PROVER_GUARDRAILS,
     REPO_ROOT,
+    management_only,
     with_guardrails,
 )
 
@@ -94,6 +95,14 @@ def _handshakes() -> Access:
     return compute_access(registry, {name: files.load(name) for name in projects})
 
 
+def _moving(settings: Settings, project: str) -> Settings:
+    """`settings` with `project` moving, whatever config.yaml says today."""
+    assert settings.production is not None
+    projects = {**settings.production.projects, project: "moving"}
+    production = settings.production.model_copy(update={"projects": projects})
+    return settings.model_copy(update={"production": production})
+
+
 def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
     """Each test file's inputs: by stack (its directory under stacks/), then by case name."""
     research = with_guardrails(settings, "math-prover", MATH_PROVER_GUARDRAILS)
@@ -101,11 +110,22 @@ def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
     sample = with_guardrails(settings, "braveheart", BRAVEHEART_GUARDRAILS)
     production = load_settings(REPO_ROOT / "config.yaml", environ={}, account="production")
     handshakes = _handshakes()
+    # The two dataset projects as each case states, not as config.yaml has them
+    # today: neither moving, or braveheart-selfplay moving with trainer still
+    # management-only (the first step of their move, docs/datasets.md).
+    dataset_projects = ("braveheart-selfplay", "braveheart-trainer")
+    still = management_only(settings, *dataset_projects)
+    selfplay_moving = _moving(still, "braveheart-selfplay")
+    selfplay_in_production = _moving(
+        management_only(production, *dataset_projects), "braveheart-selfplay"
+    )
     bots = {
         "braveheart": (_file("braveheart"), sample),
         "scheduled_bot": (_scheduled(), sample),
-        "selfplay": (_registered("braveheart-selfplay"), settings),
-        "trainer": (_registered("braveheart-trainer"), settings),
+        "selfplay": (_registered("braveheart-selfplay"), still),
+        "trainer": (_registered("braveheart-trainer"), still),
+        "selfplay_moving": (_registered("braveheart-selfplay"), selfplay_moving),
+        "selfplay_in_production": (_registered("braveheart-selfplay"), selfplay_in_production),
         "math_prover": (_file("math-prover"), research),
         "dataset_only": (_dataset_only(), research),
         "production_bot": (_bot_in_production(), production),
