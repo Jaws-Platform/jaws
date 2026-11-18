@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.0](https://github.com/jwallace145/jaws/compare/v0.54.0...v0.55.0) (2026-11-18)
+
+
+### Features
+
+* **config:** start moving guitar-knowledge-base to the production account ([#215](https://github.com/jwallace145/jaws/issues/215)) ([7eed0d4](https://github.com/jwallace145/jaws/commit/7eed0d460c903f59f9f7c30918950fab1e17fcf1))
+
 ## [0.54.0](https://github.com/jwallace145/jaws/compare/v0.53.0...v0.54.0) (2026-11-18)
 
 
