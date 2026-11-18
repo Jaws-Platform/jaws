@@ -125,21 +125,11 @@ def test_management_stamps_today_s_values_over_whatever_the_file_states() -> Non
 # -- production: the account's tags, whatever the file states -------------------------------
 
 
-def _bot_for_production() -> SiteConfig:
-    """braveheart-bot's live file, with its token parameter under production's prefix:
-    an absolute secret path is valid in one account only until secrets are named
-    relative to the project (G2). Its tags are the live file's."""
-    raw = yaml.safe_load((REGISTRY / "braveheart-bot.yaml").read_text())
-    bot = next(c for c in raw["components"] if c["kind"] == "lichess-bot")
-    bot["secrets"] = {"LICHESS_TOKEN": "/jaws/braveheart-bot/lichess-token"}
-    return SiteConfig.model_validate(raw)
-
-
 def _production_tags() -> dict[str, dict[str, str]]:
     """The tags of every render in the production view, by render."""
     production = _production()
     guitar = load_site_config(FIXTURES / "sites" / "guitar-knowledge-base.yaml")
-    bot = Project.from_config(_bot_for_production(), production)
+    bot = Project.from_config(load_site_config(REGISTRY / "braveheart-bot.yaml"), production)
     databricks = Project.from_config(load_site_config(DATABRICKS_POC), production)
     workspace = render_tfvars(
         databricks, production, stack="workspace", account_outputs=ACCOUNT_OUTPUTS
@@ -184,15 +174,7 @@ def test_databricks_tags_differ_between_the_views_only_in_the_account_s_tags() -
     [
         *SITE_FIXTURES,
         DATABRICKS_POC,
-        pytest.param(
-            REGISTRY / "braveheart-bot.yaml",
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=ConfigError,
-                reason="its secret is still the absolute management path; the bot "
-                "repository names it relative (lichess-token) before the move (runbook M1)",
-            ),
-        ),
+        REGISTRY / "braveheart-bot.yaml",
     ],
     ids=lambda p: Path(p).stem,
 )
