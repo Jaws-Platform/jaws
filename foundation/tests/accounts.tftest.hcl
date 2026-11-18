@@ -5,8 +5,9 @@
 # that account.
 #
 # The production runs plan against fixtures (tests/fixtures/*.yaml, kept equal
-# to config.yaml plus a few values by tests/test_foundation_fixtures.py),
-# because config.yaml does not describe a bootstrapped production account yet.
+# to config.yaml plus a few values by tests/test_foundation_fixtures.py), so
+# they state where each project stands and don't change with every move. The
+# default run plans config.yaml as written.
 # Mock providers: nothing is called.
 
 mock_provider "aws" {
@@ -103,18 +104,18 @@ run "management_is_unchanged_by_default" {
   }
 
   assert {
-    condition     = toset(keys(module.site_bucket)) == toset(keys(local.projects)) && toset(keys(module.site_ci_apply)) == toset(keys(local.projects))
-    error_message = "with nothing in production, management serves every registered site"
+    condition     = toset(keys(module.site_bucket)) == toset(keys(local.projects)) && toset(keys(module.site_ci_apply)) == toset([for k in keys(local.projects) : k if try(local.production_projects[k], "") != "moved"])
+    error_message = "management keeps every registered site's bucket, and serves every site that has not moved"
   }
 
   assert {
-    condition     = toset(keys(module.bot_ci_plan)) == toset(keys(local.bots)) && toset(keys(module.bot_ci_apply)) == toset(keys(local.bots))
-    error_message = "with nothing in production, management serves every registered bot and research project"
+    condition     = toset(keys(module.bot_ci_plan)) == toset([for k in keys(local.bots) : k if try(local.production_projects[k], "") != "moved"]) && toset(keys(module.bot_ci_apply)) == toset(keys(module.bot_ci_plan))
+    error_message = "management serves every registered bot and research project that has not moved"
   }
 
   assert {
-    condition     = toset(keys(module.databricks_ci_plan)) == toset(keys(local.databricks_projects))
-    error_message = "with nothing in production, management serves every registered Databricks project"
+    condition     = toset(keys(module.databricks_ci_plan)) == toset([for k in keys(local.databricks_projects) : k if try(local.production_projects[k], "") != "moved"])
+    error_message = "management serves every registered Databricks project that has not moved"
   }
 
   assert {
@@ -407,6 +408,76 @@ run "a_moving_project_keeps_its_roles_in_management" {
   assert {
     condition     = !contains(keys(local.state_prefix_access), "project=main-site/")
     error_message = "a moved site's state prefix is closed in the management account"
+  }
+}
+
+run "a_moved_bot_leaves_management" {
+  command = plan
+
+  variables {
+    config_file = "tests/fixtures/moved.yaml"
+  }
+
+  override_module {
+    target = module.databricks_shared_host
+    outputs = {
+      workspace_id  = 7474644508802918
+      workspace_url = "https://dbc-46322154-036c.cloud.databricks.com"
+    }
+  }
+
+  override_module {
+    target = module.sites_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:650503560686:repository/jwall-engineering-sites"
+    }
+  }
+
+  override_module {
+    target = module.site_bucket["main-site"]
+    outputs = {
+      arn = "arn:aws:s3:::jwall-engineering-main-site"
+    }
+  }
+
+  override_module {
+    target = module.site_bucket["cs-survival-guide"]
+    outputs = {
+      arn = "arn:aws:s3:::jwall-engineering-cs-survival-guide"
+    }
+  }
+
+  override_module {
+    target = module.site_bucket["guitar-knowledge-base"]
+    outputs = {
+      arn = "arn:aws:s3:::jwall-engineering-guitar-knowledge-base"
+    }
+  }
+
+  override_module {
+    target = module.dataset_catalog_storage
+    outputs = {
+      url                     = "s3://jwall-engineering-dataset-catalogs/managed"
+      external_location_name  = "jwall-engineering-dataset-catalogs"
+      storage_credential_name = "jwall-engineering-dataset-catalogs"
+      bucket_name             = "jwall-engineering-dataset-catalogs"
+      uc_role_arn             = "arn:aws:iam::650503560686:role/jwall-engineering-dataset-catalogs"
+    }
+  }
+
+  assert {
+    condition     = !contains(keys(module.bot_ci_plan), "braveheart-bot") && !contains(keys(module.bot_ci_apply), "braveheart-bot") && !contains(keys(module.bot_ci_release), "braveheart-bot")
+    error_message = "a bot that has moved has no roles left in the management account"
+  }
+
+  assert {
+    condition     = toset(keys(module.bot_ci_plan)) == setsubtract(toset(keys(local.bots)), ["braveheart-bot"])
+    error_message = "the other bot and research projects keep their roles in management"
+  }
+
+  assert {
+    condition     = !contains(keys(local.state_prefix_access), "project=braveheart-bot/")
+    error_message = "a moved bot's state prefix is closed in the management account"
   }
 }
 

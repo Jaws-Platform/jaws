@@ -75,6 +75,8 @@ FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "relabelled.yaml": _relabelled,
     # A research project with a stack in both accounts, and a site that has left.
     "moving.yaml": _with_projects({"braveheart-trainer": "moving", "main-site": "moved"}),
+    # A bot whose old stack has been destroyed.
+    "moved.yaml": _with_projects({"braveheart-bot": "moved"}),
     "unregistered.yaml": _with_projects({"not-a-project": "moving"}),
 }
 
