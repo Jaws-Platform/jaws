@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.0](https://github.com/jwallace145/jaws/compare/v0.55.0...v0.56.0) (2026-11-18)
+
+
+### Features
+
+* **config:** guitar-knowledge-base has moved; start moving cs-survival-guide and main-site ([#217](https://github.com/jwallace145/jaws/issues/217)) ([7ab1c3a](https://github.com/jwallace145/jaws/commit/7ab1c3a26edeb1ee5c0bb640e52dacc986f18bc7))
+
 ## [0.55.0](https://github.com/jwallace145/jaws/compare/v0.54.0...v0.55.0) (2026-11-18)
 
 
