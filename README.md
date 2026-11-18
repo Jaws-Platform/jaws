@@ -31,9 +31,11 @@ provisions and publishes every site from one YAML file in its repository,
 bundled site stack in `stacks/site/` from that file and `config.yaml`, runs
 `terraform` against the shared state bucket, syncs built content and
 invalidates CloudFront. Site repositories keep no Terraform. It ships as a
-versioned image in the private ECR repository `jwall-engineering-sites`,
-published by the release workflow, and site repositories run it through the
-reusable workflows this repository publishes. The design is in
+versioned image in each account's private ECR repository
+(`jwall-engineering-sites` in management, `jaws-cli` in production; the
+composite action pulls from the account its role is in), published by the
+release workflow, and site repositories run it through the reusable workflows
+this repository publishes. The design is in
 [#26](https://github.com/jwallace145/jaws/pull/26).
 
 | Command | Role it expects | What it does |
@@ -514,7 +516,7 @@ Every `terraform init` goes through `.github/actions/terraform-init`, which retr
 
 **Releases, applies and the image** (`.github/workflows/release-please.yml`, on push to `main`):
 
-Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`; then the `image` job, also in `prod`, builds the CLI image and pushes it to ECR as `jwall-engineering-sites:<tag>`. Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
+Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`; then the `image` job, also in `prod`, builds the CLI image and pushes it to each account's repository as `<repository>:<tag>` (`ecr.repository` in `config.yaml`: `jwall-engineering-sites` in management, `jaws-cli` in production). Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
 
 No role ARN is a secret, and this repository needs none as a variable. The foundation's plan and apply jobs run once per bootstrapped account (`jaws config accounts` lists them: management, and production once `production.bootstrapped` is true), and each leg builds its role (`<organization>-infra-ci-plan` / `-ci-apply`), its state (`backend/<account>.hcl`) and its `-var account` from its own entry. Bot role ARNs need no variable either: the workflows build them from the account and organization `jaws config env` resolves from `config.yaml` and the bot's name.
 

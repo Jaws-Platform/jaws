@@ -49,6 +49,32 @@ runs:
         role-session-name: jaws-${{ github.run_id }}-${{ github.run_attempt }}
     - uses: aws-actions/amazon-ecr-login@v2
       id: ecr
+    # Each account has its own image repository, and ECR login reaches only the
+    # role's own registry: take the repository of the role's account from
+    # config.yaml at this action's own commit. Never another account's name.
+    - name: Resolve the account's image repository
+      id: image
+      shell: bash
+      env:
+        CONFIG: ${{ github.action_path }}/../../../config.yaml
+      run: |
+        account=$(aws sts get-caller-identity --query Account --output text)
+        management=$(yq -r '.aws.account_id' "$CONFIG")
+        production=$(yq -r '.production.overrides.aws.account_id // ""' "$CONFIG")
+        if [[ "$account" == "$management" ]]; then
+          repository=$(yq -r '.ecr.repository // ""' "$CONFIG")
+        elif [[ -n "$production" && "$account" == "$production" ]]; then
+          repository=$(yq -r '.production.overrides.ecr.repository // ""' "$CONFIG")
+        else
+          echo "::error::the role is in account $account, which config.yaml names neither as management ($management) nor as production (${production:-none})"
+          exit 1
+        fi
+        if [[ -z "$repository" ]]; then
+          echo "::error::config.yaml names no image repository for account $account"
+          exit 1
+        fi
+        echo "jaws image repository for account $account: $repository"
+        echo "repository=$repository" >> "$GITHUB_OUTPUT"
     - name: jaws ${{ inputs.command }}
       id: run
       shell: bash
@@ -57,11 +83,12 @@ runs:
         # workflow ref a site pins and the image it runs are the same version.
         IMAGE_TAG: v0.53.0 # x-release-please-version
         REGISTRY: ${{ steps.ecr.outputs.registry }}
+        REPOSITORY: ${{ steps.image.outputs.repository }}
         COMMAND: ${{ inputs.command }}
         DEBUG: ${{ inputs.debug }}
         JAWS_HEAD_SHA: ${{ inputs.head-sha || github.event.pull_request.head.sha || github.sha }}
       run: |
-        image="$REGISTRY/jwall-engineering-sites:$IMAGE_TAG"
+        image="$REGISTRY/$REPOSITORY:$IMAGE_TAG"
         echo "::group::docker pull $image"
         docker pull --quiet "$image"
         echo "::endgroup::"
