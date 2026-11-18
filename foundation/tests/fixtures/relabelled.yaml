@@ -64,18 +64,10 @@ projects:
     - c8a.xlarge
     - c8a.8xlarge
     - c8a.16xlarge
-    - g6.xlarge
-    - g6.2xlarge
-    - g6e.xlarge
     task_profiles:
     - cpu
-    - gpu
     - sprt
     - match
-    - datagen
-    - relabel
-    datasets:
-      jwall-engineering-braveheart-nnue: {}
   braveheart-selfplay:
     instance_types:
     - c8a.xlarge

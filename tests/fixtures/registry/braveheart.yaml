@@ -1,8 +1,12 @@
-# jaws project file: the engine's remote CI tasks (SPRT,
-# matches, datagen, training) and its NNUE dataset. Everything else (region,
-# account, VPC, AMI, names, state, CI roles) is derived by the tool. Fields and
-# behaviour:
+# jaws project file: the engine's remote CI tasks (SPRT and
+# matches). Everything else (region, account, VPC, AMI, names, state, CI roles)
+# is derived by the tool. Fields and behaviour:
 # https://github.com/jwallace145/jaws/blob/main/docs/research-projects.md
+#
+# The engine has no dataset. Self-play data generation and relabelling, with
+# the positions they write, are Braveheart-Chess/braveheart-selfplay's (infra
+# project braveheart-selfplay); NNUE training on GPU instances, with the nets,
+# is Braveheart-Chess/braveheart-trainer's (braveheart-trainer).
 #
 # The Lichess bot is not here: Braveheart-Chess/braveheart-lichess-bot deploys
 # it, pinned to one of this repository's releases (infra project braveheart-bot).
@@ -33,33 +37,16 @@ components:
     on_demand_fallback: true        # at launch only, after spot fails in every zone
     spot_wait_minutes: 5
     max_hours: 6                    # 1-6; GitHub stops a job at six hours anyway
-    max_vcpus: 256                  # four c8a.16xlarge, the account spot quota: three datagen tasks plus an SPRT leg
+    max_vcpus: 256                  # four c8a.16xlarge, the account spot quota; no workflow here names this default (SPRT and Match have their own profiles below)
     slot_wait_minutes: 30
     results_days: 7                 # task outputs expire from S3 after this
     log_retention_days: 14
-    # GPU tasks (NNUE training, ci/train-task.sh): their own instance types,
-    # image, budget and dataset grants; a caller that names no profile gets
-    # the fields above as the default `cpu` profile. Exactly these values: the
-    # tool's foundation registers this profile, and the launch role allows
-    # nothing else. Contract: jaws's docs/remote-tasks.md,
-    # "Task profiles: GPU tasks".
+    # A caller that names no profile gets the fields above as the default
+    # `cpu` profile. One profile per workflow, so each kind of work has its own
+    # market and budget here rather than in the workflow. Registered in
+    # jaws's foundation/bots.tf, which bounds what this
+    # file can start. Contract: its docs/remote-tasks.md, "Workflow profiles".
     profiles:
-      gpu:
-        instance_types: [g6.xlarge, g6.2xlarge, g6e.xlarge]  # NVIDIA L4, L4, L40S
-        default_instance_type: g6.xlarge  # 4 vCPUs; the account's G and VT quota (5) fits one
-        market: on-demand           # G and VT spot quota is 0
-        max_hours: 6
-        max_vcpus: 4                # the gpu profile's own budget; never waits on SPRTs
-        image: deep-learning-gpu    # pinned in the tool's config.yaml: NVIDIA driver + CUDA
-        root_volume_gb: 200         # gp3; SCRATCH_DIR lives on it
-        whole_cores: false          # G types run two threads per core
-        gpu: true                   # setup waits for nvidia-smi; env block records GPU/driver/CUDA
-        datasets:
-          nnue: { read: [selfplay/], write: [nets/] }  # data/selfplay/* in, data/nets/* out
-      # One profile per workflow, so each kind of work has its own market, budget
-      # and dataset access here rather than in the workflow. Registered in
-      # jaws's foundation/bots.tf, which bounds what this
-      # file can start. Contract: its docs/remote-tasks.md, "Workflow profiles".
       sprt:
         instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge]
         default_instance_type: c8a.16xlarge
@@ -72,35 +59,3 @@ components:
         market: on-demand
         max_hours: 6
         max_vcpus: 64
-      datagen:
-        instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge]
-        default_instance_type: c8a.16xlarge
-        market: spot                # an interruption only loses the shards in progress
-        max_price_fraction: 0.58
-        on_demand_fallback: true
-        max_hours: 6
-        max_vcpus: 192              # three tasks at once
-        datasets:
-          nnue: { write: [selfplay/] }
-      relabel:
-        instance_types: [c8a.16xlarge]
-        default_instance_type: c8a.16xlarge
-        market: spot                # no capacity fails the run; rerun it later rather than pay on demand
-        max_price_fraction: 0.58
-        on_demand_fallback: false
-        spot_wait_minutes: 30
-        max_hours: 6
-        max_vcpus: 192
-        datasets:
-          nnue: { read: [selfplay/], write: [selfplay/relabel/] }
-
-  # NNUE training data: a kept-forever, append-only S3 bucket. Task instances
-  # (ci/datagen-task.sh) may add objects under the prefix, never read or
-  # delete them; the Datagen workflow reads bucket and prefix from here.
-  # Layout: docs/datagen.md. Fields and access:
-  # https://github.com/jwallace145/jaws/blob/main/docs/datasets.md
-  - kind: dataset
-    name: nnue
-    bucket: jwall-engineering-braveheart-nnue  # <Organization>-<project>-<name>
-    prefix: data/                   # everything the project writes lives under it
-    writers: [task-runner]          # the task instances: PutObject under the prefix only

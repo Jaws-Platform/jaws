@@ -10,21 +10,7 @@
       "us-east-1f"
     ],
     "bot_enabled": false,
-    "datasets": [
-      {
-        "bucket": "jwall-engineering-braveheart-nnue",
-        "expire_noncurrent_days": null,
-        "expire_prefixes": {},
-        "name": "nnue",
-        "prefix": "data/",
-        "readers": [],
-        "transition_days": 0,
-        "versioning": false,
-        "writers": [
-          "task-runner"
-        ]
-      }
-    ],
+    "datasets": [],
     "project": "braveheart",
     "records_enabled": false,
     "repository": "Braveheart-Chess/braveheart",
@@ -40,27 +26,6 @@
     "task_log_retention_days": 14,
     "task_max_lifetime_hours": 6,
     "task_profiles": [
-      {
-        "ami_name": "Deep Learning Base OSS Nvidia Driver GPU AMI (Amazon Linux 2023) 20261027",
-        "datasets": [
-          {
-            "name": "nnue",
-            "read": [
-              "selfplay/"
-            ],
-            "write": [
-              "nets/"
-            ],
-            "write_once": []
-          }
-        ],
-        "default_instance_type": "g6.xlarge",
-        "gpu": true,
-        "max_hours": 6,
-        "name": "gpu",
-        "root_volume_gb": 200,
-        "rust": true
-      },
       {
         "ami_name": null,
         "datasets": [],
@@ -78,46 +43,6 @@
         "gpu": false,
         "max_hours": 6,
         "name": "match",
-        "root_volume_gb": 40,
-        "rust": true
-      },
-      {
-        "ami_name": null,
-        "datasets": [
-          {
-            "name": "nnue",
-            "read": [],
-            "write": [
-              "selfplay/"
-            ],
-            "write_once": []
-          }
-        ],
-        "default_instance_type": "c8a.16xlarge",
-        "gpu": false,
-        "max_hours": 6,
-        "name": "datagen",
-        "root_volume_gb": 40,
-        "rust": true
-      },
-      {
-        "ami_name": null,
-        "datasets": [
-          {
-            "name": "nnue",
-            "read": [
-              "selfplay/"
-            ],
-            "write": [
-              "selfplay/relabel/"
-            ],
-            "write_once": []
-          }
-        ],
-        "default_instance_type": "c8a.16xlarge",
-        "gpu": false,
-        "max_hours": 6,
-        "name": "relabel",
         "root_volume_gb": 40,
         "rust": true
       }
