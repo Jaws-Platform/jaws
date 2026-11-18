@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.58.0](https://github.com/jwallace145/jaws/compare/v0.57.0...v0.58.0) (2026-11-18)
+
+
+### Features
+
+* **config:** the engine gives up its dataset and GPU profiles at the split's cutover ([#221](https://github.com/jwallace145/jaws/issues/221)) ([8d4eae2](https://github.com/jwallace145/jaws/commit/8d4eae24f342011484d32f8b69870aa62846f762))
+
 ## [0.57.0](https://github.com/jwallace145/jaws/compare/v0.56.0...v0.57.0) (2026-11-18)
 
 
