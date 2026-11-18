@@ -21,7 +21,7 @@ components:
     bucket: jwall-engineering-braveheart-nnue # <Organization>-<project>-<name>
     prefix: data/                              # everything the project writes lives under it
     writers: [task-runner]                     # optional: who may add objects
-    # readers: [arn:aws:iam::123456789012:role/trainer]  # optional
+    # readers: [braveheart-trainer/task-gpu]   # optional: <project>/<role> or a role ARN
     # transition_days: 0                       # optional: days before Intelligent-Tiering
     # versioning: true                         # optional; config.yaml must approve it
     # expire_noncurrent_days: 90               # optional; needs versioning; config.yaml must approve it
@@ -32,10 +32,10 @@ components:
 | Field | Meaning |
 |---|---|
 | `name` | The dataset's name, in kebab-case. `records` and `tasks` are reserved, because the project already has those buckets. Names must be unique within the file. |
-| `bucket` | Must be `<Organization>-<project>-<name>`. The tool derives the name and refuses a file that disagrees. The name is written out so the project's workflows can read it with `yq` without installing the tool. |
+| `bucket` | Where the project's workflows read and write: `<Organization>-<project>-<name>` in the account they run in. It is written out so they can read it with `yq` without installing the tool. The tool always uses the addressed account's derivation and accepts either account's name here, so one file renders in both while the project moves ([below](#moving-a-dataset-project-to-production)); any other name is refused. |
 | `prefix` | Path segments ending in `/` with no leading `/`, for example `data/`. Writers and readers are granted this prefix only. |
 | `writers` | Components whose roles may add objects under the prefix. Only `task-runner`, the task instances, is accepted today, and it needs a `task-runner` component. The default is none. |
-| `readers` | IAM role ARNs granted read access under the prefix through the bucket policy. The default is none; the account's administrators can always read. |
+| `readers` | Roles granted read access under the prefix through the bucket policy: a role ARN, or `<project>/<role>` for another project's role in whichever account the run addresses (`braveheart-trainer/task-gpu` is `<Organization>-braveheart-trainer-task-gpu`). A `<project>/<role>` reader must name a project in `config.yaml`, and is named only once that project has a stack in the account, since a bucket policy cannot name a role that does not exist yet: apply again after the reader's project is first applied there. The default is none; the account's administrators can always read. |
 | `transition_days` | Days before objects move to S3 Intelligent-Tiering. The default is 0, which means at the next daily lifecycle run. |
 | `versioning` | Keep prior versions of overwritten or deleted objects. The default is `false`. |
 | `expire_noncurrent_days` | Days before noncurrent versions expire. Needs `versioning: true`. |
@@ -108,6 +108,44 @@ resources (the bucket, its policy and its configuration) from Terraform state
 before applying, as `destroy` does, then removes the dataset's grants from the
 task roles. The bucket is no longer managed here; the owner deletes it when its
 data has a home.
+
+## Moving a dataset project to production
+
+A research project moves with its datasets: a new, empty bucket in production,
+a server-side copy, an audit, then the cutover. The old bucket is released and
+kept. While the project is `moving` (`production.projects` in `config.yaml`):
+
+- The same project file renders in both accounts. Each account uses its own
+  bucket name, and `<project>/<role>` readers resolve to each account's roles.
+- `config.yaml` approves both buckets under `projects.<name>.datasets`. Each
+  account's foundation grants its CI roles the bucket with its own prefix.
+- The old bucket's policy lets production's admin role
+  (`production.overrides.aws.admin_role_arn`) read it. The owner copies as that
+  role, server-side in the same region, so no data leaves AWS.
+- No Databricks share role is named in an account whose Databricks is off. A
+  workspace in the old account keeps reading the old bucket until it moves too.
+
+Two projects that read each other's buckets (braveheart-selfplay and
+braveheart-trainer) become `moving` one release apart. The first's production
+bucket names no reader from the second until the second has a stack there.
+Apply the first again after the second's first apply.
+
+The copy and its audit, as the owner (`jaws-prod`), with every writer paused:
+
+```sh
+export AWS_PROFILE=jaws-prod
+old=jwall-engineering-<project>-<name>; new=jaws-<project>-<name>
+aws s3 sync "s3://$old/data/" "s3://$new/data/" --only-show-errors
+# key, size and ETag of every object (braveheart-selfplay's script)
+ci/bucket-copy-audit.sh --prefix data/ "$old" "$new"
+```
+
+Only current versions are copied; the old bucket keeps its history. A second
+`sync` copies only what changed, so the final one at the cutover is short. At
+the cutover the consumer's PR moves its pin to a release that lists the project
+`moving` and sets `bucket:` to the production name. `destroy --account management`
+then releases the old buckets from state, keeps them, and removes the rest of the
+old stack, and the project becomes `moved`.
 
 ## Who can do what
 

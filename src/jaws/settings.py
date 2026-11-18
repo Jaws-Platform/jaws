@@ -575,6 +575,18 @@ class Settings(_Section):
             taken.append((f"project {name!r}", network))
         return self
 
+    def project_state(self, project: str) -> Literal["moving", "moved"] | None:
+        """Where `project` stands in its move: None while it is management-only."""
+        return self.production.projects.get(project) if self.production else None
+
+    def has_stack(self, project: str) -> bool:
+        """Whether `project` has a stack in this view's account: in management
+        until it has moved, in production once it is listed there."""
+        state = self.project_state(project)
+        if self.account == "production":
+            return state is not None
+        return state != "moved"
+
     def run_cost_ceiling(self, project: str) -> float:
         """The project's `max_run_cost_usd` override, else `tasks.max_run_cost_usd`."""
         guardrails = self.projects.get(project)
