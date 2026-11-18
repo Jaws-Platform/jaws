@@ -276,7 +276,8 @@ project named `lichess-token` in its file.
 A bot moves whole: its image repository, instance, records bucket and
 schedules are created in production, its records are copied, and the old stack
 is destroyed with its records bucket released and kept. Exactly one bot may hold
-the token at a time, so the old one is drained before the new one starts.
+the token at a time, so the old one is drained, and kept from starting again,
+before the new one starts.
 
 1. **The file serves both accounts.** In the bot repository, name the secret
    relatively (`LICHESS_TOKEN: lichess-token`) and pin a release of this tool
@@ -287,24 +288,46 @@ the token at a time, so the old one is drained before the new one starts.
    unless it says `--account management`.
 3. **Apply the new stack.** Bot apply with `account: production`. The new
    instance has neither a token nor an image yet, so it plays nothing.
-4. **Cut over, inside the running hours, while the bot is idle:**
-   - `jaws --account management bot stop --wait`: the old bot finishes its
-     game, ships its records and powers off;
+4. **Cut over while the old bot is idle:**
+   - inside its running hours, `jaws --account management bot stop --wait`:
+     the old bot finishes its game, ships its records and powers off. Outside
+     them its drain has already done that; `jaws --account management bot
+     status` says it is stopped;
+   - disable the old stack's start schedule, `<old instance name>-start`.
+     `bot stop` leaves the schedules alone, and this one would start the old
+     bot at its next start time, holding the same token as the new one. An
+     EventBridge Scheduler update replaces the whole schedule, so rewrite it
+     with only its state changed (management profile):
+
+     ```sh
+     aws scheduler get-schedule --name <old instance name>-start --output json \
+       | jq '{Name, GroupName, ScheduleExpression, ScheduleExpressionTimezone,
+              Description, FlexibleTimeWindow, Target, ActionAfterCompletion,
+              State: "DISABLED"}' > start.json
+     aws scheduler update-schedule --cli-input-json file://start.json
+     ```
+
    - copy the records through a local directory, `aws s3 sync` down with the
      management profile and up with the production one, and compare the two
      listings (key, size, ETag);
-   - `jaws --account production bot secrets set LICHESS_TOKEN`;
-   - `jaws --account production bot reconcile --version <tag>`, then
-     `bot status` until `ok`, and a game on Lichess.
-5. **Destroy the old stack** after a day of games: delete the old image
+   - `jaws --account production bot secrets set LICHESS_TOKEN`.
+5. **Deploy.** Pin the bot repository's release workflow at a release of this
+   tool whose `config.yaml` lists the project under `production.projects`
+   (until then its releases address management), then publish a release of
+   the bot repository: `Release to Lichess` builds the image into production's
+   image repository and deploys it. Re-running an earlier release's run does
+   not do this: it runs that release's own files. Then `bot status` until
+   `ok`, and a game on Lichess.
+6. **Destroy the old stack** after a day of games: delete the old image
    repository's images, then Bot apply `destroy` with `account: management`.
    The old records bucket is released and kept; the old token parameter stays
    until the owner deletes it.
-6. **Mark it moved.** `<project>: moved`; the management foundation drops its
+7. **Mark it moved.** `<project>: moved`; the management foundation drops its
    roles.
 
-Until step 5, rolling back is `--account production bot stop` and
-`--account management bot start`.
+Until step 6, rolling back is `--account production bot stop --wait`,
+re-enabling the old start schedule (the same rewrite with `State: "ENABLED"`)
+and `--account management bot start`.
 
 ## Getting a shell
 
