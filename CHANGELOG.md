@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.59.0](https://github.com/jwallace145/jaws/compare/v0.58.0...v0.59.0) (2026-11-18)
+
+
+### Features
+
+* **config:** record the development account and give the owner access to it ([#223](https://github.com/jwallace145/jaws/issues/223)) ([4f059d2](https://github.com/jwallace145/jaws/commit/4f059d2f5c2f7527482f42bfc3f1915a0d8ae251))
+* **datasets:** render a research project's datasets in either account while it moves ([#225](https://github.com/jwallace145/jaws/issues/225)) ([ad46cdf](https://github.com/jwallace145/jaws/commit/ad46cdf339b41281e12911c31afaf1152433c648))
+
 ## [0.58.0](https://github.com/jwallace145/jaws/compare/v0.57.0...v0.58.0) (2026-11-18)
 
 
