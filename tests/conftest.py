@@ -41,6 +41,39 @@ MATH_PROVER_GUARDRAILS = ProjectGuardrails(
 )
 
 
+#: The central entry the braveheart sample (fixtures/bots/braveheart.yaml) needs: the
+#: engine as it was before the split, the suite's full-featured project (GPU,
+#: datagen and relabel profiles, a dataset). Stated here, not read from config.yaml,
+#: whose entry for the real engine shrank at the split's cutover.
+BRAVEHEART_GUARDRAILS = ProjectGuardrails(
+    instance_types=(
+        "c8a.xlarge",
+        "c8a.8xlarge",
+        "c8a.16xlarge",
+        "g6.xlarge",
+        "g6.2xlarge",
+        "g6e.xlarge",
+    ),
+    task_profiles=("cpu", "gpu", "sprt", "match", "datagen", "relabel"),
+    datasets={"jwall-engineering-braveheart-nnue": DatasetRetention()},
+)
+
+
+def fixture_settings(path: Path = FIXTURES / "config.yaml", **kwargs: object) -> Settings:
+    """config.yaml's fixture copy, with the braveheart sample's central entry."""
+    loaded = load_settings(path, **kwargs)  # type: ignore[arg-type]
+    return with_guardrails(loaded, "braveheart", BRAVEHEART_GUARDRAILS)
+
+
+def fixture_config(path: Path = FIXTURES / "config.yaml") -> dict[str, object]:
+    """The same, as the raw mapping a test writes out as a workspace's config.yaml."""
+    config: dict[str, object] = yaml.safe_load(path.read_text())
+    projects = config["projects"]
+    assert isinstance(projects, dict)
+    projects["braveheart"] = BRAVEHEART_GUARDRAILS.model_dump(mode="json")
+    return config
+
+
 def with_guardrails(settings: Settings, project: str, guardrails: ProjectGuardrails) -> Settings:
     """`settings` with `guardrails` as the central entry for `project`."""
     return settings.model_copy(update={"projects": {**settings.projects, project: guardrails}})
@@ -57,7 +90,7 @@ def _restore_environment() -> Iterator[None]:
 
 @pytest.fixture
 def settings() -> Settings:
-    return load_settings(FIXTURES / "config.yaml", environ={})
+    return fixture_settings(environ={})
 
 
 @pytest.fixture(params=SITE_FIXTURES, ids=[p.stem for p in SITE_FIXTURES])
@@ -149,7 +182,7 @@ def bot_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[P
     root = tmp_path / "bot-workspace"
     (root / "lichess").mkdir(parents=True)
     shutil.copy(FIXTURES / "bots" / "braveheart.yaml", root / "jaws.yaml")
-    shutil.copy(FIXTURES / "config.yaml", root / "config.yaml")
+    (root / "config.yaml").write_text(yaml.safe_dump(fixture_config(), sort_keys=False))
     (root / "lichess" / "config.yml").write_text(
         "token: LICHESS_TOKEN_PLACEHOLDER\nurl: https://lichess.org/\n"
         "engine:\n  dir: ./engines/\n  name: braveheart\n  protocol: uci\n"

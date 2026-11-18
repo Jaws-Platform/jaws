@@ -354,7 +354,9 @@ def test_dataset_buckets_match_the_project_files() -> None:
         buckets = [c["bucket"] for c in components if c["kind"] == "dataset"]
         if buckets:
             expected[project] = buckets
-    assert "braveheart" in expected
+    # The engine gave its dataset up at the split's cutover; the data is the satellites'.
+    assert "braveheart" not in expected
+    assert {"braveheart-selfplay", "braveheart-trainer"} <= set(expected)
     assert _bot_datasets() == expected
     assert set(_bot_datasets()) <= set(registry())
 

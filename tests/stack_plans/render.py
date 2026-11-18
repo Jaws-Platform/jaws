@@ -25,7 +25,13 @@ from jaws.project import Project
 from jaws.settings import Settings, load_settings
 from jaws.site import SiteConfig
 from jaws.stack import render_tfvars
-from tests.conftest import FIXTURES, MATH_PROVER_GUARDRAILS, REPO_ROOT, with_guardrails
+from tests.conftest import (
+    BRAVEHEART_GUARDRAILS,
+    FIXTURES,
+    MATH_PROVER_GUARDRAILS,
+    REPO_ROOT,
+    with_guardrails,
+)
 
 #: What the account stack's outputs look like after an apply (`terraform output -json`),
 #: for the workspace stack's plan. The tftest file overrides the metastore lookup
@@ -91,11 +97,13 @@ def _handshakes() -> Access:
 def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
     """Each test file's inputs: by stack (its directory under stacks/), then by case name."""
     research = with_guardrails(settings, "math-prover", MATH_PROVER_GUARDRAILS)
+    # The braveheart sample keeps its own central entry: the real engine's shrank at the split.
+    sample = with_guardrails(settings, "braveheart", BRAVEHEART_GUARDRAILS)
     production = load_settings(REPO_ROOT / "config.yaml", environ={}, account="production")
     handshakes = _handshakes()
     bots = {
-        "braveheart": (_file("braveheart"), settings),
-        "scheduled_bot": (_scheduled(), settings),
+        "braveheart": (_file("braveheart"), sample),
+        "scheduled_bot": (_scheduled(), sample),
         "selfplay": (_registered("braveheart-selfplay"), settings),
         "trainer": (_registered("braveheart-trainer"), settings),
         "math_prover": (_file("math-prover"), research),
