@@ -176,11 +176,15 @@ def research_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
 
 @pytest.fixture
 def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """A working directory holding the guitar site file and config.yaml."""
+    """A working directory holding the guitar site file and config.yaml, with the
+    site in the management account only: these tests are about a site's own
+    commands, and must not change account on the pull request that moves it."""
     root = tmp_path / "workspace"
     root.mkdir()
     shutil.copy(FIXTURES / "sites" / "guitar-knowledge-base.yaml", root / "jaws.yaml")
-    shutil.copy(FIXTURES / "config.yaml", root / "config.yaml")
+    config = yaml.safe_load((FIXTURES / "config.yaml").read_text())
+    config["production"]["projects"].pop("guitar-knowledge-base", None)
+    (root / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
     monkeypatch.chdir(root)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     yield root
