@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.57.0](https://github.com/jwallace145/jaws/compare/v0.56.0...v0.57.0) (2026-11-18)
+
+
+### Features
+
+* **config:** mark cs-survival-guide and main-site moved to the production account ([#219](https://github.com/jwallace145/jaws/issues/219)) ([d32d1f4](https://github.com/jwallace145/jaws/commit/d32d1f433b0821f03b849af46cf5d90a06bf8895))
+
 ## [0.56.0](https://github.com/jwallace145/jaws/compare/v0.55.0...v0.56.0) (2026-11-18)
 
 
