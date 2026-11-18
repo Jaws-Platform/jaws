@@ -217,7 +217,7 @@ production:
   # Projects with a stack in production: `moving` while the old stack still
   # exists in the management account, `moved` once it has been destroyed.
   projects:
-    braveheart-bot: moving # docs/lichess-bot.md, "Moving a bot to the production account"
+    braveheart-bot: moved # moved 2026-11-18; old stack destroyed (docs/lichess-bot.md, "Moving a bot to the production account")
   overrides:
     aws:
       account_id: "570327089884"
