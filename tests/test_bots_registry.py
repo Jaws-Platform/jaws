@@ -214,6 +214,31 @@ def test_container_release_role_is_optional() -> None:
     assert role["default"] == ""
 
 
+def test_bot_plan_plans_a_moving_projects_old_stack_too() -> None:
+    """While a project moves, both its stacks are planned on every pull request, so
+    a change to the old one (the copy reader on its buckets) is reviewed too."""
+    ci: dict[Any, Any] = _yaml(".github/workflows/ci.yml")
+    job = ci["jobs"]["bot-plan"]
+    assert job["strategy"]["matrix"]["account"] == ["auto", "management"]
+    steps = job["steps"]
+    by_id = {s["id"]: s for s in steps if "id" in s}
+    decide = by_id["account"]["run"]
+    # `management` plans only a moving project: `auto` already plans every other
+    # project there, and a moved one has no stack there.
+    assert '"$ACCOUNT" = auto' in decide and "--account management config env" in decide
+    ids = [s.get("id") for s in steps]
+    assert ids.index("account") < ids.index("role") < ids.index("assume")
+    for gated in ("role", "file"):
+        assert by_id[gated]["if"] == "steps.account.outputs.plan == 'true'"
+    assert "$FLAG" in by_id["role"]["run"]
+    plan = next(s for s in steps if s.get("name") == "jaws plan")
+    assert "$FLAG" in plan["run"] and plan["env"]["FLAG"] == "${{ steps.account.outputs.flag }}"
+    comment = next(s for s in steps if s.get("name", "").startswith("Post plan comment"))
+    assert "matrix.account" in comment["with"]["header"]
+    upload = next(s for s in steps if s.get("name", "").startswith("Upload the run log"))
+    assert "matrix.account" in upload["with"]["name"]
+
+
 def test_bot_plan_runs_without_a_variable_and_skips_until_roles_exist() -> None:
     ci: dict[Any, Any] = _yaml(".github/workflows/ci.yml")
     job = ci["jobs"]["bot-plan"]

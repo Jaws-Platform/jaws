@@ -595,6 +595,15 @@ DROPPED_RECORDS_PLAN = (
 )
 
 
+def plan_subject(project: str, settings: Settings, domain: str | None = None) -> str:
+    """What a plan comment is about: the site's domain or the project, and its
+    account while it moves, when both its stacks are planned on one pull request."""
+    subject = domain or project
+    if settings.project_state(project) == "moving":
+        return f"{subject} ({settings.account})"
+    return subject
+
+
 @app.command()
 def plan(ctx: typer.Context) -> None:
     """Plan the site's infrastructure and write the plan comment."""
@@ -655,7 +664,7 @@ def plan(ctx: typer.Context) -> None:
                 exit_code,
                 plan_text,
                 run.settings.plan.comment_max_bytes,
-                run.project.config.domain or run.project.project,
+                plan_subject(run.project.project, run.settings, run.project.config.domain),
                 github.provenance(tool_version()),
                 # The workflow that applies every bot-stack project, research too.
                 applied_by="Bot apply" if run.project.has_components else None,

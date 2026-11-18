@@ -183,3 +183,19 @@ def test_no_share_role_is_named_where_databricks_is_off(tmp_path: Path) -> None:
     project = Project.from_config(_selfplay(tmp_path, readers=[]), settings)
     (dataset,) = render_tfvars(project, settings, access=handshake)["datasets"]
     assert dataset["readers"] == []
+
+
+# -- plans of both stacks ---------------------------------------------------------
+
+
+def test_a_moving_projects_plan_comment_names_its_account() -> None:
+    from jaws.cli import plan_subject
+
+    moving = {"braveheart-selfplay": "moving"}
+    assert plan_subject("braveheart-selfplay", _view("management", moving)) == (
+        "braveheart-selfplay (management)"
+    )
+    assert plan_subject("braveheart-selfplay", _view("production", moving)) == (
+        "braveheart-selfplay (production)"
+    )
+    assert plan_subject("braveheart-selfplay", _view("management")) == "braveheart-selfplay"

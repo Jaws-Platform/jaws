@@ -504,7 +504,7 @@ jobs:
           path: foundation/plan-comment.md
 
   bot-plan:
-    name: Bot plan (${{ matrix.project }})
+    name: Bot plan (${{ matrix.project }}${{ matrix.account == 'management' && ', management' || '' }})
     runs-on: ubuntu-latest
     # The bot's CI roles are created by the foundation apply that follows the
     # PR registering the bot. Until they exist, the role cannot be assumed and
@@ -517,6 +517,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # `auto` plans each project where it runs. `management` plans a moving
+        # project's old stack as well, so a change to it (the copy reader on its
+        # buckets, docs/datasets.md) is reviewed before Bot apply; it skips every
+        # other project, which `auto` already plans there or which has left.
+        account: [auto, management]
+        project: [braveheart, braveheart-bot, braveheart-selfplay, braveheart-trainer]
         # One entry per bot in foundation/bots.tf (a test keeps them in sync).
         include:
           - { project: braveheart, repository: Braveheart-Chess/braveheart }
@@ -543,13 +549,35 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked
-      - name: Build the plan role ARN from config.yaml
-        id: role
+      - name: Plan this account?
+        id: account
         env:
           PROJECT: ${{ matrix.project }}
+          ACCOUNT: ${{ matrix.account }}
+        run: |
+          if [ "$ACCOUNT" = auto ]; then
+            { echo "plan=true"; echo "flag="; } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Only a moving project has a second stack, its old one in management.
+          where=$(uv run jaws config env --project "$PROJECT" | sed -n 's/^account=//p')
+          if [ "$where" != management ] && uv run jaws --account management config env --project "$PROJECT" >/dev/null; then
+            { echo "plan=true"; echo "flag=--account management"; } >> "$GITHUB_OUTPUT"
+          else
+            echo "plan=false" >> "$GITHUB_OUTPUT"
+            echo "$PROJECT has no second stack in management; its plan is the auto entry's"
+          fi
+      - name: Build the plan role ARN from config.yaml
+        id: role
+        if: steps.account.outputs.plan == 'true'
+        env:
+          PROJECT: ${{ matrix.project }}
+          FLAG: ${{ steps.account.outputs.flag }}
         run: |
           # The tool says which account this is (config.yaml: management, or `production`).
-          resolved=$(uv run jaws config env --project "$PROJECT")
+          # FLAG is empty or two words, so it is split on purpose.
+          # shellcheck disable=SC2086
+          resolved=$(uv run jaws $FLAG config env --project "$PROJECT")
           account=$(sed -n 's/^account_id=//p' <<<"$resolved")
           organization=$(sed -n 's/^organization=//p' <<<"$resolved")
           [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
@@ -559,6 +587,7 @@ jobs:
       # skipped, loudly: its stack is applied from another ref (Bot apply, consumer-ref).
       - name: Skip the plan when the project file names another project
         id: file
+        if: steps.account.outputs.plan == 'true'
         env:
           PROJECT: ${{ matrix.project }}
         run: |
@@ -582,7 +611,7 @@ jobs:
         with:
           role-to-assume: ${{ steps.role.outputs.arn }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: gha-bot-plan-${{ matrix.project }}-pr-${{ github.event.pull_request.number }}
+          role-session-name: gha-bot-plan-${{ matrix.project }}-${{ matrix.account }}-pr-${{ github.event.pull_request.number }}
       - name: Skip the plan until the bot's roles exist
         if: steps.file.outputs.matches == 'true' && steps.assume.outcome != 'success'
         env:
@@ -602,7 +631,11 @@ jobs:
           # The CLI reads each counterpart's project file from GitHub (the
           # consumers of a project's datasets, or the producers a workspace reads).
           GH_TOKEN: ${{ github.token }}
-        run: uv run jaws --file .consumer/jaws.yaml plan
+          FLAG: ${{ steps.account.outputs.flag }}
+        run: |
+          # FLAG is empty or two words, so it is split on purpose.
+          # shellcheck disable=SC2086
+          uv run jaws --file .consumer/jaws.yaml $FLAG plan
       - name: Mint a comment token for the Jaws app
         id: app-token
         if: always() && vars.JES_APP_CLIENT_ID != ''
@@ -616,13 +649,13 @@ jobs:
         uses: marocchino/sticky-pull-request-comment@v3
         with:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
-          header: bot-plan-${{ matrix.project }}
+          header: bot-plan-${{ matrix.project }}${{ matrix.account == 'management' && '-management' || '' }}
           path: .jaws/plan-comment.md
       - name: Upload the run log and artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: bot-plan-${{ matrix.project }}-${{ github.run_attempt }}
+          name: bot-plan-${{ matrix.project }}-${{ matrix.account }}-${{ github.run_attempt }}
           path: .jaws/
           retention-days: 14
           if-no-files-found: ignore
