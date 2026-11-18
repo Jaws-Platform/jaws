@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.53.0](https://github.com/jwallace145/jaws/compare/v0.52.0...v0.53.0) (2026-11-18)
+
+
+### Features
+
+* **config:** mark braveheart-bot moved to the production account ([#208](https://github.com/jwallace145/jaws/issues/208)) ([5f8848e](https://github.com/jwallace145/jaws/commit/5f8848e5b8c4ff76f9d970ab75512c0a5f94277e))
+
+
+### Documentation
+
+* keep the old bot from starting again when a bot moves ([#207](https://github.com/jwallace145/jaws/issues/207)) ([1da640e](https://github.com/jwallace145/jaws/commit/1da640eb2e045a9846021540186e7b5636e1be5f))
+
 ## [0.52.0](https://github.com/jwallace145/jaws/compare/v0.51.0...v0.52.0) (2026-11-17)
 
 
