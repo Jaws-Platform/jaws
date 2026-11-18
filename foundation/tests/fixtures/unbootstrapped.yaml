@@ -167,6 +167,8 @@ databricks:
         aws_attributes.availability:
           type: fixed
           value: SPOT_WITH_FALLBACK
+development:
+  account_id: '859674017655'
 production:
   bootstrapped: false
   projects: {}
