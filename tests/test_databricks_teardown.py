@@ -144,6 +144,8 @@ def _run(
         "FAKE_SECRET": SECRET,
     }
     env.pop("GH_TOKEN", None)
+    # The owner's shell, not a workflow step: CI itself runs with GITHUB_ACTIONS=true.
+    env.pop("GITHUB_ACTIONS", None)
     result = subprocess.run(
         ["bash", str(SCRIPT), *args],
         input=answer,
