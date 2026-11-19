@@ -235,6 +235,9 @@ production:
     # other's bucket (docs/datasets.md, "Moving a dataset project to production").
     braveheart-selfplay: moving
     braveheart-trainer: moving # with its nets, one release after selfplay
+    # The engine: SPRT and match tasks on c8a.16xlarge, no dataset. Started 2026-11-19,
+    # once production's Standard on-demand and spot vCPU quotas were raised to 256.
+    braveheart: moving
     braveheart-databricks: moved # rebuilt in production with Databricks; its old stacks destroyed 2026-11-19
   overrides:
     aws:

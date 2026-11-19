@@ -93,10 +93,13 @@ def databricks_in_management(config: dict[str, Any]) -> dict[str, Any]:
 
 def fixture_config(path: Path = FIXTURES / "config.yaml") -> dict[str, Any]:
     """config.yaml's fixture copy as the suite's baseline: the braveheart sample's
-    central entry, and Databricks in the management account with the
-    databricks-poc sample. The raw mapping a test writes out as a config.yaml."""
+    central entry, in the management account, and Databricks in the management
+    account with the databricks-poc sample. The raw mapping a test writes out as a
+    config.yaml. The sample stays in management whatever config.yaml says of the
+    real engine's move; a test about production says so itself."""
     config: dict[str, Any] = yaml.safe_load(path.read_text())
     config["projects"]["braveheart"] = BRAVEHEART_GUARDRAILS.model_dump(mode="json")
+    config["production"]["projects"].pop("braveheart", None)
     return databricks_in_management(config)
 
 
