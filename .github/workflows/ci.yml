@@ -657,6 +657,7 @@ jobs:
         with:
           name: bot-plan-${{ matrix.project }}-${{ matrix.account }}-${{ github.run_attempt }}
           path: .jaws/
+          include-hidden-files: true # .jaws/ is a dot directory, which upload-artifact skips otherwise
           retention-days: 14
           if-no-files-found: ignore
 
@@ -785,5 +786,6 @@ jobs:
         with:
           name: databricks-plan-${{ matrix.project }}-${{ github.run_attempt }}
           path: .jaws/
+          include-hidden-files: true # .jaws/ is a dot directory, which upload-artifact skips otherwise
           retention-days: 14
           if-no-files-found: ignore

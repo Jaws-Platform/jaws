@@ -249,6 +249,7 @@ jobs:
         with:
           name: remote-task-log-${{ inputs.task-id || inputs.artifact }}-${{ github.run_attempt }}
           path: .jaws/
+          include-hidden-files: true # .jaws/ is a dot directory, which upload-artifact skips otherwise
           retention-days: 14
           if-no-files-found: ignore
       - name: Terminate anything this task left running
