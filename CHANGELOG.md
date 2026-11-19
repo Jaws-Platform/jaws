@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.61.0](https://github.com/jwallace145/jaws/compare/v0.60.0...v0.61.0) (2026-11-19)
+
+
+### Features
+
+* **config:** braveheart-trainer moves to production with its nets ([#228](https://github.com/jwallace145/jaws/issues/228)) ([648050c](https://github.com/jwallace145/jaws/commit/648050c52f256d36a2f594f79884269fcf830ba0))
+
 ## [0.60.0](https://github.com/jwallace145/jaws/compare/v0.59.0...v0.60.0) (2026-11-19)
 
 
