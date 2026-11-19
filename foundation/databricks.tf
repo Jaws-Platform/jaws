@@ -117,6 +117,7 @@ module "databricks_audit_logs" {
 
   account_id  = local.databricks.account_id
   bucket_name = local.databricks.audit_bucket
+  role_name   = local.databricks_log_delivery_role_name
 }
 
 # The shared-objects host: a serverless workspace with no VPC, NAT, buckets,
@@ -172,8 +173,10 @@ module "dataset_registry" {
 
 locals {
   # The host is named for the account: jwall-engineering-shared in management,
-  # jaws-shared in production.
-  databricks_host_name = "${local.context.organization}-shared"
+  # jaws-shared in production. So is the audit log delivery's role and its
+  # Databricks credential (the library's default is management's name).
+  databricks_host_name              = "${local.context.organization}-shared"
+  databricks_log_delivery_role_name = "${local.context.organization}-databricks-log-delivery"
 
   # Datasets are onboarded through the host, whose URL configures their
   # provider, so an account builds Databricks in two applies: the host first,
