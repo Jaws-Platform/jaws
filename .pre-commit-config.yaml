@@ -23,7 +23,7 @@ repos:
           - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.0
+    rev: v0.17.5 # matches ruff in uv.lock, which CI runs
     hooks:
       - id: ruff-check
         args: [--fix]

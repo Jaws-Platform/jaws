@@ -9,7 +9,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.13"
 dependencies = [
-  "boto3>=1.40",
+  "boto3>=1.44.3",
   "databricks-sdk>=0.166",
   "pydantic>=2.11",
   "pyyaml>=6.0",
@@ -23,16 +23,16 @@ jwall-engineering-sites = "jaws.cli:app"
 
 [dependency-groups]
 dev = [
-  "boto3-stubs[ce,cloudfront,ec2,ecr,logs,pricing,s3,ssm,sts]>=1.40",
-  "moto[ec2,ecr,logs,s3,ssm,sts]>=5.1",
+  "boto3-stubs[ce,cloudfront,ec2,ecr,logs,pricing,s3,ssm,sts]>=1.44.3",
+  "moto[ec2,ecr,logs,s3,ssm,sts]>=5.2.5",
   "mypy>=1.17",
   "pytest>=8.4",
-  "ruff>=0.13",
+  "ruff>=0.17.5",
   "types-pyyaml>=6.0",
 ]
 
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling>=1.33.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
