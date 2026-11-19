@@ -647,6 +647,16 @@ def test_databricks_account_resources_wait_for_enabled() -> None:
     assert config["production"]["overrides"]["databricks"]["enabled"] is True
 
 
+def test_the_shared_host_waits_for_the_metastore_module() -> None:
+    """The host looks the admin group up by name (a data source). In a fresh
+    account the group is created in the same apply, so the read must wait for
+    the metastore module, or the first plan fails ("cannot find group")."""
+    host = _squashed(_module("databricks_shared_host", DATABRICKS_TF))
+    assert "depends_on = [module.databricks_metastore]" in host
+    metastore = _squashed(_module("databricks_metastore", DATABRICKS_TF))
+    assert 'admin_group_name = "${local.context.organization}-metastore-admins"' in metastore
+
+
 def yaml_config() -> dict[str, Any]:
     import yaml
 

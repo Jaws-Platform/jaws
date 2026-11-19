@@ -677,7 +677,9 @@ jobs:
         id: list
         run: |
           # Assigned first, so a failing command fails the step (bash -e).
-          enabled=$(yq -r .databricks.enabled config.yaml)
+          # Databricks is enabled in one account at a time: management's
+          # setting, or production's override (docs/databricks.md).
+          enabled=$(yq -r '.databricks.enabled or (.production.overrides.databricks.enabled // false)' config.yaml)
           projects=$(scripts/databricks-projects.sh)
           echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
           echo "projects=$projects" >> "$GITHUB_OUTPUT"

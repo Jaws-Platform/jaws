@@ -261,11 +261,15 @@ def test_the_registry_script_reads_databricks_tf(tmp_path: Path) -> None:
 
 
 @needs_yq
-@pytest.mark.parametrize("enabled", [True, False])
+@pytest.mark.parametrize(
+    ("management", "production", "enabled"),
+    [(True, False, True), (False, True, True), (False, False, False)],
+)
 def test_the_setup_job_outputs_the_enabled_flag_and_the_registry(
-    tmp_path: Path, enabled: bool
+    tmp_path: Path, management: bool, production: bool, enabled: bool
 ) -> None:
-    """Run in a copy of the repo with `databricks.enabled` set, so both values are covered."""
+    """Run in a copy of the repo with Databricks enabled in management, in
+    production, or in neither: the plans run while either account enables it."""
     steps = _steps("ci.yml", "databricks-projects")
     step = steps[_index(steps, lambda s: s.get("id") == "list")]
     root = tmp_path / "repo"
@@ -273,7 +277,8 @@ def test_the_setup_job_outputs_the_enabled_flag_and_the_registry(
     (root / "foundation").mkdir()
     shutil.copy(REPO_ROOT / "foundation" / "databricks.tf", root / "foundation")
     config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
-    config["databricks"]["enabled"] = enabled
+    config["databricks"]["enabled"] = management
+    config["production"]["overrides"]["databricks"]["enabled"] = production
     (root / "config.yaml").write_text(yaml.safe_dump(config))
     output = tmp_path / "out"
     subprocess.run(
@@ -390,3 +395,12 @@ def test_databricks_apply_refuses_an_unregistered_project(tmp_path: Path) -> Non
     )
     assert result.returncode != 0
     assert "not-a-project is not in foundation/databricks.tf" in result.stdout
+
+
+def test_the_databricks_plans_run_wherever_databricks_is_enabled() -> None:
+    """Databricks is enabled in one account at a time: the plans run when either
+    account enables it, not only management."""
+    ci = _yaml(REPO_ROOT / ".github" / "workflows" / "ci.yml")
+    step = next(s for s in ci["jobs"]["databricks-projects"]["steps"] if s.get("id") == "list")
+    assert ".production.overrides.databricks.enabled" in step["run"]
+    assert ".databricks.enabled" in step["run"]

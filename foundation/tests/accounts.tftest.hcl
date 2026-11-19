@@ -591,6 +591,11 @@ run "databricks_in_production_starts_with_the_host" {
   }
 
   assert {
+    condition     = module.databricks_metastore[0].admin_group_name == "jaws-metastore-admins"
+    error_message = "production's metastore admin group is jaws-metastore-admins, the name the CLI gives the data-access stack (access.py metastore_admin_group), never management's"
+  }
+
+  assert {
     condition     = length(local.onboarded_datasets) == 0 && length(module.dataset_catalog_storage) == 0 && length(module.producer_catalog) == 0 && length(module.databricks_dataset) == 0
     error_message = "no dataset is onboarded before the host's URL is recorded: their provider is configured from it"
   }
