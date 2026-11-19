@@ -29,7 +29,7 @@ from jaws.access import (
 from jaws.errors import ConfigError
 from jaws.settings import Settings
 from jaws.site import load_site_config
-from tests.conftest import FIXTURES
+from tests.conftest import FIXTURES, fixture_config
 from tests.test_cli import runner
 
 HOST = "https://dbc-01234567-89ab.cloud.databricks.com"
@@ -140,7 +140,7 @@ def render_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterato
     """An infra checkout's datasets/ and config.yaml, and a directory of project files."""
     root = tmp_path / "infra"
     shutil.copytree(FIXTURES / "datasets", root / "datasets")
-    config = yaml.safe_load((FIXTURES / "config.yaml").read_text())
+    config = fixture_config()
     config["databricks"]["shared_host_url"] = HOST
     (root / "config.yaml").write_text(yaml.safe_dump(config))
     files = tmp_path / "project-files"

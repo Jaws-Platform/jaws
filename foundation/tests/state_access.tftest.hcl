@@ -106,13 +106,15 @@ run "the_reconcile_reaches_its_state" {
 }
 
 # The onboarded positions (datasets/braveheart-selfplay/positions.yaml) get
-# their producer's catalog, and the dataset its schema and files volume.
-run "the_positions_get_their_producer_catalog" {
+# their producer's catalog where Databricks is: production, since 2026-11-19
+# (accounts.tftest.hcl, databricks_in_production_onboards_once_the_host_is_recorded).
+# The management account, as config.yaml is written, onboards nothing.
+run "management_onboards_no_dataset" {
   command = plan
 
   assert {
-    condition     = jsonencode(keys(module.producer_catalog)) == jsonencode(["braveheart_selfplay"])
-    error_message = "one producer catalog per producer with an onboarded dataset: braveheart_selfplay"
+    condition     = length(module.producer_catalog) == 0 && length(module.databricks_dataset) == 0
+    error_message = "Databricks is enabled in production, so management has no producer catalog and no onboarded dataset"
   }
 }
 

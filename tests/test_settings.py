@@ -13,7 +13,7 @@ from jaws.settings import (
     load_settings,
     parse_duration,
 )
-from tests.conftest import FIXTURES, REPO_ROOT
+from tests.conftest import FIXTURES, REPO_ROOT, fixture_config
 
 
 def test_repository_config_loads() -> None:
@@ -44,7 +44,7 @@ def test_parse_duration_rejects_garbage() -> None:
 
 
 def _write(tmp_path: Path, mutate: dict[str, object]) -> Path:
-    raw = yaml.safe_load((FIXTURES / "config.yaml").read_text())
+    raw = fixture_config()
     for dotted, value in mutate.items():
         section, key = dotted.split(".")
         raw.setdefault(section, {})[key] = value
@@ -324,8 +324,9 @@ def test_central_prefixes_have_the_component_format(
 
 
 def _databricks_raw() -> dict[str, Any]:
-    raw: dict[str, Any] = yaml.safe_load((FIXTURES / "config.yaml").read_text())
-    return raw
+    """The suite's baseline: Databricks in the management account, with the
+    databricks-poc sample (tests/conftest.py)."""
+    return fixture_config()
 
 
 def _load_raw(tmp_path: Path, raw: dict[str, Any]) -> Settings:

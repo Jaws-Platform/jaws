@@ -141,8 +141,8 @@ run "management_is_unchanged_by_default" {
   }
 
   assert {
-    condition     = length(module.databricks_metastore) == 1
-    error_message = "Databricks stays in management until it moves as a whole"
+    condition     = length(module.databricks_metastore) == 0 && length(module.databricks_shared_host) == 0 && length(module.producer_catalog) == 0
+    error_message = "Databricks moved to production as a whole (2026-11-19): management plans none of it"
   }
 }
 
@@ -588,6 +588,11 @@ run "databricks_in_production_starts_with_the_host" {
   assert {
     condition     = local.databricks.metastore_name == "jaws-us-east-1" && local.databricks.audit_bucket == "jaws-databricks-audit-logs" && local.databricks_host_name == "jaws-shared"
     error_message = "production's metastore, audit bucket and shared host carry production's names"
+  }
+
+  assert {
+    condition     = module.databricks_metastore[0].admin_group_name == "jaws-metastore-admins"
+    error_message = "production's metastore admin group is jaws-metastore-admins, the name the CLI gives the data-access stack (access.py metastore_admin_group), never management's"
   }
 
   assert {

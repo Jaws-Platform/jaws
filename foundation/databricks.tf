@@ -45,7 +45,6 @@ locals {
   #                federation subject names both (docs/databricks.md).
   # One line per entry, as in bots.tf (the workflows read this block).
   databricks_projects = {
-    databricks-poc        = { repository = "jwallace145/databricks-poc", repository_id = "1458298100", owner_id = "35950238" }
     braveheart-databricks = { repository = "Braveheart-Chess/braveheart-databricks", repository_id = "1458504699", owner_id = "356866252" }
   }
 
@@ -105,6 +104,7 @@ module "databricks_metastore" {
   providers = { databricks = databricks.account }
 
   name                             = local.databricks.metastore_name
+  admin_group_name                 = "${local.context.organization}-metastore-admins" # as access.py names it
   admin_user_names                 = local.databricks.metastore_admins
   service_principal_application_id = local.databricks.client_id
 }
@@ -139,6 +139,11 @@ module "databricks_shared_host" {
     CostCenter = local.account.context.managed_by
     Workspace  = local.databricks_host_name
   })
+
+  # The module looks the admin group up by name. In a fresh account the group
+  # is created in the same apply, so the lookup waits for it: data sources in
+  # this module are read at apply whenever the metastore module has changes.
+  depends_on = [module.databricks_metastore]
 }
 
 # --------------------------------------------------- onboarded datasets

@@ -22,14 +22,14 @@ from jaws.access import (
     load_registry,
 )
 from jaws.project import Project
-from jaws.settings import Settings, load_settings
+from jaws.settings import Settings
 from jaws.site import SiteConfig
 from jaws.stack import render_tfvars
 from tests.conftest import (
     BRAVEHEART_GUARDRAILS,
     FIXTURES,
     MATH_PROVER_GUARDRAILS,
-    REPO_ROOT,
+    fixture_settings,
     management_only,
     with_guardrails,
 )
@@ -111,7 +111,7 @@ def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
     research = with_guardrails(settings, "math-prover", MATH_PROVER_GUARDRAILS)
     # The braveheart sample keeps its own central entry: the real engine's shrank at the split.
     sample = with_guardrails(settings, "braveheart", BRAVEHEART_GUARDRAILS)
-    production = load_settings(REPO_ROOT / "config.yaml", environ={}, account="production")
+    production = fixture_settings(environ={}, account="production")
     handshakes = _handshakes()
     # The two dataset projects as each case states, not as config.yaml has them
     # today: neither moving, or braveheart-selfplay moving with trainer still
@@ -156,7 +156,7 @@ def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
 
 
 def main(out: Path) -> None:
-    settings = load_settings(REPO_ROOT / "config.yaml", environ={})
+    settings = fixture_settings(environ={})
     for stack, stack_cases in cases(settings).items():
         (out / stack).mkdir(parents=True, exist_ok=True)
         for name, tfvars in stack_cases.items():

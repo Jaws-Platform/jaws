@@ -31,11 +31,11 @@ from jaws.settings import Settings, load_settings
 from jaws.site import Site, SiteConfig, load_site_config
 from jaws.stack import render_tfvars
 from jaws.tasks import TaskSpec, task_tags
-from tests.conftest import FIXTURES, SITE_FIXTURES, management_only
+from tests.conftest import FIXTURES, SITE_FIXTURES, baseline_config_path, management_only
 from tests.stack_plans.render import ACCOUNT_OUTPUTS, _handshakes
 
 GOLDEN = FIXTURES / "renders" / "management.json"
-CONFIG = FIXTURES / "config.yaml"
+CONFIG = baseline_config_path()
 REGISTRY = FIXTURES / "registry"
 #: The registered projects of the bot stack (bot and research), by their live files.
 BOT_STACK_PROJECTS = ("braveheart", "braveheart-bot", "braveheart-selfplay", "braveheart-trainer")

@@ -33,7 +33,7 @@ def registered_keys() -> set[str]:
 
 
 def test_registries_parse_known_projects() -> None:
-    assert {"main-site", "braveheart", "databricks-poc"} <= registered_keys()
+    assert {"main-site", "braveheart", "braveheart-databricks"} <= registered_keys()
 
 
 def test_no_project_is_registered_under_the_owner_access_key() -> None:

@@ -34,6 +34,7 @@ from jaws.databricks import DatabricksDeployment, workspace_plan_stale
 from jaws.databricks_names import derived_names
 from jaws.project import Project
 from jaws.site import load_site_config
+from tests.conftest import fixture_settings
 
 from .conftest import FIXTURES
 
@@ -179,9 +180,7 @@ def _artifact(root: Path, name: str) -> str:
 
 
 def _project() -> Project:
-    from jaws.settings import load_settings
-
-    settings = load_settings(FIXTURES / "config.yaml", environ={})
+    settings = fixture_settings(environ={})
     return Project.from_config(
         load_site_config(FIXTURES / "bots" / "databricks-poc.yaml"), settings
     )

@@ -7,8 +7,8 @@ from typing import Any
 
 import yaml
 
-from jaws.settings import Settings, load_settings
-from tests.conftest import REPO_ROOT
+from jaws.settings import Settings
+from tests.conftest import REPO_ROOT, fixture_settings
 from tests.stack_plans.render import cases
 
 PLANS = REPO_ROOT / "tests" / "stack_plans"
@@ -16,7 +16,7 @@ SCRIPT = REPO_ROOT / "scripts" / "test-stack-plans.sh"
 
 
 def _settings() -> Settings:
-    return load_settings(REPO_ROOT / "config.yaml", environ={})
+    return fixture_settings(environ={})
 
 
 def test_every_rendered_case_has_a_test_file_and_the_reverse() -> None:
