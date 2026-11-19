@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.60.0](https://github.com/jwallace145/jaws/compare/v0.59.0...v0.60.0) (2026-11-19)
+
+
+### Features
+
+* **config:** braveheart-selfplay moves to production with its positions ([#226](https://github.com/jwallace145/jaws/issues/226)) ([f4f100e](https://github.com/jwallace145/jaws/commit/f4f100e179a397524bd5de63c1f0d879d216ba6f))
+
 ## [0.59.0](https://github.com/jwallace145/jaws/compare/v0.58.0...v0.59.0) (2026-11-18)
 
 
