@@ -31,9 +31,15 @@ locals {
       key        = local.state_key
     }
 
+    # service_linked_role_services: the plan role may read, and the apply role
+    # create and tag (never delete), the account's EC2 Spot service-linked role,
+    # which the foundation owns in every account with a task runner. Granted one
+    # release before the role is managed, so that release's plans can already
+    # read it.
     foundation = {
-      state_bucket_arn = module.state_bucket.arn
-      hosted_zone_arn  = module.zone.arn
+      state_bucket_arn             = module.state_bucket.arn
+      hosted_zone_arn              = module.zone.arn
+      service_linked_role_services = local.hosts_task_runners ? ["spot.amazonaws.com"] : []
     }
 
     # The infra CLI image this repo publishes on release.
@@ -52,7 +58,7 @@ locals {
 
 module "infra_ci_plan" {
   source  = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version = "0.28.0"
+  version = "0.29.0"
 
   project            = local.infra_ci.project
   name_root          = local.context.organization
@@ -73,7 +79,7 @@ module "infra_ci_plan" {
 
 module "infra_ci_apply" {
   source  = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version = "0.28.0"
+  version = "0.29.0"
 
   project            = local.infra_ci.project
   name_root          = local.context.organization
@@ -122,7 +128,7 @@ locals {
 
 module "data_access_ci_plan" {
   source  = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version = "0.28.0"
+  version = "0.29.0"
 
   project            = local.data_access_ci.project
   name_root          = local.context.organization
@@ -142,7 +148,7 @@ module "data_access_ci_plan" {
 
 module "data_access_ci_apply" {
   source  = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version = "0.28.0"
+  version = "0.29.0"
 
   project            = local.data_access_ci.project
   name_root          = local.context.organization

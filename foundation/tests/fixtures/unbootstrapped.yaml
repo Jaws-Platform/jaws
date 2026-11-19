@@ -8,7 +8,7 @@ terraform:
   plan_timeout: 15m
 library:
   source: jwallace145/jwall-engineering/aws
-  version: 0.28.0
+  version: 0.29.0
 state:
   bucket: jwall-engineering-tfstate
   region: us-east-1
