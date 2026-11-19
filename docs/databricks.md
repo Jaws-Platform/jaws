@@ -321,6 +321,53 @@ the catalog's data. It keeps the metastore, the event log and the client
 secret in SSM. Every step is idempotent: re-running a failed destroy continues
 where it stopped.
 
+## Moving Databricks to the production account
+
+Databricks moves as a whole, by a clean rebuild: it is torn down in the
+management account, then built fresh in production. Both accounts use the one
+Databricks account, which holds one metastore per region, so it cannot exist
+in both at once (see "One account at a time"). Nothing is copied: workspaces,
+catalogs, credentials and locations are tied to the account's own buckets and
+roles, and are created again. The owner runs every step that touches
+management, with their admin session:
+
+1. **The reconcile's grants:** `scripts/databricks-teardown.sh access plan`, read
+   it, then `access go`. It destroys the data-access stack's bindings and
+   grants, while the workspaces they name still exist.
+2. **The workspaces:** the **Databricks apply** workflow with `action: destroy`,
+   for each workspace project ([Destroy](#destroy)).
+3. **The platform:** `scripts/databricks-teardown.sh foundation plan`, read it,
+   then `foundation go`. It refuses while the data-access stack or any
+   workspace project's stack still holds resources. It destroys the onboarded
+   datasets, the producer catalogs, their storage, the shared host, the audit
+   log delivery and the metastore, in that order. It releases from state, and
+   keeps: every workspace binding and grant (each goes with its securable) and
+   the audit-log bucket with its configuration, which the owner deletes by
+   hand. If Databricks refuses to delete the metastore because it is not
+   empty, delete it in the account console as an account admin, run
+   `terraform state rm 'module.databricks_metastore[0].databricks_metastore.this'`
+   in `foundation/`, and re-run `foundation go`.
+4. **The secret:** `scripts/databricks-teardown.sh secret` copies the service
+   principal's client secret from the management account's parameter to
+   production's (`production.overrides.databricks.secret_parameter`), without
+   printing it.
+5. **The switch release:** `databricks.enabled: false`,
+   `production.overrides.databricks.enabled: true`, and each workspace project
+   that moves listed as `moved` under `production.projects`. Production's
+   foundation creates the metastore, the audit log delivery and the shared host.
+6. **The datasets release:** `production.overrides.databricks.shared_host_url`
+   set to the new host's URL. Its apply stops at each dataset's volume; run the
+   producer's **Bot apply** in production, then re-run the apply. Run the
+   producer's **Bot apply** in management too, which takes the old share role
+   off the old bucket.
+7. **The workspaces, again:** the **Databricks apply** workflow for each project
+   (production), then **Data access**. A project with a deployer sets its
+   repository's `prod` environment variables from the new apply's output
+   (`DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`) and deploys.
+
+Every step can be re-run. Each `plan` changes nothing; each `go` asks the owner
+to type `destroy`.
+
 ## Doctor
 
 ```sh
