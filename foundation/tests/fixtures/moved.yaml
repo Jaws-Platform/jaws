@@ -97,6 +97,9 @@ projects:
       jwall-engineering-braveheart-trainer-nets:
         prefix: data/
         versioning: true
+      jaws-braveheart-trainer-nets:
+        prefix: data/
+        versioning: true
   braveheart-bot: {}
   databricks-poc:
     databricks:

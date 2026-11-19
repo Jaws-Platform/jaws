@@ -308,8 +308,8 @@ run "a_moving_project_has_roles_in_production" {
   }
 
   assert {
-    condition     = !contains(keys(local.bot_datasets), "braveheart-trainer")
-    error_message = "a project's roles in production manage only buckets with the jaws prefix: none is approved yet, so the trainer has no dataset policies there"
+    condition     = local.bot_datasets["braveheart-trainer"] == ["jaws-braveheart-trainer-nets"]
+    error_message = "a project's roles in production manage only its bucket with the jaws prefix, never the management account's"
   }
 
   assert {
