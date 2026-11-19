@@ -591,6 +591,11 @@ run "databricks_in_production_starts_with_the_host" {
   }
 
   assert {
+    condition     = local.databricks_log_delivery_role_name == "jaws-databricks-log-delivery"
+    error_message = "production's audit log delivery role (and its Databricks credential) carries production's name, never the library's default"
+  }
+
+  assert {
     condition     = module.databricks_metastore[0].admin_group_name == "jaws-metastore-admins"
     error_message = "production's metastore admin group is jaws-metastore-admins, the name the CLI gives the data-access stack (access.py metastore_admin_group), never management's"
   }
