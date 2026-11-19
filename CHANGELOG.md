@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.64.0](https://github.com/jwallace145/jaws/compare/v0.63.0...v0.64.0) (2026-11-19)
+
+
+### Features
+
+* **config:** record production's Databricks host and onboard the datasets there ([#243](https://github.com/jwallace145/jaws/issues/243)) ([e886b4e](https://github.com/jwallace145/jaws/commit/e886b4e96e51e10c284f16d7559d752860e259e5))
+
 ## [0.63.0](https://github.com/jwallace145/jaws/compare/v0.62.0...v0.63.0) (2026-11-19)
 
 
