@@ -144,6 +144,8 @@ def _run(
         "FAKE_SECRET": SECRET,
     }
     env.pop("GH_TOKEN", None)
+    # The owner's shell, not a workflow step: CI itself runs with GITHUB_ACTIONS=true.
+    env.pop("GITHUB_ACTIONS", None)
     result = subprocess.run(
         ["bash", str(SCRIPT), *args],
         input=answer,
@@ -246,6 +248,30 @@ def test_foundation_go_releases_then_destroys_dependents_first(tmp_path: Path) -
         'module.databricks_ci_plan["braveheart-databricks"].module.role.aws_iam_role.this',
         "module.state_bucket.aws_s3_bucket.this",
     ]
+
+
+def test_a_re_run_targets_only_the_stages_still_in_state(tmp_path: Path) -> None:
+    """After a stopped run, a stage whose resources are gone is not targeted: its
+    dependencies may read through the shared host, which may be gone too."""
+    (tmp_path / "state-list").write_text(
+        "module.databricks_metastore[0].databricks_group.admins\n"
+        "module.databricks_metastore[0].databricks_metastore.this\n"
+        "module.state_bucket.aws_s3_bucket.this\n"
+    )
+    result, calls = _run(tmp_path, "foundation", "go", answer="destroy\n")
+    assert result.returncode == 0, result.stderr
+    terraform = _terraform(calls)
+    plan = next(c for c in terraform if c.startswith("terraform plan -destroy"))
+    assert "-target=module.databricks_metastore" in plan
+    assert "module.databricks_dataset" not in plan and "module.databricks_shared_host" not in plan
+    destroys = [c for c in terraform if c.startswith("terraform destroy")]
+    assert [d.split("-target=")[1] for d in destroys] == ["module.databricks_metastore"]
+
+
+def test_the_teardown_never_prints_the_secret(tmp_path: Path) -> None:
+    result, _ = _run(tmp_path, "foundation", "plan")
+    assert result.returncode == 0, result.stderr
+    assert SECRET not in result.stdout + result.stderr
 
 
 def test_foundation_go_without_confirmation_destroys_nothing(tmp_path: Path) -> None:

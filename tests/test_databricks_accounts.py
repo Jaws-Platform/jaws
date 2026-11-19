@@ -242,3 +242,35 @@ def test_data_access_runs_where_databricks_is_enabled(job: str) -> None:
     terraform = next(s for s in after if "databricks-credentials.sh" in s.get("run", ""))
     assert 'databricks-credentials.sh ../config.yaml "$ACCOUNT"' in terraform["run"]
     assert terraform["env"]["ACCOUNT"] == "${{ steps.role.outputs.account }}"
+
+
+# -- the secret is never printed outside GitHub Actions ---------------------------------
+
+
+def _source_output(tmp_path: Path, actions: bool) -> str:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    fake = bin_dir / "aws"
+    fake.write_text(FAKE_AWS)
+    fake.chmod(0o755)
+    env = os.environ | {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+    env.pop("GITHUB_ACTIONS", None)
+    if actions:
+        env["GITHUB_ACTIONS"] = "true"
+    config = _config(tmp_path, True, False)
+    result = subprocess.run(
+        ["bash", "-c", f'source "{SCRIPT}" "{config}" management'],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout + result.stderr
+
+
+def test_the_credentials_script_never_prints_the_secret_outside_actions(tmp_path: Path) -> None:
+    """`::add-mask::` is a GitHub Actions command: anywhere else it prints the value."""
+    secret = "secret-of:/jwall-engineering/databricks/client-secret"
+    assert secret not in _source_output(tmp_path, actions=False)
+    assert f"::add-mask::{secret}" in _source_output(tmp_path, actions=True)
