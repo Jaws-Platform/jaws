@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.66.0](https://github.com/jwallace145/jaws/compare/v0.65.0...v0.66.0) (2026-11-19)
+
+
+### Features
+
+* **foundation:** own the EC2 Spot service-linked role in every account with a task runner ([#250](https://github.com/jwallace145/jaws/issues/250)) ([4a0f2a4](https://github.com/jwallace145/jaws/commit/4a0f2a44697b51ef21333a7c4be13d0d6d6a89bc))
+
 ## [0.65.0](https://github.com/jwallace145/jaws/compare/v0.64.0...v0.65.0) (2026-11-19)
 
 
