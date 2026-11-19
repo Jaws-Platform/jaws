@@ -294,8 +294,13 @@ def _edge_readers(
     project: Project, dataset: str, settings: Settings, access: Access | None
 ) -> list[str]:
     """The dataset's platform role, when an agreed handshake shares it; else nothing.
-    Nothing where Databricks is off, whose foundation creates no such role."""
-    if access is None or settings.databricks is None or not settings.databricks.enabled:
+    Nothing where Databricks is off, nor before the account's shared host is recorded
+    (databricks.shared_host_url): the foundation creates the role only then, and a
+    bucket policy cannot name a role that does not exist."""
+    databricks = settings.databricks
+    if access is None or databricks is None or not databricks.enabled:
+        return []
+    if databricks.shared_host_url is None:
         return []
     for edge in access.edges:
         if edge.dataset.owner == project.project and edge.dataset.name == dataset:

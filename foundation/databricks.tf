@@ -131,13 +131,13 @@ module "databricks_shared_host" {
   providers = { databricks = databricks.account }
 
   account_id       = local.databricks.account_id
-  workspace_name   = "jwall-engineering-shared"
+  workspace_name   = local.databricks_host_name
   metastore_id     = module.databricks_metastore[0].metastore_id
   admin_group_name = module.databricks_metastore[0].admin_group_name
 
   tags = merge(module.context.tags, {
-    CostCenter = "jwall-engineering-infra"
-    Workspace  = "jwall-engineering-shared"
+    CostCenter = local.account.context.managed_by
+    Workspace  = local.databricks_host_name
   })
 }
 
@@ -166,7 +166,17 @@ module "dataset_registry" {
 }
 
 locals {
-  onboarded_datasets = local.databricks_enabled ? module.dataset_registry.datasets : {}
+  # The host is named for the account: jwall-engineering-shared in management,
+  # jaws-shared in production.
+  databricks_host_name = "${local.context.organization}-shared"
+
+  # Datasets are onboarded through the host, whose URL configures their
+  # provider, so an account builds Databricks in two applies: the host first,
+  # then the datasets once config.yaml records the host's URL
+  # (databricks.shared_host_url; production's override is null until then).
+  databricks_host_recorded = try(local.databricks.shared_host_url, null) != null
+
+  onboarded_datasets = local.databricks_enabled && local.databricks_host_recorded ? module.dataset_registry.datasets : {}
 
   # One catalog per producer with an onboarded dataset: catalog => producer.
   producer_catalogs = { for c, owners in { for d in values(local.onboarded_datasets) : d.catalog => d.owner... } : c => owners[0] }
@@ -176,7 +186,7 @@ locals {
 # metastore has no storage root, so each producer catalog's managed location
 # is a prefix of this one bucket. Nothing is ever written there.
 module "dataset_catalog_storage" {
-  count     = local.databricks_enabled ? 1 : 0
+  count     = local.databricks_enabled && local.databricks_host_recorded ? 1 : 0
   source    = "jwallace145/jwall-engineering/aws//modules/databricks-catalog-storage"
   version   = "0.28.0"
   providers = { aws = aws, databricks = databricks.shared }
@@ -259,11 +269,12 @@ module "databricks_dataset" {
 }
 
 # config.yaml names the host's URL for the data-access stack; Databricks picked
-# it when this stack created the host. A mismatch is reported, not fatal.
+# it when this stack created the host. A mismatch is reported, not fatal. So is
+# a URL not recorded yet: the datasets wait for it (above).
 check "shared_host_url" {
   assert {
     condition     = !local.databricks_enabled || try(local.databricks.shared_host_url, null) == try(module.databricks_shared_host[0].workspace_url, null)
-    error_message = "config.yaml databricks.shared_host_url must be the shared host's URL (output databricks_shared_host.workspace_url), which the data-access stack binds and grants through."
+    error_message = "config.yaml databricks.shared_host_url must be the shared host's URL (output databricks_shared_host.workspace_url) for this account: the datasets are onboarded, and the data-access stack binds and grants, only once it is recorded."
   }
 }
 

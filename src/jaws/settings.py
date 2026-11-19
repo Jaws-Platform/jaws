@@ -504,6 +504,10 @@ class Settings(_Section):
     #: Every account's organization, management's first (never read from the file):
     #: what a project file may state as its Organization tag while it moves.
     organizations: tuple[str, ...] = ()
+    #: The account Databricks is enabled in, if any (never read from the file). Both
+    #: AWS accounts use the one Databricks account, which holds one metastore per
+    #: region, so it is enabled in one at a time and everything follows it there.
+    databricks_account: Account | None = None
     """The whole of config.yaml."""
 
     tool: ToolSection = ToolSection()
@@ -659,6 +663,11 @@ def load_settings(
         raise ConfigError(
             f"{path}: organizations are each account's context.organization, not a key of the file"
         )
+    if "databricks_account" in raw:
+        raise ConfigError(
+            f"{path}: databricks_account follows databricks.enabled in each account, "
+            "not a key of the file"
+        )
     try:
         management = Settings.model_validate(raw)
     except ValidationError as exc:
@@ -666,7 +675,12 @@ def load_settings(
     if management.production is None:
         if account == "production":
             raise ConfigError(f"{path}: no production section, so nothing is in production")
-        return management.model_copy(update={"organizations": (management.context.organization,)})
+        return management.model_copy(
+            update={
+                "organizations": (management.context.organization,),
+                "databricks_account": "management" if _databricks_enabled(management) else None,
+            }
+        )
     try:
         production = Settings.model_validate(
             {**_production_view(raw, management.production, path), "account": "production"}
@@ -679,7 +693,39 @@ def load_settings(
         dict.fromkeys((management.context.organization, production.context.organization))
     )
     view = production if account == "production" else management
-    return view.model_copy(update={"organizations": organizations})
+    return view.model_copy(
+        update={
+            "organizations": organizations,
+            "databricks_account": _databricks_account(management, production, path),
+        }
+    )
+
+
+def _databricks_enabled(settings: Settings) -> bool:
+    return settings.databricks is not None and settings.databricks.enabled
+
+
+def _databricks_account(management: Settings, production: Settings, path: Path) -> Account | None:
+    """The account Databricks is enabled in. Refuses both at once, and a production
+    view that would use the management account's shared host."""
+    if _databricks_enabled(management) and _databricks_enabled(production):
+        raise ConfigError(
+            f"{path}: databricks.enabled is true in both accounts. They use one Databricks "
+            "account, which holds one metastore per region, so Databricks is enabled in one "
+            "AWS account at a time: set databricks.enabled or "
+            "production.overrides.databricks.enabled to false"
+        )
+    if management.databricks is not None and production.databricks is not None:
+        url = production.databricks.shared_host_url
+        if url is not None and url == management.databricks.shared_host_url:
+            raise ConfigError(
+                f"{path}: the production view inherits the management account's "
+                "shared_host_url. Set production.overrides.databricks.shared_host_url: null "
+                "until production's own host exists, then its URL"
+            )
+    if _databricks_enabled(production):
+        return "production"
+    return "management" if _databricks_enabled(management) else None
 
 
 #: The sections `production.overrides` may replace keys of: what genuinely

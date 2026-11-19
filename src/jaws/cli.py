@@ -1048,12 +1048,31 @@ def config_env(
             help="Resolve this project's account, whatever project file is in the directory.",
         ),
     ] = None,
+    databricks: Annotated[
+        bool,
+        typer.Option(
+            "--databricks",
+            help="Resolve the account Databricks is enabled in (the Data access workflow's), "
+            "and print `databricks=ready|awaiting-host|disabled`.",
+        ),
+    ] = False,
 ) -> None:
     """Print the account this run addresses as `key=value` lines, for a
     workflow to append to GITHUB_OUTPUT: every workflow resolves a project's
     account, and so its role, here and nowhere else."""
     run: Run = ctx.obj
     settings = run.settings
+    state: str | None = None
+    if databricks:
+        # Databricks is enabled in one account at a time (settings.py); the
+        # reconcile runs there, once that account's shared host is recorded.
+        where = settings.databricks_account
+        if where is None:
+            state = "disabled"
+        else:
+            settings = load_settings(run.config_path, account=where)
+            assert settings.databricks is not None
+            state = "ready" if settings.databricks.shared_host_url else "awaiting-host"
     if project is not None:
         try:
             where = resolve_account(project, settings.production, run.requested_account)
@@ -1070,6 +1089,7 @@ def config_env(
         ("state_bucket", settings.state.bucket),
         ("ecr_repository", settings.ecr.repository),
         ("bootstrapped", str(bool(production and production.bootstrapped)).lower()),
+        *((("databricks", state),) if state is not None else ()),
     ):
         print(f"{key}={value}")
 
@@ -1134,6 +1154,14 @@ def access_render(
     """
 
     def body(run: Run) -> None:
+        where = run.settings.databricks_account
+        if where is not None and where != run.settings.account:
+            # One reconcile, in the account Databricks is enabled in: the other
+            # view would bind through a host that is not this account's.
+            raise ConfigError(
+                f"Databricks is enabled in the {where} account, not {run.settings.account}: "
+                f"run `jaws --account {where} access render`"
+            )
         root = access.infra_root()
         registry = access.load_registry(root / "datasets")
         base = access.load_registry(base_registry) if base_registry is not None else ()

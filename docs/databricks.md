@@ -16,7 +16,8 @@ parts the first live apply must confirm are listed under
 Contents: [setup](#one-time-setup), [onboarding a project](#onboarding-a-project),
 [the project file](#the-project-file), [plan](#what-plan-shows),
 [apply](#what-apply-does), [destroy](#destroy), [doctor](#doctor),
-[datasets and access](#datasets-and-access), [layout](#bucket-and-prefix-layout), [tags](#tags-on-every-resource),
+[datasets and access](#datasets-and-access), [one account at a time](#one-account-at-a-time),
+[layout](#bucket-and-prefix-layout), [tags](#tags-on-every-resource),
 [compute policies](#central-compute-policies), [costs](#costs),
 [known gaps](#known-gaps), [runbook](#runbook).
 
@@ -486,11 +487,46 @@ refuses to hold twice. The release that removes it from `config.yaml` destroys
 it; the onboarding file comes in a later release, whose plan checks the live
 metastore for any overlap first.
 
-**Rebuilding the foundation from nothing** takes two applies: the host first,
-with `datasets/` empty (the onboarded datasets' provider needs the host's URL),
-then the datasets. Set `databricks.shared_host_url` in `config.yaml` to the
-host's URL (output `databricks_shared_host.workspace_url`) for the reconcile;
-the foundation reports a mismatch as a check warning.
+**Building the foundation in an account takes two applies,** because the
+onboarded datasets' provider is configured from the host's URL:
+
+1. With `databricks.shared_host_url` unset (`null`) for the account, the
+   foundation creates the metastore, the audit log delivery and the host, and
+   onboards nothing. Its plan reports the missing URL as a check warning, and
+   the **Data access** workflow has nothing to reconcile.
+2. Once `config.yaml` records the host's URL (output
+   `databricks_shared_host.workspace_url`), the next apply creates the producer
+   catalogs' storage, the catalogs and each onboarded dataset, and the sweeps
+   start. A dataset's share role is named as a reader of its bucket only from
+   then on (the producer's **Bot apply**).
+
+The first apply of step 2 stops at each dataset's `files` volume: Unity Catalog
+checks the role can read when it creates the volume, and the bucket policy
+cannot name the role before it exists. Run the producer's **Bot apply**, then
+re-run the apply.
+
+## One account at a time
+
+Both AWS accounts use the one Databricks account, which holds one metastore per
+region, so Databricks is enabled in one of them at a time: `databricks.enabled`
+for the management account, `production.overrides.databricks.enabled` for
+production. `config.yaml` with both true does not load. Everything follows the
+account where it is enabled:
+
+- the foundation creates the Databricks resources there, and none in the other;
+- the secret is read from that account's own `secret_parameter`
+  (`scripts/databricks-credentials.sh`), where the owner stored it with
+  `jaws --account <account> ... databricks credentials set`;
+- the **Data access** workflow assumes that account's `data-access` roles and
+  uses its state bucket and its host (`jaws config env --databricks` names the
+  account, and says `ready`, `awaiting-host` or `disabled`);
+- `production.overrides.databricks.shared_host_url` must be production's own
+  host or `null`: a production view that would inherit the management account's
+  URL does not load.
+
+The shared host is named `<organization>-shared`. A workspace project's own
+account is still `production.projects`: a project listed there is planned and
+applied in production.
 
 ## Bucket and prefix layout
 
