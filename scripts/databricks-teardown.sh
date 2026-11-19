@@ -131,9 +131,20 @@ foundation_step() {
   local releases
   releases=$(terraform state list | grep -E \
     '^module\.(databricks_dataset|producer_catalog|dataset_catalog_storage)\[[^]]*\]\.databricks_(workspace_binding|grants)\.|^module\.databricks_audit_logs\[0\]\.aws_s3_bucket(_[a-z_]+)?\.this$' || true)
-  local targets=()
-  local stage
-  for stage in "${FOUNDATION_STAGES[@]}"; do targets+=("-target=$stage"); done
+  # Only the stages that still hold resources: after a stopped run, a done
+  # stage's dependencies may read through the shared host, which may be gone.
+  local state stages=() targets=() stage
+  state=$(terraform state list)
+  for stage in "${FOUNDATION_STAGES[@]}"; do
+    if grep -q -F "${stage}[" <<<"$state"; then
+      stages+=("$stage")
+      targets+=("-target=$stage")
+    fi
+  done
+  if [ "${#stages[@]}" -eq 0 ]; then
+    echo "foundation: no Databricks resource is left in the management state; nothing to destroy"
+    return
+  fi
   echo "== released from state and kept:"
   printf '%s\n' "${releases:-  (none)}"
   echo "== destroyed:"
@@ -147,7 +158,7 @@ foundation_step() {
     # shellcheck disable=SC2086 # one address per line, none with spaces
     terraform state rm -lock-timeout=120s $releases
   fi
-  for stage in "${FOUNDATION_STAGES[@]}"; do
+  for stage in "${stages[@]}"; do
     echo "== destroying $stage"
     terraform destroy -auto-approve -input=false -lock-timeout=120s -var account=management "-target=$stage"
   done

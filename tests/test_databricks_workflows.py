@@ -78,6 +78,8 @@ def _run_credentials(
         cwd=tmp_path,
         env={
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            # A workflow step, as GitHub Actions runs it.
+            "GITHUB_ACTIONS": "true",
             "GITHUB_ENV": str(github_env),
             "GITHUB_OUTPUT": str(github_env),
         },

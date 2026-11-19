@@ -53,7 +53,12 @@ if [ -z "$_dbx_secret" ] || [[ "$_dbx_secret" == *$'\n'* ]]; then
   return 1
 fi
 # Mask first: nothing may print or use the secret before this line.
-echo "::add-mask::$_dbx_secret"
+# `::add-mask::` is a GitHub Actions command; anywhere else (an owner's shell,
+# scripts/databricks-teardown.sh) echoing it would print the secret, so it is
+# emitted only inside Actions.
+if [ "${GITHUB_ACTIONS:-}" = true ]; then
+  echo "::add-mask::$_dbx_secret"
+fi
 DATABRICKS_ACCOUNT_ID=$(yq -r .databricks.account_id "$_dbx_config") || return 1
 DATABRICKS_CLIENT_ID=$(yq -r .databricks.client_id "$_dbx_config") || return 1
 DATABRICKS_CLIENT_SECRET=$_dbx_secret
