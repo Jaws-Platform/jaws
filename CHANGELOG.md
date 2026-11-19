@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.62.0](https://github.com/jwallace145/jaws/compare/v0.61.0...v0.62.0) (2026-11-19)
+
+
+### Features
+
+* **databricks:** a guarded script to tear Databricks down in the management account ([#231](https://github.com/jwallace145/jaws/issues/231)) ([a4d1fdd](https://github.com/jwallace145/jaws/commit/a4d1fdd4c914a23de409944e70e10e90437c4aff))
+* **databricks:** follow the one account Databricks is enabled in ([#230](https://github.com/jwallace145/jaws/issues/230)) ([847e2fb](https://github.com/jwallace145/jaws/commit/847e2fb282f869fa4e03e3d101a017bf2a7bdaaf))
+
 ## [0.61.0](https://github.com/jwallace145/jaws/compare/v0.60.0...v0.61.0) (2026-11-19)
 
 
