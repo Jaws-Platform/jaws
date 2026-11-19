@@ -141,6 +141,10 @@ projects:
       jwall-engineering-braveheart-trainer-nets:
         prefix: data/
         versioning: true
+      # Its home in production, the copy's destination; the same retention.
+      jaws-braveheart-trainer-nets:
+        prefix: data/
+        versioning: true
   braveheart-bot:
     # Braveheart's Lichess bot (Braveheart-Chess/braveheart-lichess-bot): a container
     # image and a lichess-bot only, running a pinned release of the engine's
@@ -234,6 +238,7 @@ production:
     # With its positions; trainer follows one release later, because each reads the
     # other's bucket (docs/datasets.md, "Moving a dataset project to production").
     braveheart-selfplay: moving
+    braveheart-trainer: moving # with its nets, one release after selfplay
   overrides:
     aws:
       account_id: "570327089884"

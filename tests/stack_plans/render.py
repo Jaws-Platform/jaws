@@ -95,6 +95,9 @@ def _handshakes() -> Access:
     return compute_access(registry, {name: files.load(name) for name in projects})
 
 
+TRAINER = "braveheart-trainer"
+
+
 def _moving(settings: Settings, project: str) -> Settings:
     """`settings` with `project` moving, whatever config.yaml says today."""
     assert settings.production is not None
@@ -119,6 +122,7 @@ def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
     selfplay_in_production = _moving(
         management_only(production, *dataset_projects), "braveheart-selfplay"
     )
+    both_in_production = _moving(selfplay_in_production, TRAINER)
     bots = {
         "braveheart": (_file("braveheart"), sample),
         "scheduled_bot": (_scheduled(), sample),
@@ -126,6 +130,10 @@ def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
         "trainer": (_registered("braveheart-trainer"), still),
         "selfplay_moving": (_registered("braveheart-selfplay"), selfplay_moving),
         "selfplay_in_production": (_registered("braveheart-selfplay"), selfplay_in_production),
+        # The second step: braveheart-trainer moving too.
+        "trainer_moving": (_registered("braveheart-trainer"), _moving(selfplay_moving, TRAINER)),
+        "trainer_in_production": (_registered("braveheart-trainer"), both_in_production),
+        "selfplay_joined_in_production": (_registered("braveheart-selfplay"), both_in_production),
         "math_prover": (_file("math-prover"), research),
         "dataset_only": (_dataset_only(), research),
         "production_bot": (_bot_in_production(), production),
