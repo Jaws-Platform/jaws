@@ -115,5 +115,6 @@ jobs:
         with:
           name: databricks-apply-${{ inputs.project }}-${{ github.run_attempt }}
           path: .jaws/
+          include-hidden-files: true # .jaws/ is a dot directory, which upload-artifact skips otherwise
           retention-days: 14
           if-no-files-found: ignore
