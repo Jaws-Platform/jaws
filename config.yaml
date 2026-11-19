@@ -261,6 +261,7 @@ production:
       secret_parameter: /jaws/databricks/client-secret
       metastore_name: jaws-us-east-1
       audit_bucket: jaws-databricks-audit-logs
-      # Production's own shared host: null until the release that creates it has
-      # applied, then its URL. Datasets are onboarded there only once it is set.
-      shared_host_url: null
+      # Production's own shared host (jaws-shared), created by v0.63.0 on
+      # 2026-11-19: output databricks_shared_host.workspace_url. Datasets are
+      # onboarded there only once it is set (docs/databricks.md).
+      shared_host_url: https://dbc-287077d7-e617.cloud.databricks.com

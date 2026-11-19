@@ -78,10 +78,11 @@ def test_the_file_cannot_say_where_databricks_is_enabled(tmp_path: Path) -> None
 
 
 def test_production_never_inherits_managements_host_url(tmp_path: Path) -> None:
-    """The live config: production's override is null until its own host exists."""
+    """The live config: production names its own host, never the management account's."""
+    management = load_settings(FIXTURES / "config.yaml", environ={})
     production = load_settings(FIXTURES / "config.yaml", environ={}, account="production")
-    assert production.databricks is not None
-    assert production.databricks.shared_host_url is None
+    assert management.databricks is not None and production.databricks is not None
+    assert production.databricks.shared_host_url != management.databricks.shared_host_url
 
     config = fixture_config()
     del config["production"]["overrides"]["databricks"]["shared_host_url"]
