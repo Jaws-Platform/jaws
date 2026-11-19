@@ -197,3 +197,4 @@ production:
       secret_parameter: /jaws/databricks/client-secret
       metastore_name: jaws-us-east-1
       audit_bucket: jaws-databricks-audit-logs
+      shared_host_url: null

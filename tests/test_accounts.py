@@ -116,14 +116,21 @@ def test_without_a_production_section_everything_is_management() -> None:
 
 def test_the_management_view_is_the_configuration_as_written() -> None:
     raw = _raw()
-    raw.pop("production")
+    raw_production = raw.pop("production")
     before = Settings.model_validate(raw).model_dump()
     now = load_settings(FIXTURES / "config.yaml", environ={}).model_dump()
     assert now.pop("account") == "management"
     assert now.pop("organizations") == ("jwall-engineering", "jaws")
+    # Set by the loader, like the two above: where the file enables Databricks.
+    in_production = raw_production["overrides"].get("databricks", {}).get("enabled", False)
+    in_management = raw["databricks"]["enabled"]
+    assert now.pop("databricks_account") == (
+        "production" if in_production else "management" if in_management else None
+    )
     now.pop("production")
     before.pop("account")
     before.pop("organizations")
+    before.pop("databricks_account")
     before.pop("production")
     assert now == before
 

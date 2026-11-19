@@ -28,10 +28,30 @@ PRODUCTION_ADMIN = (
 )
 
 
+#: The management account's shared host and a production one, as the fixtures state them.
+MANAGEMENT_HOST = "https://dbc-46322154-036c.cloud.databricks.com"
+PRODUCTION_HOST = "https://dbc-0f0f0f0f-aaaa.cloud.databricks.com"
+
+
+def _databricks_in(
+    config: dict[str, Any], account: str, production_host: str | None = None
+) -> dict[str, Any]:
+    """Databricks enabled in `account` only, stated here and not read from the file:
+    it is enabled in one account at a time, and config.yaml flips when it moves."""
+    config["databricks"]["enabled"] = account == "management"
+    config["databricks"]["shared_host_url"] = MANAGEMENT_HOST
+    overrides = config["production"]["overrides"].setdefault("databricks", {})
+    overrides["enabled"] = account == "production"
+    overrides["shared_host_url"] = production_host
+    return config
+
+
 def _bootstrapped(config: dict[str, Any]) -> dict[str, Any]:
     """What `config.yaml` says once the owner has bootstrapped production, before
     any project moves: the projects are stated here, not read from the file, so
-    these fixtures survive each pull request that moves a project."""
+    these fixtures survive each pull request that moves a project. Databricks is
+    in the management account, where these fixtures' runs expect it."""
+    config = _databricks_in(config, "management")
     production = config["production"]
     production["bootstrapped"] = True
     production["projects"] = {}
@@ -53,6 +73,7 @@ def _unbootstrapped(config: dict[str, Any]) -> dict[str, Any]:
     """What `config.yaml` says before the bootstrap: production has no admin
     role and no zone of its own yet. Stated here, not read from the file, so
     the tests that need this state survive the pull request that ends it."""
+    config = _databricks_in(config, "management")
     production = config["production"]
     production["bootstrapped"] = False
     production["projects"] = {}
@@ -69,6 +90,19 @@ def _relabelled(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
+def _databricks_switched(host: str | None) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    """Databricks rebuilt in production: braveheart-databricks has left management
+    and braveheart-selfplay, whose positions it reads, has a stack in both."""
+
+    def transform(config: dict[str, Any]) -> dict[str, Any]:
+        config = _with_projects(
+            {"braveheart-selfplay": "moving", "braveheart-databricks": "moved"}
+        )(config)
+        return _databricks_in(config, "production", host)
+
+    return transform
+
+
 FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "unbootstrapped.yaml": _unbootstrapped,
     "production.yaml": _bootstrapped,
@@ -78,6 +112,10 @@ FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     # A bot whose old stack has been destroyed.
     "moved.yaml": _with_projects({"braveheart-bot": "moved"}),
     "unregistered.yaml": _with_projects({"not-a-project": "moving"}),
+    # Databricks after its move: off in management, on in production, whose shared
+    # host is not recorded yet (the first release), then recorded (the second).
+    "databricks-switched.yaml": _databricks_switched(None),
+    "databricks-onboarded.yaml": _databricks_switched(PRODUCTION_HOST),
 }
 
 

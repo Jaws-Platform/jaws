@@ -37,6 +37,13 @@ if [ "$_dbx_enabled" != "true" ]; then
   return 0
 fi
 _dbx_parameter=$(yq -r .databricks.secret_parameter "$_dbx_config") || return 1
+if [ "$_dbx_account" = "production" ]; then
+  # Production's own parameter, when config.yaml gives it one: the secret is
+  # stored in each account under that account's name.
+  _dbx_override=$(yq -r .production.overrides.databricks.secret_parameter "$_dbx_config") || return 1
+  if [ "$_dbx_override" != "null" ]; then _dbx_parameter=$_dbx_override; fi
+  unset _dbx_override
+fi
 _dbx_secret=$(aws ssm get-parameter --with-decryption --name "$_dbx_parameter" \
   --query Parameter.Value --output text) || return 1
 # A mask covers one line; refuse anything else without printing it.

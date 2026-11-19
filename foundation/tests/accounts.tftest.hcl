@@ -540,3 +540,161 @@ run "rejects_production_before_its_admin_role_is_known" {
 
   expect_failures = [data.aws_caller_identity.current]
 }
+
+# Databricks moves as a whole: both accounts use the one Databricks account,
+# which holds one metastore per region, so it is enabled in one at a time
+# (tests/test_databricks_accounts.py). Production builds it in two releases:
+# the metastore, the audit logs and the shared host first; then, once the
+# host's URL is recorded in config.yaml, the onboarded datasets.
+run "databricks_in_production_starts_with_the_host" {
+  command = plan
+
+  variables {
+    account     = "production"
+    config_file = "tests/fixtures/databricks-switched.yaml"
+  }
+
+  # The host exists after this apply and config.yaml does not name its URL yet:
+  # the check says so on every plan until the next release records it.
+  expect_failures = [check.shared_host_url]
+
+  override_module {
+    target = module.databricks_shared_host
+    outputs = {
+      workspace_id  = 1111111111111111
+      workspace_url = "https://dbc-0f0f0f0f-aaaa.cloud.databricks.com"
+    }
+  }
+
+  override_data {
+    target = data.aws_caller_identity.current
+    values = {
+      account_id = "570327089884"
+    }
+  }
+
+  override_module {
+    target = module.sites_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-cli"
+    }
+  }
+
+  assert {
+    condition     = length(module.databricks_metastore) == 1 && length(module.databricks_audit_logs) == 1 && length(module.databricks_shared_host) == 1
+    error_message = "the first release in production creates the metastore, the audit log delivery and the shared host"
+  }
+
+  assert {
+    condition     = local.databricks.metastore_name == "jaws-us-east-1" && local.databricks.audit_bucket == "jaws-databricks-audit-logs" && local.databricks_host_name == "jaws-shared"
+    error_message = "production's metastore, audit bucket and shared host carry production's names"
+  }
+
+  assert {
+    condition     = length(local.onboarded_datasets) == 0 && length(module.dataset_catalog_storage) == 0 && length(module.producer_catalog) == 0 && length(module.databricks_dataset) == 0
+    error_message = "no dataset is onboarded before the host's URL is recorded: their provider is configured from it"
+  }
+
+  assert {
+    condition     = keys(module.databricks_ci_plan) == ["braveheart-databricks"] && module.databricks_ci_plan["braveheart-databricks"].role_name == "jaws-braveheart-databricks-ci-plan" && module.databricks_ci_apply["braveheart-databricks"].role_name == "jaws-braveheart-databricks-ci-apply"
+    error_message = "a workspace project that has moved has its roles in production, under production's names"
+  }
+}
+
+run "databricks_in_production_onboards_once_the_host_is_recorded" {
+  command = plan
+
+  variables {
+    account     = "production"
+    config_file = "tests/fixtures/databricks-onboarded.yaml"
+  }
+
+  override_data {
+    target = data.aws_caller_identity.current
+    values = {
+      account_id = "570327089884"
+    }
+  }
+
+  override_module {
+    target = module.sites_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-cli"
+    }
+  }
+
+  override_module {
+    target = module.databricks_shared_host
+    outputs = {
+      workspace_id  = 1111111111111111
+      workspace_url = "https://dbc-0f0f0f0f-aaaa.cloud.databricks.com"
+    }
+  }
+
+  override_module {
+    target = module.dataset_catalog_storage
+    outputs = {
+      url                     = "s3://jaws-dataset-catalogs/managed"
+      external_location_name  = "jaws-dataset-catalogs"
+      storage_credential_name = "jaws-dataset-catalogs"
+      bucket_name             = "jaws-dataset-catalogs"
+      uc_role_arn             = "arn:aws:iam::570327089884:role/jaws-dataset-catalogs"
+    }
+  }
+
+  assert {
+    condition     = jsonencode(keys(local.onboarded_datasets)) == jsonencode(["braveheart-selfplay-positions"]) && length(module.dataset_catalog_storage) == 1 && jsonencode(keys(module.producer_catalog)) == jsonencode(["braveheart_selfplay"])
+    error_message = "with the host recorded, production onboards the registry's datasets under their producers' catalogs"
+  }
+
+  assert {
+    condition     = local.onboarded_datasets["braveheart-selfplay-positions"].platform_name == "jaws-ds-braveheart-selfplay-positions" && local.onboarded_datasets["braveheart-selfplay-positions"].bucket == "jaws-braveheart-selfplay-positions"
+    error_message = "production's dataset role and the bucket it reads carry production's names: nothing points at the management account"
+  }
+}
+
+run "management_has_no_databricks_after_the_switch" {
+  command = plan
+
+  variables {
+    config_file = "tests/fixtures/databricks-switched.yaml"
+  }
+
+  override_module {
+    target = module.sites_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:650503560686:repository/jwall-engineering-sites"
+    }
+  }
+
+  override_module {
+    target = module.site_bucket["main-site"]
+    outputs = {
+      arn = "arn:aws:s3:::jwall-engineering-main-site"
+    }
+  }
+
+  override_module {
+    target = module.site_bucket["cs-survival-guide"]
+    outputs = {
+      arn = "arn:aws:s3:::jwall-engineering-cs-survival-guide"
+    }
+  }
+
+  override_module {
+    target = module.site_bucket["guitar-knowledge-base"]
+    outputs = {
+      arn = "arn:aws:s3:::jwall-engineering-guitar-knowledge-base"
+    }
+  }
+
+  assert {
+    condition     = length(module.databricks_metastore) == 0 && length(module.databricks_audit_logs) == 0 && length(module.databricks_shared_host) == 0 && length(module.dataset_catalog_storage) == 0 && length(module.producer_catalog) == 0 && length(module.databricks_dataset) == 0
+    error_message = "once Databricks is enabled in production, management plans none of it"
+  }
+
+  assert {
+    condition     = !contains(keys(module.databricks_ci_plan), "braveheart-databricks")
+    error_message = "a workspace project that has moved has no roles left in management"
+  }
+}
