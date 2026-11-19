@@ -41,6 +41,11 @@ mock_provider "time" {}
 run "management_is_unchanged_by_default" {
   command = plan
 
+  assert {
+    condition     = local.hosts_task_runners && jsonencode(local.infra_ci.foundation.service_linked_role_services) == jsonencode(["spot.amazonaws.com"])
+    error_message = "management runs task runners, so the infra roles may read, create and tag its EC2 Spot service-linked role"
+  }
+
   override_module {
     target = module.databricks_shared_host
     outputs = {
@@ -148,6 +153,11 @@ run "management_is_unchanged_by_default" {
 
 run "production_starts_empty" {
   command = plan
+
+  assert {
+    condition     = !local.hosts_task_runners && length(local.infra_ci.foundation.service_linked_role_services) == 0
+    error_message = "an account with no task runner grants nothing on the EC2 Spot service-linked role"
+  }
 
   variables {
     account     = "production"
@@ -270,6 +280,11 @@ run "production_takes_its_managed_by_from_the_configuration" {
 
 run "a_moving_project_has_roles_in_production" {
   command = plan
+
+  assert {
+    condition     = local.hosts_task_runners && jsonencode(local.infra_ci.foundation.service_linked_role_services) == jsonencode(["spot.amazonaws.com"])
+    error_message = "a moving project's task runner (braveheart-trainer here) makes production need the EC2 Spot service-linked role"
+  }
 
   variables {
     account     = "production"

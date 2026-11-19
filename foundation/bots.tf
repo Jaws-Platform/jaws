@@ -67,6 +67,14 @@ locals {
   # role, <org>-<key>-task[-<profile>].
   bot_task_profiles = { for k, p in local.tool_config.projects : k => p.task_profiles if length(try(p.task_profiles, [])) > 0 }
 
+  # Whether this account runs anyone's remote tasks: the same projects
+  # bot_ci_task makes launch roles for. Spot tasks need the account's EC2 Spot
+  # service-linked role, which the foundation owns, and which EC2 would create
+  # only for a caller allowed to, and a task launch role is not. A project file
+  # picks spot or on demand per profile, out of this repository's sight, so any
+  # task runner counts.
+  hosts_task_runners = anytrue([for key, _ in local.bot_task_types : try(local.serves[key], false)])
+
   # Bots with dataset components, and their buckets, <Organization>-<project>-<name>.
   # Their plan and apply roles may read and configure these buckets, never
   # their objects. Only the buckets that carry this account's prefix: a project
@@ -90,7 +98,7 @@ locals {
 module "bot_ci_plan" {
   for_each = local.served_bots
   source   = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version  = "0.28.0"
+  version  = "0.29.0"
 
   project            = each.key
   name_root          = local.context.organization
@@ -114,7 +122,7 @@ module "bot_ci_plan" {
 module "bot_ci_apply" {
   for_each = local.served_bots
   source   = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version  = "0.28.0"
+  version  = "0.29.0"
 
   project            = each.key
   name_root          = local.context.organization
@@ -139,7 +147,7 @@ module "bot_ci_apply" {
 module "bot_ci_release" {
   for_each = { for key, bot in local.served_bots : key => bot if !contains(local.research_projects, key) }
   source   = "jwallace145/jwall-engineering/aws//modules/ci-release-role"
-  version  = "0.28.0"
+  version  = "0.29.0"
 
   project           = each.key
   name_root         = local.context.organization
@@ -158,7 +166,7 @@ module "bot_ci_release" {
 module "bot_ci_task" {
   for_each = { for key, types in local.bot_task_types : key => types if try(local.serves[key], false) }
   source   = "jwallace145/jwall-engineering/aws//modules/ci-task-role"
-  version  = "0.28.0"
+  version  = "0.29.0"
 
   project           = each.key
   name_root         = local.context.organization
