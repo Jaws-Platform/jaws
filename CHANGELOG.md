@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.65.0](https://github.com/jwallace145/jaws/compare/v0.64.0...v0.65.0) (2026-11-19)
+
+
+### Features
+
+* **config:** start moving braveheart to the production account ([#247](https://github.com/jwallace145/jaws/issues/247)) ([1b31086](https://github.com/jwallace145/jaws/commit/1b31086b311b3ddd505f52e28a2cf79c84b168a3))
+* **foundation:** let the infra roles read and create the account's EC2 Spot service-linked role ([#248](https://github.com/jwallace145/jaws/issues/248)) ([68d0a1c](https://github.com/jwallace145/jaws/commit/68d0a1c43eacb9f485db4da9b286d4cdaf5dc6a9))
+
 ## [0.64.0](https://github.com/jwallace145/jaws/compare/v0.63.0...v0.64.0) (2026-11-19)
 
 
