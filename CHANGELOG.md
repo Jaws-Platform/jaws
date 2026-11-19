@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.63.0](https://github.com/jwallace145/jaws/compare/v0.62.0...v0.63.0) (2026-11-19)
+
+
+### Features
+
+* **config:** switch Databricks to the production account and retire databricks-poc ([#239](https://github.com/jwallace145/jaws/issues/239)) ([744d815](https://github.com/jwallace145/jaws/commit/744d8154ae92ef0c1f11168ad7474cfb8150d5be))
+
+
+### Bug Fixes
+
+* **databricks:** name the audit log delivery role per account ([#241](https://github.com/jwallace145/jaws/issues/241)) ([98d7726](https://github.com/jwallace145/jaws/commit/98d772610e88a9d5192e2bf7f026553c1a8785f4))
+* **databricks:** never print the client secret outside GitHub Actions ([#233](https://github.com/jwallace145/jaws/issues/233)) ([a3ef15e](https://github.com/jwallace145/jaws/commit/a3ef15e540136018e3ebc6b3209fab331f38ae36))
+
 ## [0.62.0](https://github.com/jwallace145/jaws/compare/v0.61.0...v0.62.0) (2026-11-19)
 
 
