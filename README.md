@@ -300,8 +300,11 @@ about 20–30 minutes:
 few values a workflow needs to build a role ARN: every workflow gets a
 project's account from it (`config env --project <name>`), never from its own
 reading of `config.yaml`. **Bot apply** and **Databricks apply** take an
-`account` input for the same choice. `braveheart-bot` has run in production
-since 2026-11-18; every other project still addresses the management account.
+`account` input for the same choice. `production.projects` in `config.yaml` is
+the list of where each project stands: `braveheart-bot`, the three sites and
+`braveheart-databricks` have moved, and `braveheart-selfplay`,
+`braveheart-trainer` and the engine, `braveheart`, are moving. Every other
+project still addresses the management account.
 
 ## Shared modules from the Terraform Registry
 
