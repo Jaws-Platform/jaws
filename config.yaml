@@ -150,18 +150,12 @@ projects:
     # image and a lichess-bot only, running a pinned release of the engine's
     # repository. No task runner and no datasets, so nothing to allow here.
     {}
-  databricks-poc:
-    # A Databricks workspace project. `vpc_cidr` is allocated here so IP capacity is
-    # central (/16 to /20; no overlap with another project or the bot VPC 10.0.0.0/16).
-    databricks:
-      compute_policies: [small-interactive, jobs]
-      cost_center: cc-0000
-      vpc_cidr: 10.40.0.0/16
-      admins: [jimmy.wallace145@gmail.com]
   braveheart-databricks:
     # Braveheart's Databricks workspace (Braveheart-Chess/braveheart-databricks), for its
-    # NNUE training data. Billed to Braveheart; 10.48.0.0/16 keeps clear of the bot
-    # VPC, databricks-poc and the 10.40-10.41 ranges the tests use.
+    # NNUE training data. Billed to Braveheart. `vpc_cidr` is allocated here so IP
+    # capacity is central (/16 to /20; no overlap with another project or the bot VPC
+    # 10.0.0.0/16); 10.48.0.0/16 keeps clear of the 10.40-10.41 ranges the tests use.
+    # databricks-poc was retired when Databricks moved to production (2026-11-19).
     databricks:
       compute_policies: [small-interactive, jobs]
       cost_center: braveheart
@@ -176,7 +170,9 @@ databricks:
   # The account and the infra service principal (its application/client ID; the
   # secret is in SSM). Flip `enabled` to true once the one-time setup is done: the
   # foundation's Databricks resources and the `live` checks wait for it.
-  enabled: true
+  # Enabled in one account at a time (docs/databricks.md, "One account at a time"):
+  # torn down here on 2026-11-19 and rebuilt in production (the override below).
+  enabled: false
   account_id: 64826090-46b0-471f-b2d6-f3e7490b992c
   client_id: 59a6c509-4d02-4622-b907-d42da61b2119
   secret_parameter: /jwall-engineering/databricks/client-secret
@@ -239,6 +235,7 @@ production:
     # other's bucket (docs/datasets.md, "Moving a dataset project to production").
     braveheart-selfplay: moving
     braveheart-trainer: moving # with its nets, one release after selfplay
+    braveheart-databricks: moved # rebuilt in production with Databricks; its old stacks destroyed 2026-11-19
   overrides:
     aws:
       account_id: "570327089884"
@@ -258,7 +255,7 @@ production:
       # registrar switched to its name servers (2026-11-18).
       zone_id: Z0644006DW6W2HALU9BI
     databricks:
-      enabled: false # Databricks moves last, as a whole
+      enabled: true # rebuilt here as a whole on 2026-11-19 (docs/databricks.md, "Moving Databricks to the production account")
       # Its names there, so that nothing created in production (the roles'
       # policies, at the bootstrap) names the management account's.
       secret_parameter: /jaws/databricks/client-secret

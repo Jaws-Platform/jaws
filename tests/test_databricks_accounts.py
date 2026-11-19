@@ -38,7 +38,7 @@ def _config(tmp_path: Path, management: bool, production: bool, host: Any = None
     production's shared host URL (None: not created yet)."""
     config = fixture_config()
     databricks = config["databricks"]
-    overrides = config["production"]["overrides"]["databricks"]  # type: ignore[index]
+    overrides = config["production"]["overrides"]["databricks"]
     assert isinstance(databricks, dict)
     databricks["enabled"] = management
     overrides["enabled"] = production
@@ -84,7 +84,7 @@ def test_production_never_inherits_managements_host_url(tmp_path: Path) -> None:
     assert production.databricks.shared_host_url is None
 
     config = fixture_config()
-    del config["production"]["overrides"]["databricks"]["shared_host_url"]  # type: ignore[index]
+    del config["production"]["overrides"]["databricks"]["shared_host_url"]
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(config, sort_keys=False))
     with pytest.raises(ConfigError, match="inherits the management account's shared_host_url"):

@@ -142,7 +142,9 @@ def test_the_production_view_is_the_production_account() -> None:
     assert settings.context.organization == "jaws"
     assert settings.state.bucket == "jaws-terraform-state-570327089884"
     assert settings.ecr.repository == "jaws-cli"
-    assert settings.databricks is not None and settings.databricks.enabled is False
+    # Databricks moved to production as a whole on 2026-11-19 (docs/databricks.md).
+    assert settings.databricks is not None and settings.databricks.enabled is True
+    assert settings.databricks_account == "production"
 
 
 def test_the_production_view_shares_everything_it_does_not_override() -> None:

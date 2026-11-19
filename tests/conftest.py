@@ -4,8 +4,10 @@ import json
 import logging
 import os
 import shutil
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -13,6 +15,7 @@ import yaml
 
 from jaws.project import Project
 from jaws.settings import (
+    DatabricksProject,
     DatasetRetention,
     ProjectGuardrails,
     Settings,
@@ -59,19 +62,60 @@ BRAVEHEART_GUARDRAILS = ProjectGuardrails(
 )
 
 
-def fixture_settings(path: Path = FIXTURES / "config.yaml", **kwargs: object) -> Settings:
-    """config.yaml's fixture copy, with the braveheart sample's central entry."""
-    loaded = load_settings(path, **kwargs)  # type: ignore[arg-type]
-    return with_guardrails(loaded, "braveheart", BRAVEHEART_GUARDRAILS)
+#: The central entry of the databricks-poc sample (fixtures/bots/databricks-poc.yaml),
+#: the suite's Databricks workspace project. Stated here, not read from config.yaml,
+#: which dropped the real project when it was retired (2026-11-19).
+DATABRICKS_POC_GUARDRAILS = ProjectGuardrails(
+    databricks=DatabricksProject(
+        compute_policies=("small-interactive", "jobs"),
+        cost_center="cc-0000",
+        vpc_cidr="10.40.0.0/16",
+        admins=("jimmy.wallace145@gmail.com",),
+    )
+)
 
 
-def fixture_config(path: Path = FIXTURES / "config.yaml") -> dict[str, object]:
-    """The same, as the raw mapping a test writes out as a workspace's config.yaml."""
-    config: dict[str, object] = yaml.safe_load(path.read_text())
-    projects = config["projects"]
-    assert isinstance(projects, dict)
-    projects["braveheart"] = BRAVEHEART_GUARDRAILS.model_dump(mode="json")
+def databricks_in_management(config: dict[str, Any]) -> dict[str, Any]:
+    """`config` with Databricks enabled in the management account, as the suite's
+    Databricks tests expect: their samples (databricks-poc, braveheart-databricks)
+    live there. Stated here, not read from config.yaml, which flips Databricks
+    between the accounts when it moves (docs/databricks.md, "One account at a time").
+    A test about production says so itself."""
+    config["databricks"]["enabled"] = True
+    overrides = config["production"]["overrides"].setdefault("databricks", {})
+    overrides["enabled"] = False
+    config["production"]["projects"].pop("braveheart-databricks", None)
+    config["projects"]["databricks-poc"] = DATABRICKS_POC_GUARDRAILS.model_dump(
+        mode="json", exclude_defaults=True
+    )
     return config
+
+
+def fixture_config(path: Path = FIXTURES / "config.yaml") -> dict[str, Any]:
+    """config.yaml's fixture copy as the suite's baseline: the braveheart sample's
+    central entry, and Databricks in the management account with the
+    databricks-poc sample. The raw mapping a test writes out as a config.yaml."""
+    config: dict[str, Any] = yaml.safe_load(path.read_text())
+    config["projects"]["braveheart"] = BRAVEHEART_GUARDRAILS.model_dump(mode="json")
+    return databricks_in_management(config)
+
+
+_BASELINE: dict[str, Path] = {}
+
+
+def baseline_config_path() -> Path:
+    """fixture_config() written once per session, for load_settings."""
+    if "path" not in _BASELINE:
+        directory = Path(tempfile.mkdtemp(prefix="jaws-baseline-"))
+        path = directory / "config.yaml"
+        path.write_text(yaml.safe_dump(fixture_config(), sort_keys=False))
+        _BASELINE["path"] = path
+    return _BASELINE["path"]
+
+
+def fixture_settings(path: Path | None = None, **kwargs: object) -> Settings:
+    """The suite's baseline settings (fixture_config()), or another file's."""
+    return load_settings(path or baseline_config_path(), **kwargs)  # type: ignore[arg-type]
 
 
 def management_only(settings: Settings, *projects: str) -> Settings:
@@ -209,7 +253,7 @@ def research_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
     root = tmp_path / "research-workspace"
     root.mkdir()
     shutil.copy(FIXTURES / "bots" / "math-prover.yaml", root / "jaws.yaml")
-    config = yaml.safe_load((FIXTURES / "config.yaml").read_text())
+    config = fixture_config()
     config["projects"]["math-prover"] = MATH_PROVER_GUARDRAILS.model_dump(mode="json")
     (root / "config.yaml").write_text(yaml.safe_dump(config))
     monkeypatch.chdir(root)
@@ -225,7 +269,7 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]
     root = tmp_path / "workspace"
     root.mkdir()
     shutil.copy(FIXTURES / "sites" / "guitar-knowledge-base.yaml", root / "jaws.yaml")
-    config = yaml.safe_load((FIXTURES / "config.yaml").read_text())
+    config = fixture_config()
     config["production"]["projects"].pop("guitar-knowledge-base", None)
     (root / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
     monkeypatch.chdir(root)
@@ -239,7 +283,7 @@ def databricks_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Ite
     root = tmp_path / "databricks-workspace"
     root.mkdir()
     shutil.copy(FIXTURES / "bots" / "databricks-poc.yaml", root / "jaws.yaml")
-    config = yaml.safe_load((FIXTURES / "config.yaml").read_text())
+    config = fixture_config()
     config["databricks"]["enabled"] = True
     config["databricks"]["account_id"] = "11111111-1111-1111-1111-111111111111"
     config["databricks"]["client_id"] = "22222222-2222-2222-2222-222222222222"

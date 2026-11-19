@@ -8,10 +8,12 @@ dedicated bucket, central compute policies, and an event log of every run.
 The project repository holds one file and no Terraform; the infrastructure is
 planned and applied from here, like a bot.
 
-The first consumer is `databricks-poc`. Nothing here has run against a real
-Databricks account yet: it is written from the code and the tests, and the
-parts the first live apply must confirm are listed under
-[Known gaps](#known-gaps).
+The one workspace project today is `braveheart-databricks`, in the production
+account since Databricks moved there on 2026-11-19
+([Moving Databricks to the production account](#moving-databricks-to-the-production-account)).
+The first, `databricks-poc`, was retired then; its file stays as the sample
+below and in the tests. The parts no live apply has confirmed yet are listed
+under [Known gaps](#known-gaps).
 
 Contents: [setup](#one-time-setup), [onboarding a project](#onboarding-a-project),
 [the project file](#the-project-file), [plan](#what-plan-shows),

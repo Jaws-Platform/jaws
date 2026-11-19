@@ -527,7 +527,6 @@ def _hcl_list(block: str, attribute: str) -> list[str]:
 def test_the_registered_databricks_projects() -> None:
     # repository_id is GitHub's numeric ID: gh api repos/<owner>/<repo> --jq .id
     assert databricks_registry() == {
-        "databricks-poc": ("jwallace145/databricks-poc", "1458298100"),
         "braveheart-databricks": ("Braveheart-Chess/braveheart-databricks", "1458504699"),
     }
 
@@ -538,7 +537,6 @@ def test_every_databricks_project_has_numeric_repository_and_owner_ids() -> None
     entries = re.findall(r"^ *([a-z0-9-]+) *= *\{([^}]*)\}", _databricks_block(), re.M)
     fields = {key: dict(re.findall(r'([a-z_]+) *= *"([^"]*)"', body)) for key, body in entries}
     assert {key: (f.get("repository_id"), f.get("owner_id")) for key, f in fields.items()} == {
-        "databricks-poc": ("1458298100", "35950238"),
         "braveheart-databricks": ("1458504699", "356866252"),
     }
 
@@ -643,7 +641,10 @@ def test_databricks_account_resources_wait_for_enabled() -> None:
     # The foundation never creates the secret: the owner sets it with the CLI.
     assert "aws_ssm_parameter" not in text
     # Enabled: the foundation plan creates the metastore and the audit log delivery.
-    assert yaml_config()["databricks"]["enabled"] is True
+    # Enabled in one account at a time: production, since the move (2026-11-19).
+    config = yaml_config()
+    assert config["databricks"]["enabled"] is False
+    assert config["production"]["overrides"]["databricks"]["enabled"] is True
 
 
 def yaml_config() -> dict[str, Any]:

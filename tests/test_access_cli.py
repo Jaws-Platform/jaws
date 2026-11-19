@@ -15,7 +15,7 @@ import pytest
 import yaml
 
 from jaws import cli
-from tests.conftest import FIXTURES
+from tests.conftest import FIXTURES, fixture_config
 from tests.test_cli import _as_role, _calls, runner
 
 SELFPLAY_PLAN_ROLE = (
@@ -31,7 +31,7 @@ def selfplay_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
     root.mkdir()
     shutil.copy(FIXTURES / "registry" / "braveheart-selfplay.yaml", root / "jaws.yaml")
     # Management only: these tests are about the handshake, not the move.
-    config = yaml.safe_load((FIXTURES / "config.yaml").read_text())
+    config = fixture_config()
     config["production"]["projects"].pop("braveheart-selfplay", None)
     (root / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
     files = tmp_path / "project-files"

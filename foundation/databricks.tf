@@ -45,7 +45,6 @@ locals {
   #                federation subject names both (docs/databricks.md).
   # One line per entry, as in bots.tf (the workflows read this block).
   databricks_projects = {
-    databricks-poc        = { repository = "jwallace145/databricks-poc", repository_id = "1458298100", owner_id = "35950238" }
     braveheart-databricks = { repository = "Braveheart-Chess/braveheart-databricks", repository_id = "1458504699", owner_id = "356866252" }
   }
 

@@ -141,8 +141,8 @@ run "management_is_unchanged_by_default" {
   }
 
   assert {
-    condition     = length(module.databricks_metastore) == 1
-    error_message = "Databricks stays in management until it moves as a whole"
+    condition     = length(module.databricks_metastore) == 0 && length(module.databricks_shared_host) == 0 && length(module.producer_catalog) == 0
+    error_message = "Databricks moved to production as a whole (2026-11-19): management plans none of it"
   }
 }
 

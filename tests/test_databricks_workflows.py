@@ -236,7 +236,6 @@ def _projects(path: Path | None = None) -> subprocess.CompletedProcess[str]:
 @needs_yq
 def test_the_registry_script_reads_databricks_tf(tmp_path: Path) -> None:
     assert json.loads(_projects().stdout) == [
-        {"project": "databricks-poc", "repository": "jwallace145/databricks-poc"},
         {
             "project": "braveheart-databricks",
             "repository": "Braveheart-Chess/braveheart-databricks",
@@ -251,7 +250,6 @@ def test_the_registry_script_reads_databricks_tf(tmp_path: Path) -> None:
     filled.write_text(text.replace("  databricks_projects = {\n", entry))
     assert json.loads(_projects(filled).stdout) == [
         {"project": "other", "repository": "jwallace145/other"},
-        {"project": "databricks-poc", "repository": "jwallace145/databricks-poc"},
         {
             "project": "braveheart-databricks",
             "repository": "Braveheart-Chess/braveheart-databricks",
