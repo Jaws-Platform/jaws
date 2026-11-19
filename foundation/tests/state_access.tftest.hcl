@@ -28,6 +28,17 @@ mock_provider "databricks" {
 
 mock_provider "time" {}
 
+# The management account's EC2 Spot service-linked role is imported
+# (spot_service_linked_role.tf), and a mock provider cannot import: this stands
+# in for the existing role wherever a run plans the import.
+override_resource {
+  target = module.spot_service_linked_role[0].aws_iam_service_linked_role.this
+  values = {
+    arn  = "arn:aws:iam::650503560686:role/aws-service-role/spot.amazonaws.com/AWSServiceRoleForEC2Spot"
+    name = "AWSServiceRoleForEC2Spot"
+  }
+}
+
 override_module {
   target = module.databricks_shared_host
   outputs = {

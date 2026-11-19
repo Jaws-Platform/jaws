@@ -207,6 +207,14 @@ repository's workflows can assume, an empty image repository, an empty hosted
 zone that is not yet authoritative, and the OIDC provider. Cost: the hosted
 zone, $0.50 a month. Everything in the management account is untouched.
 
+The account's EC2 Spot service-linked role (`AWSServiceRoleForEC2Spot`) comes
+later and needs no step here. The foundation creates it with the first project
+that brings a task runner (`foundation/spot_service_linked_role.tf`). A new
+account has none, and EC2 creates it on the first Spot launch only for a caller
+allowed to; a task launch role is not, so without the foundation's role every
+spot task fails with `AuthFailure.ServiceLinkedRoleCreationNotPermitted`. Don't
+create it by hand: the foundation would then have to import it.
+
 ## Undoing it
 
 Before any project has moved, the production foundation can be removed with

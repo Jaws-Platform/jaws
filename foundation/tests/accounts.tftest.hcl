@@ -34,6 +34,17 @@ mock_provider "databricks" {
 
 mock_provider "time" {}
 
+# The management account's EC2 Spot service-linked role is imported
+# (spot_service_linked_role.tf), and a mock provider cannot import: this stands
+# in for the existing role wherever a run plans the import.
+override_resource {
+  target = module.spot_service_linked_role[0].aws_iam_service_linked_role.this
+  values = {
+    arn  = "arn:aws:iam::650503560686:role/aws-service-role/spot.amazonaws.com/AWSServiceRoleForEC2Spot"
+    name = "AWSServiceRoleForEC2Spot"
+  }
+}
+
 # Check blocks compare module outputs with ARNs the stack derives; mocked,
 # those outputs are unknown at plan, so each run gives them the derived values
 # of the account it plans.
@@ -44,6 +55,11 @@ run "management_is_unchanged_by_default" {
   assert {
     condition     = local.hosts_task_runners && jsonencode(local.infra_ci.foundation.service_linked_role_services) == jsonencode(["spot.amazonaws.com"])
     error_message = "management runs task runners, so the infra roles may read, create and tag its EC2 Spot service-linked role"
+  }
+
+  assert {
+    condition     = length(module.spot_service_linked_role) == 1
+    error_message = "management runs task runners, so the foundation owns its EC2 Spot service-linked role (imported)"
   }
 
   override_module {
@@ -157,6 +173,11 @@ run "production_starts_empty" {
   assert {
     condition     = !local.hosts_task_runners && length(local.infra_ci.foundation.service_linked_role_services) == 0
     error_message = "an account with no task runner grants nothing on the EC2 Spot service-linked role"
+  }
+
+  assert {
+    condition     = length(module.spot_service_linked_role) == 0
+    error_message = "an account with no task runner has no EC2 Spot service-linked role from the foundation"
   }
 
   variables {
@@ -284,6 +305,11 @@ run "a_moving_project_has_roles_in_production" {
   assert {
     condition     = local.hosts_task_runners && jsonencode(local.infra_ci.foundation.service_linked_role_services) == jsonencode(["spot.amazonaws.com"])
     error_message = "a moving project's task runner (braveheart-trainer here) makes production need the EC2 Spot service-linked role"
+  }
+
+  assert {
+    condition     = length(module.spot_service_linked_role) == 1
+    error_message = "a moving project's task runner makes the foundation create production's EC2 Spot service-linked role"
   }
 
   variables {

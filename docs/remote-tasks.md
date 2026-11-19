@@ -389,6 +389,12 @@ Raise them in the Service Quotas console (Amazon EC2 → the quota → Request
 increase). 16 vCPUs on demand runs four `g6.xlarge` at once. Increases take
 hours to a day. Raise the profile's `max_vcpus` with the quota.
 
+Spot tasks also need the account's EC2 Spot service-linked role,
+`AWSServiceRoleForEC2Spot`. The foundation owns it in every account with a task
+runner (`foundation/spot_service_linked_role.tf`). If it is missing, a spot
+launch fails at once with `AuthFailure.ServiceLinkedRoleCreationNotPermitted`,
+not with a capacity error, so `on_demand_fallback` does not apply.
+
 ### Cost ceiling
 
 `task run` computes the worst case before it launches and logs it:
