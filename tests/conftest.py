@@ -74,6 +74,16 @@ def fixture_config(path: Path = FIXTURES / "config.yaml") -> dict[str, object]:
     return config
 
 
+def management_only(settings: Settings, *projects: str) -> Settings:
+    """`settings` with `projects` taken out of production.projects: a test about a
+    project's own behaviour states that it isn't moving, rather than inheriting
+    whatever config.yaml says today (which changes with every move)."""
+    assert settings.production is not None
+    remaining = {k: v for k, v in settings.production.projects.items() if k not in projects}
+    production = settings.production.model_copy(update={"projects": remaining})
+    return settings.model_copy(update={"production": production})
+
+
 def with_guardrails(settings: Settings, project: str, guardrails: ProjectGuardrails) -> Settings:
     """`settings` with `guardrails` as the central entry for `project`."""
     return settings.model_copy(update={"projects": {**settings.projects, project: guardrails}})

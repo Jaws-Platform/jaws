@@ -21,7 +21,7 @@ from jaws.project import Project
 from jaws.settings import Settings
 from jaws.site import load_site_config
 from jaws.stack import render_tfvars
-from tests.conftest import FIXTURES, fixture_settings, with_guardrails
+from tests.conftest import FIXTURES, fixture_settings, management_only, with_guardrails
 
 MANAGEMENT = "650503560686"
 PRODUCTION = "570327089884"
@@ -34,9 +34,11 @@ NEW_POSITIONS = "jaws-braveheart-selfplay-positions"
 
 
 def _view(account: str, projects: dict[str, str] | None = None) -> Settings:
-    """config.yaml's fixture in one account's view, with `projects` added to
-    production.projects and both accounts' positions buckets approved."""
-    settings = fixture_settings(environ={}, account=account)
+    """config.yaml's fixture in one account's view, with neither project moving
+    unless `projects` says so, and both accounts' positions buckets approved."""
+    settings = management_only(
+        fixture_settings(environ={}, account=account), "braveheart-selfplay", "braveheart-trainer"
+    )
     assert settings.production is not None
     production = settings.production.model_copy(
         update={"projects": {**settings.production.projects, **(projects or {})}}
@@ -181,3 +183,19 @@ def test_no_share_role_is_named_where_databricks_is_off(tmp_path: Path) -> None:
     project = Project.from_config(_selfplay(tmp_path, readers=[]), settings)
     (dataset,) = render_tfvars(project, settings, access=handshake)["datasets"]
     assert dataset["readers"] == []
+
+
+# -- plans of both stacks ---------------------------------------------------------
+
+
+def test_a_moving_projects_plan_comment_names_its_account() -> None:
+    from jaws.cli import plan_subject
+
+    moving = {"braveheart-selfplay": "moving"}
+    assert plan_subject("braveheart-selfplay", _view("management", moving)) == (
+        "braveheart-selfplay (management)"
+    )
+    assert plan_subject("braveheart-selfplay", _view("production", moving)) == (
+        "braveheart-selfplay (production)"
+    )
+    assert plan_subject("braveheart-selfplay", _view("management")) == "braveheart-selfplay"

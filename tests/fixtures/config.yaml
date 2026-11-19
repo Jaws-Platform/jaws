@@ -123,6 +123,11 @@ projects:
       jwall-engineering-braveheart-selfplay-positions:
         prefix: data/
         versioning: true
+      # Its home in production, the copy's destination (docs/datasets.md, "Moving a
+      # dataset project to production"). The same retention: versioned, no expiry.
+      jaws-braveheart-selfplay-positions:
+        prefix: data/
+        versioning: true
   braveheart-trainer:
     # The trainer for Braveheart's nets (Braveheart-Chess/braveheart-trainer): bullet
     # on GPU instances. It reads the positions through the selfplay bucket's
@@ -226,6 +231,9 @@ production:
     guitar-knowledge-base: moved # moved 2026-11-18; old stack destroyed, old bucket kept (README, "Moving a site")
     cs-survival-guide: moved # moved 2026-11-18; old stack destroyed, old bucket kept (README, "Moving a site")
     main-site: moved # moved 2026-11-18; old stack destroyed, old bucket kept (README, "Moving a site")
+    # With its positions; trainer follows one release later, because each reads the
+    # other's bucket (docs/datasets.md, "Moving a dataset project to production").
+    braveheart-selfplay: moving
   overrides:
     aws:
       account_id: "570327089884"

@@ -30,7 +30,10 @@ def selfplay_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
     root = tmp_path / "selfplay-workspace"
     root.mkdir()
     shutil.copy(FIXTURES / "registry" / "braveheart-selfplay.yaml", root / "jaws.yaml")
-    shutil.copy(FIXTURES / "config.yaml", root / "config.yaml")
+    # Management only: these tests are about the handshake, not the move.
+    config = yaml.safe_load((FIXTURES / "config.yaml").read_text())
+    config["production"]["projects"].pop("braveheart-selfplay", None)
+    (root / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
     files = tmp_path / "project-files"
     files.mkdir()
     shutil.copy(

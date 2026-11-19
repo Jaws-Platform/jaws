@@ -81,6 +81,9 @@ projects:
       jwall-engineering-braveheart-selfplay-positions:
         prefix: data/
         versioning: true
+      jaws-braveheart-selfplay-positions:
+        prefix: data/
+        versioning: true
   braveheart-trainer:
     instance_types:
     - c8a.xlarge

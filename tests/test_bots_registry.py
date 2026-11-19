@@ -214,6 +214,31 @@ def test_container_release_role_is_optional() -> None:
     assert role["default"] == ""
 
 
+def test_bot_plan_plans_a_moving_projects_old_stack_too() -> None:
+    """While a project moves, both its stacks are planned on every pull request, so
+    a change to the old one (the copy reader on its buckets) is reviewed too."""
+    ci: dict[Any, Any] = _yaml(".github/workflows/ci.yml")
+    job = ci["jobs"]["bot-plan"]
+    assert job["strategy"]["matrix"]["account"] == ["auto", "management"]
+    steps = job["steps"]
+    by_id = {s["id"]: s for s in steps if "id" in s}
+    decide = by_id["account"]["run"]
+    # `management` plans only a moving project: `auto` already plans every other
+    # project there, and a moved one has no stack there.
+    assert '"$ACCOUNT" = auto' in decide and "--account management config env" in decide
+    ids = [s.get("id") for s in steps]
+    assert ids.index("account") < ids.index("role") < ids.index("assume")
+    for gated in ("role", "file"):
+        assert by_id[gated]["if"] == "steps.account.outputs.plan == 'true'"
+    assert "$FLAG" in by_id["role"]["run"]
+    plan = next(s for s in steps if s.get("name") == "jaws plan")
+    assert "$FLAG" in plan["run"] and plan["env"]["FLAG"] == "${{ steps.account.outputs.flag }}"
+    comment = next(s for s in steps if s.get("name", "").startswith("Post plan comment"))
+    assert "matrix.account" in comment["with"]["header"]
+    upload = next(s for s in steps if s.get("name", "").startswith("Upload the run log"))
+    assert "matrix.account" in upload["with"]["name"]
+
+
 def test_bot_plan_runs_without_a_variable_and_skips_until_roles_exist() -> None:
     ci: dict[Any, Any] = _yaml(".github/workflows/ci.yml")
     job = ci["jobs"]["bot-plan"]
@@ -343,6 +368,14 @@ def test_bots_output_names_the_task_role() -> None:
     assert "task_role_arn" in outputs and "module.bot_ci_task[key].role_arn" in outputs
 
 
+def _in_production() -> set[str]:
+    """The projects config.yaml lists under production.projects."""
+    import yaml
+
+    config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
+    return set((config.get("production") or {}).get("projects") or {})
+
+
 def _bot_datasets() -> dict[str, list[str]]:
     return {k: list(p["datasets"]) for k, p in _projects().items() if p.get("datasets")}
 
@@ -351,13 +384,19 @@ def test_dataset_buckets_match_the_project_files() -> None:
     expected = {}
     for project in registry():
         components = project_file(project)["components"]
-        buckets = [c["bucket"] for c in components if c["kind"] == "dataset"]
+        names = [c["name"] for c in components if c["kind"] == "dataset"]
+        # Approved under each account's name where the project has a stack: the
+        # management account's, and production's too once it is moving there.
+        organizations = ["jwall-engineering"] + (["jaws"] if project in _in_production() else [])
+        buckets = [f"{org}-{project}-{name}" for name in names for org in organizations]
         if buckets:
             expected[project] = buckets
     # The engine gave its dataset up at the split's cutover; the data is the satellites'.
     assert "braveheart" not in expected
     assert {"braveheart-selfplay", "braveheart-trainer"} <= set(expected)
-    assert _bot_datasets() == expected
+    assert {k: sorted(v) for k, v in _bot_datasets().items()} == {
+        k: sorted(v) for k, v in expected.items()
+    }
     assert set(_bot_datasets()) <= set(registry())
 
 

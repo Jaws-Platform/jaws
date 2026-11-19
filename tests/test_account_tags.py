@@ -31,7 +31,7 @@ from jaws.settings import Settings, load_settings
 from jaws.site import Site, SiteConfig, load_site_config
 from jaws.stack import render_tfvars
 from jaws.tasks import TaskSpec, task_tags
-from tests.conftest import FIXTURES, SITE_FIXTURES
+from tests.conftest import FIXTURES, SITE_FIXTURES, management_only
 from tests.stack_plans.render import ACCOUNT_OUTPUTS, _handshakes
 
 GOLDEN = FIXTURES / "renders" / "management.json"
@@ -45,7 +45,11 @@ DATABRICKS_POC = FIXTURES / "bots" / "databricks-poc.yaml"
 
 
 def _management() -> Settings:
-    return load_settings(CONFIG, environ={})
+    """The management view with no research project moving: a moving project's
+    datasets gain production's admin as a reader, which is not a tag change."""
+    return management_only(
+        load_settings(CONFIG, environ={}), "braveheart-selfplay", "braveheart-trainer"
+    )
 
 
 def _production() -> Settings:

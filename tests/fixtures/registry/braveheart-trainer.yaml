@@ -56,4 +56,4 @@ components:
     prefix: data/
     versioning: true
     readers:
-      - arn:aws:iam::650503560686:role/jwall-engineering-braveheart-selfplay-task-relabel  # Relabel's retired nets
+      - braveheart-selfplay/task-relabel  # Relabel's retired nets: selfplay's relabel role, in whichever account jaws addresses
