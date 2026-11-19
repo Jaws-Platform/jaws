@@ -1,6 +1,13 @@
-# Local git hooks. Install once with `pre-commit install --hook-type commit-msg --hook-type pre-commit`.
-# CI is the authoritative check; these hooks exist so that mistakes are caught
-# before they are pushed.
+# Local git hooks. Install once with `pre-commit install` (default_install_hook_types
+# below installs all three types). pre-commit and commit-msg hooks are fast; the
+# pre-push hooks run the slow checks CI runs, each only when the push changes
+# what it covers. CI is the authoritative check; these hooks catch mistakes
+# before a pull request exists.
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+# A hook without its own `stages` runs at commit only: the pre-push stage runs
+# just the slow checks, which the commits did not.
+default_stages: [pre-commit]
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -38,3 +45,48 @@ repos:
         stages: [commit-msg]
         always_run: true
         pass_filenames: true
+
+      # The slow checks, before a push (about 3 to 4 minutes when a push touches
+      # everything). Skip once with `git push --no-verify`, and expect CI to object.
+      - id: mypy
+        name: mypy (pre-push)
+        entry: uv run mypy
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        files: ^(src|tests)/.*\.py$|^(pyproject\.toml|uv\.lock)$
+      - id: pytest
+        name: pytest (pre-push)
+        entry: uv run pytest -x
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        files: ^(src|tests|scripts|stacks|foundation|data-access|owner-access|datasets|kinds|\.github)/|^(config\.yaml|pyproject\.toml|uv\.lock|package\.json|commitlint\.config\.mjs)$
+      - id: terraform-test-foundation
+        name: terraform test, foundation (pre-push)
+        entry: bash -c 'cd foundation && terraform init -backend=false -input=false >/dev/null && terraform test'
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        files: ^(foundation|datasets)/|^config\.yaml$
+      - id: terraform-test-data-access
+        name: terraform test, data-access (pre-push)
+        entry: bash -c 'cd data-access && terraform init -backend=false -input=false >/dev/null && terraform test'
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        files: ^data-access/
+      - id: terraform-test-owner-access
+        name: terraform test, owner-access (pre-push)
+        entry: bash -c 'cd owner-access && terraform init -backend=false -input=false >/dev/null && terraform test'
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        files: ^owner-access/|^config\.yaml$
+      - id: stack-plans
+        name: stack plans against mock providers (pre-push)
+        entry: scripts/test-stack-plans.sh
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        files: ^(stacks|src|datasets|tests/stack_plans)/|^config\.yaml$

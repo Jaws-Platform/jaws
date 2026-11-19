@@ -60,13 +60,13 @@ Requirements: Terraform `>= 1.11`, [tflint](https://github.com/terraform-linters
 
 ```sh
 npm ci
-pre-commit install --hook-type commit-msg --hook-type pre-commit
+pre-commit install   # the pre-commit, commit-msg and pre-push hooks
 cd foundation && terraform init -backend=false
 tflint --init
 cd .. && uv sync                         # the infra CLI and its dev tools
 ```
 
-The `commit-msg` hook runs commitlint on every commit; the `pre-commit` hook runs `terraform fmt`, `terraform validate`, and `tflint`. CI is the authoritative check; the hooks exist so mistakes are caught before they are pushed. Skip them once with `git commit --no-verify` if you must, and expect CI to object.
+The `commit-msg` hook runs commitlint on every commit; the `pre-commit` hook runs `terraform fmt`, `terraform validate`, `tflint` and ruff. The `pre-push` hook runs the slow checks CI runs: `mypy`, `pytest`, `terraform test` in `foundation/`, `data-access/` and `owner-access/`, and `scripts/test-stack-plans.sh`. Each runs only when the push changes what it covers; about 3 to 4 minutes when a push touches everything. CI is the authoritative check; the hooks exist so mistakes are caught before a pull request exists. Skip them once with `git commit --no-verify` or `git push --no-verify` if you must, and expect CI to object. An existing checkout gets the pre-push hook by running `pre-commit install` again.
 
 ### Checks that must pass
 

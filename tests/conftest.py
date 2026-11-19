@@ -137,8 +137,15 @@ def with_guardrails(settings: Settings, project: str, guardrails: ProjectGuardra
 def _restore_environment() -> Iterator[None]:
     """Each test gets the environment back as it found it. A command adopts the old
     JES_* variables by writing os.environ (jaws.legacy), which monkeypatch does not
-    undo, so without this a JES_CONFIG set by one test chose the next test's config."""
+    undo, so without this a JES_CONFIG set by one test chose the next test's config.
+
+    It also starts every test as an owner's shell, not a workflow step: CI sets
+    GITHUB_ACTIONS, GITHUB_OUTPUT and the like, and a test that behaved
+    differently there passed locally and failed in CI (2026-11-19). A test about
+    a workflow step sets the variables it needs itself."""
     with patch.dict(os.environ):
+        for name in [k for k in os.environ if k == "CI" or k.startswith(("GITHUB_", "RUNNER_"))]:
+            del os.environ[name]
         yield
 
 

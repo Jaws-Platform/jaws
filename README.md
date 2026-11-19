@@ -556,7 +556,7 @@ No role ARN is a secret, and this repository needs none as a variable. The found
 
 ```sh
 npm ci                                   # commitlint
-pre-commit install --hook-type commit-msg --hook-type pre-commit
+pre-commit install   # the pre-commit, commit-msg and pre-push hooks
 terraform fmt -check -recursive          # from the repository root
 cd foundation
 terraform init -backend=false && terraform validate
