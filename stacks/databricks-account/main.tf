@@ -44,7 +44,7 @@ data "databricks_metastore" "this" {
 
 module "network" {
   source  = "Jaws-Platform/jaws-network/aws//modules/vpc"
-  version = "0.1.1"
+  version = "0.1.2"
 
   name                 = local.name
   cidr_block           = var.vpc_cidr
@@ -61,7 +61,7 @@ module "network" {
 
 module "nat" {
   source  = "Jaws-Platform/jaws-network/aws//modules/nat-instance"
-  version = "0.1.1"
+  version = "0.1.2"
 
   name                    = "${local.name}-nat"
   subnet_id               = module.network.public_subnet_ids[0]
@@ -72,7 +72,7 @@ module "nat" {
 
 module "workspace" {
   source  = "Jaws-Platform/jaws-databricks/aws//modules/databricks-workspace"
-  version = "0.1.1"
+  version = "0.1.2"
 
   providers = {
     databricks = databricks.account

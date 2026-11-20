@@ -30,7 +30,7 @@ locals {
 
 module "zone" {
   source  = "Jaws-Platform/jaws-static-site/aws//modules/hosted-zone"
-  version = "0.1.1"
+  version = "0.1.2"
 
   name        = local.zone_name
   comment     = "${local.context.organization}: zone owned by ${local.context.repository_tag}; records owned by project repos"

@@ -8,13 +8,13 @@ terraform:
   plan_timeout: 15m
 library:
   families:
-    Jaws-Platform/jaws-ci/aws: 0.1.1
-    Jaws-Platform/jaws-databricks/aws: 0.1.1
-    Jaws-Platform/jaws-foundation/aws: 0.1.1
-    Jaws-Platform/jaws-lichess-bot/aws: 0.1.1
-    Jaws-Platform/jaws-network/aws: 0.1.1
-    Jaws-Platform/jaws-research/aws: 0.1.1
-    Jaws-Platform/jaws-static-site/aws: 0.1.1
+    Jaws-Platform/jaws-ci/aws: 0.1.2
+    Jaws-Platform/jaws-databricks/aws: 0.1.2
+    Jaws-Platform/jaws-foundation/aws: 0.1.2
+    Jaws-Platform/jaws-lichess-bot/aws: 0.1.2
+    Jaws-Platform/jaws-network/aws: 0.1.2
+    Jaws-Platform/jaws-research/aws: 0.1.2
+    Jaws-Platform/jaws-static-site/aws: 0.1.2
 state:
   bucket: jwall-engineering-tfstate
   region: us-east-1

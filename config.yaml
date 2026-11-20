@@ -20,13 +20,13 @@ library:
   # Each family has one version: every pin of it in this repository (sites,
   # bots, Databricks, the foundation) moves with the entry here.
   families:
-    Jaws-Platform/jaws-ci/aws: 0.1.1
-    Jaws-Platform/jaws-databricks/aws: 0.1.1
-    Jaws-Platform/jaws-foundation/aws: 0.1.1
-    Jaws-Platform/jaws-lichess-bot/aws: 0.1.1
-    Jaws-Platform/jaws-network/aws: 0.1.1
-    Jaws-Platform/jaws-research/aws: 0.1.1
-    Jaws-Platform/jaws-static-site/aws: 0.1.1
+    Jaws-Platform/jaws-ci/aws: 0.1.2
+    Jaws-Platform/jaws-databricks/aws: 0.1.2
+    Jaws-Platform/jaws-foundation/aws: 0.1.2
+    Jaws-Platform/jaws-lichess-bot/aws: 0.1.2
+    Jaws-Platform/jaws-network/aws: 0.1.2
+    Jaws-Platform/jaws-research/aws: 0.1.2
+    Jaws-Platform/jaws-static-site/aws: 0.1.2
 
 state:
   bucket: jwall-engineering-tfstate

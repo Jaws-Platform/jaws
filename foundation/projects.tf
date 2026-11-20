@@ -35,7 +35,7 @@ locals {
 module "site_bucket" {
   for_each = merge(local.served_sites, { for key in local.retained_site_buckets : key => local.projects[key] })
   source   = "Jaws-Platform/jaws-static-site/aws//modules/site-bucket"
-  version  = "0.1.1"
+  version  = "0.1.2"
 
   project   = each.key
   name_root = local.context.organization
@@ -83,7 +83,7 @@ locals {
 module "site_ci_plan" {
   for_each = local.served_sites
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
-  version  = "0.1.1"
+  version  = "0.1.2"
 
   project           = each.key
   name_root         = local.context.organization
@@ -104,7 +104,7 @@ module "site_ci_plan" {
 module "site_ci_preview" {
   for_each = local.served_sites
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-preview-role"
-  version  = "0.1.1"
+  version  = "0.1.2"
 
   project           = each.key
   name_root         = local.context.organization
@@ -124,7 +124,7 @@ module "site_ci_preview" {
 module "site_ci_apply" {
   for_each = local.served_sites
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
-  version  = "0.1.1"
+  version  = "0.1.2"
 
   project           = each.key
   name_root         = local.context.organization

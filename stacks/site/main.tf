@@ -11,7 +11,7 @@ locals {
 
 module "site" {
   source  = "Jaws-Platform/jaws-static-site/aws"
-  version = "0.1.1"
+  version = "0.1.2"
 
   bucket_name                 = local.bucket_name
   bucket_regional_domain_name = "${local.bucket_name}.s3.us-east-1.amazonaws.com"

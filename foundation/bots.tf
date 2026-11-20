@@ -98,7 +98,7 @@ locals {
 module "bot_ci_plan" {
   for_each = local.served_bots
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
-  version  = "0.1.1"
+  version  = "0.1.2"
 
   project            = each.key
   name_root          = local.context.organization
@@ -122,7 +122,7 @@ module "bot_ci_plan" {
 module "bot_ci_apply" {
   for_each = local.served_bots
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
-  version  = "0.1.1"
+  version  = "0.1.2"
 
   project            = each.key
   name_root          = local.context.organization
@@ -147,7 +147,7 @@ module "bot_ci_apply" {
 module "bot_ci_release" {
   for_each = { for key, bot in local.served_bots : key => bot if !contains(local.research_projects, key) }
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-release-role"
-  version  = "0.1.1"
+  version  = "0.1.2"
 
   project           = each.key
   name_root         = local.context.organization
@@ -166,7 +166,7 @@ module "bot_ci_release" {
 module "bot_ci_task" {
   for_each = { for key, types in local.bot_task_types : key => types if try(local.serves[key], false) }
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-task-role"
-  version  = "0.1.1"
+  version  = "0.1.2"
 
   project           = each.key
   name_root         = local.context.organization

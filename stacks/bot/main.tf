@@ -66,7 +66,7 @@ data "aws_ami" "task_profile" {
 
 module "image" {
   source  = "Jaws-Platform/jaws-lichess-bot/aws//modules/ecr-repository"
-  version = "0.1.1"
+  version = "0.1.2"
   count   = var.bot_enabled ? 1 : 0
 
   name                       = local.name
@@ -81,7 +81,7 @@ moved {
 
 module "network" {
   source  = "Jaws-Platform/jaws-network/aws//modules/vpc"
-  version = "0.1.1"
+  version = "0.1.2"
   count   = local.network_enabled ? 1 : 0
 
   name               = local.name
@@ -95,7 +95,7 @@ moved {
 
 module "records" {
   source  = "Jaws-Platform/jaws-foundation/aws//modules/private-bucket"
-  version = "0.1.1"
+  version = "0.1.2"
   count   = var.records_enabled ? 1 : 0
 
   name = "${local.name}-records"
@@ -103,7 +103,7 @@ module "records" {
 
 module "bot" {
   source  = "Jaws-Platform/jaws-lichess-bot/aws//modules/container-instance"
-  version = "0.1.1"
+  version = "0.1.2"
   count   = var.bot_enabled ? 1 : 0
 
   name                 = "${local.name}-bot"
@@ -142,7 +142,7 @@ moved {
 # back by `task run`. Expired after task_results_days.
 module "task_results" {
   source  = "Jaws-Platform/jaws-foundation/aws//modules/private-bucket"
-  version = "0.1.1"
+  version = "0.1.2"
   count   = var.task_runner_enabled ? 1 : 0
 
   name                           = "${local.name}-tasks"
@@ -151,7 +151,7 @@ module "task_results" {
 
 module "tasks" {
   source  = "Jaws-Platform/jaws-research/aws//modules/task-runner"
-  version = "0.1.1"
+  version = "0.1.2"
   count   = var.task_runner_enabled ? 1 : 0
 
   name_root             = var.tags["Organization"]
@@ -169,7 +169,7 @@ module "tasks" {
 # the cpu profile's log group, security group and results bucket.
 module "task_profiles" {
   source   = "Jaws-Platform/jaws-research/aws//modules/task-runner"
-  version  = "0.1.1"
+  version  = "0.1.2"
   for_each = { for p in var.task_profiles : p.name => p }
 
   name_root             = var.tags["Organization"]
@@ -193,7 +193,7 @@ module "task_profiles" {
 # granted a dataset reads and adds only under its own sub-prefixes.
 module "datasets" {
   source   = "Jaws-Platform/jaws-research/aws//modules/dataset-bucket"
-  version  = "0.1.1"
+  version  = "0.1.2"
   for_each = { for d in var.datasets : d.name => d }
 
   name                   = each.value.bucket
