@@ -61,6 +61,12 @@ def test_each_of_them_trusts_every_name_of_the_repository() -> None:
     modules = _role_modules()
     for name in sorted(TOOL_ROLES):
         assert modules[name].get("repository_aliases") == "local.context.repository_aliases", name
+        # A transferred name is trusted under its new owner's ID, so the owner
+        # IDs of the aliases travel with them.
+        assert (
+            modules[name].get("repository_alias_owner_ids")
+            == "local.context.repository_alias_owner_ids"
+        ), name
 
 
 def test_roles_for_consumer_repositories_take_no_alias() -> None:
@@ -68,3 +74,14 @@ def test_roles_for_consumer_repositories_take_no_alias() -> None:
     assert others, "the foundation has release, task and site roles"
     for name, arguments in others.items():
         assert "repository_aliases" not in arguments, name
+        assert "repository_alias_owner_ids" not in arguments, name
+
+
+def test_every_alias_owner_id_belongs_to_an_alias() -> None:
+    context = (FOUNDATION / "context.tf").read_text()
+    aliases = re.search(r"repository_aliases\s*=\s*\[(?P<list>[^\]]*)\]", context)
+    owner_ids = re.search(r"repository_alias_owner_ids\s*=\s*\{(?P<map>[^}]*)\}", context)
+    assert aliases and owner_ids
+    alias_names = set(re.findall(r'"([^"]+)"', aliases["list"]))
+    owner_id_names = set(re.findall(r'"([^"]+)"\s*=', owner_ids["map"]))
+    assert owner_id_names <= alias_names

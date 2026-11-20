@@ -289,15 +289,16 @@ check "shared_host_url" {
 module "databricks_ci_plan" {
   for_each = local.served_databricks_projects
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
-  version  = "0.1.2"
+  version  = "0.2.0"
 
-  project            = each.key
-  name_root          = local.context.organization
-  repository         = local.context.repository
-  repository_aliases = local.context.repository_aliases
-  owner_id           = local.github.owner_id
-  repository_id      = local.github.repository_id
-  oidc_provider_arn  = data.aws_iam_openid_connect_provider.github.arn
+  project                    = each.key
+  name_root                  = local.context.organization
+  repository                 = local.context.repository
+  repository_aliases         = local.context.repository_aliases
+  repository_alias_owner_ids = local.context.repository_alias_owner_ids
+  owner_id                   = local.github.owner_id
+  repository_id              = local.github.repository_id
+  oidc_provider_arn          = data.aws_iam_openid_connect_provider.github.arn
 
   policies = ["tfstate/read", "compute/read", "databricks/read"]
 
@@ -310,16 +311,17 @@ module "databricks_ci_plan" {
 module "databricks_ci_apply" {
   for_each = local.served_databricks_projects
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
-  version  = "0.1.2"
+  version  = "0.2.0"
 
-  project            = each.key
-  name_root          = local.context.organization
-  repository         = local.context.repository
-  repository_aliases = local.context.repository_aliases
-  owner_id           = local.github.owner_id
-  repository_id      = local.github.repository_id
-  oidc_provider_arn  = data.aws_iam_openid_connect_provider.github.arn
-  environment        = "prod"
+  project                    = each.key
+  name_root                  = local.context.organization
+  repository                 = local.context.repository
+  repository_aliases         = local.context.repository_aliases
+  repository_alias_owner_ids = local.context.repository_alias_owner_ids
+  owner_id                   = local.github.owner_id
+  repository_id              = local.github.repository_id
+  oidc_provider_arn          = data.aws_iam_openid_connect_provider.github.arn
+  environment                = "prod"
 
   policies = ["tfstate/write", "compute/read", "compute/manage", "databricks/read", "databricks/manage"]
 
