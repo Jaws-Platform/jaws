@@ -330,7 +330,7 @@ Module sources look like this, with an exact `version` on every block:
 module "site_bucket" {
   for_each = local.projects
   source   = "jaws-platform/jaws-static-site/aws//modules/site-bucket"
-  version  = "0.1.0"
+  version  = "0.1.1"
 
   project = each.key
 }

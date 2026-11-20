@@ -76,7 +76,7 @@ locals {
 
 module "state_bucket" {
   source  = "jaws-platform/jaws-foundation/aws//modules/tfstate-bucket"
-  version = "0.1.0"
+  version = "0.1.1"
 
   name = local.state_bucket_name
 

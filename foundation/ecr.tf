@@ -15,7 +15,7 @@ locals {
 
 module "sites_image" {
   source  = "jaws-platform/jaws-lichess-bot/aws//modules/ecr-repository"
-  version = "0.1.0"
+  version = "0.1.1"
 
   name                       = local.account.ecr.repository
   keep_release_images        = local.account.ecr.keep_release_images
