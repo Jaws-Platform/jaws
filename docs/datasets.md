@@ -53,8 +53,8 @@ A project can declare several datasets, each with its own bucket.
 
 ## The bucket
 
-The bucket is built by the library's
-[`dataset-bucket`](https://registry.terraform.io/modules/jwallace145/jwall-engineering/aws/latest/submodules/dataset-bucket)
+The bucket is built by the research family's
+[`dataset-bucket`](https://registry.terraform.io/modules/Jaws-Platform/jaws-research/aws/latest/submodules/dataset-bucket)
 module, in the bot stack.
 
 - **Kept forever by default.** With no `expire_prefixes`, there is no

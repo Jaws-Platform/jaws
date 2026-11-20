@@ -99,8 +99,8 @@ resource "terraform_data" "databricks_config_filled_in" {
 
 module "databricks_metastore" {
   count     = local.databricks_enabled ? 1 : 0
-  source    = "jwallace145/jwall-engineering/aws//modules/databricks-metastore"
-  version   = "0.29.0"
+  source    = "Jaws-Platform/jaws-databricks/aws//modules/databricks-metastore"
+  version   = "0.1.2"
   providers = { databricks = databricks.account }
 
   name                             = local.databricks.metastore_name
@@ -111,8 +111,8 @@ module "databricks_metastore" {
 
 module "databricks_audit_logs" {
   count     = local.databricks_enabled ? 1 : 0
-  source    = "jwallace145/jwall-engineering/aws//modules/databricks-audit-logs"
-  version   = "0.29.0"
+  source    = "Jaws-Platform/jaws-databricks/aws//modules/databricks-audit-logs"
+  version   = "0.1.2"
   providers = { aws = aws, databricks = databricks.account }
 
   account_id  = local.databricks.account_id
@@ -127,8 +127,8 @@ module "databricks_audit_logs" {
 # assigned to it. It has no standing AWS cost.
 module "databricks_shared_host" {
   count     = local.databricks_enabled ? 1 : 0
-  source    = "jwallace145/jwall-engineering/aws//modules/databricks-host-workspace"
-  version   = "0.29.0"
+  source    = "Jaws-Platform/jaws-databricks/aws//modules/databricks-host-workspace"
+  version   = "0.1.2"
   providers = { databricks = databricks.account }
 
   account_id       = local.databricks.account_id
@@ -195,8 +195,8 @@ locals {
 # is a prefix of this one bucket. Nothing is ever written there.
 module "dataset_catalog_storage" {
   count     = local.databricks_enabled && local.databricks_host_recorded ? 1 : 0
-  source    = "jwallace145/jwall-engineering/aws//modules/databricks-catalog-storage"
-  version   = "0.29.0"
+  source    = "Jaws-Platform/jaws-databricks/aws//modules/databricks-catalog-storage"
+  version   = "0.1.2"
   providers = { aws = aws, databricks = databricks.shared }
 
   name              = "${local.context.organization}-dataset-catalogs"
@@ -211,8 +211,8 @@ module "dataset_catalog_storage" {
 # the data-access reconcile (data-access/).
 module "producer_catalog" {
   for_each  = local.producer_catalogs
-  source    = "jwallace145/jwall-engineering/aws//modules/databricks-producer-catalog"
-  version   = "0.29.0"
+  source    = "Jaws-Platform/jaws-databricks/aws//modules/databricks-producer-catalog"
+  version   = "0.1.2"
   providers = { databricks = databricks.shared }
 
   producer          = each.value
@@ -259,8 +259,8 @@ resource "terraform_data" "dataset_overlap_check" {
 
 module "databricks_dataset" {
   for_each  = local.onboarded_datasets
-  source    = "jwallace145/jwall-engineering/aws//modules/databricks-dataset"
-  version   = "0.29.0"
+  source    = "Jaws-Platform/jaws-databricks/aws//modules/databricks-dataset"
+  version   = "0.1.2"
   providers = { aws = aws, databricks = databricks.shared }
 
   name              = each.value.platform_name
@@ -288,8 +288,8 @@ check "shared_host_url" {
 
 module "databricks_ci_plan" {
   for_each = local.served_databricks_projects
-  source   = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version  = "0.29.0"
+  source   = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
+  version  = "0.1.2"
 
   project            = each.key
   name_root          = local.context.organization
@@ -309,8 +309,8 @@ module "databricks_ci_plan" {
 
 module "databricks_ci_apply" {
   for_each = local.served_databricks_projects
-  source   = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version  = "0.29.0"
+  source   = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
+  version  = "0.1.2"
 
   project            = each.key
   name_root          = local.context.organization

@@ -13,8 +13,8 @@
 # removing it from state or keeping it.
 module "spot_service_linked_role" {
   count   = local.hosts_task_runners ? 1 : 0
-  source  = "jwallace145/jwall-engineering/aws//modules/service-linked-role"
-  version = "0.29.0"
+  source  = "Jaws-Platform/jaws-foundation/aws//modules/service-linked-role"
+  version = "0.1.2"
 
   aws_service_name = "spot.amazonaws.com"
   # EC2's own description for the role, so the management account's role is

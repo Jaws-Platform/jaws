@@ -1,6 +1,6 @@
 """The tool configuration: config.yaml, loaded once and passed to every command.
 
-It describes how the tool runs (Terraform version, library pin, state bucket,
+It describes how the tool runs (Terraform version, module family pins, state bucket,
 organisation constants, ECR, sync headers), as opposed to what one site is,
 which lives in each site repository's jaws.yaml.
 """
@@ -67,9 +67,31 @@ class TerraformSection(_Section):
         return parse_duration(self.plan_timeout)
 
 
+_FAMILY_ADDRESS = re.compile(r"^[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[a-z0-9]+$")
+_FAMILY_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+
+
 class LibrarySection(_Section):
-    source: str = Field(pattern=r"^[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[a-z0-9]+$")
-    version: str = Field(pattern=r"^\d+\.\d+\.\d+$")
+    """The Terraform module families the stacks are built from: registry
+    address to the one exact version every pin of that family carries."""
+
+    families: dict[str, str] = Field(min_length=1)
+
+    @field_validator("families")
+    @classmethod
+    def _addresses_and_versions(cls, value: dict[str, str]) -> dict[str, str]:
+        for address, version in value.items():
+            if not _FAMILY_ADDRESS.match(address):
+                raise ValueError(
+                    f"library.families key {address!r} must be a registry address, "
+                    "<namespace>/<name>/<provider>"
+                )
+            if not _FAMILY_VERSION.match(version):
+                raise ValueError(
+                    f"library.families[{address!r}] must be an exact version such as 0.1.0, "
+                    f"not {version!r}"
+                )
+        return value
 
 
 class StateSection(_Section):

@@ -65,8 +65,8 @@ data "aws_ami" "task_profile" {
 }
 
 module "image" {
-  source  = "jwallace145/jwall-engineering/aws//modules/ecr-repository"
-  version = "0.29.0"
+  source  = "Jaws-Platform/jaws-lichess-bot/aws//modules/ecr-repository"
+  version = "0.1.2"
   count   = var.bot_enabled ? 1 : 0
 
   name                       = local.name
@@ -80,8 +80,8 @@ moved {
 }
 
 module "network" {
-  source  = "jwallace145/jwall-engineering/aws//modules/vpc"
-  version = "0.29.0"
+  source  = "Jaws-Platform/jaws-network/aws//modules/vpc"
+  version = "0.1.2"
   count   = local.network_enabled ? 1 : 0
 
   name               = local.name
@@ -94,16 +94,16 @@ moved {
 }
 
 module "records" {
-  source  = "jwallace145/jwall-engineering/aws//modules/private-bucket"
-  version = "0.29.0"
+  source  = "Jaws-Platform/jaws-foundation/aws//modules/private-bucket"
+  version = "0.1.2"
   count   = var.records_enabled ? 1 : 0
 
   name = "${local.name}-records"
 }
 
 module "bot" {
-  source  = "jwallace145/jwall-engineering/aws//modules/container-instance"
-  version = "0.29.0"
+  source  = "Jaws-Platform/jaws-lichess-bot/aws//modules/container-instance"
+  version = "0.1.2"
   count   = var.bot_enabled ? 1 : 0
 
   name                 = "${local.name}-bot"
@@ -141,8 +141,8 @@ moved {
 # Task outputs, written by task instances under tasks/<run>/<task>/ and copied
 # back by `task run`. Expired after task_results_days.
 module "task_results" {
-  source  = "jwallace145/jwall-engineering/aws//modules/private-bucket"
-  version = "0.29.0"
+  source  = "Jaws-Platform/jaws-foundation/aws//modules/private-bucket"
+  version = "0.1.2"
   count   = var.task_runner_enabled ? 1 : 0
 
   name                           = "${local.name}-tasks"
@@ -150,8 +150,8 @@ module "task_results" {
 }
 
 module "tasks" {
-  source  = "jwallace145/jwall-engineering/aws//modules/task-runner"
-  version = "0.29.0"
+  source  = "Jaws-Platform/jaws-research/aws//modules/task-runner"
+  version = "0.1.2"
   count   = var.task_runner_enabled ? 1 : 0
 
   name_root             = var.tags["Organization"]
@@ -168,8 +168,8 @@ module "tasks" {
 # The other task profiles: their own template, image, disk and instance role;
 # the cpu profile's log group, security group and results bucket.
 module "task_profiles" {
-  source   = "jwallace145/jwall-engineering/aws//modules/task-runner"
-  version  = "0.29.0"
+  source   = "Jaws-Platform/jaws-research/aws//modules/task-runner"
+  version  = "0.1.2"
   for_each = { for p in var.task_profiles : p.name => p }
 
   name_root             = var.tags["Organization"]
@@ -192,8 +192,8 @@ module "task_profiles" {
 # task-runner as a writer; nothing automated may delete them. A task profile
 # granted a dataset reads and adds only under its own sub-prefixes.
 module "datasets" {
-  source   = "jwallace145/jwall-engineering/aws//modules/dataset-bucket"
-  version  = "0.29.0"
+  source   = "Jaws-Platform/jaws-research/aws//modules/dataset-bucket"
+  version  = "0.1.2"
   for_each = { for d in var.datasets : d.name => d }
 
   name                   = each.value.bucket

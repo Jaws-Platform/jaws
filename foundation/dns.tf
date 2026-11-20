@@ -29,8 +29,8 @@ locals {
 }
 
 module "zone" {
-  source  = "jwallace145/jwall-engineering/aws//modules/hosted-zone"
-  version = "0.29.0"
+  source  = "Jaws-Platform/jaws-static-site/aws//modules/hosted-zone"
+  version = "0.1.2"
 
   name        = local.zone_name
   comment     = "${local.context.organization}: zone owned by ${local.context.repository_tag}; records owned by project repos"

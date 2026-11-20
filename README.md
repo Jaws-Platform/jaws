@@ -308,19 +308,19 @@ project still addresses the management account.
 
 ## Shared modules from the Terraform Registry
 
-This stack is a consumer of [`jwallace145/jwall-engineering/aws`](https://registry.terraform.io/modules/jwallace145/jwall-engineering/aws), the jwall-engineering module library published to the public Terraform Registry from [`jwallace145/terraform-aws-jwall-engineering`](https://github.com/jwallace145/terraform-aws-jwall-engineering). The library is open source under MIT, versioned with semver, and released with the same Release Please flow as this repo. Consuming it here, the same way any third party would, is deliberate: the foundation stack eats its own dog food, so the modules are exercised in production before anyone else depends on them.
+This stack is a consumer of the seven Jaws module families, published to the public Terraform Registry from `Jaws-Platform/terraform-aws-jaws-<family>`. Each is open source under MIT, versioned with semver on its own, and released with the same Release Please flow as this repo. Consuming them here, the same way any third party would, is deliberate: Jaws eats its own dog food, so the modules are exercised in production before anyone else depends on them.
 
-| Submodule | Used for | Where |
+| Family | Modules used here | Where |
 | --- | --- | --- |
-| `//modules/context` | The tag set applied to every resource through `default_tags` | `context.tf` |
-| `//modules/tfstate-bucket` | The shared Terraform state bucket | `state.tf` |
-| `//modules/hosted-zone` | The `jwall.engineering` zone, its CAA record and the GitHub Pages domain-verification TXT record | `dns.tf` |
-| `//modules/ci-plan-role` | Plan roles for this repo and each project, with read policies from the `ci-policies` catalog | `ci-roles.tf`, `projects.tf` |
-| `//modules/ci-preview-role` | Preview role per project, with `static-site/previews` | `projects.tf` |
-| `//modules/ci-apply-role` | Apply roles for this repo and each project, with read and write policies from the `ci-policies` catalog | `ci-roles.tf`, `projects.tf` |
-| `//modules/site-bucket` | One S3 bucket per project, `jwall-engineering-<project>` | `projects.tf` |
-| `//modules/ecr-repository` | The private repository for the `jaws` CLI image, configured from `config.yaml` | `ecr.tf` |
-| `//modules/identity-center-access` | The owner's Identity Center user and `AdministratorAccess` permission set | `owner-access/main.tf` (its own stack) |
+| [`Jaws-Platform/jaws-foundation/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-foundation/aws) | `context` (the tag set applied through `default_tags`), `tfstate-bucket` (the shared state bucket), `service-linked-role`, `private-bucket` (bot records and task results), `identity-center-access` (the owner's access) | `foundation/`, `stacks/bot/`, `owner-access/` |
+| [`Jaws-Platform/jaws-ci/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-ci/aws) | `ci-plan-role`, `ci-preview-role`, `ci-apply-role`, `ci-release-role` and `ci-task-role`, each with policies from the `ci-policies` catalog | `foundation/` |
+| [`Jaws-Platform/jaws-static-site/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-static-site/aws) | The root module (the site stack), `site-bucket` (one S3 bucket per site, `jwall-engineering-<project>`), `hosted-zone` (the `jwall.engineering` zone, its CAA record and the GitHub Pages verification TXT record) | `stacks/site/`, `foundation/` |
+| [`Jaws-Platform/jaws-lichess-bot/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-lichess-bot/aws) | `container-instance` (the bot), `ecr-repository` (bot images, and the private repository for the `jaws` CLI image) | `stacks/bot/`, `foundation/ecr.tf` |
+| [`Jaws-Platform/jaws-research/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-research/aws) | `task-runner` (one per task profile), `dataset-bucket` | `stacks/bot/` |
+| [`Jaws-Platform/jaws-network/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-network/aws) | `vpc`, `nat-instance` | `stacks/bot/`, `stacks/databricks-account/` |
+| [`Jaws-Platform/jaws-databricks/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-databricks/aws) | The eleven `databricks-*` modules: the account baseline and shared datasets, each project's workspace, catalog and compute policies, and who may read each dataset | `foundation/databricks.tf`, `stacks/databricks-account/`, `stacks/databricks-workspace/`, `data-access/` |
+
+Until Jaws 0.66 these were one library, [`jwallace145/jwall-engineering/aws`](https://registry.terraform.io/modules/jwallace145/jwall-engineering/aws), which is deprecated at its last version, 0.29.0. Version 0.1.0 of each family holds the same module code, so the move changed no resource.
 
 The root module itself creates no resources directly. It is the composition: identity, the `projects` map, module calls, and outputs.
 
@@ -329,16 +329,16 @@ Module sources look like this, with an exact `version` on every block:
 ```hcl
 module "site_bucket" {
   for_each = local.projects
-  source   = "jwallace145/jwall-engineering/aws//modules/site-bucket"
-  version  = "0.13.0"
+  source   = "Jaws-Platform/jaws-static-site/aws//modules/site-bucket"
+  version  = "0.1.2"
 
   project = each.key
 }
 ```
 
-Versions are pinned exactly, not with `~>`, because Terraform records provider versions in `.terraform.lock.hcl` but not module versions; an exact pin is the only way two applies of the same commit resolve the same code. Every pin (in `foundation/` and both stacks under `stacks/`) is always bumped together, and so is `library.version` in `config.yaml`.
+Versions are pinned exactly, not with `~>`, because Terraform records provider versions in `.terraform.lock.hcl` but not module versions; an exact pin is the only way two applies of the same commit resolve the same code. Every pin of a family (in `foundation/`, the stacks under `stacks/`, `owner-access/` and `data-access/`) is always bumped together, and so is that family's entry under `library.families` in `config.yaml`.
 
-**Upgrading.** When the library publishes a release, Dependabot's Terraform ecosystem opens a `chore(deps)` PR bumping the pins. The CI plan comment on that PR shows exactly what the new version changes in AWS. Read the library's [CHANGELOG](https://github.com/jwallace145/terraform-aws-jwall-engineering/blob/main/CHANGELOG.md) entry, check the plan, merge, and the change applies with the next release of this repo. While the library is on `0.x`, a breaking change bumps the minor version and is marked `!` in its changelog.
+**Upgrading.** When a family publishes a release, Dependabot's Terraform ecosystem opens a `chore(deps)` PR bumping its pins. The CI plan comment on that PR shows exactly what the new version changes in AWS. Read the family's changelog entry (`CHANGELOG.md` in `Jaws-Platform/terraform-aws-jaws-<family>`), check the plan, merge, and the change applies with the next release of this repo. While a family is on `0.x`, a breaking change bumps the minor version and is marked `!` in its changelog.
 
 ## Layout
 
@@ -357,9 +357,9 @@ CLI and `config.yaml`, the tool configuration shared by the stack and the CLI
 | `dns.tf` | The hosted zone, its CAA record and the zone owner's TXT records (`hosted-zone` module) |
 | `ci-roles.tf` | This repo's own plan and apply roles (`ci-plan-role` and `ci-apply-role` modules) |
 | `ecr.tf` | The ECR repository for the infra CLI image, configured from `config.yaml` at the repository root |
-| `config.yaml` (root) | Tool configuration for the infra CLI and the foundation stack: Terraform version, library pin, state bucket, DNS zone, ECR lifecycle, sync headers, and the central guardrails (`tasks.limits`, `tasks.max_run_cost_usd`, and per project the instance types, task profiles and dataset retention) |
+| `config.yaml` (root) | Tool configuration for the infra CLI and the foundation stack: Terraform version, module family pins, state bucket, DNS zone, ECR lifecycle, sync headers, and the central guardrails (`tasks.limits`, `tasks.max_run_cost_usd`, and per project the instance types, task profiles and dataset retention) |
 | `src/jaws/`, `tests/`, `pyproject.toml` | The infra CLI, its tests and its `uv` project |
-| `stacks/site/` | The site stack the CLI renders for each site, pinned to the library like any consumer |
+| `stacks/site/` | The site stack the CLI renders for each site, pinned to the static-site module family like any consumer |
 | `stacks/bot/` | The bot stack the CLI renders for each bot or research project: ECR repository, VPC, records bucket, bot instance (the image and bot are off for a research project), task runner and dataset buckets |
 | `src/jaws/kinds/lichess_bot/` | The harness Dockerfile and entrypoint of the bot image |
 | `bots.tf` | The `bots` map: one entry per bot or research project, each with plan and apply roles, a release role for bots, and a task role where `config.yaml` lists instance types |
@@ -406,7 +406,7 @@ For example this stack uses `project=infra/env=prod/infra-prod.tfstate`, and the
 - each state prefix is reachable only by the CI roles listed for it (`state.tf`): a project's plan role reads `project=<key>/` and may write only `.tflock` objects there, its apply role reads and writes it, and this stack's key is limited to this repo's two roles;
 - nothing outside those prefixes is reachable, and bucket configuration (the bucket policy included) cannot be changed, except by the break-glass principals in `local.bucket_admin_principal_arns`: the owner's Identity Center admin role (console and CLI, [docs/owner-access.md](docs/owner-access.md)), the account root user (emergencies) and this repo's apply role. The account has no IAM users.
 
-Every statement is a deny matched on `aws:PrincipalArn`, so it grants nothing: it stops any other principal in the account, including ones with `s3:*` on `*`, from reading or rewriting state. The statements are documented in the library's [`tfstate-bucket` README](https://github.com/jwallace145/terraform-aws-jwall-engineering/tree/main/modules/tfstate-bucket#hardened-bucket-policy).
+Every statement is a deny matched on `aws:PrincipalArn`, so it grants nothing: it stops any other principal in the account, including ones with `s3:*` on `*`, from reading or rewriting state. The statements are documented in the library's [`tfstate-bucket` README](https://github.com/Jaws-Platform/terraform-aws-jaws-foundation/tree/main/modules/tfstate-bucket#hardened-bucket-policy).
 
 ## Projects registry
 
@@ -420,7 +420,7 @@ Every statement is a deny matched on `aws:PrincipalArn`, so it grants nothing: i
 
 Each entry is passed to the `site-bucket`, `ci-plan-role`, `ci-preview-role` and `ci-apply-role` submodules of the [registry module](#shared-modules-from-the-terraform-registry), which create:
 
-- bucket `jwall-engineering-<key>` (versioned, encrypted, private, CloudFront-readable). Its policy lets only the project's apply role write `prod/` and `dev/` and only its preview role write `previews/`; only the break-glass principals write anything else or change the bucket's configuration. Reads are unrestricted, since the content is public through CloudFront. See the library's [`site-bucket` README](https://github.com/jwallace145/terraform-aws-jwall-engineering/tree/main/modules/site-bucket#hardened-bucket-policy).
+- bucket `jwall-engineering-<key>` (versioned, encrypted, private, CloudFront-readable). Its policy lets only the project's apply role write `prod/` and `dev/` and only its preview role write `previews/`; only the break-glass principals write anything else or change the bucket's configuration. Reads are unrestricted, since the content is public through CloudFront. See the library's [`site-bucket` README](https://github.com/Jaws-Platform/terraform-aws-jaws-static-site/tree/main/modules/site-bucket#hardened-bucket-policy).
 - roles `jwall-engineering-<key>-ci-plan`, `-ci-preview`, and `-ci-apply`, trusted for the project's repository, each with managed policies from the library's `ci-policies` catalog scoped to that bucket, to the state prefix `project=<key>/`, and to Route 53 changes for `<domain>`, `*.preview.<domain>`, and the ACM validation records those names need:
 
 | Role | Trusted for | Policies |
