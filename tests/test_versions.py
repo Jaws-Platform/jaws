@@ -119,7 +119,7 @@ def _stack_files() -> list[Path]:
 def test_site_stack_pins_the_static_site_family_root() -> None:
     """stacks/site is the root module of the static-site family, like any consumer's."""
     pins = _pins(REPO_ROOT / "stacks" / "site" / "main.tf")
-    family = "jaws-platform/jaws-static-site/aws"
+    family = "Jaws-Platform/jaws-static-site/aws"
     assert pins == [(family, None, _families()[family])], (
         "stacks/site/main.tf must pin the static-site family's root module, and nothing else"
     )
@@ -129,14 +129,14 @@ def test_bot_stack_pins_each_module_at_its_family_version() -> None:
     families = _families()
     pins = _pins(REPO_ROOT / "stacks" / "bot" / "main.tf")
     assert sorted((family, module) for family, module, _ in pins) == [
-        ("jaws-platform/jaws-foundation/aws", "private-bucket"),  # records
-        ("jaws-platform/jaws-foundation/aws", "private-bucket"),  # task results
-        ("jaws-platform/jaws-lichess-bot/aws", "container-instance"),
-        ("jaws-platform/jaws-lichess-bot/aws", "ecr-repository"),
-        ("jaws-platform/jaws-network/aws", "vpc"),
-        ("jaws-platform/jaws-research/aws", "dataset-bucket"),
-        ("jaws-platform/jaws-research/aws", "task-runner"),  # cpu
-        ("jaws-platform/jaws-research/aws", "task-runner"),  # the other profiles
+        ("Jaws-Platform/jaws-foundation/aws", "private-bucket"),  # records
+        ("Jaws-Platform/jaws-foundation/aws", "private-bucket"),  # task results
+        ("Jaws-Platform/jaws-lichess-bot/aws", "container-instance"),
+        ("Jaws-Platform/jaws-lichess-bot/aws", "ecr-repository"),
+        ("Jaws-Platform/jaws-network/aws", "vpc"),
+        ("Jaws-Platform/jaws-research/aws", "dataset-bucket"),
+        ("Jaws-Platform/jaws-research/aws", "task-runner"),  # cpu
+        ("Jaws-Platform/jaws-research/aws", "task-runner"),  # the other profiles
     ]
     assert all(version == families[family] for family, _, version in pins)
 

@@ -236,7 +236,7 @@ s3://jwall-engineering-<project>-records/records/meta/schema=1/engine=<tag>/date
   `result`, `utc_date`, `utc_time`, `time_control`, `variant`, `white_elo`,
   `black_elo`, `event`, `site`, `termination`, `headers` (every PGN header),
   `source_file`, `sha256`, `synced_at`. The [container-instance
-  README](https://github.com/jaws-platform/terraform-aws-jaws-lichess-bot/tree/main/modules/container-instance#game-records)
+  README](https://github.com/Jaws-Platform/terraform-aws-jaws-lichess-bot/tree/main/modules/container-instance#game-records)
   gives each one's type.
 - The `key=value` segments are Hive-style partitions, so Athena, Spark or
   DuckDB read `meta/` as a table.

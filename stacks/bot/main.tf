@@ -65,7 +65,7 @@ data "aws_ami" "task_profile" {
 }
 
 module "image" {
-  source  = "jaws-platform/jaws-lichess-bot/aws//modules/ecr-repository"
+  source  = "Jaws-Platform/jaws-lichess-bot/aws//modules/ecr-repository"
   version = "0.1.1"
   count   = var.bot_enabled ? 1 : 0
 
@@ -80,7 +80,7 @@ moved {
 }
 
 module "network" {
-  source  = "jaws-platform/jaws-network/aws//modules/vpc"
+  source  = "Jaws-Platform/jaws-network/aws//modules/vpc"
   version = "0.1.1"
   count   = local.network_enabled ? 1 : 0
 
@@ -94,7 +94,7 @@ moved {
 }
 
 module "records" {
-  source  = "jaws-platform/jaws-foundation/aws//modules/private-bucket"
+  source  = "Jaws-Platform/jaws-foundation/aws//modules/private-bucket"
   version = "0.1.1"
   count   = var.records_enabled ? 1 : 0
 
@@ -102,7 +102,7 @@ module "records" {
 }
 
 module "bot" {
-  source  = "jaws-platform/jaws-lichess-bot/aws//modules/container-instance"
+  source  = "Jaws-Platform/jaws-lichess-bot/aws//modules/container-instance"
   version = "0.1.1"
   count   = var.bot_enabled ? 1 : 0
 
@@ -141,7 +141,7 @@ moved {
 # Task outputs, written by task instances under tasks/<run>/<task>/ and copied
 # back by `task run`. Expired after task_results_days.
 module "task_results" {
-  source  = "jaws-platform/jaws-foundation/aws//modules/private-bucket"
+  source  = "Jaws-Platform/jaws-foundation/aws//modules/private-bucket"
   version = "0.1.1"
   count   = var.task_runner_enabled ? 1 : 0
 
@@ -150,7 +150,7 @@ module "task_results" {
 }
 
 module "tasks" {
-  source  = "jaws-platform/jaws-research/aws//modules/task-runner"
+  source  = "Jaws-Platform/jaws-research/aws//modules/task-runner"
   version = "0.1.1"
   count   = var.task_runner_enabled ? 1 : 0
 
@@ -168,7 +168,7 @@ module "tasks" {
 # The other task profiles: their own template, image, disk and instance role;
 # the cpu profile's log group, security group and results bucket.
 module "task_profiles" {
-  source   = "jaws-platform/jaws-research/aws//modules/task-runner"
+  source   = "Jaws-Platform/jaws-research/aws//modules/task-runner"
   version  = "0.1.1"
   for_each = { for p in var.task_profiles : p.name => p }
 
@@ -192,7 +192,7 @@ module "task_profiles" {
 # task-runner as a writer; nothing automated may delete them. A task profile
 # granted a dataset reads and adds only under its own sub-prefixes.
 module "datasets" {
-  source   = "jaws-platform/jaws-research/aws//modules/dataset-bucket"
+  source   = "Jaws-Platform/jaws-research/aws//modules/dataset-bucket"
   version  = "0.1.1"
   for_each = { for d in var.datasets : d.name => d }
 

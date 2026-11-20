@@ -8,7 +8,7 @@
 # then this stack goes, then the account stack.
 
 module "catalog" {
-  source  = "jaws-platform/jaws-databricks/aws//modules/databricks-catalog"
+  source  = "Jaws-Platform/jaws-databricks/aws//modules/databricks-catalog"
   version = "0.1.1"
 
   providers = {
@@ -28,7 +28,7 @@ module "catalog" {
 }
 
 module "workspace_config" {
-  source  = "jaws-platform/jaws-databricks/aws//modules/databricks-workspace-config"
+  source  = "Jaws-Platform/jaws-databricks/aws//modules/databricks-workspace-config"
   version = "0.1.1"
 
   providers = {

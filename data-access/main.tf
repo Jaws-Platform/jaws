@@ -98,7 +98,7 @@ locals {
 # absence leaving them behind.
 module "access" {
   for_each  = local.ready
-  source    = "jaws-platform/jaws-databricks/aws//modules/databricks-dataset-access"
+  source    = "Jaws-Platform/jaws-databricks/aws//modules/databricks-dataset-access"
   version   = "0.1.1"
   providers = { databricks = databricks.host }
 
@@ -116,7 +116,7 @@ module "access" {
 # binding and the consumer's USE CATALOG.
 module "catalog_access" {
   for_each  = local.catalog_consumers
-  source    = "jaws-platform/jaws-databricks/aws//modules/databricks-producer-catalog-access"
+  source    = "Jaws-Platform/jaws-databricks/aws//modules/databricks-producer-catalog-access"
   version   = "0.1.1"
   providers = { databricks = databricks.host }
 

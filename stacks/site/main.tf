@@ -10,7 +10,7 @@ locals {
 }
 
 module "site" {
-  source  = "jaws-platform/jaws-static-site/aws"
+  source  = "Jaws-Platform/jaws-static-site/aws"
   version = "0.1.1"
 
   bucket_name                 = local.bucket_name

@@ -43,7 +43,7 @@ data "databricks_metastore" "this" {
 }
 
 module "network" {
-  source  = "jaws-platform/jaws-network/aws//modules/vpc"
+  source  = "Jaws-Platform/jaws-network/aws//modules/vpc"
   version = "0.1.1"
 
   name                 = local.name
@@ -60,7 +60,7 @@ module "network" {
 }
 
 module "nat" {
-  source  = "jaws-platform/jaws-network/aws//modules/nat-instance"
+  source  = "Jaws-Platform/jaws-network/aws//modules/nat-instance"
   version = "0.1.1"
 
   name                    = "${local.name}-nat"
@@ -71,7 +71,7 @@ module "nat" {
 }
 
 module "workspace" {
-  source  = "jaws-platform/jaws-databricks/aws//modules/databricks-workspace"
+  source  = "Jaws-Platform/jaws-databricks/aws//modules/databricks-workspace"
   version = "0.1.1"
 
   providers = {

@@ -57,7 +57,7 @@ locals {
 }
 
 module "infra_ci_plan" {
-  source  = "jaws-platform/jaws-ci/aws//modules/ci-plan-role"
+  source  = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
   version = "0.1.1"
 
   project            = local.infra_ci.project
@@ -78,7 +78,7 @@ module "infra_ci_plan" {
 }
 
 module "infra_ci_apply" {
-  source  = "jaws-platform/jaws-ci/aws//modules/ci-apply-role"
+  source  = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
   version = "0.1.1"
 
   project            = local.infra_ci.project
@@ -127,7 +127,7 @@ locals {
 }
 
 module "data_access_ci_plan" {
-  source  = "jaws-platform/jaws-ci/aws//modules/ci-plan-role"
+  source  = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
   version = "0.1.1"
 
   project            = local.data_access_ci.project
@@ -147,7 +147,7 @@ module "data_access_ci_plan" {
 }
 
 module "data_access_ci_apply" {
-  source  = "jaws-platform/jaws-ci/aws//modules/ci-apply-role"
+  source  = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
   version = "0.1.1"
 
   project            = local.data_access_ci.project
