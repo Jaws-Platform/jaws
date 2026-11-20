@@ -43,7 +43,7 @@ locals {
 }
 
 module "context" {
-  source  = "jwallace145/jaws-foundation/aws//modules/context"
+  source  = "Jaws-Platform/jaws-foundation/aws//modules/context"
   version = "0.1.0"
 
   project      = local.context.project

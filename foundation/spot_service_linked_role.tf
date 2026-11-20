@@ -13,7 +13,7 @@
 # removing it from state or keeping it.
 module "spot_service_linked_role" {
   count   = local.hosts_task_runners ? 1 : 0
-  source  = "jwallace145/jaws-foundation/aws//modules/service-linked-role"
+  source  = "Jaws-Platform/jaws-foundation/aws//modules/service-linked-role"
   version = "0.1.0"
 
   aws_service_name = "spot.amazonaws.com"
