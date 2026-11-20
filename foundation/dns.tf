@@ -29,7 +29,7 @@ locals {
 }
 
 module "zone" {
-  source  = "Jaws-Platform/jaws-static-site/aws//modules/hosted-zone"
+  source  = "jaws-platform/jaws-static-site/aws//modules/hosted-zone"
   version = "0.1.0"
 
   name        = local.zone_name

@@ -7,7 +7,7 @@ credentials. There is no IAM user and no access key. Root is the backup.
 | Piece | Where it lives |
 | --- | --- |
 | The organization, the Identity Center instance, MFA rules, sign-in length, email OTP | The console, set once ([below](#one-time-console-setup)) |
-| The Identity Center user, the `AdministratorAccess` permission set and its assignment to this account | [`owner-access/`](../owner-access), from the foundation family's [`identity-center-access`](https://registry.terraform.io/modules/Jaws-Platform/jaws-foundation/aws/latest/submodules/identity-center-access) module, **applied only by the owner** |
+| The Identity Center user, the `AdministratorAccess` permission set and its assignment to this account | [`owner-access/`](../owner-access), from the foundation family's [`identity-center-access`](https://registry.terraform.io/modules/jaws-platform/jaws-foundation/aws/latest/submodules/identity-center-access) module, **applied only by the owner** |
 | The admin role's exemption from the hardened state and site bucket policies | `bucket_admin_principal_arns` in `foundation/state.tf`, applied by CI on release |
 | The `jwall-admin`, `jaws-prod` and `jaws-dev` CLI profiles | The owner's `~/.aws/config`, from `terraform output -raw aws_config` |
 

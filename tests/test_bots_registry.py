@@ -314,7 +314,7 @@ def test_bot_plan_and_apply_carry_the_task_policies() -> None:
 
 def test_task_role_is_the_launch_role_for_the_bot_repository() -> None:
     block = _module("bot_ci_task")
-    assert 'source   = "Jaws-Platform/jaws-ci/aws//modules/ci-task-role"' in block
+    assert 'source   = "jaws-platform/jaws-ci/aws//modules/ci-task-role"' in block
     # The projects with a task runner that this account serves (accounts.tf).
     assert "for key, types in local.bot_task_types : key => types if" in block
     assert "local.serves[key]" in block
