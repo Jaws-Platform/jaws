@@ -3,10 +3,11 @@
 # CI roles (jwall-engineering-<key>-ci-{plan,preview,apply}) scoped to its
 # repository, bucket, state prefix and DNS names.
 #
-# Modules come from the jwallace145/jwall-engineering/aws registry module,
-# pinned to an exact version in every block (module versions are not recorded
-# in .terraform.lock.hcl, so a range would not be reproducible). Dependabot
-# opens bump PRs; keep every version pin in this repo identical.
+# Modules come from the jwallace145/jaws-*/aws registry modules (one family
+# per component), pinned to an exact version in every block (module versions
+# are not recorded in .terraform.lock.hcl, so a range would not be
+# reproducible). Dependabot opens bump PRs; keep every pin of a family
+# identical, and equal to library.families in config.yaml.
 
 locals {
   # repository_id is the numeric GitHub ID (gh api repos/<owner>/<repo> --jq .id).
@@ -33,8 +34,8 @@ locals {
 
 module "site_bucket" {
   for_each = merge(local.served_sites, { for key in local.retained_site_buckets : key => local.projects[key] })
-  source   = "jwallace145/jwall-engineering/aws//modules/site-bucket"
-  version  = "0.29.0"
+  source   = "jwallace145/jaws-static-site/aws//modules/site-bucket"
+  version  = "0.1.0"
 
   project   = each.key
   name_root = local.context.organization
@@ -81,8 +82,8 @@ locals {
 
 module "site_ci_plan" {
   for_each = local.served_sites
-  source   = "jwallace145/jwall-engineering/aws//modules/ci-plan-role"
-  version  = "0.29.0"
+  source   = "jwallace145/jaws-ci/aws//modules/ci-plan-role"
+  version  = "0.1.0"
 
   project           = each.key
   name_root         = local.context.organization
@@ -102,8 +103,8 @@ module "site_ci_plan" {
 
 module "site_ci_preview" {
   for_each = local.served_sites
-  source   = "jwallace145/jwall-engineering/aws//modules/ci-preview-role"
-  version  = "0.29.0"
+  source   = "jwallace145/jaws-ci/aws//modules/ci-preview-role"
+  version  = "0.1.0"
 
   project           = each.key
   name_root         = local.context.organization
@@ -122,8 +123,8 @@ module "site_ci_preview" {
 
 module "site_ci_apply" {
   for_each = local.served_sites
-  source   = "jwallace145/jwall-engineering/aws//modules/ci-apply-role"
-  version  = "0.29.0"
+  source   = "jwallace145/jaws-ci/aws//modules/ci-apply-role"
+  version  = "0.1.0"
 
   project           = each.key
   name_root         = local.context.organization

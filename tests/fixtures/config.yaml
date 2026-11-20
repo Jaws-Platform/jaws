@@ -16,8 +16,17 @@ terraform:
   plan_timeout: 15m
 
 library:
-  source: jwallace145/jwall-engineering/aws
-  version: 0.29.0 # the one module pin the whole fleet shares (sites and bots)
+  # The module families, published from jwallace145/terraform-aws-jaws-<family>.
+  # Each family has one version: every pin of it in this repository (sites,
+  # bots, Databricks, the foundation) moves with the entry here.
+  families:
+    jwallace145/jaws-ci/aws: 0.1.0
+    jwallace145/jaws-databricks/aws: 0.1.0
+    jwallace145/jaws-foundation/aws: 0.1.0
+    jwallace145/jaws-lichess-bot/aws: 0.1.0
+    jwallace145/jaws-network/aws: 0.1.0
+    jwallace145/jaws-research/aws: 0.1.0
+    jwallace145/jaws-static-site/aws: 0.1.0
 
 state:
   bucket: jwall-engineering-tfstate

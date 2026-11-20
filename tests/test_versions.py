@@ -82,41 +82,85 @@ def test_workflows_use_the_action_from_their_own_commit() -> None:
         assert "jaws@v" not in text, f"{name} pins the action by tag"
 
 
-def test_site_stack_pins_the_configured_library_version() -> None:
-    """stacks/site pins the library like any consumer; config.yaml names the same version."""
-    config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
-    main_tf = (REPO_ROOT / "stacks" / "site" / "main.tf").read_text()
-    match = re.search(
-        r'source\s*=\s*"jwallace145/jwall-engineering/aws"\s*\n\s*version\s*=\s*"([\d.]+)"', main_tf
-    )
-    assert match, "stacks/site/main.tf must pin the library root module"
-    assert match.group(1) == config["library"]["version"]
-    assert config["library"]["source"] == "jwallace145/jwall-engineering/aws"
-
-
+#: A module block's pin: the family's registry address, the submodule (none for a
+#: family's root module) and the exact version.
 _MODULE_PIN = re.compile(
-    r'source\s*=\s*"jwallace145/jwall-engineering/aws(?://modules/[a-z-]+)?"\s*\n\s*version\s*=\s*"([\d.]+)"'
+    r'source\s*=\s*"(?P<family>jwallace145/[a-z0-9-]+/aws)(?://modules/(?P<module>[a-z0-9-]+))?"'
+    r'\s*\n\s*version\s*=\s*"(?P<version>[^"]+)"'
 )
+#: The library the families were split from. Nothing may pin it any more.
+_OLD_LIBRARY = "jwallace145/jwall-engineering/aws"
 
 
-def test_bot_stack_pins_the_configured_library_version() -> None:
+def _families() -> dict[str, str]:
     config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
-    pins = _MODULE_PIN.findall((REPO_ROOT / "stacks" / "bot" / "main.tf").read_text())
-    assert len(pins) == 8, (
-        "stacks/bot composes ecr-repository, vpc, private-bucket (records and task results), "
-        "container-instance, task-runner (cpu and the other profiles) and dataset-bucket"
-    )
-    assert set(pins) == {config["library"]["version"]}
+    families: dict[str, str] = config["library"]["families"]
+    return families
 
 
-def test_every_registry_pin_matches_config() -> None:
-    """AGENTS.md: every module pin in the repository moves together with library.version."""
-    config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
-    files = [
+def _pins(*paths: Path) -> list[tuple[str, str | None, str]]:
+    return [
+        (m.group("family"), m.group("module"), m.group("version"))
+        for path in paths
+        for m in _MODULE_PIN.finditer(path.read_text())
+    ]
+
+
+def _stack_files() -> list[Path]:
+    """Every Terraform file that calls a registry module."""
+    return [
         *(REPO_ROOT / "foundation").glob("*.tf"),
         *(REPO_ROOT / "stacks").glob("*/*.tf"),
         *(REPO_ROOT / "owner-access").glob("*.tf"),
+        *(REPO_ROOT / "data-access").glob("*.tf"),
     ]
-    pins = [pin for f in files for pin in _MODULE_PIN.findall(f.read_text())]
+
+
+def test_site_stack_pins_the_static_site_family_root() -> None:
+    """stacks/site is the root module of the static-site family, like any consumer's."""
+    pins = _pins(REPO_ROOT / "stacks" / "site" / "main.tf")
+    family = "jwallace145/jaws-static-site/aws"
+    assert pins == [(family, None, _families()[family])], (
+        "stacks/site/main.tf must pin the static-site family's root module, and nothing else"
+    )
+
+
+def test_bot_stack_pins_each_module_at_its_family_version() -> None:
+    families = _families()
+    pins = _pins(REPO_ROOT / "stacks" / "bot" / "main.tf")
+    assert sorted((family, module) for family, module, _ in pins) == [
+        ("jwallace145/jaws-foundation/aws", "private-bucket"),  # records
+        ("jwallace145/jaws-foundation/aws", "private-bucket"),  # task results
+        ("jwallace145/jaws-lichess-bot/aws", "container-instance"),
+        ("jwallace145/jaws-lichess-bot/aws", "ecr-repository"),
+        ("jwallace145/jaws-network/aws", "vpc"),
+        ("jwallace145/jaws-research/aws", "dataset-bucket"),
+        ("jwallace145/jaws-research/aws", "task-runner"),  # cpu
+        ("jwallace145/jaws-research/aws", "task-runner"),  # the other profiles
+    ]
+    assert all(version == families[family] for family, _, version in pins)
+
+
+def test_every_registry_pin_matches_config() -> None:
+    """AGENTS.md: every pin of a module family moves together with its entry in
+    library.families, and is an exact version."""
+    families = _families()
+    pins = _pins(*_stack_files())
     assert pins, "no registry module pins found"
-    assert set(pins) == {config["library"]["version"]}
+    for family, module, version in pins:
+        assert family in families, f"{family} (//modules/{module}) is not in library.families"
+        assert version == families[family], (
+            f"{family}//modules/{module} is pinned at {version}, "
+            f"but library.families says {families[family]}"
+        )
+
+
+def test_every_configured_family_is_used() -> None:
+    """A family nothing pins is a stale line in config.yaml."""
+    used = {family for family, _, _ in _pins(*_stack_files())}
+    assert used == set(_families())
+
+
+def test_nothing_pins_the_library_the_families_were_split_from() -> None:
+    for path in _stack_files():
+        assert _OLD_LIBRARY not in path.read_text(), path

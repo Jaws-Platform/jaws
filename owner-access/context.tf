@@ -22,12 +22,17 @@ locals {
 }
 
 module "context" {
-  source  = "jwallace145/jwall-engineering/aws//modules/context"
-  version = "0.29.0"
+  source  = "jwallace145/jaws-foundation/aws//modules/context"
+  version = "0.1.0"
 
   project      = local.context.project
   environment  = local.context.environment
   repository   = local.context.repository
   owner        = local.context.owner
   organization = local.context.organization
+
+  # Stated since the context module lost its organisation-specific defaults:
+  # the values this stack has always had.
+  name_root  = "jwall-engineering"
+  managed_by = "jwall-engineering-infra"
 }

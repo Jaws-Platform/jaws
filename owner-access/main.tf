@@ -41,8 +41,8 @@ data "aws_organizations_organization" "this" {
 }
 
 module "owner_admin" {
-  source  = "jwallace145/jwall-engineering/aws//modules/identity-center-access"
-  version = "0.29.0"
+  source  = "jwallace145/jaws-foundation/aws//modules/identity-center-access"
+  version = "0.1.0"
 
   instance_arn      = one(data.aws_ssoadmin_instances.this.arns)
   identity_store_id = one(data.aws_ssoadmin_instances.this.identity_store_ids)

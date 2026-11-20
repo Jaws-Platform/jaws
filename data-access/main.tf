@@ -98,8 +98,8 @@ locals {
 # absence leaving them behind.
 module "access" {
   for_each  = local.ready
-  source    = "jwallace145/jwall-engineering/aws//modules/databricks-dataset-access"
-  version   = "0.29.0"
+  source    = "jwallace145/jaws-databricks/aws//modules/databricks-dataset-access"
+  version   = "0.1.0"
   providers = { databricks = databricks.host }
 
   external_location_name  = each.value.location_name
@@ -116,8 +116,8 @@ module "access" {
 # binding and the consumer's USE CATALOG.
 module "catalog_access" {
   for_each  = local.catalog_consumers
-  source    = "jwallace145/jwall-engineering/aws//modules/databricks-producer-catalog-access"
-  version   = "0.29.0"
+  source    = "jwallace145/jaws-databricks/aws//modules/databricks-producer-catalog-access"
+  version   = "0.1.0"
   providers = { databricks = databricks.host }
 
   catalog_name     = each.key

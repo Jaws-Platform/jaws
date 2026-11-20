@@ -14,8 +14,8 @@ locals {
 }
 
 module "sites_image" {
-  source  = "jwallace145/jwall-engineering/aws//modules/ecr-repository"
-  version = "0.29.0"
+  source  = "jwallace145/jaws-lichess-bot/aws//modules/ecr-repository"
+  version = "0.1.0"
 
   name                       = local.account.ecr.repository
   keep_release_images        = local.account.ecr.keep_release_images

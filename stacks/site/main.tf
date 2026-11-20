@@ -10,8 +10,8 @@ locals {
 }
 
 module "site" {
-  source  = "jwallace145/jwall-engineering/aws"
-  version = "0.29.0"
+  source  = "jwallace145/jaws-static-site/aws"
+  version = "0.1.0"
 
   bucket_name                 = local.bucket_name
   bucket_regional_domain_name = "${local.bucket_name}.s3.us-east-1.amazonaws.com"
