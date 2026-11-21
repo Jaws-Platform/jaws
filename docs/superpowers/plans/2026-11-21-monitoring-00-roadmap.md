@@ -10,7 +10,7 @@ build-start checks in section 12 of the spec change their details.
 | # | Plan | Repository | Depends on | Spec sections | Status |
 |---|---|---|---|---|---|
 | 01 | [Billing storage](2026-11-21-monitoring-01-billing-storage.md): bootstrap the new repo, `billing-bucket`, `aws-billing-export` | `terraform-aws-jaws-monitoring` (new) | none | 6.1, 6.2, 7, 12.1–2 | released v0.1.0 (2026-11-21); registry publish is the owner's |
-| 02 | Billing normalizer: the Lambda, with the AWS, Databricks and runs mappers and the run records | `terraform-aws-jaws-monitoring` | 01 | 6.4, 6.12 (schema), 12.6, 12.9 | to write |
+| 02 | [Billing normalizer](2026-11-21-monitoring-02-billing-normalizer.md): the Lambda, with the AWS, Databricks and runs mappers and the run records | `terraform-aws-jaws-monitoring` | 01 | 6.4, 6.12 (schema), 12.6, 12.9 | written |
 | 03 | Databricks billing job: `databricks-billing-export` | `terraform-aws-jaws-databricks` | 01 (layout) | 6.3, 12.3–4 | to write |
 | 04 | Monitoring node: the instance, disks, network, DNS, TLS, containers, config bundle and reconciler, host monitoring dashboards and alerts | `terraform-aws-jaws-monitoring` | 01 | 6.5, 6.7 (host), 6.8 (host), 6.11, 12.5, 12.7–8 | to write |
 | 05 | Cost on the node: `cost-sync`, the cost, task and campaign dashboards, cost and pipeline alerts, Slack routing | `terraform-aws-jaws-monitoring` | 02, 04 | 6.6–6.8, 6.12 | to write |
