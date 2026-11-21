@@ -39,7 +39,7 @@ locals {
     foundation = {
       state_bucket_arn             = module.state_bucket.arn
       hosted_zone_arn              = module.zone.arn
-      service_linked_role_services = local.hosts_task_runners ? ["spot.amazonaws.com"] : []
+      service_linked_role_services = local.owns_spot_service_linked_role ? ["spot.amazonaws.com"] : []
     }
 
     # The infra CLI image this repo publishes on release.

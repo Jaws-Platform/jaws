@@ -1407,7 +1407,7 @@ def _access(consumer_reads: bool = True) -> Any:
 
 
 def test_a_shared_dataset_names_its_platform_role_as_a_reader(settings: Settings) -> None:
-    settings = management_only(settings, "braveheart-selfplay")
+    settings = management_only(settings, "braveheart-selfplay", "braveheart-trainer")
     tfvars = render_tfvars(
         _registry_project("braveheart-selfplay", settings), settings, access=_access()
     )
@@ -1416,7 +1416,7 @@ def test_a_shared_dataset_names_its_platform_role_as_a_reader(settings: Settings
 
 
 def test_a_pending_handshake_adds_no_reader(settings: Settings) -> None:
-    settings = management_only(settings, "braveheart-selfplay")
+    settings = management_only(settings, "braveheart-selfplay", "braveheart-trainer")
     project = _registry_project("braveheart-selfplay", settings)
     for access in (_access(consumer_reads=False), None):
         (dataset,) = render_tfvars(project, settings, access=access)["datasets"]

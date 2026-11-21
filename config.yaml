@@ -240,13 +240,15 @@ production:
     guitar-knowledge-base: moved # moved 2026-11-18; old stack destroyed, old bucket kept (README, "Moving a site")
     cs-survival-guide: moved # moved 2026-11-18; old stack destroyed, old bucket kept (README, "Moving a site")
     main-site: moved # moved 2026-11-18; old stack destroyed, old bucket kept (README, "Moving a site")
-    # With its positions; trainer follows one release later, because each reads the
-    # other's bucket (docs/datasets.md, "Moving a dataset project to production").
-    braveheart-selfplay: moving
-    braveheart-trainer: moving # with its nets, one release after selfplay
-    # The engine: SPRT and match tasks on c8a.16xlarge, no dataset. Started 2026-11-19,
-    # once production's Standard on-demand and spot vCPU quotas were raised to 256.
-    braveheart: moving
+    # With its positions (cut over 2026-11-19, braveheart-selfplay#25) and its nets
+    # (cut over 2026-11-21, braveheart-trainer#18, once production's G and VT quota
+    # was approved). Old stacks destroyed 2026-11-21, their buckets released and
+    # kept (docs/datasets.md, "Moving a dataset project to production").
+    braveheart-selfplay: moved
+    braveheart-trainer: moved
+    # The engine: SPRT and match tasks on c8a.16xlarge, no dataset. In production
+    # since 2026-11-19 (it pins v0.65.0); old stack destroyed 2026-11-21.
+    braveheart: moved
     braveheart-databricks: moved # rebuilt in production with Databricks; its old stacks destroyed 2026-11-19
   overrides:
     aws:
