@@ -23,6 +23,13 @@ mock_provider "aws" {
     }
   }
 
+  # The state bucket's policy (state.tf) must parse as JSON.
+  mock_data "aws_iam_policy_document" {
+    defaults = {
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+    }
+  }
+
   mock_resource "aws_identitystore_user" {
     defaults = {
       user_id = "90676d2e5d-11111111-2222-3333-4444-555555555555"
@@ -33,6 +40,50 @@ mock_provider "aws" {
     defaults = {
       arn = "arn:aws:sso:::permissionSet/ssoins-0123456789abcdef/ps-0123456789abcdef"
     }
+  }
+}
+
+# The state bucket's resources are adopted by `import` blocks (state.tf), and
+# a mock provider cannot import, so each is overridden by address.
+override_resource {
+  target = aws_s3_bucket.state
+  values = {
+    id  = "jaws-owner-access-state-650503560686"
+    arn = "arn:aws:s3:::jaws-owner-access-state-650503560686"
+  }
+}
+
+override_resource {
+  target = aws_s3_bucket_versioning.state
+}
+
+override_resource {
+  target = aws_s3_bucket_server_side_encryption_configuration.state
+}
+
+override_resource {
+  target = aws_s3_bucket_public_access_block.state
+}
+
+override_resource {
+  target = aws_s3_bucket_ownership_controls.state
+}
+
+override_resource {
+  target = aws_s3_bucket_policy.state
+}
+
+run "state_lives_in_its_own_management_account_bucket" {
+  command = plan
+
+  assert {
+    condition     = aws_s3_bucket.state.bucket == "jaws-owner-access-state-650503560686"
+    error_message = "the state bucket is jaws-owner-access-state-<management account ID>, matching backend/prod.hcl"
+  }
+
+  assert {
+    condition     = aws_s3_bucket_versioning.state.versioning_configuration[0].status == "Enabled"
+    error_message = "the state bucket must keep every prior state"
   }
 }
 
