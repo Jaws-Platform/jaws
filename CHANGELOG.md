@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.74.1](https://github.com/Jaws-Platform/jaws/compare/v0.74.0...v0.74.1) (2026-11-21)
+
+
+### Documentation
+
+* open the readme with the shared jaws banner ([#284](https://github.com/Jaws-Platform/jaws/issues/284)) ([368abe7](https://github.com/Jaws-Platform/jaws/commit/368abe70463efc88f5e7e70d5ca8d4cf161a64aa))
+* **owner-access:** create the state bucket's policy before the first import ([#282](https://github.com/Jaws-Platform/jaws/issues/282)) ([2e39c7e](https://github.com/Jaws-Platform/jaws/commit/2e39c7e4fa06109bcf0ab0825d1c1799f169dbcb))
+
 ## [0.74.0](https://github.com/Jaws-Platform/jaws/compare/v0.73.2...v0.74.0) (2026-11-21)
 
 
