@@ -1,4 +1,10 @@
-# Jaws
+[![Jaws: one platform for every project on AWS](https://raw.githubusercontent.com/Jaws-Platform/jaws-branding/main/assets/banner/jaws-readme-banner.png)](https://github.com/Jaws-Platform)
+
+# jaws
+
+[![GitHub release](https://img.shields.io/github/v/release/Jaws-Platform/jaws?label=release)](https://github.com/Jaws-Platform/jaws/releases/latest)
+[![CI](https://github.com/Jaws-Platform/jaws/actions/workflows/ci.yml/badge.svg?event=pull_request)](https://github.com/Jaws-Platform/jaws/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Jaws-Platform/jaws/blob/main/LICENSE)
 
 The foundation stack for every [jwall.engineering](https://jwall.engineering) site. It owns:
 
