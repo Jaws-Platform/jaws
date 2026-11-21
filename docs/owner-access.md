@@ -169,7 +169,9 @@ ARN, and a recreated permission set cannot lock you out of it.
 
 On a rebuild the bucket must exist before `terraform init`, since a backend
 cannot create its own bucket. Create it by hand, then let the first apply
-adopt it through the `import` blocks in `state.tf`:
+adopt it through the `import` blocks in `state.tf`. Every imported resource
+must already exist, the bucket policy included: an import of a bucket with no
+policy fails with `Cannot import non-existent remote object`.
 
 ```sh
 export AWS_PROFILE=jwall-admin
@@ -178,7 +180,18 @@ aws s3api create-bucket --bucket "$B" --region us-east-1
 aws s3api put-bucket-versioning --bucket "$B" --versioning-configuration Status=Enabled
 aws s3api put-public-access-block --bucket "$B" --public-access-block-configuration \
   BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+aws s3api put-bucket-encryption --bucket "$B" --server-side-encryption-configuration \
+  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"},"BucketKeyEnabled":true}]}'
+aws s3api put-bucket-policy --bucket "$B" --policy "$(jq -nc --arg b "$B" '{
+  Version: "2012-10-17",
+  Statement: [{Sid: "DenyInsecureTransport", Effect: "Deny", Principal: "*", Action: "s3:*",
+    Resource: ["arn:aws:s3:::\($b)", "arn:aws:s3:::\($b)/*"],
+    Condition: {Bool: {"aws:SecureTransport": "false"}}}]}')"
 ```
+
+The plan after `terraform init` then shows six imports and two in-place
+updates (the bucket's tags, and the policy re-rendered from its data source),
+and the plan after the apply shows no changes.
 
 Until 2026-11-21 the state lived in `jwall-engineering-tfstate`, the old
 foundation's state bucket from before the move to production. That bucket is
