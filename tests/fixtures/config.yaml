@@ -163,6 +163,16 @@ projects:
       jaws-pi-benchmarks-problems:
         prefix: data/
         versioning: true
+  pi-prover:
+    # Pi's own resources (Pi-Mathematical-Reasoning/pi), named pi-prover so its
+    # roles cannot match pi-benchmarks'. For now a dataset alone: the record of
+    # every published run, which the owner uploads with admin credentials.
+    # Versioned, with no expiry. Training adds instance types and task
+    # profiles here later.
+    datasets:
+      jaws-pi-prover-artifacts:
+        prefix: data/
+        versioning: true
   braveheart-bot:
     # Braveheart's Lichess bot (Braveheart-Chess/braveheart-lichess-bot): a container
     # image and a lichess-bot only, running a pinned release of the engine's
@@ -264,6 +274,7 @@ production:
     braveheart: moved
     braveheart-databricks: moved # rebuilt in production with Databricks; its old stacks destroyed 2026-11-19
     pi-benchmarks: moved # new on 2026-11-21, after the management account was retired: it has only ever been in production
+    pi-prover: moved # new on 2026-11-21, born in production like pi-benchmarks
   overrides:
     aws:
       account_id: "570327089884"

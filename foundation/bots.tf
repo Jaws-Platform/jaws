@@ -42,6 +42,7 @@ locals {
     braveheart-selfplay = { repository = "Braveheart-Chess/braveheart-selfplay", repository_id = "1459456470", owner_id = "356866252" }
     braveheart-trainer  = { repository = "Braveheart-Chess/braveheart-trainer", repository_id = "1459456509", owner_id = "356866252" }
     pi-benchmarks       = { repository = "Pi-Mathematical-Reasoning/pi-benchmarks", repository_id = "1466231955", owner_id = "359343898" }
+    pi-prover           = { repository = "Pi-Mathematical-Reasoning/pi", repository_id = "1466017315", owner_id = "359343898" }
   }
 
   # The entries of `bots` without a bot or an image (kind research): their plan
@@ -52,8 +53,9 @@ locals {
   # "A bot project that drops its bot"). braveheart-selfplay and braveheart-trainer
   # take over the engine's self-play pipeline and its training from 2026-11-16;
   # until the data moves to their own buckets they have task runners only.
-  # pi-benchmarks (2026-11-21) is a dataset alone: Pi's benchmark files.
-  research_projects = toset(["braveheart", "braveheart-selfplay", "braveheart-trainer", "pi-benchmarks"])
+  # pi-benchmarks (2026-11-21) is a dataset alone: Pi's benchmark files. So is
+  # pi-prover for now (2026-11-21): Pi's run records, until training adds a task runner.
+  research_projects = toset(["braveheart", "braveheart-selfplay", "braveheart-trainer", "pi-benchmarks", "pi-prover"])
 
   # The guardrails come from config.yaml's `projects`, not from the project
   # file. The launch role is assumed by the consumer's pull requests, so

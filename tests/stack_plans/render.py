@@ -139,6 +139,8 @@ def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
         "production_bot": (_bot_in_production(), production),
         # Pi's benchmark files: the live file, a dataset alone, only ever in production.
         "pi_benchmarks": (_registered("pi-benchmarks"), production),
+        # Pi's run records: the live file, a dataset alone for now, only ever in production.
+        "pi_prover": (_registered("pi-prover"), production),
     }
     databricks = _project(_file("databricks-poc"), settings)
     return {

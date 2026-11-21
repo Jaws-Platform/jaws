@@ -19,6 +19,7 @@ on:
           - braveheart-selfplay
           - braveheart-trainer
           - pi-benchmarks
+          - pi-prover
       destroy:
         description: Destroy the stack instead (the records, dataset and task results buckets and the secret are kept).
         required: false

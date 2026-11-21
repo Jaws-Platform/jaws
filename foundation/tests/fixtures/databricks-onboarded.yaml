@@ -111,6 +111,11 @@ projects:
       jaws-pi-benchmarks-problems:
         prefix: data/
         versioning: true
+  pi-prover:
+    datasets:
+      jaws-pi-prover-artifacts:
+        prefix: data/
+        versioning: true
   braveheart-bot: {}
   braveheart-databricks:
     databricks:
