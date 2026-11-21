@@ -96,8 +96,8 @@ organization deletes the account's Cost Explorer data. Treat it as permanent.
 
 Only the owner applies this stack, from a clean, up-to-date `main`, with admin
 credentials. Release Please never applies it, and no CI role could: none has
-Identity Center permissions, and its state (`project=owner-access/` in the
-shared bucket) is reachable only by the break-glass principals.
+Identity Center permissions, and its state lives in the management account,
+in the stack's own bucket (see [Its state](#its-state)).
 
 ```sh
 cd owner-access
@@ -155,6 +155,34 @@ others.
 
    The profile is named, never `default`, so nothing uses admin without asking
    for it.
+
+## Its state
+
+The stack keeps its state in `jaws-owner-access-state-650503560686`, a bucket
+in the management account that the stack itself manages (`owner-access/state.tf`):
+versioned, SSE-S3, Block Public Access, `BucketOwnerEnforced` ownership,
+`prevent_destroy`, and a policy that only requires TLS. It is not in the
+production account's shared bucket on purpose: this stack grants access to
+every account, so repairing that access must never need access to another
+account. The management account has no CI roles, so the policy pins no role
+ARN, and a recreated permission set cannot lock you out of it.
+
+On a rebuild the bucket must exist before `terraform init`, since a backend
+cannot create its own bucket. Create it by hand, then let the first apply
+adopt it through the `import` blocks in `state.tf`:
+
+```sh
+export AWS_PROFILE=jwall-admin
+B=jaws-owner-access-state-650503560686
+aws s3api create-bucket --bucket "$B" --region us-east-1
+aws s3api put-bucket-versioning --bucket "$B" --versioning-configuration Status=Enabled
+aws s3api put-public-access-block --bucket "$B" --public-access-block-configuration \
+  BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+```
+
+Until 2026-11-21 the state lived in `jwall-engineering-tfstate`, the old
+foundation's state bucket from before the move to production. That bucket is
+retired once the state has moved here with `terraform init -migrate-state`.
 
 ## The break-glass entry
 
@@ -230,8 +258,7 @@ With `AWS_PROFILE=jwall-admin` (the management account, where owner-access
 and its state live):
 
 - `aws sts get-caller-identity` shows `assumed-role/AWSReservedSSO_AdministratorAccess_*/jwallace145`.
-- `terraform -chdir=owner-access plan` shows no changes (the state bucket
-  exempts the role).
+- `terraform -chdir=owner-access plan` shows no changes.
 
 With `AWS_PROFILE=jaws-prod` (the production account):
 
