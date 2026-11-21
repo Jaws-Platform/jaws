@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.68.0](https://github.com/Jaws-Platform/jaws/compare/v0.67.0...v0.68.0) (2026-11-21)
+
+
+### Features
+
+* **foundation:** trust Jaws-Platform/jaws as the repository and drop the transfer alias ([#259](https://github.com/Jaws-Platform/jaws/issues/259)) ([3358346](https://github.com/Jaws-Platform/jaws/commit/3358346e20437ff97abb575c33ee3f0f117f6e5d))
+
 ## [0.67.0](https://github.com/jwallace145/jaws/compare/v0.66.0...v0.67.0) (2026-11-21)
 
 
