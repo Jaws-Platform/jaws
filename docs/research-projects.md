@@ -114,11 +114,18 @@ Then, in this repository:
    `local.research_projects` there, which gives it `compute/*` instead of
    `container/*` and no release role.
 3. Add its `projects:` entry to `config.yaml`: instance types, task profiles,
-   and each dataset bucket with its retention. Keep
-   `tests/fixtures/config.yaml` identical to it.
-4. Add a copy of the project file as `tests/fixtures/bots/<project>.yaml`
-   (the `math-prover` sample is already there). `tests/test_bots_registry.py`
-   checks steps 2 and 3 against it. No test needs editing.
+   and each dataset bucket with its retention. The management account is
+   retired, so a new project is born in production: list it under
+   `production.projects` as `moved`, and approve each bucket under
+   production's name alone (`jaws-<project>-<name>`). Keep
+   `tests/fixtures/config.yaml` identical to `config.yaml`, and regenerate the
+   foundation's fixtures with `uv run python -m tests.test_foundation_fixtures`.
+4. Add a copy of the project file as `tests/fixtures/registry/<project>.yaml`.
+   `tests/test_bots_registry.py` checks steps 2 and 3 against it. Add the
+   project to that file's `test_registry_lists_braveheart`, which lists every
+   entry, and to `BORN_IN_PRODUCTION`, so no management-account bucket is
+   expected for it. (`tests/fixtures/bots/` holds samples, such as
+   `math-prover`, that are not registered.)
 5. Add it to the CI matrices: `bot-plan` in `.github/workflows/ci.yml` and
    the `project` options in `.github/workflows/bot-apply.yml`. On this pull
    request **Bot plan** for the project is expected to skip with a warning,

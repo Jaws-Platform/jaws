@@ -523,13 +523,14 @@ jobs:
         # buckets, docs/datasets.md) is reviewed before Bot apply; it skips every
         # other project, which `auto` already plans there or which has left.
         account: [auto, management]
-        project: [braveheart, braveheart-bot, braveheart-selfplay, braveheart-trainer]
+        project: [braveheart, braveheart-bot, braveheart-selfplay, braveheart-trainer, pi-benchmarks]
         # One entry per bot in foundation/bots.tf (a test keeps them in sync).
         include:
           - { project: braveheart, repository: Braveheart-Chess/braveheart }
           - { project: braveheart-bot, repository: Braveheart-Chess/braveheart-lichess-bot }
           - { project: braveheart-selfplay, repository: Braveheart-Chess/braveheart-selfplay }
           - { project: braveheart-trainer, repository: Braveheart-Chess/braveheart-trainer }
+          - { project: pi-benchmarks, repository: Pi-Mathematical-Reasoning/pi-benchmarks }
     steps:
       - uses: actions/checkout@v7
       - name: Check out the bot's project file (its default branch)

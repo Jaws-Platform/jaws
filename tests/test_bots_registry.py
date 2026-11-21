@@ -24,6 +24,10 @@ _ENTRY = re.compile(
 )
 #: The Braveheart-Chess organisation: gh api orgs/Braveheart-Chess --jq .id
 BRAVEHEART_CHESS = "356866252"
+#: Projects registered after the management account was retired (v0.70.0): they
+#: have only ever had a stack in production, so nothing is approved under the
+#: management account's name for them.
+BORN_IN_PRODUCTION = {"pi-benchmarks"}
 
 
 def registry() -> dict[str, tuple[str, str]]:
@@ -54,6 +58,8 @@ def test_registry_lists_braveheart() -> None:
         # The self-play dataset and the trainer, split from the engine on 2026-11-16.
         "braveheart-selfplay": ("Braveheart-Chess/braveheart-selfplay", "1459456470"),
         "braveheart-trainer": ("Braveheart-Chess/braveheart-trainer", "1459456509"),
+        # Pi's benchmark files, a dataset alone, registered on 2026-11-21.
+        "pi-benchmarks": ("Pi-Mathematical-Reasoning/pi-benchmarks", "1466231955"),
     }
     # The engine's project was `rusty-chess` until 2026-11-15; the old name is gone.
     assert "rusty-chess" not in BOTS_TF.read_text()
@@ -386,8 +392,10 @@ def test_dataset_buckets_match_the_project_files() -> None:
         components = project_file(project)["components"]
         names = [c["name"] for c in components if c["kind"] == "dataset"]
         # Approved under each account's name where the project has a stack: the
-        # management account's, and production's too once it is moving there.
-        organizations = ["jwall-engineering"] + (["jaws"] if project in _in_production() else [])
+        # management account's, and production's too once it is moving there. A
+        # project born in production has production's name alone.
+        management = [] if project in BORN_IN_PRODUCTION else ["jwall-engineering"]
+        organizations = management + (["jaws"] if project in _in_production() else [])
         buckets = [f"{org}-{project}-{name}" for name in names for org in organizations]
         if buckets:
             expected[project] = buckets

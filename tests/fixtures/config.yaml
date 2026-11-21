@@ -154,6 +154,15 @@ projects:
       jaws-braveheart-trainer-nets:
         prefix: data/
         versioning: true
+  pi-benchmarks:
+    # Pi's benchmark files (Pi-Mathematical-Reasoning/pi-benchmarks): a dataset
+    # and nothing else, so no instance types and no task profiles. The owner
+    # imports each file with admin credentials; nothing automated writes it.
+    # Versioned, with no expiry, like Braveheart's production buckets.
+    datasets:
+      jaws-pi-benchmarks-problems:
+        prefix: data/
+        versioning: true
   braveheart-bot:
     # Braveheart's Lichess bot (Braveheart-Chess/braveheart-lichess-bot): a container
     # image and a lichess-bot only, running a pinned release of the engine's
@@ -254,6 +263,7 @@ production:
     # since 2026-11-19 (it pins v0.65.0); old stack destroyed 2026-11-21.
     braveheart: moved
     braveheart-databricks: moved # rebuilt in production with Databricks; its old stacks destroyed 2026-11-19
+    pi-benchmarks: moved # new on 2026-11-21, after the management account was retired: it has only ever been in production
   overrides:
     aws:
       account_id: "570327089884"
