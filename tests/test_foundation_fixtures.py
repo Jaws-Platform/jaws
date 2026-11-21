@@ -1,9 +1,10 @@
-"""The configurations the foundation's account tests plan against.
+"""The configurations the foundation's tests plan against.
 
-`foundation/tests/accounts.tftest.hcl` needs a production account that has
-been bootstrapped and projects part-way through the move, which `config.yaml`
-does not describe yet. Each fixture under `foundation/tests/fixtures/` is
-`config.yaml` with a few values set; this test keeps them from drifting.
+`foundation/tests/foundation.tftest.hcl` plans config.yaml as written, and a few
+states it isn't in: a ManagedBy no code spells, no task runner, the Databricks
+host before its URL is recorded, and an admin role of another account. Each
+fixture under `foundation/tests/fixtures/` is `config.yaml` with a few values
+set; this test keeps them from drifting.
 
 Regenerate after changing `config.yaml`:
 
@@ -22,102 +23,42 @@ import yaml
 from tests.conftest import REPO_ROOT
 
 FIXTURES_DIR = REPO_ROOT / "foundation" / "tests" / "fixtures"
-PRODUCTION_ADMIN = (
-    "arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com/"
-    "AWSReservedSSO_AdministratorAccess_0123456789abcdef"
-)
-
-
-#: The management account's shared host and a production one, as the fixtures state them.
-MANAGEMENT_HOST = "https://dbc-46322154-036c.cloud.databricks.com"
-PRODUCTION_HOST = "https://dbc-0f0f0f0f-aaaa.cloud.databricks.com"
-
-
-def _databricks_in(
-    config: dict[str, Any], account: str, production_host: str | None = None
-) -> dict[str, Any]:
-    """Databricks enabled in `account` only, stated here and not read from the file:
-    it is enabled in one account at a time, and config.yaml flips when it moves."""
-    config["databricks"]["enabled"] = account == "management"
-    config["databricks"]["shared_host_url"] = MANAGEMENT_HOST
-    overrides = config["production"]["overrides"].setdefault("databricks", {})
-    overrides["enabled"] = account == "production"
-    overrides["shared_host_url"] = production_host
-    return config
-
-
-def _bootstrapped(config: dict[str, Any]) -> dict[str, Any]:
-    """What `config.yaml` says once the owner has bootstrapped production, before
-    any project moves: the projects are stated here, not read from the file, so
-    these fixtures survive each pull request that moves a project. Databricks is
-    in the management account, where these fixtures' runs expect it."""
-    config = _databricks_in(config, "management")
-    production = config["production"]
-    production["bootstrapped"] = True
-    production["projects"] = {}
-    production.pop("management_retired", None)
-    production["overrides"]["aws"]["admin_role_arn"] = PRODUCTION_ADMIN
-    production["overrides"]["dns"] = {"zone_id": "Z0PRODUCTIONZONE0000"}
-    return config
-
-
-def _with_projects(projects: dict[str, str]) -> Callable[[dict[str, Any]], dict[str, Any]]:
-    def transform(config: dict[str, Any]) -> dict[str, Any]:
-        config = _bootstrapped(config)
-        config["production"]["projects"] = projects
-        return config
-
-    return transform
-
-
-def _unbootstrapped(config: dict[str, Any]) -> dict[str, Any]:
-    """What `config.yaml` says before the bootstrap: production has no admin
-    role and no zone of its own yet. Stated here, not read from the file, so
-    the tests that need this state survive the pull request that ends it."""
-    config = _databricks_in(config, "management")
-    production = config["production"]
-    production["bootstrapped"] = False
-    production["projects"] = {}
-    production.pop("management_retired", None)
-    production["overrides"]["aws"].pop("admin_role_arn", None)
-    production["overrides"].pop("dns", None)
-    return config
 
 
 def _relabelled(config: dict[str, Any]) -> dict[str, Any]:
-    """Production with a ManagedBy of its own that no code spells: the
-    foundation must take it from the configuration."""
-    config = _bootstrapped(config)
-    config["production"]["overrides"]["context"]["managed_by"] = "jaws-relabelled"
+    """A ManagedBy no code spells: the foundation must take it from the file."""
+    config["context"]["managed_by"] = "jaws-relabelled"
     return config
 
 
-def _databricks_switched(host: str | None) -> Callable[[dict[str, Any]], dict[str, Any]]:
-    """Databricks rebuilt in production: braveheart-databricks has left management
-    and braveheart-selfplay, whose positions it reads, has a stack in both."""
+def _no_task_runners(config: dict[str, Any]) -> dict[str, Any]:
+    """No project may start a task instance."""
+    for project in config["projects"].values():
+        if isinstance(project, dict):
+            project.pop("instance_types", None)
+            project.pop("task_profiles", None)
+    return config
 
-    def transform(config: dict[str, Any]) -> dict[str, Any]:
-        config = _with_projects(
-            {"braveheart-selfplay": "moving", "braveheart-databricks": "moved"}
-        )(config)
-        return _databricks_in(config, "production", host)
 
-    return transform
+def _awaiting_host(config: dict[str, Any]) -> dict[str, Any]:
+    """Databricks before its shared host's URL is recorded (the first apply)."""
+    config["databricks"]["shared_host_url"] = None
+    return config
+
+
+def _foreign_admin(config: dict[str, Any]) -> dict[str, Any]:
+    """An admin role that is not in the account: the plan must stop."""
+    config["aws"]["admin_role_arn"] = config["aws"]["admin_role_arn"].replace(
+        config["aws"]["account_id"], "650503560686"
+    )
+    return config
 
 
 FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
-    "unbootstrapped.yaml": _unbootstrapped,
-    "production.yaml": _bootstrapped,
     "relabelled.yaml": _relabelled,
-    # A research project with a stack in both accounts, and a site that has left.
-    "moving.yaml": _with_projects({"braveheart-trainer": "moving", "main-site": "moved"}),
-    # A bot whose old stack has been destroyed.
-    "moved.yaml": _with_projects({"braveheart-bot": "moved"}),
-    "unregistered.yaml": _with_projects({"not-a-project": "moving"}),
-    # Databricks after its move: off in management, on in production, whose shared
-    # host is not recorded yet (the first release), then recorded (the second).
-    "databricks-switched.yaml": _databricks_switched(None),
-    "databricks-onboarded.yaml": _databricks_switched(PRODUCTION_HOST),
+    "no-task-runners.yaml": _no_task_runners,
+    "awaiting-host.yaml": _awaiting_host,
+    "foreign-admin.yaml": _foreign_admin,
 }
 
 

@@ -16,21 +16,21 @@ library:
     Jaws-Platform/jaws-research/aws: 0.1.2
     Jaws-Platform/jaws-static-site/aws: 0.1.2
 state:
-  bucket: jwall-engineering-tfstate
+  bucket: jaws-terraform-state-570327089884
   region: us-east-1
   key_template: project={project}/env={environment}/{project}-{environment}.tfstate
 aws:
-  account_id: '650503560686'
-  admin_role_arn: arn:aws:iam::650503560686:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_22a17d3bc2bca2d3
+  account_id: '570327089884'
+  admin_role_arn: arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_013589f39f92382a
 context:
-  organization: jwall-engineering
+  organization: jaws
   owner: jwallace145
-  managed_by: jwall-engineering-infra
+  managed_by: jaws
 dns:
   zone: jwall.engineering
-  zone_id: Z029546536VUFGDCPXZ21
+  zone_id: Z0644006DW6W2HALU9BI
 ecr:
-  repository: jwall-engineering-sites
+  repository: jaws-cli
   keep_release_images: 20
   expire_untagged_after_days: 7
 sync:
@@ -84,9 +84,6 @@ projects:
     - datagen
     - relabel
     datasets:
-      jwall-engineering-braveheart-selfplay-positions:
-        prefix: data/
-        versioning: true
       jaws-braveheart-selfplay-positions:
         prefix: data/
         versioning: true
@@ -100,9 +97,6 @@ projects:
     - cpu
     - gpu
     datasets:
-      jwall-engineering-braveheart-trainer-nets:
-        prefix: data/
-        versioning: true
       jaws-braveheart-trainer-nets:
         prefix: data/
         versioning: true
@@ -130,16 +124,16 @@ databricks:
   enabled: true
   account_id: 64826090-46b0-471f-b2d6-f3e7490b992c
   client_id: 59a6c509-4d02-4622-b907-d42da61b2119
-  secret_parameter: /jwall-engineering/databricks/client-secret
-  metastore_name: jwall-engineering-us-east-1
+  secret_parameter: /jaws/databricks/client-secret
+  metastore_name: jaws-us-east-1
   metastore_admins:
   - jimmy.wallace145@gmail.com
   nat_ami: al2023-ami-2023.12.20261026.1-kernel-6.18-arm64
   deployment_name_prefix: null
-  audit_bucket: jwall-engineering-databricks-audit-logs
+  audit_bucket: jaws-databricks-audit-logs
   events_prefix: events/
   readiness_timeout: 20m
-  shared_host_url: https://dbc-46322154-036c.cloud.databricks.com
+  shared_host_url: null
   compute_policies:
     small-interactive:
       description: Small interactive clusters on cheap Graviton spot nodes
@@ -180,28 +174,7 @@ databricks:
         aws_attributes.availability:
           type: fixed
           value: SPOT_WITH_FALLBACK
+management:
+  account_id: '650503560686'
 development:
   account_id: '859674017655'
-production:
-  bootstrapped: true
-  projects:
-    braveheart-bot: moved
-  overrides:
-    aws:
-      account_id: '570327089884'
-      admin_role_arn: arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_0123456789abcdef
-    context:
-      organization: jaws
-      managed_by: jaws
-    state:
-      bucket: jaws-terraform-state-570327089884
-    ecr:
-      repository: jaws-cli
-    dns:
-      zone_id: Z0PRODUCTIONZONE0000
-    databricks:
-      enabled: false
-      secret_parameter: /jaws/databricks/client-secret
-      metastore_name: jaws-us-east-1
-      audit_bucket: jaws-databricks-audit-logs
-      shared_host_url: null

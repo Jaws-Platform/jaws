@@ -1,4 +1,4 @@
-# Terraform state bucket shared by every jwall-engineering stack.
+# Terraform state bucket shared by every jaws stack.
 #
 # Key convention: project=<project>/env=<env>/<project>-<env>.tfstate
 # Locking uses the S3 native lockfile (<key>.tflock); there is no DynamoDB.
@@ -53,20 +53,20 @@ locals {
       }
     },
     {
-      for key, project in local.served_sites : "project=${key}/" => {
+      for key, project in local.projects : "project=${key}/" => {
         read  = [module.site_ci_plan[key].role_arn]
         write = [module.site_ci_apply[key].role_arn]
       }
     },
     {
-      for key, bot in local.served_bots : "project=${key}/" => {
+      for key, bot in local.bots : "project=${key}/" => {
         read  = [module.bot_ci_plan[key].role_arn]
         write = [module.bot_ci_apply[key].role_arn]
       }
     },
     {
       # Both stacks of a Databricks project: its account and workspace keys.
-      for key, project in local.served_databricks_projects : "project=${key}/" => {
+      for key, project in local.databricks_projects : "project=${key}/" => {
         read  = [module.databricks_ci_plan[key].role_arn]
         write = [module.databricks_ci_apply[key].role_arn]
       }

@@ -61,7 +61,7 @@ OUTPUTS = {
     "workspace_url": URL,
     "admin_group_name": "databricks-poc-workspace-admins",
     "users_group_name": "databricks-poc-workspace-users",
-    "root_bucket_name": "jwall-engineering-databricks-poc-databricks-root",
+    "root_bucket_name": "jaws-databricks-poc-databricks-root",
     "metastore_id": "ms-1",
 }
 SKIP_HINT = (
@@ -649,7 +649,7 @@ def test_aft001_fails_when_validation_returns_nothing(databricks: Project, live:
 
 
 def _catalog(**kwargs: Any) -> CatalogInfo:
-    bucket = "jwall-engineering-databricks-poc-databricks-catalog"
+    bucket = "jaws-databricks-poc-databricks-catalog"
     fields: dict[str, Any] = {
         "name": "databricks_poc",
         "storage_root": f"s3://{bucket}/managed/",
@@ -792,7 +792,7 @@ def _network(
             )
 
 
-NAME = "jwall-engineering-databricks-poc"
+NAME = "jaws-databricks-poc"
 
 
 def test_aft004_passes_for_endpoint_and_nat_route(

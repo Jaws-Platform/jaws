@@ -2,7 +2,7 @@
 
 The foundation stack for every [jwall.engineering](https://jwall.engineering) site. It owns:
 
-- the shared Terraform state bucket `jwall-engineering-tfstate`
+- the shared Terraform state bucket `jaws-terraform-state-570327089884`
 - a reference to the account's GitHub Actions OIDC identity provider (owned by prog-strength-infra for now)
 - the `jwall.engineering` Route 53 hosted zone (zone-level records only)
 - for each site in the `projects` registry, an S3 bucket and three CI roles
@@ -18,12 +18,8 @@ Everything is in `us-east-1`, managed with Terraform `>= 1.11` and the AWS provi
 Jaws 🦈 started as a static-site tool and now provisions every
 kind of project here: sites, bots, research projects and Databricks
 workspaces. It was called JWall Engineering Infra, with the command
-`jwall-engineering-sites`, until v0.44. The old command, the old project file
-name (`jwall-engineering-sites.yaml`) and the old `JES_*` variables still work
-and print a warning naming their replacement; they are removed once every
-consumer has moved. The cloud resources (the ECR repository
-`jwall-engineering-sites`, every `jwall-engineering-` name) and this
-repository's name have not moved yet.
+`jwall-engineering-sites`, until v0.44; every name it builds now starts with
+`jaws` (README, "History").
 
 `jaws` is the Python CLI (Typer, managed with `uv`) that
 provisions and publishes every site from one YAML file in its repository,
@@ -31,9 +27,8 @@ provisions and publishes every site from one YAML file in its repository,
 bundled site stack in `stacks/site/` from that file and `config.yaml`, runs
 `terraform` against the shared state bucket, syncs built content and
 invalidates CloudFront. Site repositories keep no Terraform. It ships as a
-versioned image in each account's private ECR repository
-(`jwall-engineering-sites` in management, `jaws-cli` in production; the
-composite action pulls from the account its role is in), published by the
+versioned image in the account's private ECR repository (`jaws-cli`),
+published by the
 release workflow, and site repositories run it through the reusable workflows
 this repository publishes. The design is in
 [#26](https://github.com/Jaws-Platform/jaws/pull/26).
@@ -229,89 +224,52 @@ request keeps its original author; the app shows up on new pull requests.
 The release workflow (`workflow_dispatch` with a `tag`) can re-publish the
 image for an existing tag without cutting a release.
 
-## Two accounts, while everything moves
+## Accounts
 
-Everything is moving from the management account to a production account.
-`config.yaml` describes the management account, and its `production` section
-holds what differs in production (account, name prefix `jaws`, state bucket,
-image repository) and which projects have a stack there. Its `development`
-section records the organization's third account, where nothing is built yet:
-no run addresses it, `config accounts` never lists it, and the owner reaches it
-through [owner access](docs/owner-access.md) (the `jaws-dev` profile). A run addresses one
-account:
+Everything jaws builds lives in one AWS account, the JWall Engineering
+production account (570327089884), and `config.yaml` describes it: its account,
+its owner's admin role, the `jaws` name prefix (`context.organization`), the
+state bucket, the image repository and the `jwall.engineering` zone. A run
+never chooses an account, and every workflow builds its role ARNs from `jaws
+config env`.
 
-- production, for a project listed under `production.projects` (`moving` while
-  its old stack still exists, `moved` once that is destroyed);
-- management, for every other project and for a run without a project file;
-- `--account management` addresses the old stack of a project that is `moving`
-  (to destroy it), and `--account production` a run without a project file.
+`config.yaml` also records the organization's other two accounts, where jaws
+builds nothing and no run goes:
 
-The tags that differ between the accounts are the account's, never the project
-file's: every stack the tool renders and every task instance it launches gets
-`Organization` and `ManagedBy` from the view's `context.organization` and
-`context.managed_by` (`jwall-engineering` and `jwall-engineering-infra` in
-management, `jaws` and `jaws` in production), so one project file, which may
-state either organization, plans in both accounts while its project moves.
+- **management** (`management.account_id`): AWS Organizations and IAM Identity
+  Center, and with them [owner access](docs/owner-access.md) (the `jwall-admin`
+  profile);
+- **development** (`development.account_id`): reached as the `jaws-dev` profile.
 
-The foundation is one root for both accounts: `terraform plan -var
-account=production` plans the production account (state in
-`backend/production.hcl`), and the default plans the management account. Each
-creates roles and buckets only for the projects with a stack in its account,
-and a plan made with the other account's credentials stops before it starts.
+The tags the account decides are the tool's, never the project file's: every
+stack the tool renders and every task instance it launches gets `Organization`
+and `ManagedBy` from `context.organization` and `context.managed_by` (both
+`jaws`). A project file may state `Organization: jaws` or leave it out, and
+leaves `ManagedBy` out.
 
-The owner bootstrapped the production account on 2026-11-17
-([docs/production-bootstrap.md](docs/production-bootstrap.md)). Since then a
-pull request's checks plan the foundation in both accounts, and a release
-applies it in both and publishes the image to both registries.
+Credentials must belong to `config.yaml`'s account, even where the role check
+is skipped (`JAWS_SKIP_ROLE_CHECK`), so a secret or a stack is never written
+into another account by an admin profile left active. The foundation's plan
+stops the same way (`foundation/config.tf`).
 
-Two refusals keep a run in one account. Credentials must belong to the account
-the run addresses, even where the role check is skipped (`JAWS_SKIP_ROLE_CHECK`),
-so a secret or a stack is never written into the other account by an admin
-profile left active. And `destroy` on a project that is `moving` must name its
-account: both stacks exist, and the default is the new one.
+## History
 
-A site that has moved keeps its old bucket in the management account (without
-roles or writers) until the owner deletes it; a move never destroys a bucket.
-
-**Every project had moved by 2026-11-21**, so the management account is retired
-(`production.management_retired: true`). No workflow plans, applies or publishes
-there, `config accounts` lists production alone, and no run may address
-management. The owner removes what jaws left there with
-`scripts/retire_management.py`, after checks that every old data bucket is in
-production byte for byte ([docs/management-retirement.md](docs/management-retirement.md)).
-
-**Moving a site.** The production zone answers for `jwall.engineering` since
-2026-11-18. Every site record was copied into it first, still pointing at the
-old distributions. A CloudFront hostname belongs to one distribution at a time,
-so a site is down from its old stack's destroy until its new stack is deployed,
-about 20–30 minutes:
-
-1. `production.projects: {<site>: moving}`; the release creates the site's
-   bucket (`jaws-<site>`) and roles in production. Nothing changes for the site
-   yet.
-2. In the site's repository, set `AWS_PLAN_ROLE_ARN`, `AWS_PREVIEW_ROLE_ARN`
-   and `AWS_APPLY_ROLE_ARN` to
-   `arn:aws:iam::<production>:role/jaws-<site>-ci-{plan,preview,apply}`, and
-   pin the reusable workflows at that release. Merging the pin deploys nothing.
-3. The outage. From the site's checkout, with admin credentials:
-   `jaws --account management destroy --yes` removes the old stack (its
-   distributions, certificates and old-zone records; the bucket is the
-   foundation's and stays). Then dispatch the site's **Release** workflow
-   without a tag: it applies the production stack, whose records take over the
-   copies, and publishes the latest release.
-4. `<site>: moved`. The management foundation drops the site's roles and keeps
-   its old bucket for the owner, and the copied validation records of the old
-   certificates are deleted from the zone.
-
-`jaws config show` prints the view a run would use, and `jaws config env` the
-few values a workflow needs to build a role ARN: every workflow gets a
-project's account from it (`config env --project <name>`), never from its own
-reading of `config.yaml`. **Bot apply** and **Databricks apply** take an
-`account` input for the same choice. `production.projects` in `config.yaml` is
-the list of where each project stands: `braveheart-bot`, the three sites and
-`braveheart-databricks` have moved, and `braveheart-selfplay`,
-`braveheart-trainer` and the engine, `braveheart`, are moving. Every other
-project still addresses the management account.
+- **2026-10-14:** the first foundation, in what is now the organization's
+  management account, adopting the `jwall.engineering` zone from
+  `jwallace145/site`.
+- **2026-11-17:** the production account was bootstrapped.
+- **2026-11-18 to 11-21:** every project moved to production, one at a time,
+  each with a stack in both accounts while it moved: the sites, the Lichess
+  bot, Databricks (rebuilt as a whole), then the research projects with their
+  datasets, each copy audited key, size and ETag. The registrar switched to the
+  production zone on 2026-11-18.
+- **2026-11-21:** the management account was retired: every jaws resource there
+  destroyed and its old data deleted, after a final byte-for-byte check against
+  production (Jaws-Platform/jaws#265). The repository moved from `jwallace145`
+  to the `Jaws-Platform` organization the same day (#253, #259), and the
+  two-account code was removed. Its runbooks are in the git history, under
+  `docs/production-bootstrap.md`, `docs/migration.md` and
+  `docs/management-retirement.md`.
 
 ## Shared modules from the Terraform Registry
 
@@ -321,13 +279,13 @@ This stack is a consumer of the seven Jaws module families, published to the pub
 | --- | --- | --- |
 | [`Jaws-Platform/jaws-foundation/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-foundation/aws) | `context` (the tag set applied through `default_tags`), `tfstate-bucket` (the shared state bucket), `service-linked-role`, `private-bucket` (bot records and task results), `identity-center-access` (the owner's access) | `foundation/`, `stacks/bot/`, `owner-access/` |
 | [`Jaws-Platform/jaws-ci/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-ci/aws) | `ci-plan-role`, `ci-preview-role`, `ci-apply-role`, `ci-release-role` and `ci-task-role`, each with policies from the `ci-policies` catalog | `foundation/` |
-| [`Jaws-Platform/jaws-static-site/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-static-site/aws) | The root module (the site stack), `site-bucket` (one S3 bucket per site, `jwall-engineering-<project>`), `hosted-zone` (the `jwall.engineering` zone, its CAA record and the GitHub Pages verification TXT record) | `stacks/site/`, `foundation/` |
+| [`Jaws-Platform/jaws-static-site/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-static-site/aws) | The root module (the site stack), `site-bucket` (one S3 bucket per site, `jaws-<project>`), `hosted-zone` (the `jwall.engineering` zone, its CAA record and the GitHub Pages verification TXT record) | `stacks/site/`, `foundation/` |
 | [`Jaws-Platform/jaws-lichess-bot/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-lichess-bot/aws) | `container-instance` (the bot), `ecr-repository` (bot images, and the private repository for the `jaws` CLI image) | `stacks/bot/`, `foundation/ecr.tf` |
 | [`Jaws-Platform/jaws-research/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-research/aws) | `task-runner` (one per task profile), `dataset-bucket` | `stacks/bot/` |
 | [`Jaws-Platform/jaws-network/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-network/aws) | `vpc`, `nat-instance` | `stacks/bot/`, `stacks/databricks-account/` |
 | [`Jaws-Platform/jaws-databricks/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-databricks/aws) | The eleven `databricks-*` modules: the account baseline and shared datasets, each project's workspace, catalog and compute policies, and who may read each dataset | `foundation/databricks.tf`, `stacks/databricks-account/`, `stacks/databricks-workspace/`, `data-access/` |
 
-Until Jaws 0.66 these were one library, [`jwallace145/jwall-engineering/aws`](https://registry.terraform.io/modules/jwallace145/jwall-engineering/aws), which is deprecated at its last version, 0.29.0. Version 0.1.0 of each family holds the same module code, so the move changed no resource.
+Until Jaws 0.66 these were one library, [`jwallace145/jaws/aws`](https://registry.terraform.io/modules/jwallace145/jaws/aws), which is deprecated at its last version, 0.29.0. Version 0.1.0 of each family holds the same module code, so the move changed no resource.
 
 The root module itself creates no resources directly. It is the composition: identity, the `projects` map, module calls, and outputs.
 
@@ -357,8 +315,8 @@ CLI and `config.yaml`, the tool configuration shared by the stack and the CLI
 | Path | Owns |
 | --- | --- |
 | `versions.tf`, `providers.tf`, `context.tf` | Terraform and provider constraints, region, identity, and the registry `context` module whose tags are applied through `default_tags` |
-| `backend.tf`, `backend/management.hcl`, `backend/production.hcl` | S3 backend with native lockfile locking (no DynamoDB), one state per account |
-| `accounts.tf` | `var.account`: which account this root is planned for, the configuration as that account sees it, and the projects it serves |
+| `backend.tf`, `backend/prod.hcl` | S3 backend with native lockfile locking (no DynamoDB) |
+| `config.tf` | `config.yaml` as the foundation reads it, and the check that the credentials are its account's |
 | `state.tf` | The shared state bucket (`tfstate-bucket` module) |
 | `oidc.tf` | GitHub OIDC provider (data source; owned by prog-strength-infra, see the TODO there) |
 | `dns.tf` | The hosted zone, its CAA record and the zone owner's TXT records (`hosted-zone` module) |
@@ -379,7 +337,6 @@ CLI and `config.yaml`, the tool configuration shared by the stack and the CLI
 | `projects.tf` | The `projects` map: one entry per site, each fed to the registry `site-bucket`, `ci-plan-role`, `ci-preview-role` and `ci-apply-role` modules |
 | `outputs.tf` | Values the project repos and this repo's CI consume |
 | `registry/` | Derives the onboarded datasets from `datasets/` (each platform name, bucket and URL), tested against the CLI's derivation |
-| `docs/migration.md` | Legacy resources to retire after the move |
 | `scripts/apply-repo-settings.sh` | GitHub repository settings and the `main` ruleset |
 | `owner-access/` (root) | The owner's admin access through IAM Identity Center: a separate stack, applied only by the owner, never by CI ([docs/owner-access.md](docs/owner-access.md)) |
 | `datasets/` (root) | Onboarded datasets, one `<owner>/<name>.yaml` each ([datasets/README.md](datasets/README.md)) |
@@ -391,18 +348,18 @@ Every AWS resource this tool manages carries the same six tags, through the prov
 
 | Tag | Value | Links the resource to |
 | --- | --- | --- |
-| `Organization` | `jwall-engineering` | the umbrella all projects belong to |
-| `Project` | the project's kebab-case name, e.g. `braveheart`; `jwall-engineering-infra` for the foundation stack | the project that owns it (the CI roles' IAM policies also key on it) |
+| `Organization` | `jaws` | the umbrella all projects belong to |
+| `Project` | the project's kebab-case name, e.g. `braveheart`; `jaws` for the foundation stack | the project that owns it (the CI roles' IAM policies also key on it) |
 | `Environment` | `prod` | the deployment environment |
 | `Repository` | the project's `owner/repo` | the repository whose code it serves |
-| `ManagedBy` | `jwall-engineering-infra` | this tool, which provisions and changes it |
+| `ManagedBy` | `jaws` | this tool, which provisions and changes it |
 | `Owner` | `jwallace145` | the person responsible for it |
 
 Project files state the first five; the CLI cross-checks `Project`, `Repository`, `Environment` and `Organization` against the rest of the file and `config.yaml`, and adds `ManagedBy` itself. The foundation stack gets the same set from the library's `context` module. Components add `Component`, `Purpose` and `Lifecycle` where they apply. These tags are the cost allocation tags `cost report` groups by; [docs/costs.md](docs/costs.md) lists which must be active.
 
 ## State bucket and key convention
 
-Every jwall-engineering stack keeps its state in `jwall-engineering-tfstate` under the key
+Every jaws stack keeps its state in `jaws-terraform-state-570327089884` under the key
 
 ```
 project=<project>/env=<env>/<project>-<env>.tfstate
@@ -427,14 +384,14 @@ Every statement is a deny matched on `aws:PrincipalArn`, so it grants nothing: i
 
 Each entry is passed to the `site-bucket`, `ci-plan-role`, `ci-preview-role` and `ci-apply-role` submodules of the [registry module](#shared-modules-from-the-terraform-registry), which create:
 
-- bucket `jwall-engineering-<key>` (versioned, encrypted, private, CloudFront-readable). Its policy lets only the project's apply role write `prod/` and `dev/` and only its preview role write `previews/`; only the break-glass principals write anything else or change the bucket's configuration. Reads are unrestricted, since the content is public through CloudFront. See the library's [`site-bucket` README](https://github.com/Jaws-Platform/terraform-aws-jaws-static-site/tree/main/modules/site-bucket#hardened-bucket-policy).
-- roles `jwall-engineering-<key>-ci-plan`, `-ci-preview`, and `-ci-apply`, trusted for the project's repository, each with managed policies from the library's `ci-policies` catalog scoped to that bucket, to the state prefix `project=<key>/`, and to Route 53 changes for `<domain>`, `*.preview.<domain>`, and the ACM validation records those names need:
+- bucket `jaws-<key>` (versioned, encrypted, private, CloudFront-readable). Its policy lets only the project's apply role write `prod/` and `dev/` and only its preview role write `previews/`; only the break-glass principals write anything else or change the bucket's configuration. Reads are unrestricted, since the content is public through CloudFront. See the library's [`site-bucket` README](https://github.com/Jaws-Platform/terraform-aws-jaws-static-site/tree/main/modules/site-bucket#hardened-bucket-policy).
+- roles `jaws-<key>-ci-plan`, `-ci-preview`, and `-ci-apply`, trusted for the project's repository, each with managed policies from the library's `ci-policies` catalog scoped to that bucket, to the state prefix `project=<key>/`, and to Route 53 changes for `<domain>`, `*.preview.<domain>`, and the ACM validation records those names need:
 
 | Role | Trusted for | Policies |
 | --- | --- | --- |
-| `jwall-engineering-<key>-ci-plan` | `pull_request` | `tfstate/read`, `static-site/read`, `ecr/pull` |
-| `jwall-engineering-<key>-ci-preview` | `pull_request` | `static-site/previews`, `ecr/pull` |
-| `jwall-engineering-<key>-ci-apply` | `environment:prod` | `tfstate/write`, `static-site/read`, `static-site/deploy`, `ecr/pull` |
+| `jaws-<key>-ci-plan` | `pull_request` | `tfstate/read`, `static-site/read`, `ecr/pull` |
+| `jaws-<key>-ci-preview` | `pull_request` | `static-site/previews`, `ecr/pull` |
+| `jaws-<key>-ci-apply` | `environment:prod` | `tfstate/write`, `static-site/read`, `static-site/deploy`, `ecr/pull` |
 
 The zone itself is owned here; every other record is owned by the project repos. `terraform output projects` lists the bucket name and role ARNs per project.
 
@@ -459,9 +416,7 @@ numeric ID of the organisation that owns it, because the release and task roles
 trust GitHub's `repo:<owner>@<owner_id>/<name>@<repository_id>` subject.
 
 `braveheart` was registered as `rusty-chess` until 2026-11-15. Its stack was
-rebuilt under the new name and the old one destroyed; the old buckets
-(`jwall-engineering-rusty-chess-nnue`, `-records`, `-tasks`) and the old Lichess
-token parameter are no longer managed here and are the owner's to delete.
+rebuilt under the new name and the old one destroyed.
 
 Each entry gets three roles (two for a research project), and a fourth when
 the project lists `instance_types` under `projects` in `config.yaml` (a
@@ -470,10 +425,10 @@ bucket, readable by the plan role and writable by the apply role:
 
 | Role | Trusted for | Policies |
 | --- | --- | --- |
-| `jwall-engineering-<key>-ci-plan` | `pull_request` on this repository | `tfstate/read`, `container/read`, `task/read`, and `dataset/read` with datasets |
-| `jwall-engineering-<key>-ci-apply` | `environment:prod` on this repository | `tfstate/write`, `container/read`, `container/manage`, `task/read`, `task/manage`, `container/schedule` (a research project gets `compute/*` and no `container/schedule`), and `dataset/read`, `dataset/manage` with datasets |
-| `jwall-engineering-<key>-ci-release` | the bot repository's `v*` tags | `container/release` (which also lets `bot start` start the instance) |
-| `jwall-engineering-<key>-ci-task` | the bot repository's `pull_request` and `main` (never forks) | `task/launch`: launch from the project's task template, run commands on and terminate its `Purpose=ci-task` instances |
+| `jaws-<key>-ci-plan` | `pull_request` on this repository | `tfstate/read`, `container/read`, `task/read`, and `dataset/read` with datasets |
+| `jaws-<key>-ci-apply` | `environment:prod` on this repository | `tfstate/write`, `container/read`, `container/manage`, `task/read`, `task/manage`, `container/schedule` (a research project gets `compute/*` and no `container/schedule`), and `dataset/read`, `dataset/manage` with datasets |
+| `jaws-<key>-ci-release` | the bot repository's `v*` tags | `container/release` (which also lets `bot start` start the instance) |
+| `jaws-<key>-ci-task` | the bot repository's `pull_request` and `main` (never forks) | `task/launch`: launch from the project's task template, run commands on and terminate its `Purpose=ci-task` instances |
 
 The bot's infrastructure is planned and applied here; the bot repository
 holds only the project file and a release workflow, and its release role can
@@ -484,16 +439,16 @@ token. `terraform output bots` lists the role ARNs.
 
 | Role | Trusted for | Permissions |
 | --- | --- | --- |
-| `jwall-engineering-infra-ci-plan` | `pull_request` | `tfstate/read` (this stack's state key, write of its `.tflock` only), `foundation/read` |
-| `jwall-engineering-infra-ci-apply` | `environment:prod` | `tfstate/write`, `foundation/read`, `foundation/manage`: everything needed to manage this stack, see below; `ecr/push` for the infra CLI image |
+| `jaws-infra-ci-plan` | `pull_request` | `tfstate/read` (this stack's state key, write of its `.tflock` only), `foundation/read` |
+| `jaws-infra-ci-apply` | `environment:prod` | `tfstate/write`, `foundation/read`, `foundation/manage`: everything needed to manage this stack, see below; `ecr/push` for the infra CLI image |
 
 ### Why the apply role is scoped the way it is
 
-The policies come from the library's `ci-policies` catalog, whose README holds the full policy text and justification. In short, the apply role is the highest-privilege identity in the setup because it creates IAM roles, and it is constrained so that a compromised `prod` environment cannot reach beyond the `jwall-engineering-*` namespace:
+The policies come from the library's `ci-policies` catalog, whose README holds the full policy text and justification. In short, the apply role is the highest-privilege identity in the setup because it creates IAM roles, and it is constrained so that a compromised `prod` environment cannot reach beyond the `jaws-*` namespace:
 
-- IAM actions are limited to roles and policies named `jwall-engineering-*`. It cannot touch any other principal, and it cannot modify the shared GitHub OIDC provider. The one exception is the account's EC2 Spot service-linked role (`AWSServiceRoleForEC2Spot`), in an account with a task runner: the apply role may create it (`iam:CreateServiceLinkedRole`, only for `spot.amazonaws.com`) and tag it, and the plan role may read it. Neither may delete it. EC2 needs the role before the first Spot launch in an account, and a task launch role must not be able to create it.
-- `iam:AttachRolePolicy` only accepts a `jwall-engineering-*` customer-managed policy, so it cannot hand out `AdministratorAccess` to a role it creates. It can still edit the inline and customer-managed policies of `jwall-engineering-*` roles, itself included, so treat a compromise of `prod` as a compromise of the account.
-- S3 access is limited to the state bucket's configuration (no `DeleteBucket`) and to the `jwall-engineering-*` buckets themselves, never their objects. The state bucket matches that pattern, so object access would have exposed every project's state; the role reaches only this stack's own state through `tfstate/write`.
+- IAM actions are limited to roles and policies named `jaws-*`. It cannot touch any other principal, and it cannot modify the shared GitHub OIDC provider. The one exception is the account's EC2 Spot service-linked role (`AWSServiceRoleForEC2Spot`), in an account with a task runner: the apply role may create it (`iam:CreateServiceLinkedRole`, only for `spot.amazonaws.com`) and tag it, and the plan role may read it. Neither may delete it. EC2 needs the role before the first Spot launch in an account, and a task launch role must not be able to create it.
+- `iam:AttachRolePolicy` only accepts a `jaws-*` customer-managed policy, so it cannot hand out `AdministratorAccess` to a role it creates. It can still edit the inline and customer-managed policies of `jaws-*` roles, itself included, so treat a compromise of `prod` as a compromise of the account.
+- S3 access is limited to the state bucket's configuration (no `DeleteBucket`) and to the `jaws-*` buckets themselves, never their objects. The state bucket matches that pattern, so object access would have exposed every project's state; the role reaches only this stack's own state through `tfstate/write`.
 - Route 53 access is limited to the `jwall.engineering` zone. It cannot create or delete zones.
 - Neither role carries `ReadOnlyAccess`, which would grant `s3:GetObject` on every bucket, every project's state included. `foundation/read` grants the reads refresh and drift detection need for this stack.
 
@@ -501,39 +456,43 @@ Both roles trust only the `Jaws-Platform/jaws` repository through the OIDC provi
 
 ## Bootstrap (one time, run locally by the owner with admin credentials)
 
-The state bucket does not exist before the first apply, so the first apply uses local state and is then migrated into the bucket. An override file (gitignored) swaps the backend to `local` for step 1 only.
+Only for rebuilding the foundation in an account that has none. The state
+bucket does not exist before the first apply, so the first apply keeps its
+state in a local file and then migrates it into the bucket.
 
-1. **Apply with local state.**
+1. **Give the owner admin access to the account** with `owner-access/`
+   ([docs/owner-access.md](docs/owner-access.md)), and put the admin role's ARN
+   (`aws iam list-roles --path-prefix /aws-reserved/sso.amazonaws.com/`) in
+   `config.yaml` as `aws.admin_role_arn`. The hardened bucket policies exempt
+   exactly that role: a wrong suffix locks the owner out of the state bucket.
+2. **Ask for the quotas** the task runners need (Running On-Demand Standard
+   and Standard Spot vCPUs, VPCs per Region, and G and VT for GPU profiles).
+3. **Create the GitHub OIDC provider:** `aws iam create-open-id-connect-provider
+   --url https://token.actions.githubusercontent.com --client-id-list
+   sts.amazonaws.com`. The foundation reads it rather than owning it.
+4. **Apply with local state.**
 
    ```sh
    cd foundation
-   export AWS_PROFILE=jwall-admin       # after `aws sso login`, see docs/owner-access.md; us-east-1, account 650503560686
    printf 'terraform {\n  backend "local" {}\n}\n' > backend_override.tf
-   terraform init
+   terraform init -reconfigure
    terraform plan -out=bootstrap.tfplan
-   ```
-
-   Review the plan. It should create the state bucket, this repo's two CI roles, the CAA record, the three project buckets and nine project CI roles, and **import** the hosted zone. The only changes on the zone should be tags and its comment. The GitHub OIDC provider is read, not imported. Then:
-
-   ```sh
    terraform apply bootstrap.tfplan
    ```
 
-2. **Migrate state into the bucket.** `backend.tf` and `backend/management.hcl` are already in the repo.
+5. **Migrate the state into the bucket**, then check that a plan says No changes.
 
    ```sh
    rm backend_override.tf
-   terraform init -backend-config=backend/management.hcl -migrate-state
+   terraform init -backend-config=backend/prod.hcl -migrate-state
    rm -f terraform.tfstate terraform.tfstate.backup bootstrap.tfplan
+   terraform plan
    ```
 
-3. **Commit and push the initial scaffold.** This is the only direct push to `main`; every later change goes through a pull request.
-
-   ```sh
-   gh repo create Jaws-Platform/jaws --public --source=. --remote=origin --push
-   ```
-
-4. **Finish the hand-off** listed at the end of this file.
+6. **Record the zone:** `terraform output -raw hosted_zone_id` is `dns.zone_id`
+   in `config.yaml`; the registrar's name servers follow once the zone holds
+   every record.
+7. **Finish the hand-off** listed at the end of this file.
 
 ## CI/CD
 
@@ -554,15 +513,15 @@ Every `terraform init` goes through `.github/actions/terraform-init`, which retr
 
 **Releases, applies and the image** (`.github/workflows/release-please.yml`, on push to `main`):
 
-Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`; then the `image` job, also in `prod`, builds the CLI image and pushes it to each account's repository as `<repository>:<tag>` (`ecr.repository` in `config.yaml`: `jwall-engineering-sites` in management, `jaws-cli` in production). Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
+Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`; then the `image` job, also in `prod`, builds the CLI image and pushes it to the account's repository as `<repository>:<tag>` (`ecr.repository` in `config.yaml`, `jaws-cli`). Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
 
-No role ARN is a secret, and this repository needs none as a variable. The foundation's plan and apply jobs run once per bootstrapped account (`jaws config accounts` lists them: management, and production once `production.bootstrapped` is true), and each leg builds its role (`<organization>-infra-ci-plan` / `-ci-apply`), its state (`backend/<account>.hcl`) and its `-var account` from its own entry. Bot role ARNs need no variable either: the workflows build them from the account and organization `jaws config env` resolves from `config.yaml` and the bot's name.
+No role ARN is a secret, and this repository needs none as a variable. The foundation's plan and apply jobs build their role (`<organization>-infra-ci-plan` / `-ci-apply`) from the account and organization `jaws config env` reads from `config.yaml`, and keep their state through `backend/prod.hcl`. Bot role ARNs need no variable either: the workflows build them the same way, with the bot's name.
 
 **Bot projects** (`.github/workflows/bot-apply.yml`, by hand): applies or destroys one bot's stack in the `prod` environment with its apply role. `.github/workflows/container-release.yml` is the reusable workflow a bot repository calls on each release ([guide](docs/lichess-bot.md#the-caller-workflow)).
 
 **Databricks projects** (`.github/workflows/databricks-apply.yml`, by hand): `workflow_dispatch` with the project name applies both stacks in the `prod` environment with the project's apply role (`action: apply`, the default); `action: destroy` empties the catalog bucket and destroys them; `action: doctor` runs the read-only checks and changes nothing. Re-running after a partial apply is safe ([guide](docs/databricks.md#what-apply-does)).
 
-**Dataset access** (`.github/workflows/data-access.yml`): plans on every pull request, against the base branch's `datasets/` so that dropping a dataset a handshake still names fails, and sweeps every 15 minutes in the `prod` environment with `jwall-engineering-data-access-ci-apply`: each sweep plans and applies exactly what its plan found, so a failed apply is retried and drift undone by the next one; `workflow_dispatch` runs a sweep now. Its role ARNs are built from `config.yaml` like the bots' ([guide](docs/databricks.md#datasets-and-access)).
+**Dataset access** (`.github/workflows/data-access.yml`): plans on every pull request, against the base branch's `datasets/` so that dropping a dataset a handshake still names fails, and sweeps every 15 minutes in the `prod` environment with `jaws-data-access-ci-apply`: each sweep plans and applies exactly what its plan found, so a failed apply is retried and drift undone by the next one; `workflow_dispatch` runs a sweep now. Its role ARNs are built from `config.yaml` like the bots' ([guide](docs/databricks.md#datasets-and-access)).
 
 ## Local development
 
@@ -575,7 +534,7 @@ terraform init -backend=false && terraform validate
 tflint --init && tflint --config ../.tflint.hcl --recursive
 ```
 
-A real plan needs AWS credentials and the remote backend, from `foundation/`: `terraform init -backend-config=backend/management.hcl && terraform plan`.
+A real plan needs AWS credentials and the remote backend, from `foundation/`: `terraform init -backend-config=backend/prod.hcl && terraform plan`.
 
 ## Owner hand-off
 
@@ -609,7 +568,6 @@ Not automated; these need the owner's credentials or the GitHub UI.
 - For projects with `dataset` components (listed under `projects.<name>.datasets` in `config.yaml`), after the release that grants `dataset/*` to their roles: run the **Bot apply** workflow; it creates the buckets ([docs/datasets.md](docs/datasets.md)). A versioned bucket needs the foundation apply that grants `s3:PutBucketVersioning` first.
 - For a new research project, follow the onboarding order in [docs/research-projects.md](docs/research-projects.md#onboarding-a-research-project).
 - For Databricks workspace projects, follow [One-time setup](docs/databricks.md#one-time-setup): the service principal, the IDs and emails in `config.yaml`, `databricks credentials set`, deleting a pre-existing us-east-1 metastore (only with the owner's go-ahead), then `databricks.enabled: true`.
-- Work through [docs/migration.md](docs/migration.md) to retire the legacy resources.
 
 ## License
 

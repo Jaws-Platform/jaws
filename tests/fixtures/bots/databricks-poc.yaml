@@ -6,7 +6,7 @@ project: databricks-poc
 repository: example-org/databricks-poc
 
 tags:
-  Organization: jwall-engineering
+  Organization: jaws
   Project: databricks-poc
   Environment: prod
   Repository: example-org/databricks-poc

@@ -1,5 +1,5 @@
 output "state_bucket_name" {
-  description = "Terraform state bucket shared by every jwall-engineering stack."
+  description = "Terraform state bucket shared by every jaws stack."
   value       = module.state_bucket.name
 }
 
@@ -36,7 +36,7 @@ output "infra_ci_apply_role_arn" {
 output "projects" {
   description = "Per-project bucket name, CI role ARNs and zone ID. Project repos set their AWS_*_ROLE_ARN and bucket variables from these."
   value = {
-    for key, project in local.served_sites : key => {
+    for key, project in local.projects : key => {
       repository       = project.repository
       domain           = project.domain
       record_names     = local.project_record_names[key]
@@ -57,7 +57,7 @@ output "sites_image_repository_url" {
 output "bots" {
   description = "Per-bot repository, CI role ARNs and state key. The workflows derive these ARNs from config.yaml; this output is for reference."
   value = {
-    for key, bot in local.served_bots : key => {
+    for key, bot in local.bots : key => {
       repository       = bot.repository
       plan_role_arn    = module.bot_ci_plan[key].role_arn
       apply_role_arn   = module.bot_ci_apply[key].role_arn

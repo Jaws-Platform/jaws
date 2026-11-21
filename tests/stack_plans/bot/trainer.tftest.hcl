@@ -23,7 +23,7 @@ run "plans_a_task_runner_and_the_nets_bucket" {
   }
 
   assert {
-    condition     = toset(keys(module.datasets)) == toset(["nets"]) && var.datasets[0].bucket == "jwall-engineering-braveheart-trainer-nets" && var.datasets[0].prefix == "data/"
+    condition     = toset(keys(module.datasets)) == toset(["nets"]) && var.datasets[0].bucket == "jaws-braveheart-trainer-nets" && var.datasets[0].prefix == "data/"
     error_message = "braveheart-trainer has one dataset, nets, under data/ like the bucket it is copied from"
   }
 
@@ -38,7 +38,7 @@ run "plans_a_task_runner_and_the_nets_bucket" {
   }
 
   assert {
-    condition     = jsonencode(var.datasets[0].readers) == jsonencode(["arn:aws:iam::650503560686:role/jwall-engineering-braveheart-selfplay-task-relabel"])
+    condition     = jsonencode(var.datasets[0].readers) == jsonencode(["arn:aws:iam::570327089884:role/jaws-braveheart-selfplay-task-relabel"])
     error_message = "self-play's relabel tasks, and only they, read the nets through the bucket policy"
   }
 

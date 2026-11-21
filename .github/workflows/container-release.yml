@@ -109,8 +109,7 @@ jobs:
           if [ -n "$OVERRIDE" ]; then
             arn="$OVERRIDE"
           else
-            # The tool says which account this is (config.yaml: management, or `production`).
-            resolved=$(uv run --no-dev --project .jaws-tool jaws --config "$CONFIG" config env --project "$PROJECT")
+            resolved=$(uv run --no-dev --project .jaws-tool jaws --config "$CONFIG" config env)
             account=$(sed -n 's/^account_id=//p' <<<"$resolved")
             organization=$(sed -n 's/^organization=//p' <<<"$resolved")
             [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
@@ -132,7 +131,7 @@ jobs:
           if [ "$DEBUG" = "true" ]; then debug_flag="--debug"; fi
           # A pinned bot's release tag is the bot repository's, not an engine
           # release: let the project file's pin decide, unless a version was given.
-          file=jaws.yaml; [ -f "$file" ] || file=jwall-engineering-sites.yaml # its name before the rename
+          file=jaws.yaml
           track=$(yq -r '.components[] | select(.kind == "lichess-bot") | .track // "latest-release"' "$file")
           version_args=(--version "$VERSION")
           if [ "$track" = "pinned" ] && [ -z "$VERSION_INPUT" ]; then version_args=(); fi

@@ -398,37 +398,32 @@ jobs:
             exit 1
           fi
 
-  # The accounts the foundation is planned for: the tool lists them, so a leg's
-  # role, state and `-var account` all come from one entry.
-  accounts:
-    name: Accounts
+  # The account the foundation is planned for, read from config.yaml.
+  account:
+    name: Account
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
-      accounts: ${{ steps.list.outputs.accounts }}
+      account_id: ${{ steps.env.outputs.account_id }}
+      organization: ${{ steps.env.outputs.organization }}
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --locked
-      - name: List the accounts (management until it is retired, and production once it is bootstrapped)
-        id: list
+      - name: Read the account from config.yaml
+        id: env
         run: |
-          accounts=$(uv run jaws config accounts)
-          echo "accounts=$accounts" >> "$GITHUB_OUTPUT"
+          env=$(uv run jaws config env)
+          echo "$env" >> "$GITHUB_OUTPUT"
 
   terraform-plan:
-    # The first account's leg (management, or production once management is
-    # retired) has no label, so it keeps the name the `main` ruleset requires.
-    name: Terraform plan${{ matrix.label }}
+    # The name the `main` ruleset requires.
+    name: Terraform plan
     runs-on: ubuntu-latest
-    needs: [terraform-static, accounts]
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.accounts.outputs.accounts) }}
+    needs: [terraform-static, account]
     permissions:
       contents: read
       id-token: write # assume the plan role through GitHub OIDC
@@ -444,24 +439,22 @@ jobs:
           terraform_wrapper: false
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: arn:aws:iam::${{ matrix.account_id }}:role/${{ matrix.organization }}-infra-ci-plan
+          role-to-assume: arn:aws:iam::${{ needs.account.outputs.account_id }}:role/${{ needs.account.outputs.organization }}-infra-ci-plan
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: gha-plan-pr-${{ github.event.pull_request.number }}
       - name: terraform init
         uses: ./.github/actions/terraform-init
         with:
-          args: -backend-config=backend/${{ matrix.account }}.hcl
+          args: -backend-config=backend/prod.hcl
       # The metastore and audit log delivery (foundation/databricks.tf) need the
       # Databricks credential: each terraform step sources it into its own shell
       # (never GITHUB_ENV); it does nothing while databricks.enabled is false.
       - name: terraform plan
         id: plan
-        env:
-          ACCOUNT: ${{ matrix.account }}
         run: |
-          source ../scripts/databricks-credentials.sh ../config.yaml "$ACCOUNT"
+          source ../scripts/databricks-credentials.sh ../config.yaml
           set +e
-          terraform plan -no-color -lock-timeout=60s -out=tfplan -detailed-exitcode -var "account=$ACCOUNT" > plan.log 2>&1
+          terraform plan -no-color -lock-timeout=60s -out=tfplan -detailed-exitcode > plan.log 2>&1
           code=$?
           set -e
           echo "exitcode=$code" >> "$GITHUB_OUTPUT"
@@ -477,16 +470,12 @@ jobs:
         working-directory: .
         env:
           JAWS_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          ACCOUNT: ${{ matrix.account }}
         run: |
           uv sync --locked
-          # The management plan keeps its subject; another account's names it.
-          SUFFIX=""
-          if [ "$ACCOUNT" != "management" ]; then SUFFIX=" ($ACCOUNT)"; fi
           uv run jaws report plan-comment \
             --exit-code "${{ steps.plan.outputs.exitcode }}" \
             --plan foundation/plan.log \
-            --subject "jaws/foundation${SUFFIX}" \
+            --subject "jaws/foundation" \
             --out foundation/plan-comment.md
       - name: Mint a comment token for the Jaws app
         id: app-token
@@ -501,11 +490,11 @@ jobs:
         uses: marocchino/sticky-pull-request-comment@v3
         with:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
-          header: terraform-plan${{ matrix.account != 'management' && format('-{0}', matrix.account) || '' }}
+          header: terraform-plan
           path: foundation/plan-comment.md
 
   bot-plan:
-    name: Bot plan (${{ matrix.project }}${{ matrix.account == 'management' && ', management' || '' }})
+    name: Bot plan (${{ matrix.project }})
     runs-on: ubuntu-latest
     # The bot's CI roles are created by the foundation apply that follows the
     # PR registering the bot. Until they exist, the role cannot be assumed and
@@ -518,11 +507,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # `auto` plans each project where it runs. `management` plans a moving
-        # project's old stack as well, so a change to it (the copy reader on its
-        # buckets, docs/datasets.md) is reviewed before Bot apply; it skips every
-        # other project, which `auto` already plans there or which has left.
-        account: [auto, management]
         project: [braveheart, braveheart-bot, braveheart-selfplay, braveheart-trainer, pi-benchmarks, pi-prover]
         # One entry per bot in foundation/bots.tf (a test keeps them in sync).
         include:
@@ -541,7 +525,6 @@ jobs:
           path: .consumer
           sparse-checkout: |
             jaws.yaml
-            jwall-engineering-sites.yaml
             lichess
           sparse-checkout-cone-mode: false
       - uses: hashicorp/setup-terraform@v4
@@ -552,35 +535,12 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked
-      - name: Plan this account?
-        id: account
-        env:
-          PROJECT: ${{ matrix.project }}
-          ACCOUNT: ${{ matrix.account }}
-        run: |
-          if [ "$ACCOUNT" = auto ]; then
-            { echo "plan=true"; echo "flag="; } >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Only a moving project has a second stack, its old one in management.
-          where=$(uv run jaws config env --project "$PROJECT" | sed -n 's/^account=//p')
-          if [ "$where" != management ] && uv run jaws --account management config env --project "$PROJECT" >/dev/null; then
-            { echo "plan=true"; echo "flag=--account management"; } >> "$GITHUB_OUTPUT"
-          else
-            echo "plan=false" >> "$GITHUB_OUTPUT"
-            echo "$PROJECT has no second stack in management; its plan is the auto entry's"
-          fi
       - name: Build the plan role ARN from config.yaml
         id: role
-        if: steps.account.outputs.plan == 'true'
         env:
           PROJECT: ${{ matrix.project }}
-          FLAG: ${{ steps.account.outputs.flag }}
         run: |
-          # The tool says which account this is (config.yaml: management, or `production`).
-          # FLAG is empty or two words, so it is split on purpose.
-          # shellcheck disable=SC2086
-          resolved=$(uv run jaws $FLAG config env --project "$PROJECT")
+          resolved=$(uv run jaws config env)
           account=$(sed -n 's/^account_id=//p' <<<"$resolved")
           organization=$(sed -n 's/^organization=//p' <<<"$resolved")
           [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
@@ -590,11 +550,10 @@ jobs:
       # skipped, loudly: its stack is applied from another ref (Bot apply, consumer-ref).
       - name: Skip the plan when the project file names another project
         id: file
-        if: steps.account.outputs.plan == 'true'
         env:
           PROJECT: ${{ matrix.project }}
         run: |
-          file=.consumer/jaws.yaml; [ -f "$file" ] || file=.consumer/jwall-engineering-sites.yaml # its name before the rename
+          file=.consumer/jaws.yaml
           named=$(yq -r .project "$file")
           if [ "$named" = "$PROJECT" ]; then
             echo "matches=true" >> "$GITHUB_OUTPUT"
@@ -614,7 +573,7 @@ jobs:
         with:
           role-to-assume: ${{ steps.role.outputs.arn }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: gha-bot-plan-${{ matrix.project }}-${{ matrix.account }}-pr-${{ github.event.pull_request.number }}
+          role-session-name: gha-bot-plan-${{ matrix.project }}-pr-${{ github.event.pull_request.number }}
       - name: Skip the plan until the bot's roles exist
         if: steps.file.outputs.matches == 'true' && steps.assume.outcome != 'success'
         env:
@@ -634,11 +593,7 @@ jobs:
           # The CLI reads each counterpart's project file from GitHub (the
           # consumers of a project's datasets, or the producers a workspace reads).
           GH_TOKEN: ${{ github.token }}
-          FLAG: ${{ steps.account.outputs.flag }}
-        run: |
-          # FLAG is empty or two words, so it is split on purpose.
-          # shellcheck disable=SC2086
-          uv run jaws --file .consumer/jaws.yaml $FLAG plan
+        run: uv run jaws --file .consumer/jaws.yaml plan
       - name: Mint a comment token for the Jaws app
         id: app-token
         if: always() && vars.JES_APP_CLIENT_ID != ''
@@ -652,13 +607,13 @@ jobs:
         uses: marocchino/sticky-pull-request-comment@v3
         with:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
-          header: bot-plan-${{ matrix.project }}${{ matrix.account == 'management' && '-management' || '' }}
+          header: bot-plan-${{ matrix.project }}
           path: .jaws/plan-comment.md
       - name: Upload the run log and artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: bot-plan-${{ matrix.project }}-${{ matrix.account }}-${{ github.run_attempt }}
+          name: bot-plan-${{ matrix.project }}-${{ github.run_attempt }}
           path: .jaws/
           include-hidden-files: true # .jaws/ is a dot directory, which upload-artifact skips otherwise
           retention-days: 14
@@ -681,9 +636,7 @@ jobs:
         id: list
         run: |
           # Assigned first, so a failing command fails the step (bash -e).
-          # Databricks is enabled in one account at a time: management's
-          # setting, or production's override (docs/databricks.md).
-          enabled=$(yq -r '.databricks.enabled or (.production.overrides.databricks.enabled // false)' config.yaml)
+          enabled=$(yq -r '.databricks.enabled' config.yaml)
           projects=$(scripts/databricks-projects.sh)
           echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
           echo "projects=$projects" >> "$GITHUB_OUTPUT"
@@ -718,7 +671,6 @@ jobs:
           path: .consumer
           sparse-checkout: |
             jaws.yaml
-            jwall-engineering-sites.yaml
           sparse-checkout-cone-mode: false
       - uses: hashicorp/setup-terraform@v4
         with:
@@ -733,8 +685,7 @@ jobs:
         env:
           PROJECT: ${{ matrix.project }}
         run: |
-          # The tool says which account this is (config.yaml: management, or `production`).
-          resolved=$(uv run jaws config env --project "$PROJECT")
+          resolved=$(uv run jaws config env)
           account=$(sed -n 's/^account_id=//p' <<<"$resolved")
           organization=$(sed -n 's/^organization=//p' <<<"$resolved")
           [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }

@@ -13,9 +13,9 @@ run "plans_the_start_drain_and_stop_schedules" {
 
   assert {
     condition = module.bot[0].schedule == {
-      start = { name = "jwall-engineering-braveheart-bot-start", expression = "cron(0 8 ? * MON-FRI *)" }
-      drain = { name = "jwall-engineering-braveheart-bot-drain", expression = "cron(0 20 ? * MON-FRI *)" }
-      stop  = { name = "jwall-engineering-braveheart-bot-stop", expression = "cron(0 21 ? * MON-FRI *)" }
+      start = { name = "jaws-braveheart-bot-start", expression = "cron(0 8 ? * MON-FRI *)" }
+      drain = { name = "jaws-braveheart-bot-drain", expression = "cron(0 20 ? * MON-FRI *)" }
+      stop  = { name = "jaws-braveheart-bot-stop", expression = "cron(0 21 ? * MON-FRI *)" }
     }
     error_message = "the module plans the three schedules, Monday to Friday, with the hard stop an hour after the drain"
   }

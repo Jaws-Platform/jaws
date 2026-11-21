@@ -1,6 +1,6 @@
-# The single registry of jwall-engineering sites. Adding a site means adding a
-# line here; each entry gets an S3 bucket (jwall-engineering-<key>) and three
-# CI roles (jwall-engineering-<key>-ci-{plan,preview,apply}) scoped to its
+# The single registry of jaws sites. Adding a site means adding a
+# line here; each entry gets an S3 bucket (jaws-<key>) and three
+# CI roles (jaws-<key>-ci-{plan,preview,apply}) scoped to its
 # repository, bucket, state prefix and DNS names.
 #
 # Modules come from the Jaws-Platform/jaws-*/aws registry modules (one family
@@ -25,7 +25,7 @@ locals {
   # itself and its wildcard preview hostnames. The module adds the ACM
   # validation CNAMEs for these names automatically.
   project_record_names = {
-    for key, project in local.served_sites : key => [
+    for key, project in local.projects : key => [
       project.domain,
       "*.preview.${project.domain}",
     ]
@@ -33,7 +33,7 @@ locals {
 }
 
 module "site_bucket" {
-  for_each = merge(local.served_sites, { for key in local.retained_site_buckets : key => local.projects[key] })
+  for_each = local.projects
   source   = "Jaws-Platform/jaws-static-site/aws//modules/site-bucket"
   version  = "0.1.2"
 
@@ -46,8 +46,7 @@ module "site_bucket" {
   # configuration. Reads are unrestricted; the content is public through
   # CloudFront.
   admin_principal_arns = local.bucket_admin_principal_arns
-  # A retained bucket (accounts.tf) has no writers left: its roles are gone.
-  prefix_writers = contains(local.retained_site_buckets, each.key) ? {} : {
+  prefix_writers = {
     "prod/"     = [module.site_ci_apply[each.key].role_arn]
     "dev/"      = [module.site_ci_apply[each.key].role_arn]
     "previews/" = [module.site_ci_preview[each.key].role_arn]
@@ -60,7 +59,7 @@ module "site_bucket" {
 # Every role also pulls the jaws CLI image (ecr/pull).
 locals {
   project_ci = {
-    for key, project in local.served_sites : key => {
+    for key, project in local.projects : key => {
       tfstate = {
         bucket_arn = module.state_bucket.arn
         prefix     = "project=${key}/"
@@ -81,7 +80,7 @@ locals {
 }
 
 module "site_ci_plan" {
-  for_each = local.served_sites
+  for_each = local.projects
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
   version  = "0.2.0"
 
@@ -102,7 +101,7 @@ module "site_ci_plan" {
 }
 
 module "site_ci_preview" {
-  for_each = local.served_sites
+  for_each = local.projects
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-preview-role"
   version  = "0.2.0"
 
@@ -122,7 +121,7 @@ module "site_ci_preview" {
 }
 
 module "site_ci_apply" {
-  for_each = local.served_sites
+  for_each = local.projects
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
   version  = "0.2.0"
 
@@ -148,7 +147,7 @@ module "site_ci_apply" {
 check "site_bucket_arns_match" {
   assert {
     condition = alltrue([
-      for key, project in local.served_sites :
+      for key, project in local.projects :
       module.site_bucket[key].arn == local.project_ci[key].static_site.bucket_arn
     ])
     error_message = "local.project_ci builds a site bucket ARN that differs from module.site_bucket's arn; the CI role policies would point at the wrong bucket."

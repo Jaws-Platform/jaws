@@ -23,7 +23,6 @@ from typing import Annotated, Literal
 
 import boto3
 import typer
-import yaml
 
 from . import (
     access,
@@ -57,17 +56,14 @@ from .checks.framework import (
 from .components import CPU_PROFILE, TaskRunner
 from .errors import ConfigError, PreflightError, RunError, SitesError
 from .events import EventLog, base_fields
-from .legacy import adopt_legacy_environment, announce, notices, resolve_project_file
 from .log import annotate_error, artifacts_dir, phase, setup_logging
 from .project import Project, Role
 from .settings import (
-    Account,
     DatabricksSection,
     Settings,
     default_config_path,
     load_settings,
     parse_duration,
-    resolve_account,
 )
 from .site import DEV_PREFIX, ENVIRONMENT, PROD_PREFIX, SITE_FILE, Site, load_site_config
 
@@ -136,10 +132,8 @@ class Run:
     site_file: Path
     artifacts: Path
     logger: logging.Logger
-    #: `--config` and `--account` as given, for a command that resolves the
-    #: account of a project it is told about (`config env --project`).
+    #: `--config` as given.
     config_path: Path | None = None
-    requested_account: Account | None = None
     #: Off for the cleanup commands (`_cleanup_project`).
     check_guardrails: bool = True
     _site: Site | None = None
@@ -178,31 +172,17 @@ def main(
     ctx: typer.Context,
     file: Annotated[Path, typer.Option("--file", "-f", help="Path to the site file.")] = SITE_FILE,
     config: Annotated[Path | None, typer.Option("--config", help="Path to config.yaml.")] = None,
-    account: Annotated[
-        Account | None,
-        typer.Option(
-            "--account",
-            help="The account to address. Default: production for a project listed "
-            "under production.projects in config.yaml, management otherwise.",
-        ),
-    ] = None,
     debug: Annotated[bool, typer.Option("--debug", help="Console log at debug level.")] = False,
 ) -> None:
     try:
-        adopted = adopt_legacy_environment()
-        file = resolve_project_file(file)
         artifacts = artifacts_dir()
         settings = load_settings(config)
-        where = resolve_account(_project_named_in(file), settings.production, account)
-        if where != settings.account:
-            settings = load_settings(config, account=where)
     except SitesError as exc:
         # Logging is not configured yet: report plainly.
         print(f"error: {exc}", file=sys.stderr)
         raise typer.Exit(exc.exit_code) from exc
     level = "debug" if debug else settings.tool.log_level
     logger = setup_logging(level, settings.tool.log_format, artifacts / LOG_FILE)
-    announce(notices(file, adopted))
     logger.debug("jaws %s, config %s", tool_version(), config or default_config_path())
     ctx.obj = Run(
         settings=settings,
@@ -210,74 +190,7 @@ def main(
         artifacts=artifacts,
         logger=logger,
         config_path=config,
-        requested_account=account,
     )
-
-
-def _require_account_to_destroy(run: Run) -> None:
-    """A project that is moving has a stack in both accounts: refuse to guess
-    which one a destroy means. Checked before the project file is validated,
-    which only one account's view accepts."""
-    production = run.settings.production
-    name = _project_named_in(run.site_file)
-    if production is None or name is None or run.requested_account is not None:
-        return
-    if production.projects.get(name) == "moving":
-        raise ConfigError(
-            f"{name} has a stack in both accounts while it moves: say which one to "
-            "destroy with --account management (the old stack) or --account production"
-        )
-
-
-def _destroy_old_site(run: Run, yes: bool) -> None:
-    """Destroy the management stack of a site that is moving to production: its
-    distributions, certificates and its records in the old zone. That frees the
-    site's hostnames for the new stack. The site's bucket belongs to the
-    foundation, not to this stack, and stays. Nothing else about a site is
-    destroyed by the tool."""
-    site = run.site
-    production = run.settings.production
-    moving = production is not None and production.projects.get(site.project) == "moving"
-    if run.settings.account == "production":
-        raise PreflightError(
-            "a site's production stack is not destroyed by the tool: only the old stack "
-            "of a site that is moving, with --account management"
-        )
-    if not moving:
-        raise PreflightError(
-            "destroy is not supported for sites, except the old stack of a site that is "
-            "moving to production (config.yaml production.projects), with --account management"
-        )
-    if not yes:
-        raise PreflightError(
-            f"pass --yes to destroy {site.project}'s stack in the management account: its "
-            f"CloudFront distributions (the site is down until its production stack is "
-            f"deployed), their certificates and its records in the management zone go; "
-            f"its bucket {site.bucket} is the foundation's and stays"
-        )
-    _preflight(run, "apply", prefix=None)
-
-    def tf(terraform: stack.Terraform) -> None:
-        with phase("init"):
-            terraform.init()
-        with phase("destroy"):
-            terraform.destroy()
-
-    _with_terraform(run, tf)
-    run.logger.info(
-        "destroyed %s's management stack; its bucket %s is kept", site.project, site.bucket
-    )
-
-
-def _project_named_in(file: Path) -> str | None:
-    """The `project` a project file names, or None when there is no readable
-    file: the command that needs the file reports what is wrong with it."""
-    try:
-        raw = yaml.safe_load(file.read_text())
-    except (OSError, yaml.YAMLError):
-        return None
-    project = raw.get("project") if isinstance(raw, dict) else None
-    return project if isinstance(project, str) else None
 
 
 def _command(body: Callable[[Run], None]) -> Callable[[typer.Context], None]:
@@ -596,12 +509,8 @@ DROPPED_RECORDS_PLAN = (
 
 
 def plan_subject(project: str, settings: Settings, domain: str | None = None) -> str:
-    """What a plan comment is about: the site's domain or the project, and its
-    account while it moves, when both its stacks are planned on one pull request."""
-    subject = domain or project
-    if settings.project_state(project) == "moving":
-        return f"{subject} ({settings.account})"
-    return subject
+    """What a plan comment is about: the site's domain or the project."""
+    return domain or project
 
 
 @app.command()
@@ -932,16 +841,11 @@ def destroy(
 ) -> None:
     """Destroy a project's stacks. A bot or research project keeps its buckets and
     secrets; a Databricks project loses both its buckets and their data, and the
-    full deletion list is printed first. A site only while it moves: its old
-    stack, with --account management; its bucket stays."""
+    full deletion list is printed first. Not for sites."""
 
     def body(run: Run) -> None:
-        _require_account_to_destroy(run)
         project = run.project
-        if project.kind == "site":
-            _destroy_old_site(run, yes)
-            return
-        if not project.has_components:
+        if project.kind == "site" or not project.has_components:
             raise PreflightError("destroy is not supported for sites")
         if project.kind == "databricks":
             _destroy_databricks(run, project, yes)
@@ -1041,88 +945,33 @@ def outputs(ctx: typer.Context) -> None:
 @config_app.command("env")
 def config_env(
     ctx: typer.Context,
-    project: Annotated[
-        str | None,
-        typer.Option(
-            "--project",
-            help="Resolve this project's account, whatever project file is in the directory.",
-        ),
-    ] = None,
     databricks: Annotated[
         bool,
         typer.Option(
             "--databricks",
-            help="Resolve the account Databricks is enabled in (the Data access workflow's), "
-            "and print `databricks=ready|awaiting-host|disabled`.",
+            help="Also print `databricks=ready|awaiting-host|disabled` (the Data access "
+            "workflow's gate).",
         ),
     ] = False,
 ) -> None:
-    """Print the account this run addresses as `key=value` lines, for a
-    workflow to append to GITHUB_OUTPUT: every workflow resolves a project's
-    account, and so its role, here and nowhere else."""
-    run: Run = ctx.obj
-    settings = run.settings
-    state: str | None = None
-    if databricks:
-        # Databricks is enabled in one account at a time (settings.py); the
-        # reconcile runs there, once that account's shared host is recorded.
-        where = settings.databricks_account
-        if where is None:
-            state = "disabled"
-        else:
-            settings = load_settings(run.config_path, account=where)
-            assert settings.databricks is not None
-            state = "ready" if settings.databricks.shared_host_url else "awaiting-host"
-    if project is not None:
-        try:
-            where = resolve_account(project, settings.production, run.requested_account)
-            settings = load_settings(run.config_path, account=where)
-        except SitesError as exc:
-            # On stderr, never stdout: the caller appends stdout to GITHUB_OUTPUT.
-            print(f"error: {exc}", file=sys.stderr)
-            raise typer.Exit(exc.exit_code) from exc
-    production = settings.production
-    for key, value in (
-        ("account", settings.account),
+    """Print the account's values as `key=value` lines, for a workflow to append
+    to GITHUB_OUTPUT: every workflow builds its role ARNs, state bucket and image
+    repository from these, and nowhere else."""
+    settings = ctx.obj.settings
+    lines = [
         ("account_id", settings.aws.account_id),
         ("organization", settings.context.organization),
         ("state_bucket", settings.state.bucket),
         ("ecr_repository", settings.ecr.repository),
-        ("bootstrapped", str(bool(production and production.bootstrapped)).lower()),
-        *((("databricks", state),) if state is not None else ()),
-    ):
+    ]
+    if databricks:
+        dbx = settings.databricks
+        if dbx is None or not dbx.enabled:
+            lines.append(("databricks", "disabled"))
+        else:
+            lines.append(("databricks", "ready" if dbx.shared_host_url else "awaiting-host"))
+    for key, value in lines:
         print(f"{key}={value}")
-
-
-@config_app.command("accounts")
-def config_accounts(ctx: typer.Context) -> None:
-    """Print the accounts the foundation is planned and applied for, as one
-    line of JSON for a workflow matrix: management until it is retired,
-    production once it is bootstrapped. Each entry has what a job needs to name
-    its role, its state and its image repository, and the label its job names
-    carry: empty for the first account, so the check the `main` ruleset
-    requires ("Terraform plan") keeps its name whichever account that is."""
-    run: Run = ctx.obj
-    production = run.settings.production
-    names: list[Account] = []
-    if production is None or not production.management_retired:
-        names.append("management")
-    if production is not None and production.bootstrapped:
-        names.append("production")
-    accounts = []
-    for index, name in enumerate(names):
-        settings = load_settings(run.config_path, account=name)
-        accounts.append(
-            {
-                "account": name,
-                "account_id": settings.aws.account_id,
-                "organization": settings.context.organization,
-                "state_bucket": settings.state.bucket,
-                "ecr_repository": settings.ecr.repository,
-                "label": "" if index == 0 else f" ({name})",
-            }
-        )
-    print(json.dumps(accounts, separators=(",", ":")))
 
 
 @config_app.command("show")
@@ -1159,14 +1008,6 @@ def access_render(
     """
 
     def body(run: Run) -> None:
-        where = run.settings.databricks_account
-        if where is not None and where != run.settings.account:
-            # One reconcile, in the account Databricks is enabled in: the other
-            # view would bind through a host that is not this account's.
-            raise ConfigError(
-                f"Databricks is enabled in the {where} account, not {run.settings.account}: "
-                f"run `jaws --account {where} access render`"
-            )
         root = access.infra_root()
         registry = access.load_registry(root / "datasets")
         base = access.load_registry(base_registry) if base_registry is not None else ()

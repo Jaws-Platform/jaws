@@ -40,7 +40,7 @@ def _instance(ec2: Any, project: str, component: str = "container-instance") -> 
 def test_put_and_check_secret() -> None:
     with mock_aws():
         ssm = boto3.client("ssm", region_name=REGION)
-        name = "/jwall-engineering/braveheart/lichess-token"
+        name = "/jaws/braveheart/lichess-token"
         assert botlib.secret_exists(ssm, name) is False
         botlib.put_secret(ssm, name, "lip_x")
         assert botlib.secret_exists(ssm, name) is True
@@ -148,7 +148,7 @@ def test_tail_logs_pages_and_follows() -> None:
     lines = list(
         botlib.tail_logs(
             Logs(),  # type: ignore[arg-type]
-            "/jwall-engineering/braveheart/bot",
+            "/jaws/braveheart/bot",
             since_seconds=600,
             follow=True,
             logger=logging.getLogger("t"),

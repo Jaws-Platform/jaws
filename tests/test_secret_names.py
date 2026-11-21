@@ -39,7 +39,7 @@ def _management() -> Settings:
 
 
 def _production() -> Settings:
-    return load_settings(CONFIG, environ={}, account="production")
+    return load_settings(CONFIG, environ={})
 
 
 def _raw_bot() -> dict[str, Any]:
@@ -65,29 +65,18 @@ def test_a_relative_secret_resolves_in_each_account(tmp_path: Path) -> None:
     config = _bot(tmp_path, "lichess-token")
     management = Project.from_config(config, _management())
     production = Project.from_config(config, _production())
-    assert management.secret_parameters == {
-        "LICHESS_TOKEN": "/jwall-engineering/braveheart-bot/lichess-token"
-    }
+    assert management.secret_parameters == {"LICHESS_TOKEN": "/jaws/braveheart-bot/lichess-token"}
     assert production.secret_parameters == {"LICHESS_TOKEN": "/jaws/braveheart-bot/lichess-token"}
 
 
 def test_the_stack_is_given_the_account_s_parameter(tmp_path: Path) -> None:
     config = _bot(tmp_path, "lichess-token")
     for settings, expected in (
-        (_management(), "/jwall-engineering/braveheart-bot/lichess-token"),
+        (_management(), "/jaws/braveheart-bot/lichess-token"),
         (_production(), "/jaws/braveheart-bot/lichess-token"),
     ):
         tfvars = render_tfvars(Project.from_config(config, settings), settings)
         assert tfvars["secret_parameters"] == {"LICHESS_TOKEN": expected}
-
-
-def test_an_absolute_secret_works_in_its_own_account_only(tmp_path: Path) -> None:
-    config = _bot(tmp_path, "/jwall-engineering/braveheart-bot/lichess-token")
-    assert Project.from_config(config, _management()).secret_parameters == {
-        "LICHESS_TOKEN": "/jwall-engineering/braveheart-bot/lichess-token"
-    }
-    with pytest.raises(ConfigError, match="/jaws/braveheart-bot/"):
-        Project.from_config(config, _production())
 
 
 @pytest.mark.parametrize("value", ["bot", "bot/x", "../x", "x/y", "", "Lichess-Token", "-x"])
@@ -99,22 +88,16 @@ def test_a_reserved_or_malformed_relative_name_is_refused(tmp_path: Path, value:
 def test_bot_secrets_set_writes_the_addressed_account_s_parameter(
     bot_workspace: Path,
 ) -> None:
-    # braveheart-bot's own file: it has no dataset, whose bucket names are still the
-    # management account's (they get the same treatment in the research projects' plan).
+    # braveheart-bot's own file.
     raw = yaml.safe_load(_with_secret(bot_workspace.parent, "lichess-token").read_text())
     (bot_workspace / "jaws.yaml").write_text(yaml.safe_dump(raw))
     lichess_config = (bot_workspace / "lichess" / "config.yml").read_text()
     (bot_workspace / raw["components"][1]["config"]).write_text(lichess_config)
-    config_file = bot_workspace / "config.yaml"
-    config = yaml.safe_load(config_file.read_text())
-    config["production"]["projects"] = {raw["project"]: "moving"}
-    config_file.write_text(yaml.safe_dump(config))
-
     production = ("570327089884", PRODUCTION_ADMIN)
     with mock_aws(), patch("jaws.aws.caller_identity", return_value=production):
         result = runner.invoke(
             cli.app,
-            ["--account", "production", "bot", "secrets", "set", "LICHESS_TOKEN"],
+            ["bot", "secrets", "set", "LICHESS_TOKEN"],
             input="lip_t0k\n",
         )
         assert result.exit_code == 0, result.output

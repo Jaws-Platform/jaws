@@ -73,8 +73,8 @@ jobs:
         id: role
         working-directory: .
         run: |
-          # The tool says which account Databricks is enabled in (one at a time),
-          # and whether there is anything to reconcile there yet.
+          # Whether there is anything to reconcile yet (Databricks enabled, its
+          # shared host recorded).
           resolved=$(uv run jaws config env --databricks)
           state=$(sed -n 's/^databricks=//p' <<<"$resolved")
           echo "databricks=$state" >> "$GITHUB_OUTPUT"
@@ -87,7 +87,6 @@ jobs:
           [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization"; exit 1; }
           {
             echo "arn=arn:aws:iam::${account}:role/${organization}-data-access-ci-plan"
-            echo "account=$(sed -n 's/^account=//p' <<<"$resolved")"
             echo "state_bucket=$(sed -n 's/^state_bucket=//p' <<<"$resolved")"
           } >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6
@@ -101,8 +100,7 @@ jobs:
         working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
-          ACCOUNT: ${{ steps.role.outputs.account }}
-        run: uv run jaws --account "$ACCOUNT" access render --out data-access --base-registry .base/datasets
+        run: uv run jaws access render --out data-access --base-registry .base/datasets
       - name: terraform init
         if: steps.role.outputs.databricks == 'ready'
         uses: ./.github/actions/terraform-init
@@ -116,9 +114,8 @@ jobs:
         id: plan
         if: steps.role.outputs.databricks == 'ready'
         env:
-          ACCOUNT: ${{ steps.role.outputs.account }}
         run: |
-          source ../scripts/databricks-credentials.sh ../config.yaml "$ACCOUNT"
+          source ../scripts/databricks-credentials.sh ../config.yaml
           set +e
           terraform plan -no-color -lock-timeout=60s -out=tfplan -detailed-exitcode > plan.log 2>&1
           code=$?
@@ -185,8 +182,8 @@ jobs:
         id: role
         working-directory: .
         run: |
-          # The tool says which account Databricks is enabled in (one at a time),
-          # and whether there is anything to reconcile there yet.
+          # Whether there is anything to reconcile yet (Databricks enabled, its
+          # shared host recorded).
           resolved=$(uv run jaws config env --databricks)
           state=$(sed -n 's/^databricks=//p' <<<"$resolved")
           echo "databricks=$state" >> "$GITHUB_OUTPUT"
@@ -199,7 +196,6 @@ jobs:
           [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization"; exit 1; }
           {
             echo "arn=arn:aws:iam::${account}:role/${organization}-data-access-ci-apply"
-            echo "account=$(sed -n 's/^account=//p' <<<"$resolved")"
             echo "state_bucket=$(sed -n 's/^state_bucket=//p' <<<"$resolved")"
           } >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6
@@ -213,8 +209,7 @@ jobs:
         working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
-          ACCOUNT: ${{ steps.role.outputs.account }}
-        run: uv run jaws --account "$ACCOUNT" access render --out data-access
+        run: uv run jaws access render --out data-access
       - name: terraform init
         if: steps.role.outputs.databricks == 'ready'
         uses: ./.github/actions/terraform-init
@@ -228,9 +223,8 @@ jobs:
         id: sweep
         if: steps.role.outputs.databricks == 'ready'
         env:
-          ACCOUNT: ${{ steps.role.outputs.account }}
         run: |
-          source ../scripts/databricks-credentials.sh ../config.yaml "$ACCOUNT"
+          source ../scripts/databricks-credentials.sh ../config.yaml
           ../scripts/data-access-sweep.sh
       - name: Summary (who reads what, what is pending, what waits)
         if: always() && steps.sweep.outcome != 'skipped' && steps.role.outputs.databricks == 'ready'

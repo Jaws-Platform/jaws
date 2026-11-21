@@ -18,8 +18,6 @@ dependencies = [
 
 [project.scripts]
 jaws = "jaws.cli:app"
-# The command's name before the tool was called Jaws; removed once no consumer calls it.
-jwall-engineering-sites = "jaws.cli:app"
 
 [dependency-groups]
 dev = [

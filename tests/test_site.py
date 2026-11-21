@@ -9,7 +9,7 @@ import yaml
 from jaws.errors import ConfigError
 from jaws.settings import Settings
 from jaws.site import (
-    MANAGED_BY_VALUES,
+    MANAGED_BY,
     REQUIRED_TAGS,
     Site,
     SiteConfig,
@@ -47,11 +47,11 @@ def _write(tmp_path: Path, raw: dict[str, Any]) -> Path:
 
 
 def test_every_fixture_loads(site: Site) -> None:
-    assert site.bucket == f"jwall-engineering-{site.project}"
+    assert site.bucket == f"jaws-{site.project}"
     assert site.state_key == f"project={site.project}/env=prod/{site.project}-prod.tfstate"
-    assert site.role_name("plan") == f"jwall-engineering-{site.project}-ci-plan"
-    assert site.role_name("preview") == f"jwall-engineering-{site.project}-ci-preview"
-    assert site.role_name("apply") == f"jwall-engineering-{site.project}-ci-apply"
+    assert site.role_name("plan") == f"jaws-{site.project}-ci-plan"
+    assert site.role_name("preview") == f"jaws-{site.project}-ci-preview"
+    assert site.role_name("apply") == f"jaws-{site.project}-ci-apply"
     assert site.prod_url == f"https://{site.config.domain}/"
     assert site.preview_url(7) == f"https://pr-7.preview.{site.config.domain}/"
     assert site.preview_prefix(7) == "previews/pr-7/"
@@ -95,11 +95,11 @@ def test_cross_checked_tags(tmp_path: Path, tag: str, value: str) -> None:
         load_site_config(_write(tmp_path, _raw({f"tags.{tag}": value})))
 
 
-@pytest.mark.parametrize("stated", [None, *MANAGED_BY_VALUES, "terraform"])
+@pytest.mark.parametrize("stated", [None, MANAGED_BY])
 def test_the_tool_owns_managed_by(tmp_path: Path, settings: Settings, stated: str | None) -> None:
     raw = _raw() if stated is None else _raw({"tags.ManagedBy": stated})
     config = load_site_config(_write(tmp_path, raw))
-    assert Site.from_config(config, settings).tags["ManagedBy"] == "jwall-engineering-infra"
+    assert Site.from_config(config, settings).tags["ManagedBy"] == "jaws"
 
 
 def test_empty_tag_value(tmp_path: Path) -> None:
@@ -109,7 +109,7 @@ def test_empty_tag_value(tmp_path: Path) -> None:
 
 def test_organization_tag_must_match_config(tmp_path: Path, settings: Settings) -> None:
     config = load_site_config(_write(tmp_path, _raw({"tags.Organization": "someone-else"})))
-    with pytest.raises(ConfigError, match=r"tags\.Organization must be 'jwall-engineering'"):
+    with pytest.raises(ConfigError, match=r"tags\.Organization must be 'jaws'"):
         Site.from_config(config, settings)
 
 

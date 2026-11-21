@@ -33,7 +33,7 @@ MATH_PROVER_GUARDRAILS = ProjectGuardrails(
     instance_types=("c8a.xlarge", "g6e.xlarge", "g6e.2xlarge", "g6e.4xlarge"),
     task_profiles=("cpu", "train"),
     datasets={
-        "jwall-engineering-math-prover-artifacts": DatasetRetention(
+        "jaws-math-prover-artifacts": DatasetRetention(
             prefix="data/",
             versioning=True,
             expire_noncurrent_days=90,
@@ -58,7 +58,7 @@ BRAVEHEART_GUARDRAILS = ProjectGuardrails(
         "g6e.xlarge",
     ),
     task_profiles=("cpu", "gpu", "sprt", "match", "datagen", "relabel"),
-    datasets={"jwall-engineering-braveheart-nnue": DatasetRetention()},
+    datasets={"jaws-braveheart-nnue": DatasetRetention()},
 )
 
 
@@ -75,35 +75,17 @@ DATABRICKS_POC_GUARDRAILS = ProjectGuardrails(
 )
 
 
-def databricks_in_management(config: dict[str, Any]) -> dict[str, Any]:
-    """`config` with Databricks enabled in the management account, as the suite's
-    Databricks tests expect: their samples (databricks-poc, braveheart-databricks)
-    live there. Stated here, not read from config.yaml, which flips Databricks
-    between the accounts when it moves (docs/databricks.md, "One account at a time").
-    A test about production says so itself."""
+def fixture_config(path: Path = FIXTURES / "config.yaml") -> dict[str, Any]:
+    """config.yaml's fixture copy as the suite's baseline, with the central entries
+    of the braveheart and databricks-poc samples and Databricks enabled. The raw
+    mapping a test writes out as a config.yaml."""
+    config: dict[str, Any] = yaml.safe_load(path.read_text())
+    config["projects"]["braveheart"] = BRAVEHEART_GUARDRAILS.model_dump(mode="json")
     config["databricks"]["enabled"] = True
-    overrides = config["production"]["overrides"].setdefault("databricks", {})
-    overrides["enabled"] = False
-    config["production"]["projects"].pop("braveheart-databricks", None)
     config["projects"]["databricks-poc"] = DATABRICKS_POC_GUARDRAILS.model_dump(
         mode="json", exclude_defaults=True
     )
     return config
-
-
-def fixture_config(path: Path = FIXTURES / "config.yaml") -> dict[str, Any]:
-    """config.yaml's fixture copy as the suite's baseline: the braveheart sample's
-    central entry, in the management account, and Databricks in the management
-    account with the databricks-poc sample. The raw mapping a test writes out as a
-    config.yaml. The sample stays in management whatever config.yaml says of the
-    real engine's move; a test about production says so itself."""
-    config: dict[str, Any] = yaml.safe_load(path.read_text())
-    config["projects"]["braveheart"] = BRAVEHEART_GUARDRAILS.model_dump(mode="json")
-    config["production"]["projects"].pop("braveheart", None)
-    # The baseline has the management account in use, so a test can keep a
-    # project there; a test about its retirement says so itself.
-    config["production"].pop("management_retired", None)
-    return databricks_in_management(config)
 
 
 _BASELINE: dict[str, Path] = {}
@@ -124,18 +106,6 @@ def fixture_settings(path: Path | None = None, **kwargs: object) -> Settings:
     return load_settings(path or baseline_config_path(), **kwargs)  # type: ignore[arg-type]
 
 
-def management_only(settings: Settings, *projects: str) -> Settings:
-    """`settings` with `projects` taken out of production.projects: a test about a
-    project's own behaviour states that it isn't moving, rather than inheriting
-    whatever config.yaml says today (which changes with every move)."""
-    assert settings.production is not None
-    remaining = {k: v for k, v in settings.production.projects.items() if k not in projects}
-    production = settings.production.model_copy(
-        update={"projects": remaining, "management_retired": False}
-    )
-    return settings.model_copy(update={"production": production})
-
-
 def with_guardrails(settings: Settings, project: str, guardrails: ProjectGuardrails) -> Settings:
     """`settings` with `guardrails` as the central entry for `project`."""
     return settings.model_copy(update={"projects": {**settings.projects, project: guardrails}})
@@ -143,12 +113,9 @@ def with_guardrails(settings: Settings, project: str, guardrails: ProjectGuardra
 
 @pytest.fixture(autouse=True)
 def _restore_environment() -> Iterator[None]:
-    """Each test gets the environment back as it found it. A command adopts the old
-    JES_* variables by writing os.environ (jaws.legacy), which monkeypatch does not
-    undo, so without this a JES_CONFIG set by one test chose the next test's config.
-
-    It also starts every test as an owner's shell, not a workflow step: CI sets
-    GITHUB_ACTIONS, GITHUB_OUTPUT and the like, and a test that behaved
+    """Each test gets the environment back as it found it, and starts as an
+    owner's shell, not a workflow step: CI sets GITHUB_ACTIONS, GITHUB_OUTPUT
+    and the like, and a test that behaved
     differently there passed locally and failed in CI (2026-11-19). A test about
     a workflow step sets the variables it needs itself."""
     with patch.dict(os.environ):
@@ -203,7 +170,7 @@ def fake_terraform(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     outputs.write_text(
         json.dumps(
             {
-                "bucket_name": {"value": "jwall-engineering-guitar-knowledge-base"},
+                "bucket_name": {"value": "jaws-guitar-knowledge-base"},
                 "prod_url": {"value": "https://guitar.jwall.engineering/"},
                 "prod_distribution_id": {"value": "E1PROD"},
                 "dev_url": {"value": None},
@@ -278,14 +245,11 @@ def research_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
 
 @pytest.fixture
 def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """A working directory holding the guitar site file and config.yaml, with the
-    site in the management account only: these tests are about a site's own
-    commands, and must not change account on the pull request that moves it."""
+    """A working directory holding the guitar site file and config.yaml."""
     root = tmp_path / "workspace"
     root.mkdir()
     shutil.copy(FIXTURES / "sites" / "guitar-knowledge-base.yaml", root / "jaws.yaml")
     config = fixture_config()
-    config["production"]["projects"].pop("guitar-knowledge-base", None)
     (root / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
     monkeypatch.chdir(root)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)

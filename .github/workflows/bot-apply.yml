@@ -33,16 +33,6 @@ on:
         required: false
         type: string
         default: ""
-      account:
-        description: >-
-          The account to address. `auto` uses the one config.yaml gives the
-          project (production once it is listed under production.projects);
-          `management` addresses the old stack of a project that is moving. A
-          destroy of a moving project must name its account.
-        required: false
-        type: choice
-        options: [auto, management, production]
-        default: auto
 
 concurrency:
   group: bot-apply-${{ inputs.project }}
@@ -80,7 +70,6 @@ jobs:
           path: .consumer
           sparse-checkout: |
             jaws.yaml
-            jwall-engineering-sites.yaml
             lichess
           sparse-checkout-cone-mode: false
       - uses: hashicorp/setup-terraform@v4
@@ -95,10 +84,8 @@ jobs:
         id: role
         env:
           PROJECT: ${{ inputs.project }}
-          ACCOUNT: ${{ inputs.account != 'auto' && inputs.account || '' }}
         run: |
-          # The tool says which account this is (config.yaml: management, or `production`).
-          resolved=$(uv run jaws ${ACCOUNT:+--account "$ACCOUNT"} config env --project "$PROJECT")
+          resolved=$(uv run jaws config env)
           account=$(sed -n 's/^account_id=//p' <<<"$resolved")
           organization=$(sed -n 's/^organization=//p' <<<"$resolved")
           [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
@@ -112,7 +99,7 @@ jobs:
         env:
           PROJECT: ${{ inputs.project }}
         run: |
-          file=.consumer/jaws.yaml; [ -f "$file" ] || file=.consumer/jwall-engineering-sites.yaml # its name before the rename
+          file=.consumer/jaws.yaml
           named=$(yq -r .project "$file")
           if [ "$named" != "$PROJECT" ]; then
             echo "::error::the project file names '$named', not '$PROJECT'; pass consumer-ref for a ref whose file names $PROJECT"
@@ -121,7 +108,6 @@ jobs:
       - name: jaws ${{ inputs.destroy && 'destroy' || 'apply' }}
         env:
           JAWS_STACKS_ROOT: ${{ github.workspace }}/stacks
-          ACCOUNT: ${{ inputs.account != 'auto' && inputs.account || '' }}
           COMMAND: ${{ inputs.destroy && 'destroy --yes' || 'apply' }}
           # The CLI reads each counterpart's project file (consumers of the
           # project's datasets) from GitHub to render its bucket readers.
@@ -129,7 +115,7 @@ jobs:
         run: |
           # COMMAND is `apply` or `destroy --yes`: two words on purpose.
           # shellcheck disable=SC2086
-          uv run jaws --file .consumer/jaws.yaml ${ACCOUNT:+--account "$ACCOUNT"} $COMMAND
+          uv run jaws --file .consumer/jaws.yaml $COMMAND
       - name: Upload the run log and artifacts
         if: always()
         uses: actions/upload-artifact@v7

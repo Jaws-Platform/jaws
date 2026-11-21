@@ -29,10 +29,8 @@ def binary(tmp_path: Path) -> Path:
 
 
 def test_local_and_remote_tags(bot: Project) -> None:
-    assert image.local_tag(bot, "v0.14.0") == "jwall-engineering-braveheart:v0.14.0"
-    assert image.remote_tag(bot, REGISTRY, "v0.14.0") == (
-        f"{REGISTRY}/jwall-engineering-braveheart:v0.14.0"
-    )
+    assert image.local_tag(bot, "v0.14.0") == "jaws-braveheart:v0.14.0"
+    assert image.remote_tag(bot, REGISTRY, "v0.14.0") == (f"{REGISTRY}/jaws-braveheart:v0.14.0")
 
 
 def test_prepare_context_layout(bot: Project, binary: Path, bot_workspace: Path) -> None:
@@ -92,7 +90,7 @@ def test_build_command_line(
 ) -> None:
     context = image.prepare_context(bot, "v0.14.0", binary, bot_workspace / "ctx", bot_workspace)
     tag = image.build(context, bot, "v0.14.0", logging.getLogger("t"))
-    assert tag == "jwall-engineering-braveheart:v0.14.0"
+    assert tag == "jaws-braveheart:v0.14.0"
     line = fake_docker.read_text().splitlines()[0]
     assert line.startswith("build ")
     for part in (
@@ -102,14 +100,14 @@ def test_build_command_line(
         "--build-arg ENGINE_VERSION=v0.14.0",
         "--build-arg ENGINE_REPOSITORY=https://github.com/Braveheart-Chess/braveheart",
         "--build-arg SOURCE_REPOSITORY=https://github.com/Braveheart-Chess/braveheart",
-        "--tag jwall-engineering-braveheart:v0.14.0",
+        "--tag jaws-braveheart:v0.14.0",
     ):
         assert part in line, part
     assert line.endswith(str(context))
 
 
 def test_smoke_test_parses_nodes(bot: Project, fake_docker: Path) -> None:
-    nodes = image.smoke_test("jwall-engineering-braveheart:v0.14.0", bot, logging.getLogger("t"))
+    nodes = image.smoke_test("jaws-braveheart:v0.14.0", bot, logging.getLogger("t"))
     assert nodes == "123456"
     line = fake_docker.read_text().splitlines()[0]
     assert "--entrypoint /opt/engine/braveheart" in line and line.endswith("bench --depth 6")
@@ -121,20 +119,20 @@ def test_smoke_test_fails_without_nodes_line(
 ) -> None:
     monkeypatch.setenv("FAKE_DOCKER_BENCH_FAIL", "1")
     with pytest.raises(RunError, match="smoke test"):
-        image.smoke_test("jwall-engineering-braveheart:v0.14.0", bot, logging.getLogger("t"))
+        image.smoke_test("jaws-braveheart:v0.14.0", bot, logging.getLogger("t"))
 
 
 def test_tag_exists() -> None:
     with mock_aws():
         ecr = boto3.client("ecr", region_name="us-east-1")
-        ecr.create_repository(repositoryName="jwall-engineering-braveheart")
+        ecr.create_repository(repositoryName="jaws-braveheart")
         ecr.put_image(
-            repositoryName="jwall-engineering-braveheart",
+            repositoryName="jaws-braveheart",
             imageManifest='{"schemaVersion": 2, "mediaType": "application/vnd.docker.distribution.manifest.v2+json", "config": {"digest": "sha256:aa", "size": 1, "mediaType": "x"}, "layers": []}',  # noqa: E501
             imageTag="v0.14.0",
         )
-        assert image.tag_exists(ecr, "jwall-engineering-braveheart", "v0.14.0") is True
-        assert image.tag_exists(ecr, "jwall-engineering-braveheart", "v0.15.0") is False
+        assert image.tag_exists(ecr, "jaws-braveheart", "v0.14.0") is True
+        assert image.tag_exists(ecr, "jaws-braveheart", "v0.15.0") is False
 
 
 def test_login_uses_password_stdin(fake_docker: Path) -> None:
@@ -158,9 +156,9 @@ def test_login_uses_password_stdin(fake_docker: Path) -> None:
 
 def test_push_tags_and_pushes(bot: Project, fake_docker: Path) -> None:
     remote = image.push(bot, REGISTRY, "v0.14.0", logging.getLogger("t"))
-    assert remote == f"{REGISTRY}/jwall-engineering-braveheart:v0.14.0"
+    assert remote == f"{REGISTRY}/jaws-braveheart:v0.14.0"
     assert fake_docker.read_text().splitlines() == [
-        f"tag jwall-engineering-braveheart:v0.14.0 {remote}",
+        f"tag jaws-braveheart:v0.14.0 {remote}",
         f"push {remote}",
     ]
 
@@ -178,18 +176,18 @@ def test_present_tags_needs_only_describe_images() -> None:
                 ],
                 "nextToken": "n",
             },
-            {"repositoryName": "jwall-engineering-braveheart", "filter": {"tagStatus": "TAGGED"}},
+            {"repositoryName": "jaws-braveheart", "filter": {"tagStatus": "TAGGED"}},
         )
         stub.add_response(
             "describe_images",
             {"imageDetails": [{"imageTags": ["v0.14.0", "extra"], "imageDigest": "sha256:b"}]},
             {
-                "repositoryName": "jwall-engineering-braveheart",
+                "repositoryName": "jaws-braveheart",
                 "filter": {"tagStatus": "TAGGED"},
                 "nextToken": "n",
             },
         )
-        tags = image.present_tags(ecr, "jwall-engineering-braveheart")
+        tags = image.present_tags(ecr, "jaws-braveheart")
     assert tags == {"v0.13.0", "v0.14.0", "extra"}
 
 

@@ -61,7 +61,7 @@ def test_the_first_step_refuses_forks_and_other_events() -> None:
 
 def test_the_role_is_built_from_config_with_a_long_enough_session() -> None:
     role = _steps()[_index(lambda s: s.get("id") == "role")]
-    assert 'jaws --config "$CONFIG" config env --project "$PROJECT"' in role["run"]
+    assert 'jaws --config "$CONFIG" config env' in role["run"]
     assert '-${PROJECT}-ci-task"' in role["run"]
     assert "3600" in role["run"]
     creds = _steps()[_index(lambda s: "configure-aws-credentials" in s.get("uses", ""))]

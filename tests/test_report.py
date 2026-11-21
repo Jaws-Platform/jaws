@@ -33,7 +33,7 @@ Terraform will perform the following actions:
 
   # module.site.aws_s3_bucket.this will be created
   + resource "aws_s3_bucket" "this" {
-      + bucket = "jwall-engineering-site"
+      + bucket = "jaws-site"
     }
 
   # module.dns[0].aws_route53_record.txt["_github-pages-challenge"] will be updated in-place
@@ -73,14 +73,14 @@ Plan: 0 to add, 0 to change, 1 to destroy.
 """
 
 PLAN_NO_CHANGES_TEXT = """\
-module.site.aws_s3_bucket.this: Refreshing state... [id=jwall-engineering-site]
+module.site.aws_s3_bucket.this: Refreshing state... [id=jaws-site]
 
 No changes. Your infrastructure matches the configuration.
 """
 
 PLAN_OUTPUTS_ONLY = """\
 Changes to Outputs:
-  + bucket = "jwall-engineering-site"
+  + bucket = "jaws-site"
 
 You can apply this plan to save these new output values to the Terraform
 state, without changing any real infrastructure.

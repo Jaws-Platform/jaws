@@ -49,9 +49,9 @@ runs:
         role-session-name: jaws-${{ github.run_id }}-${{ github.run_attempt }}
     - uses: aws-actions/amazon-ecr-login@v2
       id: ecr
-    # Each account has its own image repository, and ECR login reaches only the
-    # role's own registry: take the repository of the role's account from
-    # config.yaml at this action's own commit. Never another account's name.
+    # ECR login reaches only the role's own registry: take the image
+    # repository from config.yaml at this action's own commit, and refuse a role
+    # in any other account.
     - name: Resolve the account's image repository
       id: image
       shell: bash
@@ -59,18 +59,14 @@ runs:
         CONFIG: ${{ github.action_path }}/../../../config.yaml
       run: |
         account=$(aws sts get-caller-identity --query Account --output text)
-        management=$(yq -r '.aws.account_id' "$CONFIG")
-        production=$(yq -r '.production.overrides.aws.account_id // ""' "$CONFIG")
-        if [[ "$account" == "$management" ]]; then
-          repository=$(yq -r '.ecr.repository // ""' "$CONFIG")
-        elif [[ -n "$production" && "$account" == "$production" ]]; then
-          repository=$(yq -r '.production.overrides.ecr.repository // ""' "$CONFIG")
-        else
-          echo "::error::the role is in account $account, which config.yaml names neither as management ($management) nor as production (${production:-none})"
+        expected=$(yq -r '.aws.account_id' "$CONFIG")
+        if [[ "$account" != "$expected" ]]; then
+          echo "::error::the role is in account $account, not config.yaml's account $expected"
           exit 1
         fi
+        repository=$(yq -r '.ecr.repository // ""' "$CONFIG")
         if [[ -z "$repository" ]]; then
-          echo "::error::config.yaml names no image repository for account $account"
+          echo "::error::config.yaml names no image repository"
           exit 1
         fi
         echo "jaws image repository for account $account: $repository"

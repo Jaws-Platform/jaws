@@ -20,11 +20,8 @@ from jaws.errors import PreflightError
 if TYPE_CHECKING:
     from mypy_boto3_sts import STSClient
 
-ROLE_ARN = (
-    "arn:aws:sts::650503560686:assumed-role/"
-    "jwall-engineering-guitar-knowledge-base-ci-plan/gha-plan-pr-1"
-)
-USER_ARN = "arn:aws:iam::650503560686:user/example-user"
+ROLE_ARN = "arn:aws:sts::570327089884:assumed-role/jaws-guitar-knowledge-base-ci-plan/gha-plan-pr-1"
+USER_ARN = "arn:aws:iam::570327089884:user/example-user"
 
 
 def _sts(arn: str) -> tuple[STSClient, Stubber]:
@@ -32,38 +29,35 @@ def _sts(arn: str) -> tuple[STSClient, Stubber]:
     stub = Stubber(sts)
     stub.add_response(
         "get_caller_identity",
-        {"Account": "650503560686", "Arn": arn, "UserId": "AROAEXAMPLE:session"},
+        {"Account": arn.split(":")[4], "Arn": arn, "UserId": "AROAEXAMPLE:session"},
     )
     stub.activate()
     return sts, stub
 
 
 def test_role_name_from_arn() -> None:
-    assert role_name_from_arn(ROLE_ARN) == "jwall-engineering-guitar-knowledge-base-ci-plan"
+    assert role_name_from_arn(ROLE_ARN) == "jaws-guitar-knowledge-base-ci-plan"
     assert role_name_from_arn(USER_ARN) is None
 
 
 def test_check_role_accepts_the_expected_role(logger: logging.Logger) -> None:
     sts, _ = _sts(ROLE_ARN)
-    assert (
-        check_role(sts, "jwall-engineering-guitar-knowledge-base-ci-plan", logger, environ={})
-        == ROLE_ARN
-    )
+    assert check_role(sts, "jaws-guitar-knowledge-base-ci-plan", logger, environ={}) == ROLE_ARN
 
 
 def test_check_role_rejects_another_role(logger: logging.Logger) -> None:
     sts, _ = _sts(ROLE_ARN)
     with pytest.raises(
         PreflightError,
-        match="must run as the jwall-engineering-guitar-knowledge-base-ci-apply role",
+        match="must run as the jaws-guitar-knowledge-base-ci-apply role",
     ):
-        check_role(sts, "jwall-engineering-guitar-knowledge-base-ci-apply", logger, environ={})
+        check_role(sts, "jaws-guitar-knowledge-base-ci-apply", logger, environ={})
 
 
 def test_check_role_rejects_a_user(logger: logging.Logger) -> None:
     sts, _ = _sts(USER_ARN)
     with pytest.raises(PreflightError, match="not an assumed role"):
-        check_role(sts, "jwall-engineering-guitar-knowledge-base-ci-plan", logger, environ={})
+        check_role(sts, "jaws-guitar-knowledge-base-ci-plan", logger, environ={})
 
 
 def test_check_role_can_be_skipped_with_a_warning(
@@ -125,7 +119,7 @@ def test_check_role_refuses_another_accounts_credentials(logger: logging.Logger)
 
 def test_skipping_the_role_check_does_not_skip_the_account_check(logger: logging.Logger) -> None:
     sts, stubber = _sts("arn:aws:sts::650503560686:assumed-role/AWSReservedSSO_Admin_0f/owner")
-    with stubber, pytest.raises(PreflightError, match="570327089884"):
+    with stubber, pytest.raises(PreflightError, match="650503560686"):
         check_role(
             sts,
             "any-role",
@@ -136,16 +130,16 @@ def test_skipping_the_role_check_does_not_skip_the_account_check(logger: logging
 
 
 def test_check_role_accepts_the_addressed_accounts_credentials(logger: logging.Logger) -> None:
-    arn = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-guitar-ci-plan/s"
+    arn = "arn:aws:sts::570327089884:assumed-role/jaws-guitar-ci-plan/s"
     sts, stubber = _sts(arn)
     with stubber:
         assert (
             check_role(
                 sts,
-                "jwall-engineering-guitar-ci-plan",
+                "jaws-guitar-ci-plan",
                 logger,
                 environ={},
-                account_id="650503560686",
+                account_id="570327089884",
             )
             == arn
         )
@@ -153,5 +147,5 @@ def test_check_role_accepts_the_addressed_accounts_credentials(logger: logging.L
 
 def test_check_any_role_refuses_another_accounts_credentials(logger: logging.Logger) -> None:
     sts, stubber = _sts("arn:aws:sts::650503560686:assumed-role/jaws-guitar-ci-plan/s")
-    with stubber, pytest.raises(PreflightError, match="570327089884"):
+    with stubber, pytest.raises(PreflightError, match="650503560686"):
         check_any_role(sts, ["jaws-guitar-ci-plan"], logger, environ={}, account_id="570327089884")

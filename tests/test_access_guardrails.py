@@ -78,9 +78,9 @@ def test_a_workspace_cannot_read_its_own_dataset(settings: Settings) -> None:
         (
             "braveheart-selfplay/nets",
             "braveheart-selfplay",
-            "jwall-engineering-braveheart-selfplay-nets",
+            "jaws-braveheart-selfplay-nets",
         ),
-        ("nobody/x", "nobody", "jwall-engineering-nobody-x"),
+        ("nobody/x", "nobody", "jaws-nobody-x"),
     ],
 )
 def test_a_read_must_name_an_approved_dataset(
@@ -132,7 +132,7 @@ def _settings_with(tmp_path: Path, change: Callable[[dict[str, Any]], None]) -> 
 def test_a_leftover_databricks_share_is_refused(tmp_path: Path) -> None:
     def share(raw: dict[str, Any]) -> None:
         approval = raw["projects"]["braveheart-selfplay"]["datasets"][
-            "jwall-engineering-braveheart-selfplay-positions"
+            "jaws-braveheart-selfplay-positions"
         ]
         approval["databricks_share"] = {"prefix": "data/", "consumers": ["braveheart-databricks"]}
 

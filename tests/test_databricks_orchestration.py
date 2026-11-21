@@ -40,10 +40,10 @@ from .conftest import FIXTURES
 
 runner = CliRunner()
 SENTINEL = "dapi-SENTINEL-s3cr3t-value"
-PARAM = "/jwall-engineering/databricks/client-secret"
-AUDIT_BUCKET = "jwall-engineering-databricks-audit-logs"
-PLAN_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-databricks-poc-ci-plan/s"
-APPLY_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-databricks-poc-ci-apply/s"
+PARAM = "/jaws/databricks/client-secret"
+AUDIT_BUCKET = "jaws-databricks-audit-logs"
+PLAN_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-databricks-poc-ci-plan/s"
+APPLY_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-databricks-poc-ci-apply/s"
 PARTIAL = "account stack applied; workspace stack failed; re-running apply is safe"
 DEFERRED = "workspace stack is planned after the workspace exists"
 WORKSPACE_ADDRESS = "module.workspace.databricks_mws_workspaces.this"
@@ -53,12 +53,12 @@ ACCOUNT_OUTPUTS = {
     "workspace_url": "https://dbc-42.cloud.databricks.com",
     "admin_group_name": "databricks-poc-workspace-admins",
     "users_group_name": "databricks-poc-workspace-users",
-    "root_bucket_name": "jwall-engineering-databricks-poc-databricks-root",
+    "root_bucket_name": "jaws-databricks-poc-databricks-root",
     "metastore_id": "m-1",
 }
 WORKSPACE_OUTPUTS = {
     "catalog_name": "databricks_poc",
-    "catalog_bucket_name": "jwall-engineering-databricks-poc-databricks-catalog",
+    "catalog_bucket_name": "jaws-databricks-poc-databricks-catalog",
     "cluster_policy_ids": {"jobs": "p-1"},
 }
 
@@ -79,7 +79,7 @@ class FakeClients:
 
 
 def _as_role(arn: str) -> AbstractContextManager[Any]:
-    return patch("jaws.aws.caller_identity", return_value=("650503560686", arn))
+    return patch("jaws.aws.caller_identity", return_value=("570327089884", arn))
 
 
 def _outputs_file(path: Path, values: dict[str, Any]) -> Path:

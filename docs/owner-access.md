@@ -116,15 +116,15 @@ bucket policies; recreating the user drops its passkeys. Do either only on
 purpose, and expect to update `foundation/state.tf`.
 
 The stack also assigns the same permission set in the production account
-(`production.overrides.aws.account_id` in `config.yaml`), where everything is
-moving, and `terraform output -raw aws_config` prints a `jaws-prod` profile for
-it beside `jwall-admin`. The role Identity Center provisions there has its own
-suffix; [production-bootstrap.md](production-bootstrap.md) reads it.
+(`aws.account_id` in `config.yaml`), where everything jaws builds lives, and
+`terraform output -raw aws_config` prints a `jaws-prod` profile for it beside
+`jwall-admin`. The role Identity Center provisions there has its own suffix:
+`config.yaml`'s `aws.admin_role_arn` names it.
 
 It assigns it in the development account too (`development.account_id` in
 `config.yaml`), and prints a `jaws-dev` profile for it. Nothing is built there
 yet; the access is for the console and the CLI, such as asking for its EC2
-quotas ahead of a move. All three profiles share the one `jwall-engineering`
+quotas. All three profiles share the one `jwall-engineering`
 SSO session, so one sign-in covers them:
 
 ```sh
@@ -226,14 +226,19 @@ session, and root for emergencies.
 
 ## Verification
 
-With `AWS_PROFILE=jwall-admin`:
+With `AWS_PROFILE=jwall-admin` (the management account, where owner-access
+and its state live):
 
 - `aws sts get-caller-identity` shows `assumed-role/AWSReservedSSO_AdministratorAccess_*/jwallace145`.
 - `terraform -chdir=owner-access plan` shows no changes (the state bucket
-  exempts the role), and a plan in `foundation/` runs.
-- `aws s3 ls s3://jwall-engineering-tfstate/`, a site bucket and
-  `s3://jwall-engineering-braveheart-nnue/data/` list.
-- `uv run jaws cost report` prints the table.
-- Through the portal, the console browses the state bucket and a site bucket.
+  exempts the role).
+
+With `AWS_PROFILE=jaws-prod` (the production account):
+
+- a plan in `foundation/` runs;
+- `aws s3 ls s3://jaws-terraform-state-570327089884/`, a site bucket and
+  `s3://jaws-braveheart-selfplay-positions/data/` list;
+- `uv run jaws cost report` prints the table;
+- through the portal, the console browses the state bucket and a site bucket.
 - An hour later a command still works without a prompt; after the sign-in has
   expired it asks for `aws sso login`; after `aws sso logout` commands fail.

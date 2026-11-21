@@ -75,9 +75,10 @@ run "outputs_render_the_cli_profile" {
   }
 }
 
-# Everything is moving to the production account, so the owner needs the same
-# admin access there. The development account is in config.yaml too: nothing is
-# built there yet, but the owner can sign in to it (quota requests, the console).
+# Everything jaws builds is in the production account, so the owner needs the
+# same admin access there. The development account is in config.yaml too:
+# nothing is built there yet, but the owner can sign in to it (quota requests,
+# the console).
 run "the_owner_has_the_same_access_in_production_and_development" {
   command = plan
 

@@ -11,8 +11,8 @@ mock_provider "aws" {
 
   mock_data "aws_caller_identity" {
     defaults = {
-      account_id = "650503560686"
-      arn        = "arn:aws:iam::650503560686:root"
+      account_id = "570327089884"
+      arn        = "arn:aws:iam::570327089884:root"
     }
   }
 
@@ -78,7 +78,7 @@ override_data {
 override_data {
   target = module.workspace.data.databricks_aws_bucket_policy.root
   values = {
-    json = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\",\"s3:PutObject\"],\"Resource\":[\"arn:aws:s3:::jwall-engineering-databricks-poc-databricks-root/*\",\"arn:aws:s3:::jwall-engineering-databricks-poc-databricks-root\"],\"Principal\":{\"AWS\":\"arn:aws:iam::414351767826:root\"}}]}"
+    json = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\",\"s3:PutObject\"],\"Resource\":[\"arn:aws:s3:::jaws-databricks-poc-databricks-root/*\",\"arn:aws:s3:::jaws-databricks-poc-databricks-root\"],\"Principal\":{\"AWS\":\"arn:aws:iam::414351767826:root\"}}]}"
   }
 }
 

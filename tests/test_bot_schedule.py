@@ -30,9 +30,9 @@ from jaws.stack import render_tfvars
 from .conftest import FIXTURES
 
 REGION = "us-east-1"
-PREFIX = "/jwall-engineering/braveheart/bot"
-RELEASE_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-braveheart-ci-release/s"
-PLAN_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-braveheart-ci-plan/s"
+PREFIX = "/jaws/braveheart/bot"
+RELEASE_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-braveheart-ci-release/s"
+PLAN_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-braveheart-ci-plan/s"
 DAILY = {"days": "daily", "start": "08:00", "stop": "20:00"}
 runner = CliRunner()
 logger = logging.getLogger("test")
@@ -56,7 +56,7 @@ def _project(tmp_path: Path, settings: Settings, schedule: dict[str, Any] | None
 
 
 def _as_role(arn: str) -> AbstractContextManager[Any]:
-    return patch("jaws.aws.caller_identity", return_value=("650503560686", arn))
+    return patch("jaws.aws.caller_identity", return_value=("570327089884", arn))
 
 
 def _instance(ec2: Any, state: str = "running") -> str:
@@ -357,9 +357,9 @@ def scheduled_workspace(bot_workspace: Path) -> Path:
 
 def _ecr_with(tag: str) -> None:
     ecr = boto3.client("ecr", region_name=REGION)
-    ecr.create_repository(repositoryName="jwall-engineering-braveheart")
+    ecr.create_repository(repositoryName="jaws-braveheart")
     ecr.put_image(
-        repositoryName="jwall-engineering-braveheart",
+        repositoryName="jaws-braveheart",
         imageManifest=(
             '{"schemaVersion": 2, "mediaType": '
             '"application/vnd.docker.distribution.manifest.v2+json", '

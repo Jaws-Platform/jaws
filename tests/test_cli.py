@@ -16,31 +16,25 @@ from jaws import cli
 from jaws.stack import PLAN_CHANGES
 
 runner = CliRunner()
-PLAN_ROLE = (
-    "arn:aws:sts::650503560686:assumed-role/jwall-engineering-guitar-knowledge-base-ci-plan/s"
-)
-PREVIEW_ROLE = (
-    "arn:aws:sts::650503560686:assumed-role/jwall-engineering-guitar-knowledge-base-ci-preview/s"
-)
-APPLY_ROLE = (
-    "arn:aws:sts::650503560686:assumed-role/jwall-engineering-guitar-knowledge-base-ci-apply/s"
-)
-BUCKET = "jwall-engineering-guitar-knowledge-base"
-BOT_PLAN_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-braveheart-ci-plan/s"
-BOT_APPLY_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-braveheart-ci-apply/s"
+PLAN_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-guitar-knowledge-base-ci-plan/s"
+PREVIEW_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-guitar-knowledge-base-ci-preview/s"
+APPLY_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-guitar-knowledge-base-ci-apply/s"
+BUCKET = "jaws-guitar-knowledge-base"
+BOT_PLAN_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-braveheart-ci-plan/s"
+BOT_APPLY_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-braveheart-ci-apply/s"
 # The owner's shell: admin credentials in the account the project lives in. The
 # commands that accept any role still refuse another account's credentials.
-OWNER = "arn:aws:sts::650503560686:assumed-role/AWSReservedSSO_AdministratorAccess_0f/owner"
+OWNER = "arn:aws:sts::570327089884:assumed-role/AWSReservedSSO_AdministratorAccess_0f/owner"
 
 
 def _as_role(arn: str) -> AbstractContextManager[Any]:
-    return patch("jaws.aws.caller_identity", return_value=("650503560686", arn))
+    return patch("jaws.aws.caller_identity", return_value=("570327089884", arn))
 
 
 def test_config_show(workspace: Path) -> None:
     result = runner.invoke(cli.app, ["config", "show"])
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output)["ecr"]["repository"] == "jwall-engineering-sites"
+    assert json.loads(result.output)["ecr"]["repository"] == "jaws-cli"
 
 
 def test_validate_runs_terraform_offline(workspace: Path, fake_terraform: Path) -> None:
@@ -114,7 +108,7 @@ def test_plan_refuses_the_wrong_role(workspace: Path, fake_terraform: Path) -> N
     with mock_aws(), _as_role(APPLY_ROLE):
         result = runner.invoke(cli.app, ["plan"])
     assert result.exit_code == 3
-    assert "must run as the jwall-engineering-guitar-knowledge-base-ci-plan role" in result.output
+    assert "must run as the jaws-guitar-knowledge-base-ci-plan role" in result.output
     assert not fake_terraform.exists(), "terraform must not run after a failed preflight"
 
 
@@ -295,7 +289,7 @@ def test_destroy_releases_the_task_results_bucket_from_state_first(
     rm = calls.index("state rm -lock-timeout=120s module.task_results")
     destroy = next(i for i, c in enumerate(calls) if c.startswith("destroy "))
     assert rm < destroy
-    assert "jwall-engineering-braveheart-tasks" in result.output
+    assert "jaws-braveheart-tasks" in result.output
 
 
 def test_destroy_refuses_while_task_instances_run(
@@ -334,10 +328,8 @@ def test_destroy_refuses_sites(workspace: Path, fake_terraform: Path) -> None:
     assert "not supported for sites" in result.output
 
 
-BOT_RELEASE_ROLE = (
-    "arn:aws:sts::650503560686:assumed-role/jwall-engineering-braveheart-ci-release/s"
-)
-TOKEN_PARAM = "/jwall-engineering/braveheart/lichess-token"
+BOT_RELEASE_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-braveheart-ci-release/s"
+TOKEN_PARAM = "/jaws/braveheart/lichess-token"
 
 
 def test_secrets_set_prompts_hidden(bot_workspace: Path) -> None:
@@ -376,7 +368,7 @@ def test_secrets_check_exit_codes(bot_workspace: Path) -> None:
 def test_bot_status_output(bot_workspace: Path) -> None:
     with mock_aws(), _as_role(BOT_PLAN_ROLE):
         boto3.client("ssm", region_name="us-east-1").put_parameter(
-            Name="/jwall-engineering/braveheart/bot/status", Value="ok", Type="String"
+            Name="/jaws/braveheart/bot/status", Value="ok", Type="String"
         )
         result = runner.invoke(cli.app, ["bot", "status"])
     assert result.exit_code == 0, result.output
@@ -399,7 +391,7 @@ def test_bot_status_refuses_other_roles(bot_workspace: Path) -> None:
 def test_bot_logs_prints_events(bot_workspace: Path) -> None:
     with mock_aws(), _as_role(BOT_PLAN_ROLE):
         logs = boto3.client("logs", region_name="us-east-1")
-        group = "/jwall-engineering/braveheart/bot"
+        group = "/jaws/braveheart/bot"
         logs.create_log_group(logGroupName=group)
         logs.create_log_stream(logGroupName=group, logStreamName="app-v0.14.0")
         import time
@@ -425,7 +417,7 @@ from jaws import image as image_module  # noqa: E402
 from jaws import releases as releases_module  # noqa: E402
 from jaws import rollout as rollout_module  # noqa: E402
 
-REPO = "jwall-engineering-braveheart"
+REPO = "jaws-braveheart"
 API_RELEASES = "https://api.github.com/repos/Braveheart-Chess/braveheart/releases?per_page=100"
 LINUX = "braveheart-{v}-x86_64-unknown-linux-gnu.tar.gz"
 
@@ -518,7 +510,7 @@ def _bot_instance() -> str:
 def _param(name: str) -> str | None:
     try:
         value: str = boto3.client("ssm", region_name="us-east-1").get_parameter(
-            Name=f"/jwall-engineering/braveheart/bot/{name}"
+            Name=f"/jaws/braveheart/bot/{name}"
         )["Parameter"]["Value"]
     except Exception:
         return None
@@ -527,7 +519,7 @@ def _param(name: str) -> str | None:
 
 def _put_param(name: str, value: str) -> None:
     boto3.client("ssm", region_name="us-east-1").put_parameter(
-        Name=f"/jwall-engineering/braveheart/bot/{name}",
+        Name=f"/jaws/braveheart/bot/{name}",
         Value=value,
         Type="String",
         Overwrite=True,
@@ -802,13 +794,9 @@ def test_bot_build_waits_for_assets_attached_after_publishing(
 
 # -- research projects ---------------------------------------------------------------
 
-RESEARCH_PLAN_ROLE = (
-    "arn:aws:sts::650503560686:assumed-role/jwall-engineering-math-prover-ci-plan/s"
-)
-RESEARCH_APPLY_ROLE = (
-    "arn:aws:sts::650503560686:assumed-role/jwall-engineering-math-prover-ci-apply/s"
-)
-RESEARCH_BUCKET = "jwall-engineering-math-prover-artifacts"
+RESEARCH_PLAN_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-math-prover-ci-plan/s"
+RESEARCH_APPLY_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-math-prover-ci-apply/s"
+RESEARCH_BUCKET = "jaws-math-prover-artifacts"
 TF_RM = "state rm -lock-timeout=120s "
 
 
@@ -882,7 +870,7 @@ def test_plan_research_refuses_another_projects_role(
     with _as_role(BOT_PLAN_ROLE):
         result = runner.invoke(cli.app, ["plan"])
     assert result.exit_code == 3
-    assert "jwall-engineering-math-prover-ci-plan" in result.output
+    assert "jaws-math-prover-ci-plan" in result.output
     assert _calls(fake_terraform) == []
 
 
@@ -972,7 +960,7 @@ def test_destroy_bot_warning_stays_true(bot_workspace: Path, fake_terraform: Pat
 def test_destroy_research_releases_only_the_buckets_and_skips_the_image_check(
     research_workspace: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    state = _dataset_state("artifacts", "jwall-engineering-math-prover-task-train")
+    state = _dataset_state("artifacts", "jaws-math-prover-task-train")
     monkeypatch.setenv(
         "FAKE_TF_STATE_LIST",
         " ".join([*state["buckets"], *state["grants"], "module.tasks[0].aws_launch_template.this"]),
@@ -1027,7 +1015,7 @@ def test_destroy_bot_releases_its_dataset_buckets_too(
     bot_workspace: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """braveheart has a dataset: its prevent_destroy would reject the whole plan."""
-    state = _dataset_state("nnue", "jwall-engineering-braveheart-task-datagen")
+    state = _dataset_state("nnue", "jaws-braveheart-task-datagen")
     monkeypatch.setenv(
         "FAKE_TF_STATE_LIST",
         " ".join(["module.records[0].aws_s3_bucket.this", *state["buckets"], *state["grants"]]),
@@ -1041,7 +1029,7 @@ def test_destroy_bot_releases_its_dataset_buckets_too(
     released = [c for c in calls if c.startswith(TF_RM) and c != TF_RM + "module.records"]
     _assert_releases_only_the_buckets([*released, calls[destroy]], state)
     summary = next(line for line in result.output.splitlines() if "destroyed braveheart" in line)
-    assert "jwall-engineering-braveheart-nnue" in summary
+    assert "jaws-braveheart-nnue" in summary
     assert "records bucket" in summary and "secret" in summary
 
 
@@ -1200,7 +1188,7 @@ def test_apply_of_a_research_project_that_dropped_its_bot_keeps_the_records_buck
     rm = calls.index(TF_RM + "module.records")
     plan = next(i for i, c in enumerate(calls) if c.startswith("plan "))
     assert rm < plan
-    assert "jwall-engineering-math-prover-records" in result.output
+    assert "jaws-math-prover-records" in result.output
     assert "games are kept" in result.output
 
 
@@ -1210,9 +1198,9 @@ def test_apply_of_a_dropped_bot_refuses_while_its_image_repository_holds_images(
     monkeypatch.setenv("FAKE_TF_STATE_LIST", DROPPED_BOT_STATE)
     with mock_aws(), _as_role(RESEARCH_APPLY_ROLE):
         ecr = boto3.client("ecr", region_name="us-east-1")
-        ecr.create_repository(repositoryName="jwall-engineering-math-prover")
+        ecr.create_repository(repositoryName="jaws-math-prover")
         ecr.put_image(
-            repositoryName="jwall-engineering-math-prover",
+            repositoryName="jaws-math-prover",
             imageManifest=json.dumps(
                 {
                     "schemaVersion": 2,
@@ -1225,9 +1213,7 @@ def test_apply_of_a_dropped_bot_refuses_while_its_image_repository_holds_images(
         )
         result = runner.invoke(cli.app, ["apply"])
     assert result.exit_code == 3
-    assert "aws ecr batch-delete-image --repository-name jwall-engineering-math-prover" in (
-        result.output
-    )
+    assert "aws ecr batch-delete-image --repository-name jaws-math-prover" in (result.output)
     calls = _calls(fake_terraform)
     assert not any(c.startswith(("plan ", "apply ", TF_RM)) for c in calls)
 
@@ -1242,7 +1228,7 @@ def test_plan_of_a_dropped_bot_explains_instead_of_failing_on_prevent_destroy(
     calls = _calls(fake_terraform)
     assert not any(c.startswith(("plan ", TF_RM)) for c in calls)  # the plan role changes nothing
     comment = (research_workspace / ".jaws" / "plan-comment.md").read_text()
-    assert "jwall-engineering-math-prover-records" in comment and "Bot apply" in comment
+    assert "jaws-math-prover-records" in comment and "Bot apply" in comment
 
 
 def test_apply_of_a_bot_that_keeps_records_does_not_touch_its_state(
@@ -1266,14 +1252,14 @@ DROPPED_DATASET_STATE = (
     'module.datasets["nnue"].aws_s3_bucket.this '
     'module.datasets["nnue"].aws_s3_bucket_policy.this '
     'module.datasets["nnue"].aws_s3_bucket_lifecycle_configuration.this '
-    'module.datasets["nnue"].aws_iam_role_policy.grant["jwall-engineering-math-prover-task"] '
+    'module.datasets["nnue"].aws_iam_role_policy.grant["jaws-math-prover-task"] '
     "module.tasks[0].aws_launch_template.this"
 )
 
 
 def _approve_nnue(workspace: Path) -> None:
     config = yaml.safe_load((workspace / "config.yaml").read_text())
-    config["projects"]["math-prover"]["datasets"]["jwall-engineering-math-prover-nnue"] = {}
+    config["projects"]["math-prover"]["datasets"]["jaws-math-prover-nnue"] = {}
     (workspace / "config.yaml").write_text(yaml.safe_dump(config))
 
 
@@ -1293,7 +1279,7 @@ def test_apply_releases_a_dropped_datasets_bucket_and_keeps_its_grants_planned(
     ], "only the dropped dataset's bucket resources; its grants go with the apply"
     plan = next(i for i, c in enumerate(calls) if c.startswith("plan "))
     assert max(i for i, c in enumerate(calls) if c.startswith(TF_RM)) < plan
-    assert "jwall-engineering-math-prover-nnue" in result.output
+    assert "jaws-math-prover-nnue" in result.output
     assert "data are kept" in result.output
 
 
@@ -1305,7 +1291,7 @@ def test_apply_refuses_a_dropped_dataset_config_still_approves(
     with mock_aws(), _as_role(RESEARCH_APPLY_ROLE):
         result = runner.invoke(cli.app, ["apply"])
     assert result.exit_code == 3
-    assert "config.yaml still approves jwall-engineering-math-prover-nnue" in result.output
+    assert "config.yaml still approves jaws-math-prover-nnue" in result.output
     calls = _calls(fake_terraform)
     assert not any(c.startswith(("plan ", "apply ", TF_RM)) for c in calls)
 
@@ -1320,7 +1306,7 @@ def test_plan_of_a_dropped_dataset_explains_instead_of_failing_on_prevent_destro
     calls = _calls(fake_terraform)
     assert not any(c.startswith(("plan ", TF_RM)) for c in calls)  # the plan role changes nothing
     comment = (research_workspace / ".jaws" / "plan-comment.md").read_text()
-    assert "jwall-engineering-math-prover-nnue" in comment and "Bot apply" in comment
+    assert "jaws-math-prover-nnue" in comment and "Bot apply" in comment
 
 
 def test_plan_of_a_dropped_dataset_config_still_approves_fails(

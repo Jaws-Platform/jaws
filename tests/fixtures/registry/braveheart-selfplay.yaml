@@ -2,7 +2,7 @@
 # pipeline that grows it (datagen, relabel). Fields and behaviour:
 # https://github.com/Jaws-Platform/jaws/blob/main/docs/research-projects.md
 #
-# The positions were copied key for key from jwall-engineering-braveheart-nnue
+# The positions were copied key for key from the old jaws-braveheart-nnue
 # (data/selfplay/) at the split; docs/datasets.md records the move.
 version: 1
 project: braveheart-selfplay
@@ -11,7 +11,7 @@ repository: Braveheart-Chess/braveheart-selfplay
 # The tags every resource carries (through the provider's default_tags).
 # Project, Repository and Environment=prod are cross-checked.
 tags:
-  Organization: jwall-engineering
+  Organization: jaws
   Project: braveheart-selfplay
   Environment: prod
   Repository: Braveheart-Chess/braveheart-selfplay
@@ -67,7 +67,7 @@ components:
   # https://github.com/Jaws-Platform/jaws/blob/main/docs/datasets.md
   - kind: dataset
     name: positions
-    bucket: jwall-engineering-braveheart-selfplay-positions  # <Organization>-<project>-<name>
+    bucket: jaws-braveheart-selfplay-positions  # <Organization>-<project>-<name>
     prefix: data/
     versioning: true
     readers:

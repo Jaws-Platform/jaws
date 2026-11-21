@@ -3,7 +3,7 @@
 Each file here onboards one dataset to the platform. The foundation creates
 its one read-only, platform-owned IAM role, storage credential and Unity
 Catalog external location, all named `<organization>-ds-<owner>-<name>` (for
-example `jwall-engineering-ds-braveheart-selfplay-positions`).
+example `jaws-ds-braveheart-selfplay-positions`).
 
 **Onboarding lets nobody read.** A Databricks workspace reads a dataset only
 while both of these hold, a handshake:

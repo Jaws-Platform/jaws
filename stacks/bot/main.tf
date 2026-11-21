@@ -74,11 +74,6 @@ module "image" {
   expire_untagged_after_days = var.expire_untagged_after_days
 }
 
-moved {
-  from = module.image
-  to   = module.image[0]
-}
-
 module "network" {
   source  = "Jaws-Platform/jaws-network/aws//modules/vpc"
   version = "0.1.2"
@@ -86,11 +81,6 @@ module "network" {
 
   name               = local.name
   availability_zones = var.availability_zones
-}
-
-moved {
-  from = module.network
-  to   = module.network[0]
 }
 
 module "records" {
@@ -131,11 +121,6 @@ module "bot" {
 
   # Started, drained and stopped by EventBridge Scheduler; null: always on.
   schedule = var.schedule
-}
-
-moved {
-  from = module.bot
-  to   = module.bot[0]
 }
 
 # Task outputs, written by task instances under tasks/<run>/<task>/ and copied

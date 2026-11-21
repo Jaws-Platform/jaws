@@ -4,7 +4,7 @@ repository: jwallace145/site
 domain: jwall.engineering
 
 tags:
-  Organization: jwall-engineering
+  Organization: jaws
   Project: main-site
   Environment: prod
   Repository: jwallace145/site

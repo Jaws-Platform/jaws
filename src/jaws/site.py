@@ -30,12 +30,10 @@ SITE_FILE = Path("jaws.yaml")
 #: The tags the site file must state. Every resource also carries ManagedBy.
 REQUIRED_TAGS = ("Organization", "Project", "Environment", "Repository", "Owner")
 
-#: The ManagedBy values the accounts stamp (`context.managed_by` of each view of
-#: config.yaml); the stacks' variables accept exactly these. The tool owns the tag:
-#: a file is parsed without config.yaml, so it may state any of them, or the value
-#: project files stated before the tool owned it, or leave it out.
-MANAGED_BY_VALUES = ("jwall-engineering-infra", "jaws")
-LEGACY_MANAGED_BY = "terraform"
+#: The ManagedBy value the tool stamps (`context.managed_by`); the stacks'
+#: variables accept exactly this. The tool owns the tag, so a file leaves it out
+#: (or states this value).
+MANAGED_BY = "jaws"
 
 ENVIRONMENT = "prod"
 PROD_PREFIX = "prod/"
@@ -105,10 +103,9 @@ class SiteConfig(_Model):
     @classmethod
     def _managed_by(cls, value: dict[str, str]) -> dict[str, str]:
         stated = value.get("ManagedBy")
-        if stated is not None and stated not in (*MANAGED_BY_VALUES, LEGACY_MANAGED_BY):
+        if stated is not None and stated != MANAGED_BY:
             raise ValueError(
-                f"ManagedBy must be {_either(MANAGED_BY_VALUES)} or left out (the tool sets "
-                f"it), got {stated!r}"
+                f"ManagedBy must be {MANAGED_BY!r} or left out (the tool sets it), got {stated!r}"
             )
         return value
 
@@ -267,24 +264,20 @@ def _format_validation_error(exc: ValidationError) -> str:
     return "; ".join(lines)
 
 
-def _either(values: tuple[str, ...]) -> str:
-    return " or ".join(repr(value) for value in values)
-
-
 def account_tags(tags: Mapping[str, str], organization: str, managed_by: str) -> dict[str, str]:
-    """`tags` with the two the account decides, whatever the file states: a file is
-    valid in both accounts' views while its project moves, so it cannot decide them."""
+    """`tags` with the two config.yaml decides (`context.organization` and
+    `context.managed_by`), whatever the file states."""
     return {**tags, "Organization": organization, "ManagedBy": managed_by}
 
 
 def organization_problems(tags: Mapping[str, str], settings: Settings) -> list[str]:
-    """A stated Organization must be one of the accounts' organizations; the view's
-    own is stamped at render (`account_tags`)."""
+    """A stated Organization must be config.yaml's `context.organization`, which is
+    also what is stamped at render (`account_tags`)."""
     stated = tags.get("Organization")
-    known = settings.organizations or (settings.context.organization,)
-    if stated is None or stated in known:
+    organization = settings.context.organization
+    if stated is None or stated == organization:
         return []
-    return [f"tags.Organization must be {_either(known)}, got {stated!r}"]
+    return [f"tags.Organization must be {organization!r}, got {stated!r}"]
 
 
 class Site(_Model):

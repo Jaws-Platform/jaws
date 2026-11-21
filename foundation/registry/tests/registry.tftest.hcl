@@ -4,7 +4,7 @@
 # two implementations, one expected output, no source-text matching.
 
 variables {
-  organization = "jwall-engineering"
+  organization = "jaws"
 }
 
 run "derives_what_python_derives" {
@@ -95,7 +95,7 @@ run "every_live_location_but_the_onboarded_ones_is_checked" {
 
   variables {
     directory           = "../../tests/fixtures/datasets"
-    live_location_names = ["jwall-engineering-ds-braveheart-selfplay-positions", "braveheart-databricks-catalog"]
+    live_location_names = ["jaws-ds-braveheart-selfplay-positions", "braveheart-databricks-catalog"]
   }
 
   assert {
@@ -110,19 +110,19 @@ run "a_live_location_equal_to_inside_or_containing_a_dataset_overlaps" {
   variables {
     directory = "../../tests/fixtures/datasets"
     live_location_urls = {
-      old-share = "s3://jwall-engineering-braveheart-selfplay-positions/data/"
-      root      = "s3://jwall-engineering-braveheart-selfplay-positions"
-      inside    = "s3://jwall-engineering-braveheart-selfplay-positions/data/selfplay"
-      sibling   = "s3://jwall-engineering-braveheart-selfplay-positions/data2"
-      other     = "s3://jwall-engineering-braveheart-selfplay-positions-2/data"
+      old-share = "s3://jaws-braveheart-selfplay-positions/data/"
+      root      = "s3://jaws-braveheart-selfplay-positions"
+      inside    = "s3://jaws-braveheart-selfplay-positions/data/selfplay"
+      sibling   = "s3://jaws-braveheart-selfplay-positions/data2"
+      other     = "s3://jaws-braveheart-selfplay-positions-2/data"
     }
   }
 
   assert {
     condition = jsonencode(output.overlaps) == jsonencode([
-      "braveheart-selfplay/positions (s3://jwall-engineering-braveheart-selfplay-positions/data) and inside (s3://jwall-engineering-braveheart-selfplay-positions/data/selfplay)",
-      "braveheart-selfplay/positions (s3://jwall-engineering-braveheart-selfplay-positions/data) and old-share (s3://jwall-engineering-braveheart-selfplay-positions/data)",
-      "braveheart-selfplay/positions (s3://jwall-engineering-braveheart-selfplay-positions/data) and root (s3://jwall-engineering-braveheart-selfplay-positions)",
+      "braveheart-selfplay/positions (s3://jaws-braveheart-selfplay-positions/data) and inside (s3://jaws-braveheart-selfplay-positions/data/selfplay)",
+      "braveheart-selfplay/positions (s3://jaws-braveheart-selfplay-positions/data) and old-share (s3://jaws-braveheart-selfplay-positions/data)",
+      "braveheart-selfplay/positions (s3://jaws-braveheart-selfplay-positions/data) and root (s3://jaws-braveheart-selfplay-positions)",
     ])
     error_message = "equal, containing and contained locations overlap; a sibling prefix and another bucket do not"
   }

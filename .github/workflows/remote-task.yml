@@ -142,7 +142,6 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             jaws.yaml
-            jwall-engineering-sites.yaml
           sparse-checkout-cone-mode: false
       - name: Check out jaws at this workflow's own commit
         uses: actions/checkout@v7
@@ -175,13 +174,12 @@ jobs:
           MAX_HOURS: ${{ inputs.max-hours }}
           CONFIG: .jaws-tool/config.yaml
         run: |
-          # The tool says which account this is (config.yaml: management, or `production`).
-          resolved=$(uv run --no-dev --project .jaws-tool jaws --config "$CONFIG" config env --project "$PROJECT")
+          resolved=$(uv run --no-dev --project .jaws-tool jaws --config "$CONFIG" config env)
           account=$(sed -n 's/^account_id=//p' <<<"$resolved")
           organization=$(sed -n 's/^organization=//p' <<<"$resolved")
           [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
           [[ "$PROFILE" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "::error::profile must be kebab-case, got $PROFILE"; exit 2; }
-          file=jaws.yaml; [ -f "$file" ] || file=jwall-engineering-sites.yaml # its name before the rename
+          file=jaws.yaml
           hours="$MAX_HOURS"
           if [ "$hours" = "0" ] && [ "$PROFILE" = "cpu" ]; then
             hours=$(yq -r '[.components[] | select(.kind == "task-runner") | .max_hours // 6][0] // 6' "$file")

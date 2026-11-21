@@ -2,7 +2,7 @@
 # (bullet, on GPU instances). Fields and behaviour:
 # https://github.com/Jaws-Platform/jaws/blob/main/docs/research-projects.md
 #
-# The nets were copied key for key from jwall-engineering-braveheart-nnue
+# The nets were copied key for key from the old jaws-braveheart-nnue
 # (data/nets/) at the split; docs/nets.md records the move. The positions are
 # braveheart-selfplay's, read through its bucket's readers.
 version: 1
@@ -12,7 +12,7 @@ repository: Braveheart-Chess/braveheart-trainer
 # The tags every resource carries (through the provider's default_tags).
 # Project, Repository and Environment=prod are cross-checked.
 tags:
-  Organization: jwall-engineering
+  Organization: jaws
   Project: braveheart-trainer
   Environment: prod
   Repository: Braveheart-Chess/braveheart-trainer
@@ -52,7 +52,7 @@ components:
   # https://github.com/Jaws-Platform/jaws/blob/main/docs/datasets.md
   - kind: dataset
     name: nets
-    bucket: jwall-engineering-braveheart-trainer-nets  # <Organization>-<project>-<name>
+    bucket: jaws-braveheart-trainer-nets  # <Organization>-<project>-<name>
     prefix: data/
     versioning: true
     readers:
