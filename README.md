@@ -273,6 +273,13 @@ account: both stacks exist, and the default is the new one.
 A site that has moved keeps its old bucket in the management account (without
 roles or writers) until the owner deletes it; a move never destroys a bucket.
 
+**Every project had moved by 2026-11-21**, so the management account is retired
+(`production.management_retired: true`). No workflow plans, applies or publishes
+there, `config accounts` lists production alone, and no run may address
+management. The owner removes what jaws left there with
+`scripts/retire_management.py`, after checks that every old data bucket is in
+production byte for byte ([docs/management-retirement.md](docs/management-retirement.md)).
+
 **Moving a site.** The production zone answers for `jwall.engineering` since
 2026-11-18. Every site record was copied into it first, still pointing at the
 old distributions. A CloudFront hostname belongs to one distribution at a time,

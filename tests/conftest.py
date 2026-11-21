@@ -100,6 +100,9 @@ def fixture_config(path: Path = FIXTURES / "config.yaml") -> dict[str, Any]:
     config: dict[str, Any] = yaml.safe_load(path.read_text())
     config["projects"]["braveheart"] = BRAVEHEART_GUARDRAILS.model_dump(mode="json")
     config["production"]["projects"].pop("braveheart", None)
+    # The baseline has the management account in use, so a test can keep a
+    # project there; a test about its retirement says so itself.
+    config["production"].pop("management_retired", None)
     return databricks_in_management(config)
 
 
@@ -127,7 +130,9 @@ def management_only(settings: Settings, *projects: str) -> Settings:
     whatever config.yaml says today (which changes with every move)."""
     assert settings.production is not None
     remaining = {k: v for k, v in settings.production.projects.items() if k not in projects}
-    production = settings.production.model_copy(update={"projects": remaining})
+    production = settings.production.model_copy(
+        update={"projects": remaining, "management_retired": False}
+    )
     return settings.model_copy(update={"production": production})
 
 

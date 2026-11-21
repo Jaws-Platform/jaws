@@ -233,6 +233,10 @@ development:
 # folded into the top level when the last project has moved.
 production:
   bootstrapped: true # the owner ran docs/production-bootstrap.md on 2026-11-17
+  # Every project has moved, so no workflow plans, applies or publishes in the
+  # management account any more, and no run may address it. Its foundation is
+  # torn down by the owner (docs/management-retirement.md). Set 2026-11-21.
+  management_retired: true
   # Projects with a stack in production: `moving` while the old stack still
   # exists in the management account, `moved` once it has been destroyed.
   projects:

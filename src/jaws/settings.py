@@ -465,6 +465,24 @@ class ProductionSection(_Section):
     projects: dict[str, Literal["moving", "moved"]] = {}
     #: Section name to the keys that differ in production.
     overrides: dict[str, dict[str, Any]] = {}
+    #: True once every project has moved and the management account's foundation
+    #: is being retired (docs/management-retirement.md): no workflow plans,
+    #: applies or publishes there, and no run may address it.
+    management_retired: bool = False
+
+    @model_validator(mode="after")
+    def _retired_only_when_everything_moved(self) -> ProductionSection:
+        if not self.management_retired:
+            return self
+        if not self.bootstrapped:
+            raise ValueError("management_retired needs a bootstrapped production account")
+        still_moving = sorted(name for name, state in self.projects.items() if state != "moved")
+        if still_moving:
+            raise ValueError(
+                "management_retired needs every project moved; still moving: "
+                + ", ".join(still_moving)
+            )
+        return self
 
     @model_validator(mode="after")
     def _bootstrapped_is_complete(self) -> ProductionSection:
@@ -498,11 +516,24 @@ def resolve_account(
     """The account a run addresses: production for a project listed under
     `production.projects`, management otherwise. `requested` (`--account`)
     chooses the old stack of a project that is moving, or an account for a run
-    without a project; it cannot address a project where it has no stack."""
+    without a project; it cannot address a project where it has no stack.
+    Once the management account is retired, every run addresses production."""
     if production is None:
         if requested == "production":
             raise ConfigError("config.yaml has no production section, so nothing is in production")
         return "management"
+    if production.management_retired:
+        if requested == "management":
+            raise ConfigError(
+                "the management account is retired (production.management_retired): "
+                "nothing runs there any more"
+            )
+        if project is not None and project not in production.projects:
+            raise ConfigError(
+                f"{project} is not in production: list it under production.projects in "
+                "config.yaml (the management account is retired, so it has no other home)"
+            )
+        return "production"
     if project is None:
         return requested or "management"
     state = production.projects.get(project)

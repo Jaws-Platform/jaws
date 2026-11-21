@@ -413,15 +413,16 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked
-      - name: List the accounts (management, and production once it is bootstrapped)
+      - name: List the accounts (management until it is retired, and production once it is bootstrapped)
         id: list
         run: |
           accounts=$(uv run jaws config accounts)
           echo "accounts=$accounts" >> "$GITHUB_OUTPUT"
 
   terraform-plan:
-    # The management leg keeps the name the `main` ruleset requires.
-    name: Terraform plan${{ matrix.account != 'management' && format(' ({0})', matrix.account) || '' }}
+    # The first account's leg (management, or production once management is
+    # retired) has no label, so it keeps the name the `main` ruleset requires.
+    name: Terraform plan${{ matrix.label }}
     runs-on: ubuntu-latest
     needs: [terraform-static, accounts]
     strategy:
