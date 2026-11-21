@@ -186,8 +186,8 @@ s3://jaws-billing/
       project=<p>/date=YYYY-MM-DD/<run-id>.<task-id>.<started|finished|swept>.json
   normalized/                              # the normalizer's output; rebuildable from raw/
     schema=focus-1.2/provider=<p>/billing_period=YYYY-MM/data.parquet
-    schema=runs-1/billing_period=YYYY-MM/data.parquet
-    _runs/<UTC timestamp>.json             # one record per normalizer run
+    schema=runs-1/event_month=YYYY-MM/data.parquet   # one row per task-run event (built in plan 02)
+    _runs/<UTC timestamp>.json, _runs/latest.json    # one record per normalizer run; read latest.json
 ```
 
 - **Raw data is never removed.**
@@ -362,7 +362,22 @@ The `billing-normalizer` submodule, applied by the `monitoring/` stack.
   - **Double counting.** A Databricks subscription bought through AWS
     Marketplace would show up in the AWS rows too. It doesn't apply here
     (the owner pays by card). The module documents the caveat and offers
-    an `exclude_marketplace_products` input, empty by default.
+    an `exclude_publishers` input (matched exactly against FOCUS
+    `PublisherName`), empty by default.
+- **As built in v0.2.0 (plan 02):**
+  - Databricks prices are matched on `sku_name` and `cloud`, with
+    `price_start_time <= usage_end_time < price_end_time`. That is the join
+    Databricks documents.
+  - `RegionId` is null for Databricks rows, because no system table gives a
+    workspace's region.
+  - Every output, meaning each `(provider, period)` and each event month, is
+    built on its own, so a bad old period never blocks the current one.
+  - An output's warnings are stored on it and reported by every run.
+  - Only the FOCUS columns are read from an AWS delivery.
+  - `memory_size` is an input, 1 GB by default, enough for about 150,000
+    rows a month.
+  - The Cost Explorer backfill source waits for plan 08, and is built only if
+    AWS Support's backfill fails.
 
 ### 6.5 The monitoring node
 
@@ -426,7 +441,19 @@ follows `container-instance` from `terraform-aws-jaws-lichess-bot`:
   - Changing the password parameter is applied on the next reconcile,
     because Grafana reads the variable only on first boot.
 
-**Containers** (Docker Compose under systemd, with pinned image versions and
+**Images: stock AMI, digest-pinned containers (the owner's decision,
+2026-11-21).** There is no custom AMI.
+
+- The node runs the pinned stock AL2023 image.
+- Every container image is pinned by digest in the module, and pulled with
+  retries at boot. Docker's image cache is on the root volume, so a scheduled
+  stop and start never pulls again. Only an instance replacement pulls.
+- A version bump is a config-bundle change: the container is replaced, not
+  the instance.
+- If a pull ever fails, the pinned images get mirrored into a private ECR
+  repository, at about $0.10 a month, without ECR's pull-through cache.
+
+**Containers** (Docker Compose under systemd, with digest-pinned images and
 a memory limit each; exact values are the builder's)
 
 | Service | Purpose |
@@ -721,7 +748,14 @@ a documented schema, `runs-1`. Jaws is simply its first writer.
   on-demand price, ceiling, links.
 - Free-form `attributes` for anything else.
 
-The output is `normalized/schema=runs-1/billing_period=YYYY-MM/data.parquet`.
+The output is `normalized/schema=runs-1/event_month=YYYY-MM/data.parquet`,
+as built in v0.2.0 (plan 02). It has **one row per event**, grouped by the
+month of the record's `date=` folder. `cost-sync` on the node (plan 05)
+merges a run's `started`, `finished` and `swept` rows by `run_key`.
+
+A month is rebuilt only when its record list changes. Any invalid record is
+skipped and reported, and never blocks the rest. `cost-sync` lists only the
+`schema=` prefixes, never the growing `_runs/` history.
 
 **Cost per run.**
 

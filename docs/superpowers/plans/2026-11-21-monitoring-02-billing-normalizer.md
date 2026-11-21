@@ -92,7 +92,7 @@
   - `normalizer.parquet.read_rows(body: bytes) -> list[dict]`, where map columns come back as `dict`.
   - `normalizer.parquet.write_rows(rows: Sequence[Mapping], schema: pa.Schema) -> bytes`, snappy-compressed. Map fields are accepted as `dict`.
 
-- [ ] **Step 1: Teach `check-module.sh` to run Python tests with their requirements**
+- [x] **Step 1: Teach `check-module.sh` to run Python tests with their requirements**
 
 In the `files/test_*.py` step:
 - If `files/requirements-test.txt` exists, run `uv run --no-project --python 3.13 --with-requirements files/requirements-test.txt python -m unittest discover -s files -p 'test_*.py'`.
@@ -102,7 +102,7 @@ In `ci.yml`, add `- uses: astral-sh/setup-uv@v10` before "Check the module and i
 
 In `CONTRIBUTING.md`, add one sentence on `files/requirements-test.txt`.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `files/test_tags.py`:
 
@@ -134,12 +134,12 @@ class PromoteTest(unittest.TestCase):
   - `.names[-4:] == ["x_Project", "x_Component", "x_Serverless", "x_Source"]`.
 - `test_runs_schema_has_the_event_columns`: `runs_schema().names` starts `["run_key", "tags", "event", "at"]`.
 
-- [ ] **Step 3: Run them to see them fail**
+- [x] **Step 3: Run them to see them fail**
 
 Run: `cd $REPO && scripts/check-module.sh modules/billing-normalizer`
 Expected: FAIL at "script unit tests" with `ModuleNotFoundError: No module named 'normalizer.tags'`.
 
-- [ ] **Step 4: Implement `tags.py`, `schema.py` and `parquet.py`**
+- [x] **Step 4: Implement `tags.py`, `schema.py` and `parquet.py`**
 
 **`promote`:** for each name, try the keys `name`, `f"user:{name}"` and `f"user_{name.lower()}"`, in that order. Strip the value; blank becomes `None`.
 
@@ -165,12 +165,12 @@ Expected: FAIL at "script unit tests" with `ModuleNotFoundError: No module named
 
 **`read_rows`:** do the reverse.
 
-- [ ] **Step 5: Run them to see them pass**
+- [x] **Step 5: Run them to see them pass**
 
 Run: `scripts/check-module.sh modules/billing-normalizer`
 Expected: every step passes, and the unit tests report `Ran 7 tests … OK`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/check-module.sh .github/workflows/ci.yml CONTRIBUTING.md modules/billing-normalizer
@@ -205,7 +205,7 @@ git commit -q -m "feat(billing-normalizer): add the FOCUS schema, tag promotion 
   - `aws.latest_aws_deliveries(store: Store, bucket: str, delivery_prefix: str) -> dict[str, AwsDelivery]`.
   - `aws.map_aws_rows(rows: Iterable[Mapping], *, promoted_tags: Sequence[str], exclude_publishers: Sequence[str], source: str) -> list[dict]`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `files/test_aws.py` builds manifests with `json.dumps`, and data with `fakes.parquet_bytes` in the shape of the FOCUS 1.2 AWS columns. Its tests:
 
@@ -219,12 +219,12 @@ git commit -q -m "feat(billing-normalizer): add the FOCUS schema, tag promotion 
 - **`test_rows_from_excluded_publishers_are_dropped`:** `PublisherName = "Databricks"` with `exclude_publishers=["Databricks"]` gives `[]`.
 - **`test_null_tags_become_an_empty_map`:** `Tags = None` gives `Tags == {}` and `x_Project is None`.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `scripts/check-module.sh modules/billing-normalizer`
 Expected: FAIL with `ModuleNotFoundError: No module named 'normalizer.aws'`.
 
-- [ ] **Step 3: Implement `store.py`, `fakes.FakeStore` and `aws.py`**
+- [x] **Step 3: Implement `store.py`, `fakes.FakeStore` and `aws.py`**
 
 **`latest_aws_deliveries`:**
 - List `f"{delivery_prefix}/metadata/"`.
@@ -238,12 +238,12 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'normalizer.aws'`.
 - Add the promoted `x_` columns, `x_Serverless = None` and `x_Source = source`.
 - Drop rows whose `PublisherName` is in `exclude_publishers`.
 
-- [ ] **Step 4: Run them to see them pass**
+- [x] **Step 4: Run them to see them pass**
 
 Run: `scripts/check-module.sh modules/billing-normalizer`
 Expected: `Ran 12 tests … OK`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `git commit -m "feat(billing-normalizer): map AWS FOCUS 1.2 deliveries"` (with the trailer).
 
@@ -264,7 +264,7 @@ Expected: `Ran 12 tests … OK`.
   - `databricks.SERVICE_CATEGORIES: dict[str, str]`.
   - `databricks.RESOURCE_ID_FIELDS: tuple[str, ...]`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `files/test_databricks.py` uses usage rows shaped like `system.billing.usage`:
 - `usage_quantity` is a `Decimal`, `usage_date` a `date`, and `usage_end_time` a UTC datetime;
@@ -289,12 +289,12 @@ Its tests:
   - gives `ServiceName == "Databricks JOBS"`, `ServiceCategory == "Compute"`, `ResourceId == "42"` and `x_Serverless is True`;
   - with `ChargePeriodStart == usage_date 00:00 UTC`, `ChargePeriodEnd == + 1 day` and `BillingPeriodStart == the first of that month`.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `scripts/check-module.sh modules/billing-normalizer`
 Expected: FAIL with `ModuleNotFoundError: No module named 'normalizer.databricks'`.
 
-- [ ] **Step 3: Implement `databricks.py`**
+- [x] **Step 3: Implement `databricks.py`**
 
 **`SERVICE_CATEGORIES`:**
 - `Compute`: JOBS, DLT, ALL_PURPOSE, INTERACTIVE, BASE_ENVIRONMENTS, LAKEFLOW_CONNECT, APPS.
@@ -318,12 +318,12 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'normalizer.databricks
 - `ConsumedQuantity = float(usage_quantity)`, `ConsumedUnit = usage_unit`;
 - `Tags = custom_tags or {}`.
 
-- [ ] **Step 4: Run them to see them pass**
+- [x] **Step 4: Run them to see them pass**
 
 Run: `scripts/check-module.sh modules/billing-normalizer`
 Expected: `Ran 20 tests … OK`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `git commit -m "feat(billing-normalizer): map Databricks system-table deliveries at list price"` (with the trailer).
 
@@ -356,7 +356,7 @@ Expected: `Ran 20 tests … OK`.
 
 `finished` events set `outcome`, `exit_code` and `interrupted_at`; `swept` events set `reason`. Every field except `schema`, `event`, `at`, `tags` and `project` is optional.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 - **`test_records_group_by_the_month_of_their_date_folder`:** keys under `date=2026-11-30/` and `date=2026-12-01/` land under `"2026-11"` and `"2026-12"`. A key with no `date=` segment is ignored.
 - **`test_flattens_a_started_event`:** the example above gives:
@@ -372,17 +372,17 @@ Expected: `Ran 20 tests … OK`.
   - a blank `project`;
   - `at = "yesterday"`.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Expected: `ModuleNotFoundError: No module named 'normalizer.runs'`.
 
-- [ ] **Step 3: Implement `runs.py`**
+- [x] **Step 3: Implement `runs.py`**
 
-- [ ] **Step 4: Run them to see them pass**
+- [x] **Step 4: Run them to see them pass**
 
 Expected: `Ran 24 tests … OK`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `git commit -m "feat(billing-normalizer): flatten task-run event records"` (with the trailer).
 
@@ -411,7 +411,7 @@ Expected: `Ran 24 tests … OK`.
   - `outputs`, a list of `{key, provider, period, rebuilt, rows, billed_cost}`;
   - `warnings` and `errors`, lists of strings.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Each test uses `FakeStore` with one AWS period, one Databricks period and one runs month. Its tests:
 - **`test_first_run_builds_every_output_and_writes_a_run_record`:**
@@ -432,11 +432,11 @@ Each test uses `FakeStore` with one AWS period, one Databricks period and one ru
   - Assert: `run` raises `NormalizeError`; the AWS and runs outputs are written; `latest.json` has `status == "error"` and one error naming `databricks`.
 - **`test_load_config_reads_the_rendered_json`:** the JSON Task 6 renders for all three providers gives the right dataclasses. `null` providers give `None`.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Expected: `ModuleNotFoundError: No module named 'normalizer.run'`.
 
-- [ ] **Step 3: Implement `config.py`, `run.py` and `handler.py`**
+- [x] **Step 3: Implement `config.py`, `run.py` and `handler.py`**
 
 **`run`, provider by provider, each in its own `try`:**
 - List the deliveries.
@@ -452,11 +452,11 @@ Expected: `ModuleNotFoundError: No module named 'normalizer.run'`.
 
 **`handler`:** builds `S3Store(config.bucket, boto3.client("s3"))`. Import boto3 inside the handler, so tests never need it.
 
-- [ ] **Step 4: Run them to see them pass**
+- [x] **Step 4: Run them to see them pass**
 
 Expected: `Ran 31 tests … OK`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `git commit -m "feat(billing-normalizer): rebuild changed periods and record every run"` (with the trailer).
 
@@ -488,7 +488,7 @@ Expected: `Ran 31 tests … OK`.
     - `function_name`, `function_arn`, `role_name`, `role_arn`, `log_group_name`, `schedule_name`;
     - `outputs = { focus = "<np>/schema=focus-1.2", runs = "<np>/schema=runs-1", run_records = "<np>/_runs" }`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/billing_normalizer.tftest.hcl` mocks `aws` (with `aws_region` = `us-east-1` and `aws_caller_identity` = `222222222222`) and `archive`. It sets these variables:
 - `name = "acme-billing-normalizer"`, `bucket_name = "acme-billing"`;
@@ -519,12 +519,12 @@ Its runs:
 - **`rejects_runs_without_join_tags`:** `expect_failures = [var.runs]`.
 - **`rejects_prefixes_with_stray_slashes`:** `normalized_prefix = "normalized/"` gives `expect_failures = [var.normalized_prefix]`.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `cd $MOD && terraform init -backend=false -input=false >/dev/null && terraform test`
 Expected: FAIL, because the variables and resources are undeclared.
 
-- [ ] **Step 3: Implement the module**
+- [x] **Step 3: Implement the module**
 
 - **`versions.tf`:** `aws ~> 6.0` and `archive ~> 2.7`.
 - **`main.tf`:**
@@ -546,12 +546,12 @@ Expected: FAIL, because the variables and resources are undeclared.
   - the run record;
   - a usage snippet with `# x-release-please-version`.
 
-- [ ] **Step 4: Run them to see them pass**
+- [x] **Step 4: Run them to see them pass**
 
 Run: `terraform test`
 Expected: `Success! 10 passed, 0 failed.`
 
-- [ ] **Step 5: The example, the docs and the module check**
+- [x] **Step 5: The example, the docs and the module check**
 
 - **`examples/basic/main.tf`:** all three sources, for `acme-billing`.
 - Regenerate the README docs, and update the root README and the `main.tf` comment.
@@ -559,7 +559,7 @@ Expected: `Success! 10 passed, 0 failed.`
 Run: `cd $REPO && scripts/check.sh`
 Expected: `All checks passed.`, with four modules.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 `git commit -m "feat(billing-normalizer): run the normalizer hourly as a Lambda"` (with the trailer).
 
@@ -569,17 +569,17 @@ Expected: `All checks passed.`, with four modules.
 
 Every step here needs the owner's explicit permission for this plan, asked for at this step; plan 01's permission doesn't carry over.
 
-- [ ] **Step 1 (owner permission): Push and open the PR**
+- [x] **Step 1 (owner permission): Push and open the PR**
 
 Run: `git push -u origin feat/billing-normalizer`, then `gh pr create --template feat.md --title "feat: add the billing normalizer"` with every section filled.
 Expected: CI passes, including the new uv step, in the `terraform (billing-normalizer)` leg.
 
-- [ ] **Step 2 (owner permission): Merge, then release**
+- [x] **Step 2 (owner permission): Merge, then release**
 
 Squash-merge the PR, then merge the `chore(main): release 0.2.0` PR.
 Expected: the tag `v0.2.0` exists.
 
-- [ ] **Step 3: Record**
+- [x] **Step 3: Record**
 
 On the Jaws docs branch:
 - tick this plan;
