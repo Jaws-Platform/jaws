@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.74.0](https://github.com/Jaws-Platform/jaws/compare/v0.73.2...v0.74.0) (2026-11-21)
+
+
+### Features
+
+* **registry:** register prog-strength-archive, the cold archive of prog strength ([#279](https://github.com/Jaws-Platform/jaws/issues/279)) ([ca0e33e](https://github.com/Jaws-Platform/jaws/commit/ca0e33e83fcfc68fb094bc458aa051acc0aefa5a))
+
 ## [0.73.2](https://github.com/Jaws-Platform/jaws/compare/v0.73.1...v0.73.2) (2026-11-21)
 
 
