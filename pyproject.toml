@@ -23,7 +23,7 @@ jwall-engineering-sites = "jaws.cli:app"
 
 [dependency-groups]
 dev = [
-  "boto3-stubs[ce,cloudfront,ec2,ecr,logs,pricing,s3,ssm,sts]>=1.44.3",
+  "boto3-stubs[ce,cloudfront,ec2,ecr,logs,pricing,s3,ssm,sts]>=1.44.4",
   "moto[ec2,ecr,logs,s3,ssm,sts]>=5.2.5",
   "mypy>=1.17",
   "pytest>=8.4",
