@@ -479,12 +479,12 @@ jobs:
             --out foundation/plan-comment.md
       - name: Mint a comment token for the Jaws app
         id: app-token
-        if: always() && steps.plan.outcome != 'skipped' && vars.JES_APP_CLIENT_ID != ''
+        if: always() && steps.plan.outcome != 'skipped' && vars.JAWS_APP_CLIENT_ID != ''
         continue-on-error: true # a misconfigured app falls back to github-actions
         uses: actions/create-github-app-token@v3
         with:
-          client-id: ${{ vars.JES_APP_CLIENT_ID }}
-          private-key: ${{ secrets.JES_APP_PRIVATE_KEY }}
+          client-id: ${{ vars.JAWS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.JAWS_APP_PRIVATE_KEY }}
       - name: Post plan comment (updated on each push)
         if: always() && steps.plan.outcome != 'skipped'
         uses: marocchino/sticky-pull-request-comment@v3
@@ -596,12 +596,12 @@ jobs:
         run: uv run jaws --file .consumer/jaws.yaml plan
       - name: Mint a comment token for the Jaws app
         id: app-token
-        if: always() && vars.JES_APP_CLIENT_ID != ''
+        if: always() && vars.JAWS_APP_CLIENT_ID != ''
         continue-on-error: true
         uses: actions/create-github-app-token@v3
         with:
-          client-id: ${{ vars.JES_APP_CLIENT_ID }}
-          private-key: ${{ secrets.JES_APP_PRIVATE_KEY }}
+          client-id: ${{ vars.JAWS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.JAWS_APP_PRIVATE_KEY }}
       - name: Post plan comment (updated on each push)
         if: always() && hashFiles('.jaws/plan-comment.md') != ''
         uses: marocchino/sticky-pull-request-comment@v3
@@ -721,12 +721,12 @@ jobs:
         run: uv run jaws --file .consumer/jaws.yaml plan
       - name: Mint a comment token for the Jaws app
         id: app-token
-        if: always() && vars.JES_APP_CLIENT_ID != ''
+        if: always() && vars.JAWS_APP_CLIENT_ID != ''
         continue-on-error: true
         uses: actions/create-github-app-token@v3
         with:
-          client-id: ${{ vars.JES_APP_CLIENT_ID }}
-          private-key: ${{ secrets.JES_APP_PRIVATE_KEY }}
+          client-id: ${{ vars.JAWS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.JAWS_APP_PRIVATE_KEY }}
       - name: Post plan comment (updated on each push)
         if: always() && hashFiles('.jaws/plan-comment.md') != ''
         uses: marocchino/sticky-pull-request-comment@v3

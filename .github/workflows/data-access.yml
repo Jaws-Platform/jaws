@@ -138,12 +138,12 @@ jobs:
           { echo; cat data-access/access-summary.md; } >> data-access/plan-comment.md
       - name: Mint a comment token for the Jaws app
         id: app-token
-        if: always() && steps.plan.outcome != 'skipped' && steps.role.outputs.databricks == 'ready' && vars.JES_APP_CLIENT_ID != ''
+        if: always() && steps.plan.outcome != 'skipped' && steps.role.outputs.databricks == 'ready' && vars.JAWS_APP_CLIENT_ID != ''
         continue-on-error: true # a misconfigured app falls back to github-actions
         uses: actions/create-github-app-token@v3
         with:
-          client-id: ${{ vars.JES_APP_CLIENT_ID }}
-          private-key: ${{ secrets.JES_APP_PRIVATE_KEY }}
+          client-id: ${{ vars.JAWS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.JAWS_APP_PRIVATE_KEY }}
       - name: Post plan comment (updated on each push)
         if: always() && steps.plan.outcome != 'skipped' && steps.role.outputs.databricks == 'ready'
         uses: marocchino/sticky-pull-request-comment@v3
