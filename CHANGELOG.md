@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.67.0](https://github.com/jwallace145/jaws/compare/v0.66.0...v0.67.0) (2026-11-21)
+
+
+### Features
+
+* **foundation:** trust Jaws-Platform/jaws ahead of the repository's transfer ([#253](https://github.com/jwallace145/jaws/issues/253)) ([e998453](https://github.com/jwallace145/jaws/commit/e9984536b998d59b1b0e8ef8a90bcc909cd02eb5))
+
 ## [0.66.0](https://github.com/jwallace145/jaws/compare/v0.65.0...v0.66.0) (2026-11-19)
 
 
