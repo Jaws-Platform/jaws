@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.73.1](https://github.com/Jaws-Platform/jaws/compare/v0.73.0...v0.73.1) (2026-11-21)
+
+
+### Bug Fixes
+
+* **foundation:** tag the foundation's resources with the repository that manages them ([#274](https://github.com/Jaws-Platform/jaws/issues/274)) ([83f4960](https://github.com/Jaws-Platform/jaws/commit/83f49600c3298c3818c971403fc1ce6196e28442))
+
 ## [0.73.0](https://github.com/Jaws-Platform/jaws/compare/v0.72.0...v0.73.0) (2026-11-21)
 
 
