@@ -53,13 +53,13 @@ run "management_is_unchanged_by_default" {
   command = plan
 
   assert {
-    condition     = local.hosts_task_runners && jsonencode(local.infra_ci.foundation.service_linked_role_services) == jsonencode(["spot.amazonaws.com"])
-    error_message = "management runs task runners, so the infra roles may read, create and tag its EC2 Spot service-linked role"
+    condition     = !local.hosts_task_runners && jsonencode(local.infra_ci.foundation.service_linked_role_services) == jsonencode(["spot.amazonaws.com"])
+    error_message = "management runs no task runners since every research project moved, yet the infra roles may still read, create and tag its EC2 Spot service-linked role"
   }
 
   assert {
     condition     = length(module.spot_service_linked_role) == 1
-    error_message = "management runs task runners, so the foundation owns its EC2 Spot service-linked role (imported)"
+    error_message = "the foundation keeps owning management's EC2 Spot service-linked role (imported) until the management foundation is retired"
   }
 
   override_module {
@@ -139,9 +139,11 @@ run "management_is_unchanged_by_default" {
     error_message = "management serves every registered Databricks project that has not moved"
   }
 
+  # The jwall-engineering prefix of a project's roles in management is checked
+  # with a moving project (a_moving_project_keeps_its_roles_in_management).
   assert {
-    condition     = module.bot_ci_plan["braveheart-trainer"].role_name == "jwall-engineering-braveheart-trainer-ci-plan"
-    error_message = "a project's roles in management keep the jwall-engineering prefix"
+    condition     = length(module.bot_ci_plan) == 0 && length(module.bot_ci_apply) == 0
+    error_message = "every bot and research project has moved (braveheart-bot on 2026-11-18, the Braveheart research projects on 2026-11-21): management serves none"
   }
 
   assert {

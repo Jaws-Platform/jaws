@@ -7,12 +7,13 @@
 # (Braveheart-Chess/braveheart-selfplay run 44546406893).
 #
 # One per account, so it is the foundation's, never a project stack's, and it
-# exists wherever a project runs tasks (local.hosts_task_runners, bots.tf).
-# The module never destroys it (prevent_destroy): an account that stops
-# hosting task runners fails its plan here until the owner decides, by
-# removing it from state or keeping it.
+# exists wherever a project runs tasks (local.hosts_task_runners, bots.tf),
+# and in the management account until its foundation is retired
+# (local.owns_spot_service_linked_role). The module never destroys it
+# (prevent_destroy): an account that stops owning it fails its plan here until
+# the owner decides, by removing it from state or keeping it.
 module "spot_service_linked_role" {
-  count   = local.hosts_task_runners ? 1 : 0
+  count   = local.owns_spot_service_linked_role ? 1 : 0
   source  = "Jaws-Platform/jaws-foundation/aws//modules/service-linked-role"
   version = "0.1.2"
 
@@ -27,7 +28,7 @@ module "spot_service_linked_role" {
 # 2026-11-19). IAM refuses a second one, so it is imported, never created.
 # Production had none and gets a new one. Once imported, this block is a no-op.
 import {
-  for_each = var.account == "management" && local.hosts_task_runners ? toset(["spot"]) : toset([])
+  for_each = var.account == "management" && local.owns_spot_service_linked_role ? toset(["spot"]) : toset([])
 
   to = module.spot_service_linked_role[0].aws_iam_service_linked_role.this
   id = "arn:aws:iam::${local.account_id}:role/aws-service-role/spot.amazonaws.com/AWSServiceRoleForEC2Spot"

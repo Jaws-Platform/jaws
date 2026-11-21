@@ -75,6 +75,14 @@ locals {
   # task runner counts.
   hosts_task_runners = anytrue([for key, _ in local.bot_task_types : try(local.serves[key], false)])
 
+  # Whether the foundation owns the account's EC2 Spot service-linked role
+  # (spot_service_linked_role.tf). Wherever task runners run, and in the
+  # management account even after its last research project moved to
+  # production (2026-11-21): the role there predates this repository and is
+  # kept as it is until the management account's foundation is retired, when
+  # the owner decides between keeping it and deleting it.
+  owns_spot_service_linked_role = local.hosts_task_runners || var.account == "management"
+
   # Bots with dataset components, and their buckets, <Organization>-<project>-<name>.
   # Their plan and apply roles may read and configure these buckets, never
   # their objects. Only the buckets that carry this account's prefix: a project
