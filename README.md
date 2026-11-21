@@ -99,7 +99,7 @@ image tag, whatever it pinned.)
 | --- | --- | --- |
 | `site-plan.yml` | `validate`, then `plan`, and posts the sticky plan comment | `plan-role-arn`; `id-token: write`, `pull-requests: write`; optionally `app-client-id` and the `app-private-key` secret |
 | `site-preview.yml` | `preview deploy` on open/synchronize/reopen, `preview remove` on close, and the sticky preview comment | `artifact`, `preview-role-arn`; the same permissions and optional app inputs |
-| `site-release-please.yml` | Release Please with the release bot; outputs `release_created` and `tag` | `secrets: inherit` |
+| `site-release-please.yml` | Release Please with the release bot; outputs `release_created` and `tag` | the `RELEASE_BOT_CLIENT_ID` and `RELEASE_BOT_PRIVATE_KEY` secrets, passed by name (`secrets: inherit` only reaches callers in the Jaws-Platform organization) |
 | `site-deploy.yml` | `release` in the caller's `prod` environment at the tag | `artifact`, `tag`, `apply-role-arn`; `id-token: write` |
 
 Every job uploads `.jaws/` (the debug log, plan text and
