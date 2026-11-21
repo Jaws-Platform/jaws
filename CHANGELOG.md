@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.71.0](https://github.com/Jaws-Platform/jaws/compare/v0.70.0...v0.71.0) (2026-11-21)
+
+
+### Features
+
+* **registry:** register pi-benchmarks, a dataset born in production ([#267](https://github.com/Jaws-Platform/jaws/issues/267)) ([cfe8933](https://github.com/Jaws-Platform/jaws/commit/cfe89336ce9005aa69a0a83215ed0410fc9a9cac))
+
 ## [0.70.0](https://github.com/Jaws-Platform/jaws/compare/v0.69.0...v0.70.0) (2026-11-21)
 
 
