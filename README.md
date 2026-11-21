@@ -122,9 +122,9 @@ jobs:
     with:
       artifact: site
       preview-role-arn: ${{ vars.AWS_PREVIEW_ROLE_ARN }}
-      app-client-id: ${{ vars.JES_APP_CLIENT_ID }} # optional: comments come from the app
+      app-client-id: ${{ vars.JAWS_APP_CLIENT_ID }} # optional: comments come from the app
     secrets:
-      app-private-key: ${{ secrets.JES_APP_PRIVATE_KEY }}
+      app-private-key: ${{ secrets.JAWS_APP_PRIVATE_KEY }}
     permissions: { contents: read, id-token: write, pull-requests: write }
 ```
 
@@ -212,8 +212,8 @@ foundation plan and the site plans look the same.
 
 **Who posts the comment.** By default the sticky comment is authored by
 `github-actions[bot]`. Pass `app-client-id` (and the `app-private-key`
-secret) to `site-plan.yml` and `site-preview.yml`, or set `JES_APP_CLIENT_ID`
-and `JES_APP_PRIVATE_KEY` in this repository, and the workflows mint a
+secret) to `site-plan.yml` and `site-preview.yml`, or set `JAWS_APP_CLIENT_ID`
+and `JAWS_APP_PRIVATE_KEY` in this repository, and the workflows mint a
 short-lived installation token for the **Jaws** GitHub
 App and post as it, with the app's name and avatar. The app needs only
 *Pull requests: read and write* and has to be installed on every repository
@@ -553,7 +553,7 @@ Not automated; these need the owner's credentials or the GitHub UI.
 - Run the bootstrap steps above.
 - Create the GitHub `prod` environment with a deployment branch restriction to `main`.
 - In each site's repository, set its role ARNs and bucket name as repository variables (from `terraform output projects`). This repository needs none: its workflows derive the foundation's roles from `config.yaml`. (`AWS_PLAN_ROLE_ARN` and `AWS_APPLY_ROLE_ARN`, set here before v0.47, are no longer read and can be deleted.)
-- Optional, for comments authored by the product rather than `github-actions[bot]`: create a GitHub App for the tool (the owner's is still named **JWall Engineering Infra**; the name shown beside a comment is the app's, and renaming it is the owner's; no webhook; permissions *Pull requests: read and write*; upload an avatar), generate a private key, and install it on this repo and every site repo. In each of those repos set the variable `JES_APP_CLIENT_ID` to the app's client ID and the secret `JES_APP_PRIVATE_KEY` to the full `.pem` contents, and pass them to the reusable workflows as shown above.
+- Optional, for comments authored by the product rather than `github-actions[bot]`: create a GitHub App for the tool (the owner's is still named **JWall Engineering Infra**; the name shown beside a comment is the app's, and renaming it is the owner's; no webhook; permissions *Pull requests: read and write*; upload an avatar), generate a private key, and install it on this repo and every site repo. In each of those repos set the variable `JAWS_APP_CLIENT_ID` to the app's client ID and the secret `JAWS_APP_PRIVATE_KEY` to the full `.pem` contents, and pass them to the reusable workflows as shown above.
 - Activate cost allocation tags in Billing: `Organization`, `Project`, `Environment`, `Repository`, `ManagedBy`, `Owner`, `Component`, `Purpose`, `Profile` and `Lifecycle` (task instances carry `Purpose=ci-task`, `Profile=cpu|gpu` and `Lifecycle=spot|on-demand`, for the later tag-based cost tooling).
 - For GPU task profiles, raise the EC2 quotas in Service Quotas (us-east-1) as needed: *Running On-Demand G and VT instances* (5 vCPUs today, one `g6.xlarge` at a time) and *All G and VT Spot Instance Requests* (0 today). See [docs/remote-tasks.md](docs/remote-tasks.md#quotas).
 - For bot projects, after the release that creates their roles:
