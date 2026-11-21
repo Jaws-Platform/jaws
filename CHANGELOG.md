@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.72.0](https://github.com/Jaws-Platform/jaws/compare/v0.71.0...v0.72.0) (2026-11-21)
+
+
+### Features
+
+* **registry:** register pi-prover, Pi's run records, born in production ([#269](https://github.com/Jaws-Platform/jaws/issues/269)) ([094676d](https://github.com/Jaws-Platform/jaws/commit/094676dea7ab1fa6718019454fae2c18317e8209))
+
 ## [0.71.0](https://github.com/Jaws-Platform/jaws/compare/v0.70.0...v0.71.0) (2026-11-21)
 
 
