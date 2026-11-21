@@ -86,6 +86,11 @@ projects:
       jaws-pi-prover-artifacts:
         prefix: data/
         versioning: true
+  prog-strength-archive:
+    datasets:
+      jaws-prog-strength-archive-backups:
+        prefix: data/
+        versioning: true
   braveheart-bot: {}
   braveheart-databricks:
     databricks:

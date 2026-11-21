@@ -37,12 +37,13 @@ locals {
   # (compute/manage about 3,900 and task/launch about 4,050 characters at 19), so
   # its key may take the 30 a project name allows (tests/test_bots_registry.py).
   bots = {
-    braveheart          = { repository = "Braveheart-Chess/braveheart", repository_id = "1435162673", owner_id = "356866252" }
-    braveheart-bot      = { repository = "Braveheart-Chess/braveheart-lichess-bot", repository_id = "1459279608", owner_id = "356866252" }
-    braveheart-selfplay = { repository = "Braveheart-Chess/braveheart-selfplay", repository_id = "1459456470", owner_id = "356866252" }
-    braveheart-trainer  = { repository = "Braveheart-Chess/braveheart-trainer", repository_id = "1459456509", owner_id = "356866252" }
-    pi-benchmarks       = { repository = "Pi-Mathematical-Reasoning/pi-benchmarks", repository_id = "1466231955", owner_id = "359343898" }
-    pi-prover           = { repository = "Pi-Mathematical-Reasoning/pi", repository_id = "1466017315", owner_id = "359343898" }
+    braveheart            = { repository = "Braveheart-Chess/braveheart", repository_id = "1435162673", owner_id = "356866252" }
+    braveheart-bot        = { repository = "Braveheart-Chess/braveheart-lichess-bot", repository_id = "1459279608", owner_id = "356866252" }
+    braveheart-selfplay   = { repository = "Braveheart-Chess/braveheart-selfplay", repository_id = "1459456470", owner_id = "356866252" }
+    braveheart-trainer    = { repository = "Braveheart-Chess/braveheart-trainer", repository_id = "1459456509", owner_id = "356866252" }
+    pi-benchmarks         = { repository = "Pi-Mathematical-Reasoning/pi-benchmarks", repository_id = "1466231955", owner_id = "359343898" }
+    pi-prover             = { repository = "Pi-Mathematical-Reasoning/pi", repository_id = "1466017315", owner_id = "359343898" }
+    prog-strength-archive = { repository = "Prog-Strength/prog-strength-archive", repository_id = "1466937166", owner_id = "283382515" }
   }
 
   # The entries of `bots` without a bot or an image (kind research): their plan
@@ -55,7 +56,9 @@ locals {
   # until the data moves to their own buckets they have task runners only.
   # pi-benchmarks (2026-11-21) is a dataset alone: Pi's benchmark files. So is
   # pi-prover for now (2026-11-21): Pi's run records, until training adds a task runner.
-  research_projects = toset(["braveheart", "braveheart-selfplay", "braveheart-trainer", "pi-benchmarks", "pi-prover"])
+  # prog-strength-archive (2026-11-21) is a dataset alone: the cold archive of the
+  # deprecated Prog Strength.
+  research_projects = toset(["braveheart", "braveheart-selfplay", "braveheart-trainer", "pi-benchmarks", "pi-prover", "prog-strength-archive"])
 
   # The guardrails come from config.yaml's `projects`, not from the project
   # file. The launch role is assumed by the consumer's pull requests, so

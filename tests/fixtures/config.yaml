@@ -161,6 +161,16 @@ projects:
       jaws-pi-prover-artifacts:
         prefix: data/
         versioning: true
+  prog-strength-archive:
+    # The cold archive of Prog Strength (Prog-Strength/prog-strength-archive),
+    # deprecated on 2026-11-21: its final databases, user media, last Terraform
+    # state and secret key names. A dataset and nothing else, so no instance
+    # types and no task profiles. The owner uploads it once with admin
+    # credentials; nothing automated writes it. Versioned, with no expiry.
+    datasets:
+      jaws-prog-strength-archive-backups:
+        prefix: data/
+        versioning: true
   braveheart-bot:
     # Braveheart's Lichess bot (Braveheart-Chess/braveheart-lichess-bot): a container
     # image and a lichess-bot only, running a pinned release of the engine's

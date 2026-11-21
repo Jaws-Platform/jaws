@@ -20,6 +20,7 @@ on:
           - braveheart-trainer
           - pi-benchmarks
           - pi-prover
+          - prog-strength-archive
       destroy:
         description: Destroy the stack instead (the records, dataset and task results buckets and the secret are kept).
         required: false
