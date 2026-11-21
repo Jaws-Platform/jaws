@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.68.1](https://github.com/Jaws-Platform/jaws/compare/v0.68.0...v0.68.1) (2026-11-21)
+
+
+### Documentation
+
+* pass the release bot secrets to site-release-please by name ([#261](https://github.com/Jaws-Platform/jaws/issues/261)) ([33d89ae](https://github.com/Jaws-Platform/jaws/commit/33d89aea9b63f7fd3c33b6d327af9de5972c56a2))
+
 ## [0.68.0](https://github.com/Jaws-Platform/jaws/compare/v0.67.0...v0.68.0) (2026-11-21)
 
 
