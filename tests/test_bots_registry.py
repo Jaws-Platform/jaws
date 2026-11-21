@@ -61,6 +61,8 @@ def test_registry_lists_braveheart() -> None:
         "pi-benchmarks": ("Pi-Mathematical-Reasoning/pi-benchmarks", "1466231955"),
         # Pi's own resources, from the pi repository, registered on 2026-11-21.
         "pi-prover": ("Pi-Mathematical-Reasoning/pi", "1466017315"),
+        # The cold archive of the deprecated Prog Strength, registered on 2026-11-21.
+        "prog-strength-archive": ("Prog-Strength/prog-strength-archive", "1466937166"),
     }
     # The engine's project was `rusty-chess` until 2026-11-15; the old name is gone.
     assert "rusty-chess" not in BOTS_TF.read_text()
@@ -95,7 +97,7 @@ def test_registered_projects_fit_the_apply_policy_size() -> None:
 def test_the_long_research_keys_are_research_projects() -> None:
     # The 15-character limit binds every key that is not a research project.
     long_keys = {p for p in registry() if len(p) > MAX_PROJECT_KEY}
-    assert long_keys == {"braveheart-selfplay", "braveheart-trainer"}
+    assert long_keys == {"braveheart-selfplay", "braveheart-trainer", "prog-strength-archive"}
     assert long_keys <= _research_projects()
 
 

@@ -110,6 +110,8 @@ def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
         "pi_benchmarks": (_registered("pi-benchmarks"), settings),
         # Pi's run records: the live file, a dataset alone for now.
         "pi_prover": (_registered("pi-prover"), settings),
+        # Prog Strength's cold archive: the live file, a dataset alone.
+        "prog_strength_archive": (_registered("prog-strength-archive"), settings),
     }
     databricks = _project(_file("databricks-poc"), settings)
     return {

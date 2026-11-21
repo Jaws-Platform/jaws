@@ -507,7 +507,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [braveheart, braveheart-bot, braveheart-selfplay, braveheart-trainer, pi-benchmarks, pi-prover]
+        project: [braveheart, braveheart-bot, braveheart-selfplay, braveheart-trainer, pi-benchmarks, pi-prover, prog-strength-archive]
         # One entry per bot in foundation/bots.tf (a test keeps them in sync).
         include:
           - { project: braveheart, repository: Braveheart-Chess/braveheart }
@@ -516,6 +516,7 @@ jobs:
           - { project: braveheart-trainer, repository: Braveheart-Chess/braveheart-trainer }
           - { project: pi-benchmarks, repository: Pi-Mathematical-Reasoning/pi-benchmarks }
           - { project: pi-prover, repository: Pi-Mathematical-Reasoning/pi }
+          - { project: prog-strength-archive, repository: Prog-Strength/prog-strength-archive }
     steps:
       - uses: actions/checkout@v7
       - name: Check out the bot's project file (its default branch)
