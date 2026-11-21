@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.70.0](https://github.com/Jaws-Platform/jaws/compare/v0.69.0...v0.70.0) (2026-11-21)
+
+
+### Features
+
+* **config:** retire the management account and script its teardown ([#265](https://github.com/Jaws-Platform/jaws/issues/265)) ([0981b83](https://github.com/Jaws-Platform/jaws/commit/0981b8341e6d0235195b2361b8725e4b29a1e198))
+
 ## [0.69.0](https://github.com/Jaws-Platform/jaws/compare/v0.68.1...v0.69.0) (2026-11-21)
 
 
