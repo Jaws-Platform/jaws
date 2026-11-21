@@ -6,7 +6,7 @@
 #   ./scripts/apply-repo-settings.sh [owner/repo]
 set -euo pipefail
 
-REPO="${1:-jwallace145/jaws}"
+REPO="${1:-Jaws-Platform/jaws}"
 
 echo "==> Merge methods, squash commit format, auto-delete head branches ($REPO)"
 gh api -X PATCH "repos/$REPO" \

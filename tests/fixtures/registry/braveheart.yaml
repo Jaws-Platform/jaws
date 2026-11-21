@@ -1,7 +1,7 @@
 # jaws project file: the engine's remote CI tasks (SPRT and
 # matches). Everything else (region, account, VPC, AMI, names, state, CI roles)
 # is derived by the tool. Fields and behaviour:
-# https://github.com/jwallace145/jaws/blob/main/docs/research-projects.md
+# https://github.com/Jaws-Platform/jaws/blob/main/docs/research-projects.md
 #
 # The engine has no dataset. Self-play data generation and relabelling, with
 # the positions they write, are Braveheart-Chess/braveheart-selfplay's (infra
@@ -28,7 +28,7 @@ components:
   # Remote CI tasks (SPRT, matches) on dedicated, ephemeral EC2 instances,
   # through jaws's remote-task.yml: a 64-core spot box by
   # default, capped at 58% of on demand, on demand only as a launch fallback.
-  # https://github.com/jwallace145/jaws/blob/main/docs/remote-tasks.md
+  # https://github.com/Jaws-Platform/jaws/blob/main/docs/remote-tasks.md
   - kind: task-runner
     instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge]  # whole Zen 5 cores, SMT off; the launch role's allow-list
     default_instance_type: c8a.16xlarge  # 64 cores, the bot's core: concurrency 60

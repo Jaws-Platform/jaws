@@ -4,7 +4,7 @@
 # lives in each site repository's jaws.yaml). The foundation
 # stack reads the `aws`, `ecr` and `projects` sections with yamldecode; the CLI
 # reads the whole file. Design:
-# https://github.com/jwallace145/jaws/pull/26
+# https://github.com/Jaws-Platform/jaws/pull/26
 
 tool:
   log_level: info # JAWS_LOG_LEVEL overrides, for local debugging

@@ -1,4 +1,4 @@
-"""The repository is `jwallace145/jaws`, and its workflows say so.
+"""The repository is `Jaws-Platform/jaws`, and its workflows say so.
 
 A reusable workflow runs in the consumer's repository and checks this one out
 beside it, at the workflow's own commit. That checkout names the repository
@@ -16,7 +16,7 @@ import yaml
 from tests.conftest import REPO_ROOT
 
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
-REPOSITORY = "jwallace145/jaws"
+REPOSITORY = "Jaws-Platform/jaws"
 #: Where a reusable workflow checks the tool out, in the consumer's workspace.
 #: Not `.jaws`: that is the artifacts directory the tool writes there.
 TOOL_DIR = ".jaws-tool"

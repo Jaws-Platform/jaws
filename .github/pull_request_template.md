@@ -1,12 +1,12 @@
 <!--
 Pick the template that matches the PR type. Open this PR again with one of:
 
-  https://github.com/jwallace145/jaws/compare/main...<branch>?template=feat.md
-  https://github.com/jwallace145/jaws/compare/main...<branch>?template=fix.md
-  https://github.com/jwallace145/jaws/compare/main...<branch>?template=docs.md
-  https://github.com/jwallace145/jaws/compare/main...<branch>?template=chore.md
-  https://github.com/jwallace145/jaws/compare/main...<branch>?template=refactor.md
-  https://github.com/jwallace145/jaws/compare/main...<branch>?template=ci.md
+  https://github.com/Jaws-Platform/jaws/compare/main...<branch>?template=feat.md
+  https://github.com/Jaws-Platform/jaws/compare/main...<branch>?template=fix.md
+  https://github.com/Jaws-Platform/jaws/compare/main...<branch>?template=docs.md
+  https://github.com/Jaws-Platform/jaws/compare/main...<branch>?template=chore.md
+  https://github.com/Jaws-Platform/jaws/compare/main...<branch>?template=refactor.md
+  https://github.com/Jaws-Platform/jaws/compare/main...<branch>?template=ci.md
 
 or, from the command line:
 

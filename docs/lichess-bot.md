@@ -379,7 +379,7 @@ permissions: {}
 
 jobs:
   release:
-    uses: jwallace145/jaws/.github/workflows/container-release.yml@vX.Y.Z
+    uses: Jaws-Platform/jaws/.github/workflows/container-release.yml@vX.Y.Z
     with:
       project: braveheart
     permissions:

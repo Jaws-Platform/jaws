@@ -13,26 +13,25 @@ locals {
     # Project tag value, and the prefix of this stack's Name tags.
     project     = local.in_production ? "jaws" : "jwall-engineering-infra"
     environment = "prod"
-    repository  = "jwallace145/jaws"
+    repository  = "Jaws-Platform/jaws"
 
     # The `Repository` tag. Unchanged in the management account: its resources
     # leave with the move to production, and retagging 144 of them (a
     # Databricks workspace and a storage credential among them) would buy nothing.
+    # Unchanged by the transfer to Jaws-Platform too, for the same reason: the
+    # tag names where the stack was first applied, and only trust needs the
+    # repository's current name.
     repository_tag = local.in_production ? "jwallace145/jaws" : "jwallace145/jwall-engineering-infra"
     owner          = "jwallace145"
 
     # Other names the roles its own workflows assume also trust, because
     # GitHub's OIDC subject contains the name: set the new name here before a
-    # rename or transfer, and clear it once the move is done.
-    #
-    # The repository is moving to the Jaws-Platform organization. A transfer
-    # changes the owner's ID as well as its name, so the alias carries the new
-    # owner's ID (gh api orgs/Jaws-Platform --jq .id). IAM compares the subject
-    # case-sensitively: the alias is spelled exactly as GitHub sends the login.
-    repository_aliases = ["Jaws-Platform/jaws"]
-    repository_alias_owner_ids = {
-      "Jaws-Platform/jaws" = "359185083"
-    }
+    # rename or transfer (with the new owner's ID in repository_alias_owner_ids
+    # for a transfer), and clear both once the move is done. Empty since the
+    # transfer to Jaws-Platform on 2026-11-21. IAM compares the subject
+    # case-sensitively: names are spelled exactly as GitHub sends the login.
+    repository_aliases         = []
+    repository_alias_owner_ids = {}
   }
 
   # Numeric GitHub IDs for the immutable OIDC subject form
@@ -40,7 +39,7 @@ locals {
   # "use immutable subject" is on for the repository (the default for new
   # repos). Look up with: gh api repos/<owner>/<repo> --jq '{id, owner_id: .owner.id}'
   github = {
-    owner_id      = 35950238
+    owner_id      = 359185083 # Jaws-Platform
     repository_id = 1420037633
   }
 

@@ -50,7 +50,7 @@ jobs:
       - name: Check out jaws at this workflow's own commit
         uses: actions/checkout@v7
         with:
-          repository: jwallace145/jaws
+          repository: Jaws-Platform/jaws
           ref: ${{ job.workflow_sha }}
           path: .jaws-tool
       - name: Check jaws is at this workflow's own commit

@@ -80,7 +80,7 @@ jobs:
   play:
     strategy:
       matrix: { mode: [timed, nodes] }
-    uses: jwallace145/jaws/.github/workflows/remote-task.yml@vX.Y.Z
+    uses: Jaws-Platform/jaws/.github/workflows/remote-task.yml@vX.Y.Z
     with:
       project: braveheart
       script: ci/strength-task.sh
@@ -238,7 +238,7 @@ Call it with `profile: gpu`:
 ```yaml
 jobs:
   train:
-    uses: jwallace145/jaws/.github/workflows/remote-task.yml@vX.Y.Z
+    uses: Jaws-Platform/jaws/.github/workflows/remote-task.yml@vX.Y.Z
     with:
       project: braveheart
       profile: gpu

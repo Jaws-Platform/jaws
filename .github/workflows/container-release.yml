@@ -23,7 +23,7 @@ name: Container release
 #   permissions: {}
 #   jobs:
 #     release:
-#       uses: jwallace145/jaws/.github/workflows/container-release.yml@vX.Y.Z
+#       uses: Jaws-Platform/jaws/.github/workflows/container-release.yml@vX.Y.Z
 #       with:
 #         project: braveheart
 #       permissions:
@@ -80,7 +80,7 @@ jobs:
       - name: Check out jaws at this workflow's own commit
         uses: actions/checkout@v7
         with:
-          repository: jwallace145/jaws
+          repository: Jaws-Platform/jaws
           ref: ${{ job.workflow_sha }}
           path: .jaws-tool
       - name: Check jaws is at this workflow's own commit

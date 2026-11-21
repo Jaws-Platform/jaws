@@ -245,7 +245,7 @@ permissions: {}
 
 jobs:
   train:
-    uses: jwallace145/jaws/.github/workflows/remote-task.yml@vX.Y.Z
+    uses: Jaws-Platform/jaws/.github/workflows/remote-task.yml@vX.Y.Z
     with:
       project: math-prover
       profile: train

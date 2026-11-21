@@ -36,7 +36,7 @@ versioned image in each account's private ECR repository
 composite action pulls from the account its role is in), published by the
 release workflow, and site repositories run it through the reusable workflows
 this repository publishes. The design is in
-[#26](https://github.com/jwallace145/jaws/pull/26).
+[#26](https://github.com/Jaws-Platform/jaws/pull/26).
 
 | Command | Role it expects | What it does |
 | --- | --- | --- |
@@ -123,7 +123,7 @@ jobs:
   preview:
     needs: build
     if: always() && !cancelled()
-    uses: jwallace145/jaws/.github/workflows/site-preview.yml@v0.6.1
+    uses: Jaws-Platform/jaws/.github/workflows/site-preview.yml@v0.6.1
     with:
       artifact: site
       preview-role-arn: ${{ vars.AWS_PREVIEW_ROLE_ARN }}
@@ -345,7 +345,7 @@ Versions are pinned exactly, not with `~>`, because Terraform records provider v
 The foundation Terraform stack lives in `foundation/`; every `.tf` path below
 is relative to it. The repository root holds the `jaws`
 CLI and `config.yaml`, the tool configuration shared by the stack and the CLI
-([design](https://github.com/jwallace145/jaws/pull/26)).
+([design](https://github.com/Jaws-Platform/jaws/pull/26)).
 
 | Path | Owns |
 | --- | --- |
@@ -488,7 +488,7 @@ The policies come from the library's `ci-policies` catalog, whose README holds t
 - Route 53 access is limited to the `jwall.engineering` zone. It cannot create or delete zones.
 - Neither role carries `ReadOnlyAccess`, which would grant `s3:GetObject` on every bucket, every project's state included. `foundation/read` grants the reads refresh and drift detection need for this stack.
 
-Both roles trust only the `jwallace145/jaws` repository through the OIDC provider, with the audience pinned to `sts.amazonaws.com`.
+Both roles trust only the `Jaws-Platform/jaws` repository through the OIDC provider, with the audience pinned to `sts.amazonaws.com`.
 
 ## Bootstrap (one time, run locally by the owner with admin credentials)
 
@@ -521,7 +521,7 @@ The state bucket does not exist before the first apply, so the first apply uses 
 3. **Commit and push the initial scaffold.** This is the only direct push to `main`; every later change goes through a pull request.
 
    ```sh
-   gh repo create jwallace145/jaws --public --source=. --remote=origin --push
+   gh repo create Jaws-Platform/jaws --public --source=. --remote=origin --push
    ```
 
 4. **Finish the hand-off** listed at the end of this file.
