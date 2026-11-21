@@ -129,10 +129,11 @@ run "management_onboards_no_dataset" {
   }
 }
 
-# The repository is jaws. Its own workflows' tokens name it, and only it: the
-# old name is no longer trusted. (The roles keep the repository_aliases input
-# for a future rename: tests/test_repository_trust.py.)
-run "the_repository_is_trusted_under_its_name_only" {
+# The repository is jaws, moving to the Jaws-Platform organization. Its own
+# workflows' tokens name it, and while the transfer is pending also its new
+# name under the new owner's ID, and nothing else: the pre-jaws name is no
+# longer trusted. (Which roles take the alias: tests/test_repository_trust.py.)
+run "the_repository_is_trusted_under_its_name_and_its_new_owner_only" {
   command = plan
 
   assert {
@@ -141,7 +142,12 @@ run "the_repository_is_trusted_under_its_name_only" {
   }
 
   assert {
-    condition     = length(local.context.repository_aliases) == 0
-    error_message = "no other name of the repository is trusted: jwallace145/jwall-engineering-infra was renamed on 2026-11-17 and no token can name it any more"
+    condition     = local.context.repository_aliases == ["Jaws-Platform/jaws"]
+    error_message = "the only other name trusted is Jaws-Platform/jaws, the transfer's destination: jwallace145/jwall-engineering-infra was renamed on 2026-11-17 and no token can name it any more"
+  }
+
+  assert {
+    condition     = local.context.repository_alias_owner_ids == { "Jaws-Platform/jaws" = "359185083" }
+    error_message = "Jaws-Platform/jaws is trusted under the Jaws-Platform organization's ID, 359185083, not the current owner's"
   }
 }

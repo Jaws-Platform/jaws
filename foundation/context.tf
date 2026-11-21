@@ -23,8 +23,16 @@ locals {
 
     # Other names the roles its own workflows assume also trust, because
     # GitHub's OIDC subject contains the name: set the new name here before a
-    # rename, and clear it once the rename is done. Empty since jaws.
-    repository_aliases = []
+    # rename or transfer, and clear it once the move is done.
+    #
+    # The repository is moving to the Jaws-Platform organization. A transfer
+    # changes the owner's ID as well as its name, so the alias carries the new
+    # owner's ID (gh api orgs/Jaws-Platform --jq .id). IAM compares the subject
+    # case-sensitively: the alias is spelled exactly as GitHub sends the login.
+    repository_aliases = ["Jaws-Platform/jaws"]
+    repository_alias_owner_ids = {
+      "Jaws-Platform/jaws" = "359185083"
+    }
   }
 
   # Numeric GitHub IDs for the immutable OIDC subject form
