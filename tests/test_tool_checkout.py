@@ -26,7 +26,7 @@ from tests.conftest import REPO_ROOT
 
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 OWN_COMMIT = "${{ job.workflow_sha }}"
-REPOSITORY = "jwallace145/jaws"
+REPOSITORY = "Jaws-Platform/jaws"
 
 
 def _jobs() -> Iterator[tuple[str, str, list[dict[str, Any]]]]:

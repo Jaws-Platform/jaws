@@ -21,7 +21,7 @@ name: Remote task
 #   permissions: {}
 #   jobs:
 #     sprt:
-#       uses: jwallace145/jaws/.github/workflows/remote-task.yml@vX.Y.Z
+#       uses: Jaws-Platform/jaws/.github/workflows/remote-task.yml@vX.Y.Z
 #       with:
 #         project: braveheart
 #         script: scripts/sprt.sh
@@ -147,7 +147,7 @@ jobs:
       - name: Check out jaws at this workflow's own commit
         uses: actions/checkout@v7
         with:
-          repository: jwallace145/jaws
+          repository: Jaws-Platform/jaws
           ref: ${{ job.workflow_sha }}
           path: .jaws-tool
           persist-credentials: false

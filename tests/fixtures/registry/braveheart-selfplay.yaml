@@ -1,6 +1,6 @@
 # jaws project file: Braveheart's self-play dataset and the
 # pipeline that grows it (datagen, relabel). Fields and behaviour:
-# https://github.com/jwallace145/jaws/blob/main/docs/research-projects.md
+# https://github.com/Jaws-Platform/jaws/blob/main/docs/research-projects.md
 #
 # The positions were copied key for key from jwall-engineering-braveheart-nnue
 # (data/selfplay/) at the split; docs/datasets.md records the move.
@@ -64,7 +64,7 @@ components:
   # handshake stand: `consumers` below is this project's, the workspace's
   # `reads` is its own. Removing either revokes it.
   # Layout: docs/datagen.md. Fields and access:
-  # https://github.com/jwallace145/jaws/blob/main/docs/datasets.md
+  # https://github.com/Jaws-Platform/jaws/blob/main/docs/datasets.md
   - kind: dataset
     name: positions
     bucket: jwall-engineering-braveheart-selfplay-positions  # <Organization>-<project>-<name>

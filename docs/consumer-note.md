@@ -1,7 +1,7 @@
 # Running as a Lichess bot
 
 This repository runs permanently as a Lichess bot on infrastructure managed by
-[jaws](https://github.com/jwallace145/jaws).
+[jaws](https://github.com/Jaws-Platform/jaws).
 It declares itself in `jaws.yaml` and keeps no Terraform
 and no AWS credentials.
 
@@ -14,5 +14,5 @@ and no AWS credentials.
 - **`lichess/config.yml`** is the bot's configuration. The token stays
   `LICHESS_TOKEN_PLACEHOLDER`; the real one is injected at start.
 - **Everything else is in the
-  [bot projects guide](https://github.com/jwallace145/jaws/blob/main/docs/lichess-bot.md):**
+  [bot projects guide](https://github.com/Jaws-Platform/jaws/blob/main/docs/lichess-bot.md):**
   rollouts, game records in S3, secrets, status, logs and the runbook.

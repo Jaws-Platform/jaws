@@ -1,6 +1,6 @@
 # jaws project file: the trainer for Braveheart's NNUE nets
 # (bullet, on GPU instances). Fields and behaviour:
-# https://github.com/jwallace145/jaws/blob/main/docs/research-projects.md
+# https://github.com/Jaws-Platform/jaws/blob/main/docs/research-projects.md
 #
 # The nets were copied key for key from jwall-engineering-braveheart-nnue
 # (data/nets/) at the split; docs/nets.md records the move. The positions are
@@ -49,7 +49,7 @@ components:
   # config.yaml approves. Only the GPU profile adds objects; nothing automated
   # deletes. Self-play's relabel tasks read retired nets through the bucket
   # policy. Fields and access:
-  # https://github.com/jwallace145/jaws/blob/main/docs/datasets.md
+  # https://github.com/Jaws-Platform/jaws/blob/main/docs/datasets.md
   - kind: dataset
     name: nets
     bucket: jwall-engineering-braveheart-trainer-nets  # <Organization>-<project>-<name>

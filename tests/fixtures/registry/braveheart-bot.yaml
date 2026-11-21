@@ -2,7 +2,7 @@
 # permanent Lichess bot, deployed from this repository. The engine release it
 # plays is pinned below; everything else (region, account, VPC, AMI, names,
 # state, CI roles) is derived by the tool. Fields and behaviour:
-# https://github.com/jwallace145/jaws/blob/main/docs/lichess-bot.md
+# https://github.com/Jaws-Platform/jaws/blob/main/docs/lichess-bot.md
 version: 1
 project: braveheart-bot
 repository: Braveheart-Chess/braveheart-lichess-bot

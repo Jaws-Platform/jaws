@@ -129,25 +129,25 @@ run "management_onboards_no_dataset" {
   }
 }
 
-# The repository is jaws, moving to the Jaws-Platform organization. Its own
-# workflows' tokens name it, and while the transfer is pending also its new
-# name under the new owner's ID, and nothing else: the pre-jaws name is no
-# longer trusted. (Which roles take the alias: tests/test_repository_trust.py.)
-run "the_repository_is_trusted_under_its_name_and_its_new_owner_only" {
+# The repository is Jaws-Platform/jaws. Its own workflows' tokens name it, and
+# only it: the old names (jwallace145/jaws before the transfer of 2026-11-21,
+# jwallace145/jwall-engineering-infra before the rename of 2026-11-17) are no
+# longer trusted. (Which roles take aliases: tests/test_repository_trust.py.)
+run "the_repository_is_trusted_under_its_name_only" {
   command = plan
 
   assert {
-    condition     = local.context.repository == "jwallace145/jaws"
-    error_message = "the repository's own name is jaws"
+    condition     = local.context.repository == "Jaws-Platform/jaws"
+    error_message = "the repository is Jaws-Platform/jaws"
   }
 
   assert {
-    condition     = local.context.repository_aliases == ["Jaws-Platform/jaws"]
-    error_message = "the only other name trusted is Jaws-Platform/jaws, the transfer's destination: jwallace145/jwall-engineering-infra was renamed on 2026-11-17 and no token can name it any more"
+    condition     = local.github.owner_id == 359185083
+    error_message = "the owner ID in the immutable OIDC subject is the Jaws-Platform organization's"
   }
 
   assert {
-    condition     = local.context.repository_alias_owner_ids == { "Jaws-Platform/jaws" = "359185083" }
-    error_message = "Jaws-Platform/jaws is trusted under the Jaws-Platform organization's ID, 359185083, not the current owner's"
+    condition     = length(local.context.repository_aliases) == 0 && length(local.context.repository_alias_owner_ids) == 0
+    error_message = "no other name of the repository is trusted: no token can name jwallace145/jaws since the transfer"
   }
 }
