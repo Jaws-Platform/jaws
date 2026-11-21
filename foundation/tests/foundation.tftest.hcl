@@ -115,7 +115,7 @@ run "the_account_is_config_yamls" {
       Organization = "jaws"
       Project      = "jaws"
       Environment  = "prod"
-      Repository   = "jwallace145/jaws"
+      Repository   = "Jaws-Platform/jaws"
       ManagedBy    = "jaws"
       Owner        = "jwallace145"
     })

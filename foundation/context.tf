@@ -15,9 +15,8 @@ locals {
     environment = "prod"
     repository  = "Jaws-Platform/jaws"
 
-    # The `Repository` tag: the repository's name when this stack was first
-    # applied. Correcting it retags every resource, so that is its own change.
-    repository_tag = "jwallace145/jaws"
+    # The `Repository` tag: the repository that manages this stack.
+    repository_tag = "Jaws-Platform/jaws"
     owner          = "jwallace145"
 
     # Other names the roles its own workflows assume also trust, because
