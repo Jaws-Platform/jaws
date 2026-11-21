@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.73.0](https://github.com/Jaws-Platform/jaws/compare/v0.72.0...v0.73.0) (2026-11-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* build in one account, the production account config.yaml describes ([#271](https://github.com/Jaws-Platform/jaws/issues/271))
+
+### Code Refactoring
+
+* build in one account, the production account config.yaml describes ([#271](https://github.com/Jaws-Platform/jaws/issues/271)) ([34f599a](https://github.com/Jaws-Platform/jaws/commit/34f599a3bc3b8ab4414e6a4f0c46dee90a7dacd1))
+
 ## [0.72.0](https://github.com/Jaws-Platform/jaws/compare/v0.71.0...v0.72.0) (2026-11-21)
 
 
