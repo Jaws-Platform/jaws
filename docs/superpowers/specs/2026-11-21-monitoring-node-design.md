@@ -1043,13 +1043,27 @@ Each step that spends money is a release the owner merges.
 
 Check each of these before relying on it; each has a fallback.
 
-1. **Cross-account destination.** Does the Terraform AWS provider's
-   `aws_bcmdataexports_export` support a cross-account destination (GA
-   2026-04-14)? Fallback: the `awscc` provider, or the owner creating the
-   export once by CLI and the root importing it.
-2. **FOCUS 1.2 details.** The FOCUS 1.2 table name and its
-   `TIME_GRANULARITY` option. The "create new" folder layout and manifest
-   the normalizer reads.
+1. **Cross-account destination.** **Verified 2026-11-21:**
+   `hashicorp/aws` v6.73.0 has
+   `export.destination_configurations.s3_destination.s3_bucket_owner`,
+   which is optional. `awscc` 1.110.0 has the same attribute. No fallback
+   is needed.
+2. **FOCUS 1.2 details.** **Verified 2026-11-21 from the AWS docs:**
+   - **Table and setting:** the table is `FOCUS_1_2_AWS`, with one
+     configuration, `TIME_GRANULARITY` (`HOURLY`, `DAILY` or `MONTHLY`; no
+     default is documented). It has 60 columns, listed in plan 01, Task 3.
+   - **Bucket policy:** `bcm-data-exports.amazonaws.com` needs only
+     `s3:PutObject` on `<bucket>/*`, with `ArnLike` `aws:SourceArn` and
+     `StringEquals` `aws:SourceAccount`.
+   - **Delivery layout ("create new"):**
+     `<prefix>/<export>/data/BILLING_PERIOD=YYYY-MM/<timestamp>-<execution-id>/<export>-00001.snappy.parquet`.
+   - **Manifests:** `metadata/BILLING_PERIOD=YYYY-MM/Manifest.json`
+     always points to the newest execution, and is written last. Its
+     fields are `executionId`, `exportArn`, `columns`, `dataFiles` and
+     `additionalInfo.rowCount`. Read `dataFiles` rather than listing the
+     bucket.
+   - **Not documented:** whether `SELECT *` is allowed, so the export lists
+     its columns.
 3. **Writing from serverless jobs.** Can serverless jobs compute use a
    Unity Catalog service credential to `PutObject` with boto3? Fallback:
    an external volume over `staging/`.
