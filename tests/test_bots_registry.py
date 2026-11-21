@@ -27,7 +27,7 @@ BRAVEHEART_CHESS = "356866252"
 #: Projects registered after the management account was retired (v0.70.0): they
 #: have only ever had a stack in production, so nothing is approved under the
 #: management account's name for them.
-BORN_IN_PRODUCTION = {"pi-benchmarks"}
+BORN_IN_PRODUCTION = {"pi-benchmarks", "pi-prover"}
 
 
 def registry() -> dict[str, tuple[str, str]]:
@@ -60,6 +60,8 @@ def test_registry_lists_braveheart() -> None:
         "braveheart-trainer": ("Braveheart-Chess/braveheart-trainer", "1459456509"),
         # Pi's benchmark files, a dataset alone, registered on 2026-11-21.
         "pi-benchmarks": ("Pi-Mathematical-Reasoning/pi-benchmarks", "1466231955"),
+        # Pi's own resources, from the pi repository, registered on 2026-11-21.
+        "pi-prover": ("Pi-Mathematical-Reasoning/pi", "1466017315"),
     }
     # The engine's project was `rusty-chess` until 2026-11-15; the old name is gone.
     assert "rusty-chess" not in BOTS_TF.read_text()
