@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.69.0](https://github.com/Jaws-Platform/jaws/compare/v0.68.1...v0.69.0) (2026-11-21)
+
+
+### Features
+
+* **config:** mark the Braveheart research projects moved to the production account ([#263](https://github.com/Jaws-Platform/jaws/issues/263)) ([00b48d1](https://github.com/Jaws-Platform/jaws/commit/00b48d168697f49fe227bd61337318bd9736183b))
+
 ## [0.68.1](https://github.com/Jaws-Platform/jaws/compare/v0.68.0...v0.68.1) (2026-11-21)
 
 
