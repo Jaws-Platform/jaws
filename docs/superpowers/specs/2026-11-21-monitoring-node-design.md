@@ -221,10 +221,12 @@ s3://jaws-billing/
   - Non-TLS requests denied.
   - The bucket carries `Component=billing`.
 - **Writers:**
-  - `bcm-data-exports.amazonaws.com` may `PutObject` only under
-    `raw/provider=aws/`. The condition is `aws:SourceAccount` = the
-    management account and `aws:SourceArn` =
-    `arn:aws:bcm-data-exports:us-east-1:<management>:export/*`.
+  - `bcm-data-exports.amazonaws.com` may `PutObject` on `<bucket>/*`, as AWS
+    documents it. The condition is `aws:SourceAccount` = the management
+    account and `aws:SourceArn` =
+    `arn:aws:bcm-data-exports:us-east-1:<management>:export/*`. The export
+    itself delivers under `raw/provider=aws/` (plan 01's final-review
+    ruling).
   - The Databricks writer role may `PutObject` only under
     `raw/provider=databricks/` (6.3).
   - The normalizer may write only under `normalized/`.

@@ -103,12 +103,12 @@
   - `scripts/check.sh` and `scripts/check-module.sh <dir>`, the local CI;
   - `scripts/list-modules.sh`, which finds modules by their `versions.tf`.
 
-- [ ] **Step 1: Check the tools**
+- [x] **Step 1: Check the tools**
 
 Run: `terraform version | head -1; tflint --version | head -1; terraform-docs --version; shellcheck --version | sed -n 2p; node --version`
 Expected: Terraform v1.14.x, TFLint 0.59.x, terraform-docs v0.24.x, a shellcheck version, and node v24.x. If any is missing, stop and tell the owner.
 
-- [ ] **Step 2: Copy the tooling**
+- [x] **Step 2: Copy the tooling**
 
 ```bash
 mkdir -p "$REPO" && cd "$REPO" && git init -q -b main
@@ -118,7 +118,7 @@ cd "$TEMPLATE" && git ls-files -z -- .github .gitignore .pre-commit-config.yaml 
 cd "$REPO" && printf '{}\n' > .release-please-manifest.json
 ```
 
-- [ ] **Step 3: Rename the family**
+- [x] **Step 3: Rename the family**
 
 Run: `grep -rIn -i -E 'lichess|jaws-lichess-bot|container-instance|ecr-repository' --exclude-dir=node_modules .`
 Expected: hits only in `scripts/apply-repo-settings.sh`, `package.json`, `CONTRIBUTING.md` and `.github/pull_request_template.md`.
@@ -132,7 +132,7 @@ In each of them:
 Then re-run the grep.
 Expected: no output.
 
-- [ ] **Step 4: Write the root module**
+- [x] **Step 4: Write the root module**
 
 - `versions.tf`: `terraform { required_version = ">= 1.11" }`.
 - `main.tf`, `variables.tf` and `outputs.tf`: comments only.
@@ -145,12 +145,12 @@ Expected: no output.
 
 Generate the docs block: `terraform-docs --config .terraform-docs.yml .`
 
-- [ ] **Step 5: Run the whole suite**
+- [x] **Step 5: Run the whole suite**
 
 Run: `npm ci && scripts/list-modules.sh && scripts/check.sh`
 Expected: `list-modules.sh` prints `.`, and `check.sh` ends with `All checks passed.`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A && git commit -q -m "chore: bootstrap the repository with the family conventions" -m "Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -180,7 +180,7 @@ git add -A && git commit -q -m "chore: bootstrap the repository with the family 
     - `aws_export_prefix` (`"raw/provider=aws/source=data-exports"`);
     - `normalized_prefix` (`"normalized"`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/billing_bucket.tftest.hcl`:
 
@@ -381,12 +381,12 @@ run "rejects_a_zero_retention" {
 
 Also create `versions.tf`: `required_version = ">= 1.11"` and `aws = { source = "hashicorp/aws", version = "~> 6.0" }`.
 
-- [ ] **Step 2: Run the tests to see them fail**
+- [x] **Step 2: Run the tests to see them fail**
 
 Run: `cd "$REPO/modules/billing-bucket" && terraform init -backend=false -input=false >/dev/null && terraform test`
 Expected: FAIL, because the resources the assertions name, such as `aws_s3_bucket_policy.this`, don't exist.
 
-- [ ] **Step 3: Implement the module**
+- [x] **Step 3: Implement the module**
 
 **`variables.tf`**
 - `bucket_name`: validation `can(regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$", var.bucket_name)) && !strcontains(var.bucket_name, "..")`.
@@ -412,12 +412,12 @@ Expected: FAIL, because the resources the assertions name, such as `aws_s3_bucke
 
 **`outputs.tf`**: the five outputs, each with a description.
 
-- [ ] **Step 4: Run the tests to see them pass**
+- [x] **Step 4: Run the tests to see them pass**
 
 Run: `terraform test`
 Expected: `Success! 10 passed, 0 failed.`
 
-- [ ] **Step 5: Write the example and the README**
+- [x] **Step 5: Write the example and the README**
 
 **`examples/basic/main.tf`:**
 - `provider "aws" { region = "us-east-1" }`;
@@ -437,12 +437,12 @@ Expected: `Success! 10 passed, 0 failed.`
 
 Then run: `terraform-docs --config ../../.terraform-docs.yml .`
 
-- [ ] **Step 6: Run the module's full check**
+- [x] **Step 6: Run the module's full check**
 
 Run: `cd "$REPO" && scripts/check-module.sh modules/billing-bucket`
 Expected: every step passes (validate, tflint, test, the docs diff, the example), with no errors.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add modules/billing-bucket && git commit -q -m "feat(billing-bucket): add the billing bucket that never loses raw data" -m "Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -473,7 +473,7 @@ git add modules/billing-bucket && git commit -q -m "feat(billing-bucket): add th
     - `name`;
     - `delivery_prefix` (`"<prefix>/<name>"`, under which AWS writes `data/BILLING_PERIOD=YYYY-MM/<timestamp>-<execution-id>/` and `metadata/BILLING_PERIOD=YYYY-MM/Manifest.json`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/aws_billing_export.tftest.hcl`:
 
@@ -612,12 +612,12 @@ run "rejects_an_invalid_export_name" {
 
 Also create `versions.tf`: `required_version = ">= 1.11"` and `aws = { source = "hashicorp/aws", version = ">= 6.73, < 7.0" }`. 6.73.0 is the version in which `s3_bucket_owner` was verified.
 
-- [ ] **Step 2: Run the tests to see them fail**
+- [x] **Step 2: Run the tests to see them fail**
 
 Run: `cd "$REPO/modules/aws-billing-export" && terraform init -backend=false -input=false >/dev/null && terraform test`
 Expected: FAIL, because `aws_bcmdataexports_export.this` doesn't exist.
 
-- [ ] **Step 3: Confirm the column list is current**
+- [x] **Step 3: Confirm the column list is current**
 
 Fetch https://docs.aws.amazon.com/cur/latest/userguide/table-dictionary-focus-1-2-aws-columns.html and compare it with the list below. If it differs, use the page's list. Update the 60 in the test, and record the change in spec 12.2.
 
@@ -637,7 +637,7 @@ SkuMeter SkuPriceId SkuPriceDetails SubAccountId SubAccountName SubAccountType T
 x_Operation x_ServiceCode
 ```
 
-- [ ] **Step 4: Implement the module**
+- [x] **Step 4: Implement the module**
 
 - **`columns.tf`:** `locals { focus_1_2_aws_columns = [ ...the 60 names, in that order... ] }`, with a comment giving the source URL and the date read.
 - **`variables.tf` validations:**
@@ -654,12 +654,12 @@ x_Operation x_ServiceCode
   - `name`;
   - `delivery_prefix = "${var.prefix}/${var.name}"`.
 
-- [ ] **Step 5: Run the tests to see them pass**
+- [x] **Step 5: Run the tests to see them pass**
 
 Run: `terraform test`
 Expected: `Success! 8 passed, 0 failed.`
 
-- [ ] **Step 6: Write the example and the README**
+- [x] **Step 6: Write the example and the README**
 
 **`examples/basic/main.tf`:** the cross-account case.
 - `provider "aws" { region = "us-east-1" }`, standing for the payer;
@@ -675,12 +675,12 @@ Expected: `Success! 8 passed, 0 failed.`
 
 Then run terraform-docs as in Task 2.
 
-- [ ] **Step 7: Run the module's full check**
+- [x] **Step 7: Run the module's full check**
 
 Run: `cd "$REPO" && scripts/check-module.sh modules/aws-billing-export`
 Expected: every step passes.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add modules/aws-billing-export && git commit -q -m "feat(aws-billing-export): add the org-wide FOCUS 1.2 daily export" -m "Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -698,7 +698,7 @@ git add modules/aws-billing-export && git commit -q -m "feat(aws-billing-export)
 - Consumes: both submodules, through `source = "../../modules/<name>"`.
 - Produces: the registry's root example.
 
-- [ ] **Step 1: Write the example**
+- [x] **Step 1: Write the example**
 
 **`main.tf`:**
 - Two providers:
@@ -709,12 +709,12 @@ git add modules/aws-billing-export && git commit -q -m "feat(aws-billing-export)
 
 **`README.md`:** explains that in real use the two halves are usually applied from separate roots, one per account, bucket first. The example only shows the wiring.
 
-- [ ] **Step 2: Run the whole suite**
+- [x] **Step 2: Run the whole suite**
 
 Run: `cd "$REPO" && scripts/check.sh`
 Expected: `All checks passed.`, covering three modules (`.`, `modules/aws-billing-export`, `modules/billing-bucket`), their examples and the commitlint tests.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add examples README.md && git commit -q -m "docs: add the organization billing example" -m "Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -726,12 +726,12 @@ git add examples README.md && git commit -q -m "docs: add the organization billi
 
 Every step that touches GitHub needs the owner's explicit permission, asked for at that step. These steps are not code; they have checks instead of tests.
 
-- [ ] **Step 1 (owner permission): Create the repository**
+- [x] **Step 1 (owner permission): Create the repository**
 
 Run: `gh repo create Jaws-Platform/terraform-aws-jaws-monitoring --public --add-readme --description "Terraform modules for a self-hosted monitoring and multi-source cost platform on AWS"`
 Expected: the repository exists, with one commit, `Initial commit`, on `main`.
 
-- [ ] **Step 2: Put the work on a branch on top of `main`**
+- [x] **Step 2: Put the work on a branch on top of `main`**
 
 ```bash
 cd "$REPO" && git remote add origin https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring.git && git fetch -q origin
@@ -741,12 +741,12 @@ git push -q -u origin feat/billing-storage
 
 Expected: `git log --oneline origin/main..HEAD` shows the four commits from Tasks 1–4, and nothing else.
 
-- [ ] **Step 3: Open the PR**
+- [x] **Step 3: Open the PR**
 
 Run: `gh pr create --template feat.md --title "feat: add the billing bucket and the AWS billing export"`, then fill every section of the template.
 Expected: CI passes, including `commitlint`, `pr-title`, `fmt` and `terraform`.
 
-- [ ] **Step 4 (owner permission): Merge, then apply the settings and secrets**
+- [x] **Step 4 (owner permission): Merge, then apply the settings and secrets**
 
 Run each of these in order:
 1. `gh pr merge --squash`.
@@ -756,7 +756,7 @@ Run each of these in order:
 
 Expected: the `main` ruleset exists (`gh api repos/Jaws-Platform/terraform-aws-jaws-monitoring/rulesets --jq '.[].name'` prints `main`). If Release Please ran before the secrets were set, re-run the `release-please` workflow.
 
-- [ ] **Step 5 (owner permission): Release 0.1.0**
+- [x] **Step 5 (owner permission): Release 0.1.0**
 
 Run: `gh pr list --repo Jaws-Platform/terraform-aws-jaws-monitoring --author 'app/jaws-platform-release-bot'`, then merge the release PR for `0.1.0`.
 Expected: the tag `v0.1.0` exists, along with a GitHub release.
@@ -768,7 +768,7 @@ The owner publishes `Jaws-Platform/terraform-aws-jaws-monitoring` in HCP Terrafo
 Run: `curl -s https://registry.terraform.io/v1/modules/Jaws-Platform/jaws-monitoring/aws | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])'`
 Expected: `0.1.0`.
 
-- [ ] **Step 7: Record the outcome**
+- [x] **Step 7: Record the outcome**
 
 In the Jaws repo, on branch `docs/monitoring-node-design`:
 - tick this plan's checkboxes;
