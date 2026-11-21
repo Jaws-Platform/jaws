@@ -77,7 +77,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked
-      - name: List the accounts (management, and production once it is bootstrapped)
+      - name: List the accounts (management until it is retired, and production once it is bootstrapped)
         id: list
         run: |
           accounts=$(uv run jaws config accounts)

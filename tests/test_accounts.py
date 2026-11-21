@@ -39,6 +39,7 @@ def _raw() -> dict[str, Any]:
     production = raw["production"]
     production["bootstrapped"] = False
     production["projects"] = {}
+    production.pop("management_retired", None)
     production["overrides"]["aws"].pop("admin_role_arn", None)
     production["overrides"].pop("dns", None)
     return raw
@@ -92,6 +93,49 @@ def test_a_run_without_a_project_addresses_management_unless_told() -> None:
     assert resolve_account(None, section, None) == "management"
     assert resolve_account(None, section, "production") == "production"
     assert resolve_account(None, section, "management") == "management"
+
+
+def _retired(projects: dict[str, str]) -> ProductionSection:
+    raw = _raw()["production"]
+    raw["bootstrapped"] = True
+    raw["overrides"]["dns"] = {"zone_id": "Z0PRODUCTIONZONE0000"}
+    raw["overrides"]["aws"]["admin_role_arn"] = (
+        f"arn:aws:iam::{PRODUCTION}:role/aws-reserved/sso.amazonaws.com/"
+        "AWSReservedSSO_AdministratorAccess_0123456789abcdef"
+    )
+    return ProductionSection.model_validate(
+        {**raw, "projects": projects, "management_retired": True}
+    )
+
+
+def test_once_management_is_retired_every_run_addresses_production() -> None:
+    section = _retired({"p": "moved"})
+    assert resolve_account("p", section, None) == "production"
+    assert resolve_account("p", section, "production") == "production"
+    assert resolve_account(None, section, None) == "production"
+
+
+def test_a_retired_management_account_cannot_be_addressed() -> None:
+    section = _retired({"p": "moved"})
+    for project in ("p", None):
+        with pytest.raises(ConfigError, match="the management account is retired"):
+            resolve_account(project, section, "management")
+
+
+def test_once_management_is_retired_a_project_must_be_in_production() -> None:
+    with pytest.raises(ConfigError, match="q is not in production"):
+        resolve_account("q", _retired({"p": "moved"}), None)
+
+
+def test_management_cannot_be_retired_while_a_project_is_moving() -> None:
+    with pytest.raises(ValueError, match="still moving: p"):
+        _retired({"p": "moving", "r": "moved"})
+
+
+def test_management_cannot_be_retired_before_production_is_bootstrapped() -> None:
+    raw = {**_raw()["production"], "management_retired": True}
+    with pytest.raises(ValueError, match="needs a bootstrapped production account"):
+        ProductionSection.model_validate(raw)
 
 
 def test_a_project_that_is_not_in_production_cannot_be_addressed_there() -> None:
@@ -418,6 +462,7 @@ def test_only_management_is_listed_until_production_is_bootstrapped(workspace: P
             "organization": "jwall-engineering",
             "state_bucket": "jwall-engineering-tfstate",
             "ecr_repository": "jwall-engineering-sites",
+            "label": "",
         }
     ]
 
@@ -434,7 +479,27 @@ def test_a_bootstrapped_production_account_is_listed_after_management(workspace:
         "organization": "jaws",
         "state_bucket": "jaws-terraform-state-570327089884",
         "ecr_repository": "jaws-cli",
+        "label": " (production)",
     }
+
+
+def _retired_config(directory: Path) -> Path:
+    _bootstrapped_config(directory)
+    raw = yaml.safe_load((directory / "config.yaml").read_text())
+    raw["production"]["projects"] = {SITE: "moved"}
+    raw["production"]["management_retired"] = True
+    return _write(directory / "config.yaml", raw)
+
+
+def test_a_retired_management_account_is_not_listed(workspace: Path) -> None:
+    """Production is then the only account, and its leg carries no label, so it
+    reports the "Terraform plan" check the ruleset requires."""
+    _retired_config(workspace)
+    result = runner.invoke(cli.app, ["config", "accounts"])
+    assert result.exit_code == 0, result.output
+    (production,) = json.loads(result.stdout)
+    assert production["account"] == "production" and production["account_id"] == PRODUCTION
+    assert production["label"] == ""
 
 
 def test_the_accounts_are_one_line_of_json_for_a_workflow_output(workspace: Path) -> None:

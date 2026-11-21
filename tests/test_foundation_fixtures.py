@@ -55,6 +55,7 @@ def _bootstrapped(config: dict[str, Any]) -> dict[str, Any]:
     production = config["production"]
     production["bootstrapped"] = True
     production["projects"] = {}
+    production.pop("management_retired", None)
     production["overrides"]["aws"]["admin_role_arn"] = PRODUCTION_ADMIN
     production["overrides"]["dns"] = {"zone_id": "Z0PRODUCTIONZONE0000"}
     return config
@@ -77,6 +78,7 @@ def _unbootstrapped(config: dict[str, Any]) -> dict[str, Any]:
     production = config["production"]
     production["bootstrapped"] = False
     production["projects"] = {}
+    production.pop("management_retired", None)
     production["overrides"]["aws"].pop("admin_role_arn", None)
     production["overrides"].pop("dns", None)
     return config

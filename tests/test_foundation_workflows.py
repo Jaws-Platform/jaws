@@ -96,11 +96,12 @@ def test_the_release_applies_the_plan_it_made_with_that_accounts_credential() ->
     assert "-var" not in apply["run"]
 
 
-def test_the_management_plan_keeps_the_name_the_ruleset_requires() -> None:
+def test_the_first_accounts_plan_keeps_the_name_the_ruleset_requires() -> None:
+    """`config accounts` labels the first account's leg with nothing, so the
+    required "Terraform plan" check reports whether that is management or, once
+    management is retired, production."""
     job = _jobs("ci.yml")["terraform-plan"]
-    assert job["name"] == (
-        "Terraform plan${{ " + NOT_MANAGEMENT + " && format(' ({0})', matrix.account) || '' }}"
-    )
+    assert job["name"] == "Terraform plan${{ matrix.label }}"
 
 
 def test_each_accounts_plan_has_its_own_sticky_comment() -> None:

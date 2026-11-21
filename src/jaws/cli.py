@@ -1097,16 +1097,20 @@ def config_env(
 @config_app.command("accounts")
 def config_accounts(ctx: typer.Context) -> None:
     """Print the accounts the foundation is planned and applied for, as one
-    line of JSON for a workflow matrix: management always, production once it
-    is bootstrapped. Each entry has what a job needs to name its role, its
-    state and its image repository."""
+    line of JSON for a workflow matrix: management until it is retired,
+    production once it is bootstrapped. Each entry has what a job needs to name
+    its role, its state and its image repository, and the label its job names
+    carry: empty for the first account, so the check the `main` ruleset
+    requires ("Terraform plan") keeps its name whichever account that is."""
     run: Run = ctx.obj
     production = run.settings.production
-    names: list[Account] = ["management"]
+    names: list[Account] = []
+    if production is None or not production.management_retired:
+        names.append("management")
     if production is not None and production.bootstrapped:
         names.append("production")
     accounts = []
-    for name in names:
+    for index, name in enumerate(names):
         settings = load_settings(run.config_path, account=name)
         accounts.append(
             {
@@ -1115,6 +1119,7 @@ def config_accounts(ctx: typer.Context) -> None:
                 "organization": settings.context.organization,
                 "state_bucket": settings.state.bucket,
                 "ecr_repository": settings.ecr.repository,
+                "label": "" if index == 0 else f" ({name})",
             }
         )
     print(json.dumps(accounts, separators=(",", ":")))
