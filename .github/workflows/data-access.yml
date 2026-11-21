@@ -113,7 +113,6 @@ jobs:
       - name: terraform plan
         id: plan
         if: steps.role.outputs.databricks == 'ready'
-        env:
         run: |
           source ../scripts/databricks-credentials.sh ../config.yaml
           set +e
@@ -222,7 +221,6 @@ jobs:
       - name: Sweep (plan, then apply what changed)
         id: sweep
         if: steps.role.outputs.databricks == 'ready'
-        env:
         run: |
           source ../scripts/databricks-credentials.sh ../config.yaml
           ../scripts/data-access-sweep.sh
