@@ -24,12 +24,12 @@ output "github_oidc_provider_arn" {
 }
 
 output "infra_ci_plan_role_arn" {
-  description = "Role assumed by this repository's pull request plans (AWS_PLAN_ROLE_ARN)."
+  description = "Role assumed by this repository's pull request plans (built from `jaws config env`, never a variable)."
   value       = module.infra_ci_plan.role_arn
 }
 
 output "infra_ci_apply_role_arn" {
-  description = "Role assumed by this repository's release applies (AWS_APPLY_ROLE_ARN)."
+  description = "Role assumed by this repository's release applies (built from `jaws config env`, never a variable)."
   value       = module.infra_ci_apply.role_arn
 }
 
