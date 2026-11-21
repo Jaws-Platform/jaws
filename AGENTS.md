@@ -1,6 +1,6 @@
 # Guidance for coding agents
 
-This repository is Terraform for the jwall-engineering foundation stack (state bucket, GitHub OIDC provider, `jwall.engineering` hosted zone, per-project buckets and CI roles). Read [README.md](README.md) for the layout and [CONTRIBUTING.md](CONTRIBUTING.md) for the full rules. The rules below are the ones you MUST follow.
+This repository is Terraform for the jaws foundation stack (state bucket, GitHub OIDC provider, `jwall.engineering` hosted zone, per-project buckets and CI roles). Read [README.md](README.md) for the layout and [CONTRIBUTING.md](CONTRIBUTING.md) for the full rules. The rules below are the ones you MUST follow.
 
 ## Rules
 
@@ -14,7 +14,7 @@ This repository is Terraform for the jwall-engineering foundation stack (state b
   The PR title MUST be a valid Conventional Commit; squash merges use it as the commit message.
 - **Commits are a single line**: `type(scope)?: subject`, at most 100 characters. Allowed types: `feat`, `fix`, `docs`, `chore`, `refactor`, `ci`, `build`, `perf`, `style`, `test`, `revert`. The only thing allowed after the header is a blank line and `Co-authored-by: Name <email>` trailers. No body text. Put details in the PR description.
 - **Merges are squash or rebase only.** Never create merge commits.
-- **Do not modify or delete existing AWS resources** that this stack does not own. The legacy resources listed in `docs/migration.md` are retired by the owner, not by Terraform in this repo.
+- **Do not modify or delete existing AWS resources** that this stack does not own.
 - **Never run `terraform apply` yourself.** Applies happen only through the Release Please `apply` job. Local plans are fine with read-only credentials. The same goes for the infra CLI: never run `jaws apply`, `publish`, `release`, `destroy` or `bot push`, `bot deploy`, `bot reconcile` (without `--dry-run`) or `bot secrets set` against real resources, and never run `task run`, `task terminate` or `task sweep` against AWS (`task list` is read-only and fine); its role check refuses non-CI credentials unless `JAWS_SKIP_ROLE_CHECK=1` is set, and you do not set it.
 - **Do not add `ignore_changes`, `-lock=false`, or widen an IAM policy** to make a plan pass. Explain the diff in the PR instead.
 - **Shared modules come from the Terraform Registry.** Every resource in this stack comes from a module of one of the Jaws module families, `Jaws-Platform/jaws-<family>/aws` (`ci`, `databricks`, `foundation`, `lichess-bot`, `network`, `research`, `static-site`), pinned to an exact `version` in each module block. Bump every pin of a family together (`foundation/`, every stack under `stacks/`, `owner-access/`, `data-access/` and the family's entry under `library.families` in `config.yaml`; `tests/test_versions.py` checks), never switch a module back to a git or local source, and fix module bugs upstream in the family's repository, `Jaws-Platform/terraform-aws-jaws-<family>`, rather than working around them here.

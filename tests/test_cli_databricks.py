@@ -24,14 +24,14 @@ from jaws.checks.framework import (
 
 runner = CliRunner()
 SENTINEL = "dapi-SENTINEL-s3cr3t-value"
-PARAM = "/jwall-engineering/databricks/client-secret"
-PLAN_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-databricks-poc-ci-plan/s"
-APPLY_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-databricks-poc-ci-apply/s"
-OWNER = "arn:aws:sts::650503560686:assumed-role/owner/s"
+PARAM = "/jaws/databricks/client-secret"
+PLAN_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-databricks-poc-ci-plan/s"
+APPLY_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-databricks-poc-ci-apply/s"
+OWNER = "arn:aws:sts::570327089884:assumed-role/owner/s"
 
 
 def _as_role(arn: str) -> AbstractContextManager[Any]:
-    return patch("jaws.aws.caller_identity", return_value=("650503560686", arn))
+    return patch("jaws.aws.caller_identity", return_value=("570327089884", arn))
 
 
 def _put_secret(value: str = SENTINEL) -> None:

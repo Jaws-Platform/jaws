@@ -28,7 +28,6 @@ import yaml
 
 from .components import DatabricksWorkspace, Dataset, check_prefixes
 from .errors import ConfigError
-from .legacy import LEGACY_SITE_FILE
 from .settings import default_config_path
 from .site import SITE_FILE, SiteConfig, load_site_config, site_config_from_text
 
@@ -306,28 +305,9 @@ class GitHubProjectFiles:
                 f"{project}: not a registered project (foundation/bots.tf or "
                 "foundation/databricks.tf), so its file cannot be read"
             )
-        # The file's old name is read when the new one is not there (404), until
-        # every project has renamed its file. Any other failure is an error, and
-        # when neither name exists the error names the one to create.
         url = f"{GITHUB_API}/repos/{repository}/contents/{SITE_FILE.name}"
-        legacy_url = f"{GITHUB_API}/repos/{repository}/contents/{LEGACY_SITE_FILE.name}"
         try:
-            try:
-                payload = self._get(url)
-            except urllib.error.HTTPError as missing:
-                if missing.code != 404:
-                    raise
-                try:
-                    payload = self._get(legacy_url)
-                except urllib.error.HTTPError as legacy_missing:
-                    if legacy_missing.code == 404:
-                        raise missing from None
-                    url = legacy_url
-                    raise
-                except (urllib.error.URLError, OSError, ValueError):
-                    url = legacy_url
-                    raise
-                url = legacy_url
+            payload = self._get(url)
             text = base64.b64decode(payload["content"]).decode()
             sha = str(payload["sha"])
         except (

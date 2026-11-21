@@ -1,4 +1,4 @@
-# Remote state in S3 with native lockfile locking, as every jwall-engineering
+# Remote state in S3 with native lockfile locking, as every jaws
 # stack: the bucket, key and region live in backend/prod.hcl and are passed with
 #
 #   terraform init -backend-config=backend/prod.hcl

@@ -12,7 +12,7 @@ with the engine pinned (see [A bot repository that pins its engine](#a-bot-repos
 
 What you get:
 
-- an ECR repository, `jwall-engineering-<project>`, with immutable release tags;
+- an ECR repository, `jaws-<project>`, with immutable release tags;
 - one image per release: lichess-bot at a pinned commit, the release's own
   Linux binary (checksum-verified, never rebuilt), and your lichess-bot config;
 - one `t3.micro` running the image, with no inbound access at all;
@@ -32,7 +32,7 @@ project: braveheart
 repository: Braveheart-Chess/braveheart
 
 tags:
-  Organization: jwall-engineering
+  Organization: jaws
   Project: braveheart
   Environment: prod
   Repository: Braveheart-Chess/braveheart
@@ -75,7 +75,7 @@ A file is either a site (`domain` and `site`) or a bot project
 | `version` | `1` | File format version. |
 | `project` | kebab-case, ≤ 30 | The project; every name below is derived from it. A bot project registered in `foundation/bots.tf` takes at most 15 characters (a research project up to 30: its policies are much smaller): its apply role's `container/manage` policy repeats the name in 17 ARNs and IAM caps a managed policy at 6,144 characters. The project can differ from the repository name (`braveheart-bot` deploys from `Braveheart-Chess/braveheart-lichess-bot`). |
 | `repository` | `owner/repo` | Where the releases are published. Must match `tags.Repository`. |
-| `tags` | five required keys | Applied to every AWS resource for cost allocation. `Project`, `Repository` and `Environment: prod` are cross-checked; extra keys pass through. `Organization` and `ManagedBy` are the account's: the tool stamps `jwall-engineering` / `jwall-engineering-infra` in the management account and `jaws` / `jaws` in production, whatever the file says, so one file serves both while a project moves. A stated `Organization` must be one of the two; leave `ManagedBy` out. |
+| `tags` | five required keys | Applied to every AWS resource for cost allocation. `Project`, `Repository` and `Environment: prod` are cross-checked; extra keys pass through. `Organization` and `ManagedBy` are the tool's: it stamps `jaws` / `jaws` whatever the file says. A stated `Organization` must be `jaws`; leave `ManagedBy` out. |
 | `container-image.architecture` | `x86_64` \| `arm64`, `x86_64` | Must match the release asset. `arm64` also needs a `t4g` instance type. |
 | `container-image.artifact.asset` | file name with `{version}` | The release asset that holds the binary. `{version}` is the release tag. |
 | `container-image.artifact.checksum` | file name with `{version}` | Its `sha256sum` file. The build stops if the digest differs. |
@@ -157,21 +157,20 @@ components:
 
 ## Names the tool derives
 
-`jwall-engineering` below is the management account's organization; in the
-production account every name starts with `jaws` instead (`jaws-<project>`,
-`/jaws/<project>/...`, state in `jaws-terraform-state-570327089884`).
+Every name starts with the organization, `jaws` (`context.organization` in
+`config.yaml`); state is in `jaws-terraform-state-570327089884`.
 
 | What | Name |
 |---|---|
-| Image repository | `jwall-engineering-<project>` |
-| Instance, its role, profile and security group | `jwall-engineering-<project>-bot` |
-| VPC | `jwall-engineering-<project>` (public subnets in us-east-1a and 1b, no NAT) |
-| Records bucket | `jwall-engineering-<project>-records` |
-| Log group | `/jwall-engineering/<project>/bot` |
-| Parameters | `/jwall-engineering/<project>/bot/{desired-version,running-version,status,last-sync}` |
-| CI roles | `jwall-engineering-<project>-ci-{plan,apply,release}` |
-| Schedules, with `schedule` | `jwall-engineering-<project>-bot-{start,drain,stop}` (EventBridge Scheduler, default group), run as the role `jwall-engineering-<project>-bot-scheduler` |
-| State | `s3://jwall-engineering-tfstate/project=<project>/env=prod/<project>-prod.tfstate` |
+| Image repository | `jaws-<project>` |
+| Instance, its role, profile and security group | `jaws-<project>-bot` |
+| VPC | `jaws-<project>` (public subnets in us-east-1a and 1b, no NAT) |
+| Records bucket | `jaws-<project>-records` |
+| Log group | `/jaws/<project>/bot` |
+| Parameters | `/jaws/<project>/bot/{desired-version,running-version,status,last-sync}` |
+| CI roles | `jaws-<project>-ci-{plan,apply,release}` |
+| Schedules, with `schedule` | `jaws-<project>-bot-{start,drain,stop}` (EventBridge Scheduler, default group), run as the role `jaws-<project>-bot-scheduler` |
+| State | `s3://jaws-terraform-state-570327089884/project=<project>/env=prod/<project>-prod.tfstate` |
 
 ## How a release reaches the bot
 
@@ -225,8 +224,8 @@ When `records.s3` is on, every finished game is shipped every 10 minutes,
 around every swap, and at shutdown, to:
 
 ```
-s3://jwall-engineering-<project>-records/records/pgn/schema=1/engine=<tag>/date=<YYYY-MM-DD>/<game_id>.pgn
-s3://jwall-engineering-<project>-records/records/meta/schema=1/engine=<tag>/date=<YYYY-MM-DD>/<game_id>.json
+s3://jaws-<project>-records/records/pgn/schema=1/engine=<tag>/date=<YYYY-MM-DD>/<game_id>.pgn
+s3://jaws-<project>-records/records/meta/schema=1/engine=<tag>/date=<YYYY-MM-DD>/<game_id>.json
 ```
 
 - The `.pgn` is the file lichess-bot wrote, byte for byte, with the engine's
@@ -267,67 +266,8 @@ jaws bot secrets check LICHESS_TOKEN  # exit 0 if set
 Run these from your own shell with admin credentials. Only the instance role
 can read the value. The release role can't: it writes only `.../bot/*`.
 
-The parameter is the one the account addresses: `--account production bot
-secrets set LICHESS_TOKEN` writes `/jaws/<project>/lichess-token` for a
-project named `lichess-token` in its file.
-
-## Moving a bot to the production account
-
-A bot moves whole: its image repository, instance, records bucket and
-schedules are created in production, its records are copied, and the old stack
-is destroyed with its records bucket released and kept. Exactly one bot may hold
-the token at a time, so the old one is drained, and kept from starting again,
-before the new one starts.
-
-1. **The file serves both accounts.** In the bot repository, name the secret
-   relatively (`LICHESS_TOKEN: lichess-token`) and pin a release of this tool
-   that has relative secrets. The management Bot plan stays "No changes".
-2. **Register it in production.** `production.projects: {<project>: moving}` in
-   this repository's `config.yaml`; the release applies the project's CI roles
-   in production. From now on, a run for the project addresses production
-   unless it says `--account management`.
-3. **Apply the new stack.** Bot apply with `account: production`. The new
-   instance has neither a token nor an image yet, so it plays nothing.
-4. **Cut over while the old bot is idle:**
-   - inside its running hours, `jaws --account management bot stop --wait`:
-     the old bot finishes its game, ships its records and powers off. Outside
-     them its drain has already done that; `jaws --account management bot
-     status` says it is stopped;
-   - disable the old stack's start schedule, `<old instance name>-start`.
-     `bot stop` leaves the schedules alone, and this one would start the old
-     bot at its next start time, holding the same token as the new one. An
-     EventBridge Scheduler update replaces the whole schedule, so rewrite it
-     with only its state changed (management profile):
-
-     ```sh
-     aws scheduler get-schedule --name <old instance name>-start --output json \
-       | jq '{Name, GroupName, ScheduleExpression, ScheduleExpressionTimezone,
-              Description, FlexibleTimeWindow, Target, ActionAfterCompletion,
-              State: "DISABLED"}' > start.json
-     aws scheduler update-schedule --cli-input-json file://start.json
-     ```
-
-   - copy the records through a local directory, `aws s3 sync` down with the
-     management profile and up with the production one, and compare the two
-     listings (key, size, ETag);
-   - `jaws --account production bot secrets set LICHESS_TOKEN`.
-5. **Deploy.** Pin the bot repository's release workflow at a release of this
-   tool whose `config.yaml` lists the project under `production.projects`
-   (until then its releases address management), then publish a release of
-   the bot repository: `Release to Lichess` builds the image into production's
-   image repository and deploys it. Re-running an earlier release's run does
-   not do this: it runs that release's own files. Then `bot status` until
-   `ok`, and a game on Lichess.
-6. **Destroy the old stack** after a day of games: delete the old image
-   repository's images, then Bot apply `destroy` with `account: management`.
-   The old records bucket is released and kept; the old token parameter stays
-   until the owner deletes it.
-7. **Mark it moved.** `<project>: moved`; the management foundation drops its
-   roles.
-
-Until step 6, rolling back is `--account production bot stop --wait`,
-re-enabling the old start schedule (the same rewrite with `State: "ENABLED"`)
-and `--account management bot start`.
+`bot secrets set LICHESS_TOKEN` writes `/jaws/<project>/lichess-token` for a
+secret named `lichess-token` in the project file.
 
 ## Getting a shell
 

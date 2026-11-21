@@ -23,7 +23,7 @@ run "plans_a_task_runner_and_the_positions_bucket" {
   }
 
   assert {
-    condition     = toset(keys(module.datasets)) == toset(["positions"]) && var.datasets[0].bucket == "jwall-engineering-braveheart-selfplay-positions" && var.datasets[0].prefix == "data/"
+    condition     = toset(keys(module.datasets)) == toset(["positions"]) && var.datasets[0].bucket == "jaws-braveheart-selfplay-positions" && var.datasets[0].prefix == "data/"
     error_message = "braveheart-selfplay has one dataset, positions, under data/ like the bucket it is copied from"
   }
 
@@ -39,8 +39,8 @@ run "plans_a_task_runner_and_the_positions_bucket" {
 
   assert {
     condition = jsonencode(var.datasets[0].readers) == jsonencode([
-      "arn:aws:iam::650503560686:role/jwall-engineering-braveheart-trainer-task-gpu",
-      "arn:aws:iam::650503560686:role/jwall-engineering-ds-braveheart-selfplay-positions",
+      "arn:aws:iam::570327089884:role/jaws-braveheart-trainer-task-gpu",
+      "arn:aws:iam::570327089884:role/jaws-ds-braveheart-selfplay-positions",
     ])
     error_message = "the trainer's GPU tasks and the onboarded dataset's role (an agreed handshake with braveheart-databricks), and only they, read the positions through the bucket policy"
   }

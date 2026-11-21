@@ -41,20 +41,20 @@ def _load(tmp_path: Path, raw: dict[str, Any], settings: Settings) -> Project:
 def test_bot_fixture_loads(bot: Project) -> None:
     assert bot.kind == "bot"
     assert bot.project == "braveheart"
-    assert bot.image_repository == "jwall-engineering-braveheart"
-    assert bot.bot_name == "jwall-engineering-braveheart-bot"
-    assert bot.records_bucket == "jwall-engineering-braveheart-records"
-    assert bot.vpc_name == "jwall-engineering-braveheart"
-    assert bot.log_group == "/jwall-engineering/braveheart/bot"
-    assert bot.parameter_prefix == "/jwall-engineering/braveheart/bot"
-    assert bot.parameter("desired-version") == "/jwall-engineering/braveheart/bot/desired-version"
+    assert bot.image_repository == "jaws-braveheart"
+    assert bot.bot_name == "jaws-braveheart-bot"
+    assert bot.records_bucket == "jaws-braveheart-records"
+    assert bot.vpc_name == "jaws-braveheart"
+    assert bot.log_group == "/jaws/braveheart/bot"
+    assert bot.parameter_prefix == "/jaws/braveheart/bot"
+    assert bot.parameter("desired-version") == "/jaws/braveheart/bot/desired-version"
     assert bot.state_key == "project=braveheart/env=prod/braveheart-prod.tfstate"
-    assert bot.role_name("release") == "jwall-engineering-braveheart-ci-release"
-    assert bot.role_name("apply") == "jwall-engineering-braveheart-ci-apply"
+    assert bot.role_name("release") == "jaws-braveheart-ci-release"
+    assert bot.role_name("apply") == "jaws-braveheart-ci-apply"
     assert bot.profile_url == "https://lichess.org/@/rusty-chess-bot"
     assert bot.bot.engine.hash_mb == 128
     assert bot.bot.engine.move_overhead_ms == 500
-    assert bot.bot.secrets == {"LICHESS_TOKEN": "/jwall-engineering/braveheart/lichess-token"}
+    assert bot.bot.secrets == {"LICHESS_TOKEN": "/jaws/braveheart/lichess-token"}
     assert bot.image.artifact.binary == "braveheart"
     assert bot.image.architecture == "x86_64"
     assert bot.zone_id is None
@@ -84,20 +84,20 @@ def test_unknown_field_fails(tmp_path: Path, settings: Settings) -> None:
 def test_secret_outside_project_path_fails(tmp_path: Path, settings: Settings) -> None:
     raw = _raw()
     _bot(raw)["secrets"] = {"LICHESS_TOKEN": "/other/token"}
-    with pytest.raises(ConfigError, match="must start with /jwall-engineering/braveheart/"):
+    with pytest.raises(ConfigError, match="must start with /jaws/braveheart/"):
         _load(tmp_path, raw, settings)
 
 
 def test_secret_under_bot_prefix_fails(tmp_path: Path, settings: Settings) -> None:
     raw = _raw()
-    _bot(raw)["secrets"] = {"LICHESS_TOKEN": "/jwall-engineering/braveheart/bot/token"}
+    _bot(raw)["secrets"] = {"LICHESS_TOKEN": "/jaws/braveheart/bot/token"}
     with pytest.raises(ConfigError, match="bot/"):
         _load(tmp_path, raw, settings)
 
 
 def test_missing_lichess_token_fails(tmp_path: Path, settings: Settings) -> None:
     raw = _raw()
-    _bot(raw)["secrets"] = {"OTHER": "/jwall-engineering/braveheart/other"}
+    _bot(raw)["secrets"] = {"OTHER": "/jaws/braveheart/other"}
     with pytest.raises(ConfigError, match="LICHESS_TOKEN"):
         _load(tmp_path, raw, settings)
 
@@ -196,12 +196,12 @@ def test_task_runner_loads_and_names_derive(bot: Project) -> None:
     )
     assert (runner.spot_wait_minutes, runner.max_vcpus, runner.slot_wait_minutes) == (5, 192, 30)
     assert (runner.max_hours, runner.results_days, runner.log_retention_days) == (6, 7, 14)
-    assert bot.task_name == "jwall-engineering-braveheart-task"
-    assert bot.task_template == "jwall-engineering-braveheart-task"
-    assert bot.task_log_group == "/jwall-engineering/braveheart/tasks"
-    assert bot.task_bucket == "jwall-engineering-braveheart-tasks"
+    assert bot.task_name == "jaws-braveheart-task"
+    assert bot.task_template == "jaws-braveheart-task"
+    assert bot.task_log_group == "/jaws/braveheart/tasks"
+    assert bot.task_bucket == "jaws-braveheart-tasks"
     assert bot.task_prefix == "tasks/"
-    assert bot.role_name("task") == "jwall-engineering-braveheart-ci-task"
+    assert bot.role_name("task") == "jaws-braveheart-ci-task"
 
 
 def test_task_runner_defaults(tmp_path: Path, settings: Settings) -> None:
@@ -289,12 +289,12 @@ def _dataset(raw: dict[str, Any]) -> dict[str, Any]:
 def test_dataset_loads(bot: Project) -> None:
     (dataset,) = bot.datasets
     assert dataset.name == "nnue"
-    assert dataset.bucket == "jwall-engineering-braveheart-nnue"
+    assert dataset.bucket == "jaws-braveheart-nnue"
     assert dataset.prefix == "data/"
     assert dataset.writers == ("task-runner",)
     assert dataset.readers == ()
     assert dataset.transition_days == 0
-    assert bot.dataset_bucket("nnue") == "jwall-engineering-braveheart-nnue"
+    assert bot.dataset_bucket("nnue") == "jaws-braveheart-nnue"
 
 
 def test_project_without_dataset_loads(tmp_path: Path, settings: Settings) -> None:
@@ -309,7 +309,7 @@ def test_project_without_dataset_loads(tmp_path: Path, settings: Settings) -> No
 def test_dataset_bucket_must_be_the_derived_name(tmp_path: Path, settings: Settings) -> None:
     raw = _raw()
     _dataset(raw)["bucket"] = "my-own-bucket"
-    with pytest.raises(ConfigError, match="jwall-engineering-braveheart-nnue"):
+    with pytest.raises(ConfigError, match="jaws-braveheart-nnue"):
         _load(tmp_path, raw, settings)
 
 
@@ -340,7 +340,7 @@ def test_dataset_name_shape_and_reserved_names(
 ) -> None:
     raw = _raw()
     _dataset(raw)["name"] = bad
-    _dataset(raw)["bucket"] = f"jwall-engineering-braveheart-{bad}"
+    _dataset(raw)["bucket"] = f"jaws-braveheart-{bad}"
     with pytest.raises(ConfigError, match="name"):
         _load(tmp_path, raw, settings)
 
@@ -408,8 +408,8 @@ def test_the_gpu_profile_loads(bot: Project) -> None:
     )  # fmt: skip
     assert gpu.datasets["nnue"].read == ("selfplay/",)
     assert gpu.datasets["nnue"].write == ("nets/",)
-    assert bot.profile_task_name("gpu") == "jwall-engineering-braveheart-task-gpu"
-    assert bot.profile_task_name("cpu") == "jwall-engineering-braveheart-task"
+    assert bot.profile_task_name("gpu") == "jaws-braveheart-task-gpu"
+    assert bot.profile_task_name("cpu") == "jaws-braveheart-task"
 
 
 def test_the_cpu_profile_is_the_task_runners_own_fields(bot: Project) -> None:
@@ -596,14 +596,14 @@ def test_an_image_without_a_bot_still_fails(tmp_path: Path, settings: Settings) 
 
 
 def test_the_research_project_uses_the_task_names(research: Project) -> None:
-    assert research.task_bucket == "jwall-engineering-math-prover-tasks"
-    assert research.task_log_group == "/jwall-engineering/math-prover/tasks"
-    assert research.profile_task_name("cpu") == "jwall-engineering-math-prover-task"
-    assert research.profile_task_name("train") == "jwall-engineering-math-prover-task-train"
+    assert research.task_bucket == "jaws-math-prover-tasks"
+    assert research.task_log_group == "/jaws/math-prover/tasks"
+    assert research.profile_task_name("cpu") == "jaws-math-prover-task"
+    assert research.profile_task_name("train") == "jaws-math-prover-task-train"
     assert research.task_runner is not None
     assert research.task_runner.profile_names == ("cpu", "train")
     (dataset,) = research.datasets
-    assert dataset.bucket == "jwall-engineering-math-prover-artifacts"
+    assert dataset.bucket == "jaws-math-prover-artifacts"
     assert research.dataset_bucket("artifacts") == dataset.bucket
 
 
@@ -682,7 +682,7 @@ def test_databricks_with_dataset_rejected(tmp_path: Path, settings: Settings) ->
         {
             "kind": "dataset",
             "name": "nnue",
-            "bucket": "jwall-engineering-databricks-poc-nnue",
+            "bucket": "jaws-databricks-poc-nnue",
             "prefix": "data/",
         }
     )

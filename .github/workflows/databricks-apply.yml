@@ -24,16 +24,6 @@ on:
         type: choice
         options: [apply, destroy, doctor]
         default: apply
-      account:
-        description: >-
-          The account to address. `auto` uses the one config.yaml gives the
-          project (production once it is listed under production.projects);
-          `management` addresses the old stack of a project that is moving. A
-          destroy of a moving project must name its account.
-        required: false
-        type: choice
-        options: [auto, management, production]
-        default: auto
 
 concurrency:
   group: databricks-apply-${{ inputs.project }}
@@ -70,7 +60,6 @@ jobs:
           path: .consumer
           sparse-checkout: |
             jaws.yaml
-            jwall-engineering-sites.yaml
           sparse-checkout-cone-mode: false
       - uses: hashicorp/setup-terraform@v4
         with:
@@ -84,10 +73,8 @@ jobs:
         id: role
         env:
           PROJECT: ${{ inputs.project }}
-          ACCOUNT: ${{ inputs.account != 'auto' && inputs.account || '' }}
         run: |
-          # The tool says which account this is (config.yaml: management, or `production`).
-          resolved=$(uv run jaws ${ACCOUNT:+--account "$ACCOUNT"} config env --project "$PROJECT")
+          resolved=$(uv run jaws config env)
           account=$(sed -n 's/^account_id=//p' <<<"$resolved")
           organization=$(sed -n 's/^organization=//p' <<<"$resolved")
           [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
@@ -100,7 +87,6 @@ jobs:
       - name: jaws ${{ inputs.action }}
         env:
           JAWS_STACKS_ROOT: ${{ github.workspace }}/stacks
-          ACCOUNT: ${{ inputs.account != 'auto' && inputs.account || '' }}
           COMMAND: ${{ inputs.action == 'destroy' && 'destroy --yes' || inputs.action == 'doctor' && 'databricks doctor' || 'apply' }}
           # The CLI reads the producers' project files of the datasets the
           # workspace reads from GitHub to render its endpoint statements.
@@ -108,7 +94,7 @@ jobs:
         run: |
           # COMMAND is `apply`, `destroy --yes` or `databricks doctor`: words on purpose.
           # shellcheck disable=SC2086
-          uv run jaws --file .consumer/jaws.yaml ${ACCOUNT:+--account "$ACCOUNT"} $COMMAND
+          uv run jaws --file .consumer/jaws.yaml $COMMAND
       - name: Upload the run log and artifacts
         if: always()
         uses: actions/upload-artifact@v7

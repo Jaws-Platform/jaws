@@ -24,12 +24,11 @@ _ENTRY = re.compile(
 )
 #: The Braveheart-Chess organisation: gh api orgs/Braveheart-Chess --jq .id
 BRAVEHEART_CHESS = "356866252"
+
+
 #: Projects registered after the management account was retired (v0.70.0): they
 #: have only ever had a stack in production, so nothing is approved under the
 #: management account's name for them.
-BORN_IN_PRODUCTION = {"pi-benchmarks", "pi-prover"}
-
-
 def registry() -> dict[str, tuple[str, str]]:
     return {m[0]: (m[1], m[2]) for m in _ENTRY.findall(BOTS_TF.read_text())}
 
@@ -154,7 +153,7 @@ def test_registry_matches_each_projects_file() -> None:
 
 def test_bot_state_prefixes_are_in_the_state_bucket_policy() -> None:
     state = (REPO_ROOT / "foundation" / "state.tf").read_text()
-    assert "local.served_bots" in state and "project=${key}/" in state
+    assert "local.bots" in state and "project=${key}/" in state
     assert "module.bot_ci_plan[key].role_arn" in state
     assert "module.bot_ci_apply[key].role_arn" in state
 
@@ -222,31 +221,6 @@ def test_container_release_role_is_optional() -> None:
     assert role["default"] == ""
 
 
-def test_bot_plan_plans_a_moving_projects_old_stack_too() -> None:
-    """While a project moves, both its stacks are planned on every pull request, so
-    a change to the old one (the copy reader on its buckets) is reviewed too."""
-    ci: dict[Any, Any] = _yaml(".github/workflows/ci.yml")
-    job = ci["jobs"]["bot-plan"]
-    assert job["strategy"]["matrix"]["account"] == ["auto", "management"]
-    steps = job["steps"]
-    by_id = {s["id"]: s for s in steps if "id" in s}
-    decide = by_id["account"]["run"]
-    # `management` plans only a moving project: `auto` already plans every other
-    # project there, and a moved one has no stack there.
-    assert '"$ACCOUNT" = auto' in decide and "--account management config env" in decide
-    ids = [s.get("id") for s in steps]
-    assert ids.index("account") < ids.index("role") < ids.index("assume")
-    for gated in ("role", "file"):
-        assert by_id[gated]["if"] == "steps.account.outputs.plan == 'true'"
-    assert "$FLAG" in by_id["role"]["run"]
-    plan = next(s for s in steps if s.get("name") == "jaws plan")
-    assert "$FLAG" in plan["run"] and plan["env"]["FLAG"] == "${{ steps.account.outputs.flag }}"
-    comment = next(s for s in steps if s.get("name", "").startswith("Post plan comment"))
-    assert "matrix.account" in comment["with"]["header"]
-    upload = next(s for s in steps if s.get("name", "").startswith("Upload the run log"))
-    assert "matrix.account" in upload["with"]["name"]
-
-
 def test_bot_plan_runs_without_a_variable_and_skips_until_roles_exist() -> None:
     ci: dict[Any, Any] = _yaml(".github/workflows/ci.yml")
     job = ci["jobs"]["bot-plan"]
@@ -265,7 +239,7 @@ def test_bot_plan_runs_without_a_variable_and_skips_until_roles_exist() -> None:
 
 def test_foundation_takes_the_account_from_config() -> None:
     state = (REPO_ROOT / "foundation" / "state.tf").read_text()
-    assert "650503560686" not in state
+    assert "570327089884" not in state
     assert "local.account_id" in state
 
 
@@ -323,9 +297,8 @@ def test_bot_plan_and_apply_carry_the_task_policies() -> None:
 def test_task_role_is_the_launch_role_for_the_bot_repository() -> None:
     block = _module("bot_ci_task")
     assert 'source   = "Jaws-Platform/jaws-ci/aws//modules/ci-task-role"' in block
-    # The projects with a task runner that this account serves (accounts.tf).
-    assert "for key, types in local.bot_task_types : key => types if" in block
-    assert "local.serves[key]" in block
+    # Every project with a task runner.
+    assert "for_each = local.bot_task_types" in block
     assert "repository        = local.bots[each.key].repository" in block
     assert "repository_id     = local.bots[each.key].repository_id" in block
     assert _policies(block) == ["task/launch"]
@@ -376,14 +349,6 @@ def test_bots_output_names_the_task_role() -> None:
     assert "task_role_arn" in outputs and "module.bot_ci_task[key].role_arn" in outputs
 
 
-def _in_production() -> set[str]:
-    """The projects config.yaml lists under production.projects."""
-    import yaml
-
-    config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
-    return set((config.get("production") or {}).get("projects") or {})
-
-
 def _bot_datasets() -> dict[str, list[str]]:
     return {k: list(p["datasets"]) for k, p in _projects().items() if p.get("datasets")}
 
@@ -393,12 +358,8 @@ def test_dataset_buckets_match_the_project_files() -> None:
     for project in registry():
         components = project_file(project)["components"]
         names = [c["name"] for c in components if c["kind"] == "dataset"]
-        # Approved under each account's name where the project has a stack: the
-        # management account's, and production's too once it is moving there. A
-        # project born in production has production's name alone.
-        management = [] if project in BORN_IN_PRODUCTION else ["jwall-engineering"]
-        organizations = management + (["jaws"] if project in _in_production() else [])
-        buckets = [f"{org}-{project}-{name}" for name in names for org in organizations]
+        # Approved under the organization's name: <Organization>-<project>-<name>.
+        buckets = [f"jaws-{project}-{name}" for name in names]
         if buckets:
             expected[project] = buckets
     # The engine gave its dataset up at the split's cutover; the data is the satellites'.
@@ -461,7 +422,7 @@ def test_foundation_gives_research_projects_no_release_role() -> None:
     match = re.search(r"^\s*for_each\s*=\s*(.+)$", _module("bot_ci_release"), re.MULTILINE)
     assert match, "bot_ci_release has no for_each"
     comprehension = re.fullmatch(
-        r"\{\s*for (\w+), (\w+) in local\.served_bots\s*:\s*\1\s*=>\s*\2\s*"
+        r"\{\s*for (\w+), (\w+) in local\.bots\s*:\s*\1\s*=>\s*\2\s*"
         r"if !contains\(local\.research_projects,\s*\1\)\s*\}",
         match.group(1).strip(),
     )
@@ -566,7 +527,7 @@ def test_databricks_projects_get_plan_and_apply_roles_with_databricks_policies()
     apply = _module("databricks_ci_apply", DATABRICKS_TF)
     assert "modules/ci-plan-role" in plan and "modules/ci-apply-role" in apply
     for block in map(_squashed, (plan, apply)):
-        assert "for_each = local.served_databricks_projects" in block
+        assert "for_each = local.databricks_projects" in block
         # Planned and applied from this repository, as bots are.
         assert "repository = local.context.repository" in block
         assert "tfstate = local.databricks_ci[each.key].tfstate" in block
@@ -585,14 +546,13 @@ def test_databricks_projects_get_plan_and_apply_roles_with_databricks_policies()
 def test_databricks_projects_get_no_release_or_task_role() -> None:
     text = DATABRICKS_TF.read_text()
     assert "ci-release-role" not in text and "ci-task-role" not in text
-    # Only state.tf (the state prefixes) and accounts.tf (which account serves
-    # each project) read the registry outside databricks.tf.
+    # Only state.tf (the state prefixes) reads the registry outside databricks.tf.
     readers = {
         p.name
         for p in (REPO_ROOT / "foundation").glob("*.tf")
         if "databricks_projects" in p.read_text()
     }
-    assert readers == {"accounts.tf", "databricks.tf", "state.tf"}
+    assert readers == {"databricks.tf", "state.tf"}
 
 
 def test_databricks_policy_inputs_point_at_the_secret_and_the_projects_events() -> None:
@@ -612,7 +572,7 @@ def test_databricks_policy_inputs_point_at_the_secret_and_the_projects_events() 
 
 def test_databricks_project_state_prefixes_are_in_the_state_bucket_policy() -> None:
     state = (REPO_ROOT / "foundation" / "state.tf").read_text()
-    assert "for key, project in local.served_databricks_projects" in state
+    assert "for key, project in local.databricks_projects" in state
     assert "module.databricks_ci_plan[key].role_arn" in state
     assert "module.databricks_ci_apply[key].role_arn" in state
 
@@ -651,10 +611,7 @@ def test_databricks_account_resources_wait_for_enabled() -> None:
     # The foundation never creates the secret: the owner sets it with the CLI.
     assert "aws_ssm_parameter" not in text
     # Enabled: the foundation plan creates the metastore and the audit log delivery.
-    # Enabled in one account at a time: production, since the move (2026-11-19).
-    config = yaml_config()
-    assert config["databricks"]["enabled"] is False
-    assert config["production"]["overrides"]["databricks"]["enabled"] is True
+    assert yaml_config()["databricks"]["enabled"] is True
 
 
 def test_the_shared_host_waits_for_the_metastore_module() -> None:

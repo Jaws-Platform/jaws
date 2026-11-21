@@ -8,17 +8,15 @@ dedicated bucket, central compute policies, and an event log of every run.
 The project repository holds one file and no Terraform; the infrastructure is
 planned and applied from here, like a bot.
 
-The one workspace project today is `braveheart-databricks`, in the production
-account since Databricks moved there on 2026-11-19
-([Moving Databricks to the production account](#moving-databricks-to-the-production-account)).
-The first, `databricks-poc`, was retired then; its file stays as the sample
-below and in the tests. The parts no live apply has confirmed yet are listed
+The one workspace project today is `braveheart-databricks`. The first,
+`databricks-poc`, was retired on 2026-11-19; its file stays as the sample below
+and in the tests. The parts no live apply has confirmed yet are listed
 under [Known gaps](#known-gaps).
 
 Contents: [setup](#one-time-setup), [onboarding a project](#onboarding-a-project),
 [the project file](#the-project-file), [plan](#what-plan-shows),
 [apply](#what-apply-does), [destroy](#destroy), [doctor](#doctor),
-[datasets and access](#datasets-and-access), [one account at a time](#one-account-at-a-time),
+[datasets and access](#datasets-and-access),
 [layout](#bucket-and-prefix-layout), [tags](#tags-on-every-resource),
 [compute policies](#central-compute-policies), [costs](#costs),
 [known gaps](#known-gaps), [runbook](#runbook).
@@ -64,7 +62,7 @@ pointer back here.
    works too. The secret is account-wide, so the project only tells the CLI
    which `config.yaml` section and region to use.
    `set` prompts without echo and writes a SecureString at
-   `/jwall-engineering/databricks/client-secret` (`databricks.secret_parameter`).
+   `/jaws/databricks/client-secret` (`databricks.secret_parameter`).
    `check` exits 0 if it exists and decrypts and 3 if not; it never prints the
    value. The secret reaches Terraform only through the child process's
    environment and the SDK clients in memory, never a variable, a file, state,
@@ -72,7 +70,7 @@ pointer back here.
 5. **Delete a pre-existing us-east-1 metastore, if there is one.** Databricks
    creates a metastore for a region automatically with the first workspace
    there, and an account holds one metastore per region. The foundation
-   creates its own (`jwall-engineering-us-east-1`), so an old one must go
+   creates its own (`jaws-us-east-1`), so an old one must go
    first. This is manual and **only with the owner's go-ahead, right before**:
    in the account console, open Catalog, then Metastores, open the us-east-1
    metastore, unassign every workspace, and delete it. `DBX-LIVE-004`
@@ -81,7 +79,7 @@ pointer back here.
 6. **Set `databricks.enabled: true`** in a pull request. The next foundation
    plan creates the metastore (owned by an account group holding the service
    principal and the metastore admins), audit log delivery to
-   `jwall-engineering-databricks-audit-logs`, and the CI roles' access to the
+   `jaws-databricks-audit-logs`, and the CI roles' access to the
    secret and the event log. It also adds
    `terraform_data.databricks_config_filled_in[0]`, the placeholder guard: its
    preconditions fail the plan if a nil-UUID ID or an `@example.com`
@@ -107,7 +105,7 @@ In this order:
 2. In `foundation/databricks.tf`, add the project to `local.databricks_projects`
    with its repository, repository ID and owner ID
    (`gh api repos/<owner>/<repo> --jq '.id, .owner.id'`). The release that applies it creates
-   the project's `jwall-engineering-<name>-ci-plan` and `-ci-apply` roles
+   the project's `jaws-<name>-ci-plan` and `-ci-apply` roles
    (`compute/*` and `databricks/*` policies; no release or task role). A
    Databricks project must not also be a site or a bot.
 3. Commit `jaws.yaml` in the project repository (below).
@@ -128,7 +126,7 @@ project: databricks-poc
 repository: example-org/databricks-poc
 
 tags:
-  Organization: jwall-engineering
+  Organization: jaws
   Project: databricks-poc
   Environment: prod
   Repository: example-org/databricks-poc
@@ -324,53 +322,6 @@ the catalog's data. It keeps the metastore, the event log and the client
 secret in SSM. Every step is idempotent: re-running a failed destroy continues
 where it stopped.
 
-## Moving Databricks to the production account
-
-Databricks moves as a whole, by a clean rebuild: it is torn down in the
-management account, then built fresh in production. Both accounts use the one
-Databricks account, which holds one metastore per region, so it cannot exist
-in both at once (see "One account at a time"). Nothing is copied: workspaces,
-catalogs, credentials and locations are tied to the account's own buckets and
-roles, and are created again. The owner runs every step that touches
-management, with their admin session:
-
-1. **The reconcile's grants:** `scripts/databricks-teardown.sh access plan`, read
-   it, then `access go`. It destroys the data-access stack's bindings and
-   grants, while the workspaces they name still exist.
-2. **The workspaces:** the **Databricks apply** workflow with `action: destroy`,
-   for each workspace project ([Destroy](#destroy)).
-3. **The platform:** `scripts/databricks-teardown.sh foundation plan`, read it,
-   then `foundation go`. It refuses while the data-access stack or any
-   workspace project's stack still holds resources. It destroys the onboarded
-   datasets, the producer catalogs, their storage, the shared host, the audit
-   log delivery and the metastore, in that order. It releases from state, and
-   keeps: every workspace binding and grant (each goes with its securable) and
-   the audit-log bucket with its configuration, which the owner deletes by
-   hand. If Databricks refuses to delete the metastore because it is not
-   empty, delete it in the account console as an account admin, run
-   `terraform state rm 'module.databricks_metastore[0].databricks_metastore.this'`
-   in `foundation/`, and re-run `foundation go`.
-4. **The secret:** `scripts/databricks-teardown.sh secret` copies the service
-   principal's client secret from the management account's parameter to
-   production's (`production.overrides.databricks.secret_parameter`), without
-   printing it.
-5. **The switch release:** `databricks.enabled: false`,
-   `production.overrides.databricks.enabled: true`, and each workspace project
-   that moves listed as `moved` under `production.projects`. Production's
-   foundation creates the metastore, the audit log delivery and the shared host.
-6. **The datasets release:** `production.overrides.databricks.shared_host_url`
-   set to the new host's URL. Its apply stops at each dataset's volume; run the
-   producer's **Bot apply** in production, then re-run the apply. Run the
-   producer's **Bot apply** in management too, which takes the old share role
-   off the old bucket.
-7. **The workspaces, again:** the **Databricks apply** workflow for each project
-   (production), then **Data access**. A project with a deployer sets its
-   repository's `prod` environment variables from the new apply's output
-   (`DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`) and deploys.
-
-Every step can be re-run. Each `plan` changes nothing; each `go` asks the owner
-to type `destroy`.
-
 ## Doctor
 
 ```sh
@@ -413,7 +364,7 @@ own one piece, and nothing in `config.yaml` names a consumer:
    # braveheart-selfplay's jaws.yaml
      - kind: dataset
        name: positions
-       bucket: jwall-engineering-braveheart-selfplay-positions
+       bucket: jaws-braveheart-selfplay-positions
        prefix: data/
        versioning: true
        consumers: [braveheart-databricks]
@@ -475,8 +426,8 @@ hold. Either side ends it alone by removing its half.
 - **The reconcile.** `data-access/` is a root module of its own (state key
   `project=data-access/env=prod/data-access-prod.tfstate`), planned and applied
   by the **Data access** workflow (`.github/workflows/data-access.yml`) with
-  the roles `jwall-engineering-data-access-ci-plan` and
-  `jwall-engineering-data-access-ci-apply`, which reach only that state and the
+  the roles `jaws-data-access-ci-plan` and
+  `jaws-data-access-ci-apply`, which reach only that state and the
   Databricks secret. `jaws access render` reads `datasets/`,
   every Databricks workspace project's file and every onboarded dataset's
   owner's file (each repository's default branch, through GitHub's API) and
@@ -554,40 +505,17 @@ checks the role can read when it creates the volume, and the bucket policy
 cannot name the role before it exists. Run the producer's **Bot apply**, then
 re-run the apply.
 
-## One account at a time
-
-Both AWS accounts use the one Databricks account, which holds one metastore per
-region, so Databricks is enabled in one of them at a time: `databricks.enabled`
-for the management account, `production.overrides.databricks.enabled` for
-production. `config.yaml` with both true does not load. Everything follows the
-account where it is enabled:
-
-- the foundation creates the Databricks resources there, and none in the other;
-- the secret is read from that account's own `secret_parameter`
-  (`scripts/databricks-credentials.sh`), where the owner stored it with
-  `jaws --account <account> ... databricks credentials set`;
-- the **Data access** workflow assumes that account's `data-access` roles and
-  uses its state bucket and its host (`jaws config env --databricks` names the
-  account, and says `ready`, `awaiting-host` or `disabled`);
-- `production.overrides.databricks.shared_host_url` must be production's own
-  host or `null`: a production view that would inherit the management account's
-  URL does not load.
-
-The shared host is named `<organization>-shared`. A workspace project's own
-account is still `production.projects`: a project listed there is planned and
-applied in production.
-
 ## Bucket and prefix layout
 
 | Bucket | Prefix | Holds |
 | --- | --- | --- |
-| `jwall-engineering-<project>-databricks-root` | Databricks' own | The workspace root storage. Private, S3-managed encryption; its policy grants only the access Databricks documents. |
-| `jwall-engineering-<project>-databricks-catalog` | `managed/` | The catalog's Unity Catalog managed storage (`s3://.../managed`, the external location; Databricks stores it without a trailing slash). Not a DBFS root; reachable through Unity Catalog only. |
-| `jwall-engineering-databricks-audit-logs` | `audit/` | Databricks audit log delivery (foundation, one for the account). |
-| `jwall-engineering-databricks-audit-logs` | `events/project=<p>/date=YYYY-MM-DD/` | The CLI's event records. |
+| `jaws-<project>-databricks-root` | Databricks' own | The workspace root storage. Private, S3-managed encryption; its policy grants only the access Databricks documents. |
+| `jaws-<project>-databricks-catalog` | `managed/` | The catalog's Unity Catalog managed storage (`s3://.../managed`, the external location; Databricks stores it without a trailing slash). Not a DBFS root; reachable through Unity Catalog only. |
+| `jaws-databricks-audit-logs` | `audit/` | Databricks audit log delivery (foundation, one for the account). |
+| `jaws-databricks-audit-logs` | `events/project=<p>/date=YYYY-MM-DD/` | The CLI's event records. |
 
 Other names derived from the project: the roles
-`jwall-engineering-<project>-databricks-cross-account` and `-uc`, and the
+`jaws-<project>-databricks-cross-account` and `-uc`, and the
 catalog `<project>` with hyphens replaced by underscores. The catalog bucket's
 policy denies every principal except the Unity Catalog role (object access),
 the CI and admin roles (manage the bucket, never read or put objects) and the
@@ -869,7 +797,7 @@ resources by hand, then re-run `destroy`.
 ### DBX-AUTH
 
 Databricks rejected the service principal credentials. Check
-`/jwall-engineering/databricks/client-secret` holds the current secret and has
+`/jaws/databricks/client-secret` holds the current secret and has
 not expired, and that the service principal is an account admin. Re-run
 `apply`; no partial state is lost.
 
@@ -945,7 +873,7 @@ import the existing assignment into the account stack's state:
 1. In the owner's shell, with admin AWS credentials (the `jwall-admin`
    profile, [owner access](owner-access.md)), export
    `DATABRICKS_ACCOUNT_ID` and `DATABRICKS_CLIENT_ID` (from `config.yaml`) and
-   `DATABRICKS_CLIENT_SECRET` (from `/jwall-engineering/databricks/client-secret`).
+   `DATABRICKS_CLIENT_SECRET` (from `/jaws/databricks/client-secret`).
 2. In the project's repository, run
    `JAWS_KEEP_WORKDIR=1 JAWS_SKIP_ROLE_CHECK=1 jaws --file jaws.yaml apply`.
    It fails at the same assignment and keeps the account stack's working

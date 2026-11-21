@@ -73,7 +73,7 @@ CATALOGUE: tuple[Diagnosis, ...] = (
             "job reads."
         ),
         next_steps=(
-            "Check `/jwall-engineering/databricks/client-secret` holds the current secret.",
+            "Check the SSM parameter `databricks.secret_parameter` names holds the current secret.",
             "Confirm the service principal is an account admin and its secret has not expired.",
             "Re-run apply; no partial state is lost.",
         ),

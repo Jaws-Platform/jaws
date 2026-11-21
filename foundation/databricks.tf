@@ -5,7 +5,7 @@
 # Account resources, one of each for the whole account:
 #
 #   the us-east-1 Unity Catalog metastore   every workspace in the region shares it
-#   audit log delivery                      jwall-engineering-databricks-audit-logs, audit/
+#   audit log delivery                      jaws-databricks-audit-logs, audit/
 #
 # They wait for config.yaml `databricks.enabled`. While it is false (the
 # owner has not created the service principal yet) they are not planned, so
@@ -20,8 +20,8 @@
 # The registry of Databricks workspace projects (a project file whose only
 # component is a databricks-workspace). Each entry gets two CI roles:
 #
-#   jwall-engineering-<key>-ci-plan   trusted for pull_request on THIS repo     tfstate/read, compute/read, databricks/read
-#   jwall-engineering-<key>-ci-apply  trusted for environment:prod on THIS repo tfstate/write, compute/read, compute/manage,
+#   jaws-<key>-ci-plan   trusted for pull_request on THIS repo     tfstate/read, compute/read, databricks/read
+#   jaws-<key>-ci-apply  trusted for environment:prod on THIS repo tfstate/write, compute/read, compute/manage,
 #                                                                               databricks/read, databricks/manage
 #
 # and no release or task role. Like a bot's, the project's stacks are planned
@@ -49,7 +49,7 @@ locals {
   }
 
   databricks_ci = {
-    for key, project in local.served_databricks_projects : key => {
+    for key, project in local.databricks_projects : key => {
       tfstate = {
         bucket_arn = module.state_bucket.arn
         prefix     = "project=${key}/"
@@ -172,16 +172,15 @@ module "dataset_registry" {
 }
 
 locals {
-  # The host is named for the account: jwall-engineering-shared in management,
-  # jaws-shared in production. So is the audit log delivery's role and its
-  # Databricks credential (the library's default is management's name).
+  # The host, the audit log delivery's role and its Databricks credential are
+  # named for the organization (jaws-shared, jaws-databricks-log-delivery).
   databricks_host_name              = "${local.context.organization}-shared"
   databricks_log_delivery_role_name = "${local.context.organization}-databricks-log-delivery"
 
   # Datasets are onboarded through the host, whose URL configures their
   # provider, so an account builds Databricks in two applies: the host first,
   # then the datasets once config.yaml records the host's URL
-  # (databricks.shared_host_url; production's override is null until then).
+  # (databricks.shared_host_url; null until then).
   databricks_host_recorded = try(local.databricks.shared_host_url, null) != null
 
   onboarded_datasets = local.databricks_enabled && local.databricks_host_recorded ? module.dataset_registry.datasets : {}
@@ -287,7 +286,7 @@ check "shared_host_url" {
 }
 
 module "databricks_ci_plan" {
-  for_each = local.served_databricks_projects
+  for_each = local.databricks_projects
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
   version  = "0.2.0"
 
@@ -309,7 +308,7 @@ module "databricks_ci_plan" {
 }
 
 module "databricks_ci_apply" {
-  for_each = local.served_databricks_projects
+  for_each = local.databricks_projects
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
   version  = "0.2.0"
 

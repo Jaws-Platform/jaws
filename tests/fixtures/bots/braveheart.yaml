@@ -3,10 +3,10 @@ project: braveheart
 repository: Braveheart-Chess/braveheart
 
 # The tags every resource carries (through the provider's default_tags), plus
-# ManagedBy=jwall-engineering-infra, which the tool adds.
+# ManagedBy=jaws, which the tool adds.
 # Project, Repository and Environment=prod are cross-checked.
 tags:
-  Organization: jwall-engineering
+  Organization: jaws
   Project: braveheart
   Environment: prod
   Repository: Braveheart-Chess/braveheart
@@ -27,12 +27,12 @@ components:
     config: lichess/config.yml      # lichess-bot config with LICHESS_TOKEN_PLACEHOLDER
     lichess_user: rusty-chess-bot   # optional: for the profile URL in `bot status`
     secrets:
-      LICHESS_TOKEN: /jwall-engineering/braveheart/lichess-token
+      LICHESS_TOKEN: /jaws/braveheart/lichess-token
     engine:
       hash_mb: 128                  # UCI Hash
       move_overhead_ms: 500         # UCI Move Overhead (lichess-bot's own move_overhead stays in config.yml)
     records:
-      s3: true                      # sync game_records/ to s3://jwall-engineering-braveheart-records/records/
+      s3: true                      # sync game_records/ to s3://jaws-braveheart-records/records/
     logs:
       retention_days: 30
 
@@ -96,6 +96,6 @@ components:
 
   - kind: dataset                   # optional: a kept-forever, append-only S3 bucket (docs/datasets.md)
     name: nnue
-    bucket: jwall-engineering-braveheart-nnue  # <Organization>-<project>-<name>, written out for workflows
+    bucket: jaws-braveheart-nnue  # <Organization>-<project>-<name>, written out for workflows
     prefix: data/                   # everything the project writes lives under it
     writers: [task-runner]          # task instances may add objects under the prefix, never read or delete

@@ -30,7 +30,6 @@ from tests.conftest import (
     FIXTURES,
     MATH_PROVER_GUARDRAILS,
     fixture_settings,
-    management_only,
     with_guardrails,
 )
 
@@ -43,7 +42,7 @@ ACCOUNT_OUTPUTS: dict[str, Any] = {
     "admin_group_name": "databricks-poc-workspace-admins",
     "users_group_name": "databricks-poc-workspace-users",
     "metastore_id": "abcdef01-2345-6789-abcd-ef0123456789",
-    "root_bucket_name": "jwall-engineering-databricks-poc-databricks-root",
+    "root_bucket_name": "jaws-databricks-poc-databricks-root",
 }
 
 
@@ -73,9 +72,7 @@ def _scheduled() -> dict[str, Any]:
 
 
 def _bot_in_production() -> dict[str, Any]:
-    """braveheart-bot's live file as the production view renders it while it moves:
-    its tags as the file states them (Organization: jwall-engineering), its token
-    parameter under production's prefix (an absolute secret path is one account's)."""
+    """braveheart-bot's live file with its token parameter as an absolute path."""
     raw = _registered("braveheart-bot")
     bot = next(c for c in raw["components"] if c["kind"] == "lichess-bot")
     bot["secrets"] = {"LICHESS_TOKEN": "/jaws/braveheart-bot/lichess-token"}
@@ -95,52 +92,24 @@ def _handshakes() -> Access:
     return compute_access(registry, {name: files.load(name) for name in projects})
 
 
-TRAINER = "braveheart-trainer"
-
-
-def _moving(settings: Settings, project: str) -> Settings:
-    """`settings` with `project` moving, whatever config.yaml says today."""
-    assert settings.production is not None
-    projects = {**settings.production.projects, project: "moving"}
-    production = settings.production.model_copy(update={"projects": projects})
-    return settings.model_copy(update={"production": production})
-
-
 def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
     """Each test file's inputs: by stack (its directory under stacks/), then by case name."""
     research = with_guardrails(settings, "math-prover", MATH_PROVER_GUARDRAILS)
     # The braveheart sample keeps its own central entry: the real engine's shrank at the split.
     sample = with_guardrails(settings, "braveheart", BRAVEHEART_GUARDRAILS)
-    production = fixture_settings(environ={}, account="production")
     handshakes = _handshakes()
-    # The two dataset projects as each case states, not as config.yaml has them
-    # today: neither moving, or braveheart-selfplay moving with trainer still
-    # management-only (the first step of their move, docs/datasets.md).
-    dataset_projects = ("braveheart-selfplay", "braveheart-trainer")
-    still = management_only(settings, *dataset_projects)
-    selfplay_moving = _moving(still, "braveheart-selfplay")
-    selfplay_in_production = _moving(
-        management_only(production, *dataset_projects), "braveheart-selfplay"
-    )
-    both_in_production = _moving(selfplay_in_production, TRAINER)
     bots = {
         "braveheart": (_file("braveheart"), sample),
         "scheduled_bot": (_scheduled(), sample),
-        "selfplay": (_registered("braveheart-selfplay"), still),
-        "trainer": (_registered("braveheart-trainer"), still),
-        "selfplay_moving": (_registered("braveheart-selfplay"), selfplay_moving),
-        "selfplay_in_production": (_registered("braveheart-selfplay"), selfplay_in_production),
-        # The second step: braveheart-trainer moving too.
-        "trainer_moving": (_registered("braveheart-trainer"), _moving(selfplay_moving, TRAINER)),
-        "trainer_in_production": (_registered("braveheart-trainer"), both_in_production),
-        "selfplay_joined_in_production": (_registered("braveheart-selfplay"), both_in_production),
+        "selfplay": (_registered("braveheart-selfplay"), settings),
+        "trainer": (_registered("braveheart-trainer"), settings),
         "math_prover": (_file("math-prover"), research),
         "dataset_only": (_dataset_only(), research),
-        "production_bot": (_bot_in_production(), production),
+        "production_bot": (_bot_in_production(), settings),
         # Pi's benchmark files: the live file, a dataset alone, only ever in production.
-        "pi_benchmarks": (_registered("pi-benchmarks"), production),
-        # Pi's run records: the live file, a dataset alone for now, only ever in production.
-        "pi_prover": (_registered("pi-prover"), production),
+        "pi_benchmarks": (_registered("pi-benchmarks"), settings),
+        # Pi's run records: the live file, a dataset alone for now.
+        "pi_prover": (_registered("pi-prover"), settings),
     }
     databricks = _project(_file("databricks-poc"), settings)
     return {

@@ -61,7 +61,7 @@ projects:
     instance_types: [c8a.xlarge, ...]
     task_profiles: [cpu, gpu, sprt, match, datagen, relabel]
     datasets:
-      jwall-engineering-braveheart-nnue: {}
+      jaws-braveheart-nnue: {}
 ```
 
 `foundation/bots.tf` reads `projects` for the launch role's allow-lists and
@@ -114,17 +114,14 @@ Then, in this repository:
    `local.research_projects` there, which gives it `compute/*` instead of
    `container/*` and no release role.
 3. Add its `projects:` entry to `config.yaml`: instance types, task profiles,
-   and each dataset bucket with its retention. The management account is
-   retired, so a new project is born in production: list it under
-   `production.projects` as `moved`, and approve each bucket under
-   production's name alone (`jaws-<project>-<name>`). Keep
+   and each dataset bucket with its retention, named
+   `<Organization>-<project>-<name>` (`jaws-<project>-<name>`). Keep
    `tests/fixtures/config.yaml` identical to `config.yaml`, and regenerate the
    foundation's fixtures with `uv run python -m tests.test_foundation_fixtures`.
 4. Add a copy of the project file as `tests/fixtures/registry/<project>.yaml`.
    `tests/test_bots_registry.py` checks steps 2 and 3 against it. Add the
    project to that file's `test_registry_lists_braveheart`, which lists every
-   entry, and to `BORN_IN_PRODUCTION`, so no management-account bucket is
-   expected for it. (`tests/fixtures/bots/` holds samples, such as
+   entry. (`tests/fixtures/bots/` holds samples, such as
    `math-prover`, that are not registered.)
 5. Add it to the CI matrices: `bot-plan` in `.github/workflows/ci.yml` and
    the `project` options in `.github/workflows/bot-apply.yml`. On this pull
@@ -172,7 +169,7 @@ project: math-prover
 repository: jwallace145/math-prover
 
 tags:
-  Organization: jwall-engineering
+  Organization: jaws
   Project: math-prover
   Environment: prod
   Repository: jwallace145/math-prover
@@ -181,7 +178,7 @@ tags:
 components:
   - kind: dataset
     name: artifacts
-    bucket: jwall-engineering-math-prover-artifacts
+    bucket: jaws-math-prover-artifacts
     prefix: data/
     versioning: true
     expire_noncurrent_days: 90
@@ -221,7 +218,7 @@ projects:
     instance_types: [c8a.xlarge, g6e.xlarge, g6e.2xlarge, g6e.4xlarge]
     task_profiles: [cpu, train]
     datasets:
-      jwall-engineering-math-prover-artifacts:
+      jaws-math-prover-artifacts:
         prefix: data/
         versioning: true
         write_once: [runs/, models/]
@@ -429,10 +426,6 @@ grants stay in state and are destroyed with the roles they sit on. It refuses
 while task instances run. It also refuses a file that `config.yaml` no longer
 allows, so destroy before removing the project's central entry.
 
-Moving to production ends the same way: `destroy --account management` removes
-the old stack and keeps its buckets. The whole move, with the data copy, is in
-[Moving a dataset project to production](datasets.md#moving-a-dataset-project-to-production).
-
 Applying the project again afterwards is not automated. The kept buckets
 exist in AWS but not in state, so an administrator imports them first.
 
@@ -480,7 +473,7 @@ dataset's `name`):
 
 ```sh
 dataset='module.datasets["artifacts"]'
-bucket=jwall-engineering-math-prover-artifacts
+bucket=jaws-math-prover-artifacts
 for resource in \
   'aws_s3_bucket.this' \
   'aws_s3_bucket_server_side_encryption_configuration.this' \
@@ -499,7 +492,7 @@ versioning on. Then the task results bucket, whose versioning has no `count`:
 
 ```sh
 results='module.task_results[0]'
-bucket=jwall-engineering-math-prover-tasks
+bucket=jaws-math-prover-tasks
 for resource in \
   'aws_s3_bucket.this' \
   'aws_s3_bucket_server_side_encryption_configuration.this' \
@@ -539,9 +532,6 @@ lifecycle configuration, which is why retention is approved in `config.yaml`.
 - **The rendered inputs** pass the stack's and modules' validations in
   `scripts/test-stack-plans.sh`, against a mock provider. That is a plan with no
   AWS behind it, so it says nothing about IAM or what AWS accepts.
-- **`moved` blocks** (`module.image` to `module.image[0]`, and the others) are
-  proven by the CI **Bot plan** for braveheart, which must show no create or
-  destroy.
 - **The write-once IAM** was proven in a live test on 2026-11-03 with a
   temporary bucket and role, both deleted: new keys succeed, existing keys
   and plain uploads fail. That test used AWS CLI 2.34.59.

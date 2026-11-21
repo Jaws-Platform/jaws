@@ -1,6 +1,6 @@
-# braveheart-bot's live file rendered in the production view, as while it moves:
-# the file states Organization jwall-engineering, the CLI stamps production's
-# tags over it, and the stack names everything from the stamped tag.
+# braveheart-bot's live file, with its token parameter as an absolute path: the
+# CLI stamps the account's tags over the file's, and the stack names everything
+# from the stamped tag.
 mock_provider "aws" {
   source = "./tests/mocks"
 }

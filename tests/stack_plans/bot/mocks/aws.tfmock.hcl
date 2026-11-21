@@ -9,8 +9,8 @@ mock_data "aws_ami" {
 
 mock_data "aws_caller_identity" {
   defaults = {
-    account_id = "650503560686"
-    arn        = "arn:aws:iam::650503560686:root"
+    account_id = "570327089884"
+    arn        = "arn:aws:iam::570327089884:root"
   }
 }
 

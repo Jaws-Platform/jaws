@@ -83,20 +83,13 @@ class Project(BaseModel):
                         "which the release role can write"
                     )
         for dataset in config.datasets:
-            # Either account's name: the file names where its workflows point,
-            # which flips at the project's cutover; the tool always uses this
-            # account's (Project.dataset_bucket).
-            names = [
-                f"{org}-{config.project}-{dataset.name}"
-                for org in settings.organizations or (organization,)
-            ]
-            if dataset.bucket not in names:
+            name = f"{organization}-{config.project}-{dataset.name}"
+            if dataset.bucket != name:
                 problems.append(
-                    f"dataset {dataset.name}: bucket must be "
-                    f"{' or '.join(repr(n) for n in names)} "
+                    f"dataset {dataset.name}: bucket must be {name!r} "
                     f"(<Organization>-<project>-<name>), got {dataset.bucket!r}"
                 )
-            for name in names:
+            if True:
                 if len(name) > 63:
                     problems.append(
                         f"dataset {dataset.name}: bucket {name!r} exceeds 63 characters"

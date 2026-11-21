@@ -18,8 +18,8 @@ from tests.conftest import FIXTURES, REPO_ROOT, fixture_config
 
 def test_repository_config_loads() -> None:
     settings = load_settings(REPO_ROOT / "config.yaml", environ={})
-    assert settings.ecr.repository == "jwall-engineering-sites"
-    assert settings.state.bucket == "jwall-engineering-tfstate"
+    assert settings.ecr.repository == "jaws-cli"
+    assert settings.state.bucket == "jaws-terraform-state-570327089884"
     assert settings.dns.zone == "jwall.engineering"
 
 
@@ -78,7 +78,7 @@ def test_env_overrides_only_logging(tmp_path: Path) -> None:
     )
     assert settings.tool.log_level == "debug"
     assert settings.tool.log_format == "json"
-    assert settings.state.bucket == "jwall-engineering-tfstate"
+    assert settings.state.bucket == "jaws-terraform-state-570327089884"
 
 
 def test_missing_file_is_a_config_error(tmp_path: Path) -> None:
@@ -106,7 +106,7 @@ def test_bot_health_seconds_bounds(tmp_path: Path) -> None:
 
 def test_aws_account_is_configured(settings: Settings) -> None:
     """The one place the account ID lives: workflows build role ARNs from it."""
-    assert settings.aws.account_id == "650503560686"
+    assert settings.aws.account_id == "570327089884"
 
 
 def test_the_development_account_is_recorded(settings: Settings) -> None:
@@ -121,7 +121,7 @@ def test_a_development_account_id_must_be_twelve_digits(tmp_path: Path) -> None:
         load_settings(path, environ={})
 
 
-@pytest.mark.parametrize("other", ["650503560686", "570327089884"])
+@pytest.mark.parametrize("other", ["570327089884", "570327089884"])
 def test_the_development_account_is_neither_other_account(tmp_path: Path, other: str) -> None:
     path = _write(tmp_path, {"development.account_id": other})
     with pytest.raises(ConfigError, match=r"development\.account_id"):
@@ -206,8 +206,8 @@ def test_braveheart_guardrails_match_the_previous_lists(settings: Settings) -> N
         "g6e.xlarge",
     )
     assert guardrails.task_profiles == ("cpu", "gpu", "sprt", "match", "datagen", "relabel")
-    assert list(guardrails.datasets) == ["jwall-engineering-braveheart-nnue"]
-    retention = guardrails.datasets["jwall-engineering-braveheart-nnue"]
+    assert list(guardrails.datasets) == ["jaws-braveheart-nnue"]
+    retention = guardrails.datasets["jaws-braveheart-nnue"]
     assert retention.write_once == ()
     assert retention.expire_prefixes == {}
     assert retention.expire_noncurrent_days is None
@@ -300,7 +300,7 @@ def test_central_retention_must_name_the_dataset_prefix(
 
 
 def test_an_empty_central_entry_needs_no_prefix(settings: Settings) -> None:
-    entry = settings.projects["braveheart"].datasets["jwall-engineering-braveheart-nnue"]
+    entry = settings.projects["braveheart"].datasets["jaws-braveheart-nnue"]
     assert entry.prefix is None
 
 
@@ -347,9 +347,9 @@ def test_databricks_section_parses(settings: Settings) -> None:
     assert section is not None
     assert section.enabled is True
     assert section.has_placeholder_ids is False  # the real IDs are filled in
-    assert section.secret_parameter == "/jwall-engineering/databricks/client-secret"
-    assert section.metastore_name == "jwall-engineering-us-east-1"
-    assert section.audit_bucket == "jwall-engineering-databricks-audit-logs"
+    assert section.secret_parameter == "/jaws/databricks/client-secret"
+    assert section.metastore_name == "jaws-us-east-1"
+    assert section.audit_bucket == "jaws-databricks-audit-logs"
     assert section.events_prefix == "events/"
     assert section.readiness_timeout_seconds == 1200
     assert set(section.compute_policies) == {"small-interactive", "jobs"}

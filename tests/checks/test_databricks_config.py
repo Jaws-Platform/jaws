@@ -199,7 +199,7 @@ def test_cfg004_passes(databricks: Project, settings: Settings) -> None:
 
 def test_cfg004_fails_on_a_long_project_name(databricks: Project, settings: Settings) -> None:
     long = databricks.model_copy(
-        update={"config": databricks.config.model_copy(update={"project": "p" * 30})}
+        update={"config": databricks.config.model_copy(update={"project": "p" * 40})}
     )
     result = _run("DBX-CFG-004", long, settings)
     assert result.outcome is Outcome.FAIL

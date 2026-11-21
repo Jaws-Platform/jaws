@@ -1,6 +1,6 @@
 # Identity of this stack: who owns it, which repo manages it, and the tag set
 # that default_tags stamps on everything. Derived from the library's context
-# module so every jwall-engineering stack tags resources the same way.
+# module so every jaws stack tags resources the same way.
 
 locals {
   region = "us-east-1"
@@ -11,17 +11,13 @@ locals {
   context = {
     organization = local.account.context.organization
     # Project tag value, and the prefix of this stack's Name tags.
-    project     = local.in_production ? "jaws" : "jwall-engineering-infra"
+    project     = "jaws"
     environment = "prod"
     repository  = "Jaws-Platform/jaws"
 
-    # The `Repository` tag. Unchanged in the management account: its resources
-    # leave with the move to production, and retagging 144 of them (a
-    # Databricks workspace and a storage credential among them) would buy nothing.
-    # Unchanged by the transfer to Jaws-Platform too, for the same reason: the
-    # tag names where the stack was first applied, and only trust needs the
-    # repository's current name.
-    repository_tag = local.in_production ? "jwallace145/jaws" : "jwallace145/jwall-engineering-infra"
+    # The `Repository` tag: the repository's name when this stack was first
+    # applied. Correcting it retags every resource, so that is its own change.
+    repository_tag = "jwallace145/jaws"
     owner          = "jwallace145"
 
     # Other names the roles its own workflows assume also trust, because
@@ -44,7 +40,7 @@ locals {
   }
 
   # Resource name prefix for this stack's own CI roles and Name tags. The
-  # role names are fixed by convention (jwall-engineering-infra-ci-*), so this
+  # role names are fixed by convention (jaws-infra-ci-*), so this
   # is intentionally not module.context.name_prefix, which adds "-prod".
   name_prefix = local.context.project
 }

@@ -103,8 +103,8 @@ def test_plan_sync_requires_trailing_slash() -> None:
 @mock_aws
 def test_round_trip_uploads_html_last_and_deletes(dist: Path, logger: logging.Logger) -> None:
     s3 = boto3.client("s3", region_name="us-east-1")
-    s3.create_bucket(Bucket="jwall-engineering-guitar-knowledge-base")
-    bucket = "jwall-engineering-guitar-knowledge-base"
+    s3.create_bucket(Bucket="jaws-guitar-knowledge-base")
+    bucket = "jaws-guitar-knowledge-base"
     s3.put_object(Bucket=bucket, Key="prod/stale.html", Body=b"old")
     s3.put_object(Bucket=bucket, Key="previews/pr-1/index.html", Body=b"other prefix")
 
@@ -134,7 +134,7 @@ def test_round_trip_uploads_html_last_and_deletes(dist: Path, logger: logging.Lo
 @mock_aws
 def test_delete_prefix_is_idempotent(logger: logging.Logger) -> None:
     s3 = boto3.client("s3", region_name="us-east-1")
-    bucket = "jwall-engineering-guitar-knowledge-base"
+    bucket = "jaws-guitar-knowledge-base"
     s3.create_bucket(Bucket=bucket)
     s3.put_object(Bucket=bucket, Key="previews/pr-9/index.html", Body=b"x")
     s3.put_object(Bucket=bucket, Key="previews/pr-10/index.html", Body=b"y")

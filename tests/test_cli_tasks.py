@@ -15,10 +15,8 @@ from jaws import cli, tasks
 from tests.test_cli import BOT_PLAN_ROLE, RESEARCH_PLAN_ROLE, _as_role
 
 runner = CliRunner()
-TASK_ROLE = "arn:aws:sts::650503560686:assumed-role/jwall-engineering-braveheart-ci-task/s"
-RESEARCH_TASK_ROLE = (
-    "arn:aws:sts::650503560686:assumed-role/jwall-engineering-math-prover-ci-task/s"
-)
+TASK_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-braveheart-ci-task/s"
+RESEARCH_TASK_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-math-prover-ci-task/s"
 SHA = "0123456789abcdef0123456789abcdef01234567"
 NOW = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
 
@@ -313,7 +311,7 @@ def test_task_list_refuses_another_projects_role_on_research(research_fleet: lis
     with _as_role(BOT_PLAN_ROLE):
         result = runner.invoke(cli.app, ["task", "list"])
     assert result.exit_code == 3
-    assert "jwall-engineering-math-prover-ci-plan" in result.output
+    assert "jaws-math-prover-ci-plan" in result.output
 
 
 def test_task_terminate_and_sweep_work_on_research(research_fleet: list[str]) -> None:

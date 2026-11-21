@@ -1,7 +1,7 @@
 # This repository's own CI roles, assumed by GitHub Actions through OIDC.
 #
-#   jwall-engineering-infra-ci-plan   trusted for pull_request      tfstate/read, foundation/read, databricks/read
-#   jwall-engineering-infra-ci-apply  trusted for environment:prod  tfstate/write, foundation/read, foundation/manage, ecr/push,
+#   jaws-infra-ci-plan   trusted for pull_request      tfstate/read, foundation/read, databricks/read
+#   jaws-infra-ci-apply  trusted for environment:prod  tfstate/write, foundation/read, foundation/manage, ecr/push,
 #                                                                   databricks/read
 #
 # databricks/read lets both roles read the Databricks client secret, which
@@ -13,15 +13,15 @@
 # ci-policies catalog, built for this stack. The plan role only accepts read
 # policies. The apply role is the highest-privilege identity in the setup:
 # foundation/manage restricts its IAM permissions to roles and policies named
-# jwall-engineering-* and allow-lists the managed policies it may attach, so it
+# jaws-* and allow-lists the managed policies it may attach, so it
 # cannot attach an AWS-managed policy such as AdministratorAccess. It can still
-# edit jwall-engineering-* roles and policies, itself included, so the prod
+# edit jaws-* roles and policies, itself included, so the prod
 # environment must stay protected. The full justification is in the
 # ci-policies README; a summary is in README.md.
 
 locals {
   infra_ci = {
-    # Short role-name segment (jwall-engineering-infra-ci-plan/apply).
+    # Short role-name segment (jaws-infra-ci-plan/apply).
     # Deliberately not local.context.project, which is the Project tag value;
     # changing this renames and replaces the roles.
     project = "infra"
@@ -39,7 +39,7 @@ locals {
     foundation = {
       state_bucket_arn             = module.state_bucket.arn
       hosted_zone_arn              = module.zone.arn
-      service_linked_role_services = local.owns_spot_service_linked_role ? ["spot.amazonaws.com"] : []
+      service_linked_role_services = local.hosts_task_runners ? ["spot.amazonaws.com"] : []
     }
 
     # The infra CLI image this repo publishes on release.
@@ -104,8 +104,8 @@ module "infra_ci_apply" {
 
 # The reconcile's roles (data-access/, .github/workflows/data-access.yml):
 #
-#   jwall-engineering-data-access-ci-plan   trusted for pull_request      tfstate/read, databricks/read
-#   jwall-engineering-data-access-ci-apply  trusted for environment:prod  tfstate/write, databricks/read
+#   jaws-data-access-ci-plan   trusted for pull_request      tfstate/read, databricks/read
+#   jaws-data-access-ci-apply  trusted for environment:prod  tfstate/write, databricks/read
 #
 # The stack only binds and grants in Databricks, through the service principal
 # whose secret databricks/read reads; neither role has any other AWS

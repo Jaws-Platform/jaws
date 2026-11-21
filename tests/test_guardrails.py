@@ -23,7 +23,7 @@ from jaws.site import SiteConfig, load_site_config
 from tests.conftest import FIXTURES, with_guardrails
 
 BOT_FILE = FIXTURES / "bots" / "braveheart.yaml"
-BUCKET = "jwall-engineering-braveheart-nnue"
+BUCKET = "jaws-braveheart-nnue"
 
 
 def _raw() -> dict[str, Any]:
@@ -89,9 +89,9 @@ def test_other_project_names_need_their_own_entry(settings: Settings) -> None:
     raw["project"] = "other"
     raw["tags"]["Project"] = "other"
     dataset = _component(raw, "dataset")
-    dataset["bucket"] = "jwall-engineering-other-nnue"
+    dataset["bucket"] = "jaws-other-nnue"
     other = settings.projects["braveheart"].model_copy(
-        update={"datasets": {"jwall-engineering-other-nnue": DatasetRetention()}}
+        update={"datasets": {"jaws-other-nnue": DatasetRetention()}}
     )
     assert _problems(raw, settings) != []  # no entry for "other" yet
     assert _problems(raw, with_guardrails(settings, "other", other)) == []

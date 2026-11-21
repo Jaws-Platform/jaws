@@ -52,9 +52,9 @@ variable "tags" {
       lookup(var.tags, "Project", null) == var.project &&
       lookup(var.tags, "Repository", null) == var.repository &&
       lookup(var.tags, "Environment", null) == var.environment &&
-      contains(["jwall-engineering-infra", "jaws"], lookup(var.tags, "ManagedBy", ""))
+      lookup(var.tags, "ManagedBy", "") == "jaws"
     )
-    error_message = "tags.Project, tags.Repository and tags.Environment must equal project, repository and environment, and tags.ManagedBy must be `jwall-engineering-infra` or `jaws` (the account's, stamped by the CLI)."
+    error_message = "tags.Project, tags.Repository and tags.Environment must equal project, repository and environment, and tags.ManagedBy must be `jaws` (stamped by the CLI)."
   }
 }
 

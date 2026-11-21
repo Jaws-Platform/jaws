@@ -10,7 +10,7 @@ repository: Braveheart-Chess/braveheart-databricks
 # Project, Repository and Environment=prod are cross-checked; the CLI adds
 # ManagedBy, CostCenter and Workspace itself.
 tags:
-  Organization: jwall-engineering
+  Organization: jaws
   Project: braveheart-databricks
   Environment: prod
   Repository: Braveheart-Chess/braveheart-databricks

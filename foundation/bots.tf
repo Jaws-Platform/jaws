@@ -3,15 +3,15 @@
 # adding a line here; each entry gets three CI roles, and a fourth with a
 # task runner (config.yaml, projects.*.instance_types):
 #
-#   jwall-engineering-<key>-ci-plan     trusted for pull_request on THIS repo     tfstate/read, container/read, task/read
+#   jaws-<key>-ci-plan     trusted for pull_request on THIS repo     tfstate/read, container/read, task/read
 #                                                                                 (+ dataset/read with datasets)
 #                                                                                 (compute/read for container/read on research)
-#   jwall-engineering-<key>-ci-apply    trusted for environment:prod on THIS repo tfstate/write, container/read, container/manage, task/read,
+#   jaws-<key>-ci-apply    trusted for environment:prod on THIS repo tfstate/write, container/read, container/manage, task/read,
 #                                                                                 task/manage, container/schedule
 #                                                                                 (+ dataset/read, dataset/manage with datasets)
 #                                                                                 (compute/* for container/* on research; no container/schedule)
-#   jwall-engineering-<key>-ci-release  trusted for the bot repo's v* tags only   container/release (none on research)
-#   jwall-engineering-<key>-ci-task     trusted for the bot repo's pull_request   task/launch, for every task profile
+#   jaws-<key>-ci-release  trusted for the bot repo's v* tags only   container/release (none on research)
+#   jaws-<key>-ci-task     trusted for the bot repo's pull_request   task/launch, for every task profile
 #                                       and main only (never forks)
 #
 # The bot's infrastructure is planned and applied from this repository (the
@@ -19,7 +19,7 @@
 # replace the instance, so it is a deliberate act here, not a consumer push.
 # The consumer's own release workflow only ships images and rolls them out,
 # with the release role, which can push to the bot's image repository, write
-# /jwall-engineering/<key>/bot/* parameters and run the reconciler, and
+# /jaws/<key>/bot/* parameters and run the reconciler, and
 # nothing else (it cannot read the Lichess token).
 #
 # State lives in the shared bucket under project=<key>/ (state.tf).
@@ -77,30 +77,18 @@ locals {
   # only for a caller allowed to, and a task launch role is not. A project file
   # picks spot or on demand per profile, out of this repository's sight, so any
   # task runner counts.
-  hosts_task_runners = anytrue([for key, _ in local.bot_task_types : try(local.serves[key], false)])
-
-  # Whether the foundation owns the account's EC2 Spot service-linked role
-  # (spot_service_linked_role.tf). Wherever task runners run, and in the
-  # management account even after its last research project moved to
-  # production (2026-11-21): the role there predates this repository and is
-  # kept as it is until the management account's foundation is retired, when
-  # the owner decides between keeping it and deleting it.
-  owns_spot_service_linked_role = local.hosts_task_runners || var.account == "management"
+  hosts_task_runners = length(local.bot_task_types) > 0
 
   # Bots with dataset components, and their buckets, <Organization>-<project>-<name>.
   # Their plan and apply roles may read and configure these buckets, never
-  # their objects. Only the buckets that carry this account's prefix: a project
-  # that is moving has its old buckets approved in the management account and
-  # its new ones in production, and each account's roles manage their own.
+  # their objects.
   bot_dataset_names = {
-    for k, p in local.tool_config.projects : k => [
-      for name in keys(try(p.datasets, {})) : name if startswith(name, "${local.context.organization}-")
-    ]
+    for k, p in local.tool_config.projects : k => keys(try(p.datasets, {}))
   }
   bot_datasets = { for k, names in local.bot_dataset_names : k => names if length(names) > 0 }
 
   bot_tfstate = {
-    for key, bot in local.served_bots : key => {
+    for key, bot in local.bots : key => {
       bucket_arn = module.state_bucket.arn
       prefix     = "project=${key}/"
     }
@@ -108,7 +96,7 @@ locals {
 }
 
 module "bot_ci_plan" {
-  for_each = local.served_bots
+  for_each = local.bots
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
   version  = "0.2.0"
 
@@ -133,7 +121,7 @@ module "bot_ci_plan" {
 }
 
 module "bot_ci_apply" {
-  for_each = local.served_bots
+  for_each = local.bots
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
   version  = "0.2.0"
 
@@ -159,7 +147,7 @@ module "bot_ci_apply" {
 }
 
 module "bot_ci_release" {
-  for_each = { for key, bot in local.served_bots : key => bot if !contains(local.research_projects, key) }
+  for_each = { for key, bot in local.bots : key => bot if !contains(local.research_projects, key) }
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-release-role"
   version  = "0.2.0"
 
@@ -178,7 +166,7 @@ module "bot_ci_release" {
 # pull_request and main events only: GitHub issues no OIDC token to fork
 # pull requests, and the remote-task workflow refuses every other event.
 module "bot_ci_task" {
-  for_each = { for key, types in local.bot_task_types : key => types if try(local.serves[key], false) }
+  for_each = local.bot_task_types
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-task-role"
   version  = "0.2.0"
 

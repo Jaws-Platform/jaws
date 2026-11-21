@@ -29,13 +29,11 @@ def test_a_registry_file_is_its_id(tmp_path: Path) -> None:
     write(tmp_path / "braveheart-selfplay" / "positions.yaml", "description: d\nprefix: data/\n")
     (d,) = load_registry(tmp_path)
     assert (d.id, d.key) == ("braveheart-selfplay/positions", "braveheart-selfplay-positions")
-    assert (
-        d.platform_name("jwall-engineering") == "jwall-engineering-ds-braveheart-selfplay-positions"
-    )
-    assert d.bucket("jwall-engineering") == "jwall-engineering-braveheart-selfplay-positions"
-    assert d.url("jwall-engineering") == "s3://jwall-engineering-braveheart-selfplay-positions/data"
-    assert d.role_arn("650503560686", "jwall-engineering") == (
-        "arn:aws:iam::650503560686:role/jwall-engineering-ds-braveheart-selfplay-positions"
+    assert d.platform_name("jaws") == "jaws-ds-braveheart-selfplay-positions"
+    assert d.bucket("jaws") == "jaws-braveheart-selfplay-positions"
+    assert d.url("jaws") == "s3://jaws-braveheart-selfplay-positions/data"
+    assert d.role_arn("570327089884", "jaws") == (
+        "arn:aws:iam::570327089884:role/jaws-ds-braveheart-selfplay-positions"
     )
     assert (d.prefix, d.description) == ("data/", "d")
 
@@ -43,15 +41,15 @@ def test_a_registry_file_is_its_id(tmp_path: Path) -> None:
 def test_as_dict_is_what_the_foundation_derives(tmp_path: Path) -> None:
     write(tmp_path / "braveheart-selfplay" / "positions.yaml", "description: d\nprefix: data/v1/\n")
     (d,) = load_registry(tmp_path)
-    assert d.as_dict("jwall-engineering") == {
+    assert d.as_dict("jaws") == {
         "id": "braveheart-selfplay/positions",
         "owner": "braveheart-selfplay",
         "name": "positions",
         "prefix": "data/v1/",
         "description": "d",
-        "platform_name": "jwall-engineering-ds-braveheart-selfplay-positions",
-        "bucket": "jwall-engineering-braveheart-selfplay-positions",
-        "url": "s3://jwall-engineering-braveheart-selfplay-positions/data/v1",
+        "platform_name": "jaws-ds-braveheart-selfplay-positions",
+        "bucket": "jaws-braveheart-selfplay-positions",
+        "url": "s3://jaws-braveheart-selfplay-positions/data/v1",
         "catalog": "braveheart_selfplay",
         "schema": "positions",
         "volume": "files",
@@ -144,5 +142,5 @@ def test_infra_root_is_the_env_override_else_the_configs_directory(
 def test_python_and_terraform_derive_the_same_registry() -> None:
     """foundation/registry's terraform test asserts the same file for the same fixtures."""
     expected = json.loads((FIXTURES / "datasets-expected.json").read_text())
-    derived = {d.key: d.as_dict("jwall-engineering") for d in load_registry(FIXTURES / "datasets")}
+    derived = {d.key: d.as_dict("jaws") for d in load_registry(FIXTURES / "datasets")}
     assert derived == expected

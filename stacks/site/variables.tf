@@ -3,7 +3,7 @@
 # config.yaml; the CLI writes them to terraform.tfvars.json.
 
 variable "project" {
-  description = "Project name in kebab-case. The site bucket is `jwall-engineering-<project>`."
+  description = "Project name in kebab-case. The site bucket is `<organization>-<project>`, for example `jaws-<project>`."
   type        = string
 
   validation {
@@ -72,7 +72,7 @@ variable "tags" {
   }
 
   validation {
-    condition     = contains(["jwall-engineering-infra", "jaws"], lookup(var.tags, "ManagedBy", "")) && lookup(var.tags, "Environment", null) == "prod"
-    error_message = "tags.ManagedBy must be `jwall-engineering-infra` or `jaws` (the account's, stamped by the CLI) and tags.Environment must be `prod`."
+    condition     = lookup(var.tags, "ManagedBy", "") == "jaws" && lookup(var.tags, "Environment", null) == "prod"
+    error_message = "tags.ManagedBy must be `jaws` (stamped by the CLI) and tags.Environment must be `prod`."
   }
 }

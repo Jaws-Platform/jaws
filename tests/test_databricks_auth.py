@@ -26,7 +26,7 @@ from jaws.errors import ConfigError, PreflightError
 from jaws.settings import Settings
 
 SENTINEL = "S3CR3T-SENTINEL"
-PARAMETER = "/jwall-engineering/databricks/client-secret"
+PARAMETER = "/jaws/databricks/client-secret"
 ACCOUNT_ID = "11111111-2222-3333-4444-555555555555"
 CLIENT_ID = "66666666-7777-8888-9999-000000000000"
 

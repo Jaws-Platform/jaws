@@ -42,23 +42,11 @@ def _index(steps: list[dict[str, Any]], predicate: Any) -> int:
 # --- the credential script --------------------------------------------------
 
 
-def _run_credentials(
-    tmp_path: Path,
-    *,
-    enabled: bool,
-    account: str | None = None,
-    production_enabled: bool | None = False,
-) -> tuple[str, Path, Path]:
+def _run_credentials(tmp_path: Path, *, enabled: bool) -> tuple[str, Path, Path]:
     """Source the script in a step-like shell (`bash -e`) with a fake `aws` that returns
-    SENTINEL, then print the environment the step's terraform would see. `account` is
-    the script's second argument; `production_enabled` is production's override of
-    `databricks.enabled` (None removes the override)."""
+    SENTINEL, then print the environment the step's terraform would see."""
     config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
     config["databricks"]["enabled"] = enabled
-    if production_enabled is None:
-        config["production"]["overrides"].pop("databricks")
-    else:
-        config["production"]["overrides"]["databricks"] = {"enabled": production_enabled}
     (tmp_path / "config.yaml").write_text(yaml.safe_dump(config))
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -69,12 +57,7 @@ def _run_credentials(
     github_env = tmp_path / "github-env"
     github_env.touch()
     result = subprocess.run(
-        [
-            "bash",
-            "-e",
-            "-c",
-            f'source "{CREDENTIALS_SCRIPT}" config.yaml {account or ""}\necho ---\nenv',
-        ],
+        ["bash", "-e", "-c", f'source "{CREDENTIALS_SCRIPT}" config.yaml\necho ---\nenv'],
         cwd=tmp_path,
         env={
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
@@ -91,49 +74,10 @@ def _run_credentials(
 
 
 @needs_yq
-def test_production_needs_no_credential_while_databricks_is_off_there(tmp_path: Path) -> None:
-    """Databricks stays in the management account until it moves as a whole: the
-    production foundation is planned and applied without the credential."""
-    out, calls, _ = _run_credentials(tmp_path, enabled=True, account="production")
-    printed, environment = out.split("---\n", 1)
-    assert "no Databricks credential is needed" in printed
-    assert not calls.exists(), "the secret must not be read for production"
-    assert "DATABRICKS_CLIENT_SECRET" not in environment
-
-
-@needs_yq
-@pytest.mark.parametrize("account", [None, "management"])
-def test_management_reads_the_credential_whatever_production_says(
-    tmp_path: Path, account: str | None
-) -> None:
-    out, calls, _ = _run_credentials(tmp_path, enabled=True, account=account)
-    assert calls.exists()
+def test_the_credential_is_read_while_databricks_is_enabled(tmp_path: Path) -> None:
+    out, calls, _ = _run_credentials(tmp_path, enabled=True)
+    assert "--name /jaws/databricks/client-secret" in calls.read_text()
     assert f"DATABRICKS_CLIENT_SECRET={SENTINEL}" in out.split("---\n", 1)[1]
-
-
-@needs_yq
-def test_production_follows_the_shared_setting_without_an_override(tmp_path: Path) -> None:
-    out, calls, _ = _run_credentials(
-        tmp_path, enabled=True, account="production", production_enabled=None
-    )
-    assert calls.exists()
-    assert f"DATABRICKS_CLIENT_SECRET={SENTINEL}" in out.split("---\n", 1)[1]
-
-
-@needs_yq
-def test_production_can_turn_databricks_on_while_management_has_it_off(tmp_path: Path) -> None:
-    """The day Databricks moves: off in management, on in production."""
-    out, calls, _ = _run_credentials(
-        tmp_path, enabled=False, account="production", production_enabled=True
-    )
-    assert calls.exists()
-    assert f"DATABRICKS_CLIENT_SECRET={SENTINEL}" in out.split("---\n", 1)[1]
-
-
-@needs_yq
-def test_an_unknown_account_is_refused(tmp_path: Path) -> None:
-    with pytest.raises(subprocess.CalledProcessError):
-        _run_credentials(tmp_path, enabled=True, account="dev")
 
 
 @needs_yq
@@ -152,7 +96,7 @@ def test_the_secret_is_masked_before_it_is_used_and_stays_in_the_step(tmp_path: 
     assert github_env.read_text() == ""
     call = calls.read_text()
     assert "ssm get-parameter" in call and "--with-decryption" in call
-    assert "--name /jwall-engineering/databricks/client-secret" in call
+    assert "--name /jaws/databricks/client-secret" in call
 
 
 @needs_yq
@@ -185,7 +129,7 @@ def test_a_multiline_secret_fails_the_step_without_printing_it(tmp_path: Path) -
     assert SENTINEL not in result.stdout + result.stderr
 
 
-_SOURCE = 'source ../scripts/databricks-credentials.sh ../config.yaml "$ACCOUNT"'
+_SOURCE = "source ../scripts/databricks-credentials.sh ../config.yaml"
 
 
 @pytest.mark.parametrize(
@@ -263,15 +207,11 @@ def test_the_registry_script_reads_databricks_tf(tmp_path: Path) -> None:
 
 
 @needs_yq
-@pytest.mark.parametrize(
-    ("management", "production", "enabled"),
-    [(True, False, True), (False, True, True), (False, False, False)],
-)
+@pytest.mark.parametrize("enabled", [True, False])
 def test_the_setup_job_outputs_the_enabled_flag_and_the_registry(
-    tmp_path: Path, management: bool, production: bool, enabled: bool
+    tmp_path: Path, enabled: bool
 ) -> None:
-    """Run in a copy of the repo with Databricks enabled in management, in
-    production, or in neither: the plans run while either account enables it."""
+    """Run in a copy of the repo with Databricks enabled or not."""
     steps = _steps("ci.yml", "databricks-projects")
     step = steps[_index(steps, lambda s: s.get("id") == "list")]
     root = tmp_path / "repo"
@@ -279,8 +219,7 @@ def test_the_setup_job_outputs_the_enabled_flag_and_the_registry(
     (root / "foundation").mkdir()
     shutil.copy(REPO_ROOT / "foundation" / "databricks.tf", root / "foundation")
     config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
-    config["databricks"]["enabled"] = management
-    config["production"]["overrides"]["databricks"]["enabled"] = production
+    config["databricks"]["enabled"] = enabled
     (root / "config.yaml").write_text(yaml.safe_dump(config))
     output = tmp_path / "out"
     subprocess.run(
@@ -330,7 +269,7 @@ def test_the_plan_job_never_runs_for_forks_and_waits_for_projects() -> None:
 def test_the_plan_job_uses_the_projects_plan_role_and_skips_until_it_exists() -> None:
     steps = _steps("ci.yml", "databricks-plan")
     role = steps[_index(steps, lambda s: s.get("id") == "role")]
-    assert 'uv run jaws config env --project "$PROJECT"' in role["run"]
+    assert "uv run jaws config env" in role["run"]
     assert ':role/${organization}-${PROJECT}-ci-plan"' in role["run"]
     assume = steps[_index(steps, lambda s: s.get("id") == "assume")]
     assert assume["continue-on-error"] is True
@@ -348,7 +287,7 @@ def test_the_plan_job_uses_the_projects_plan_role_and_skips_until_it_exists() ->
 def test_databricks_apply_is_a_manual_prod_run() -> None:
     apply = _yaml(WORKFLOWS / "databricks-apply.yml")
     inputs = apply[True]["workflow_dispatch"]["inputs"]
-    assert set(inputs) == {"project", "action", "account"}
+    assert set(inputs) == {"project", "action"}
     assert inputs["project"]["required"] is True
     assert inputs["action"] == {
         "description": inputs["action"]["description"],
@@ -377,7 +316,7 @@ def test_databricks_apply_runs_the_projects_file_with_its_apply_role() -> None:
         "${{ inputs.action == 'destroy' && 'destroy --yes' || "
         "inputs.action == 'doctor' && 'databricks doctor' || 'apply' }}"
     )
-    assert '--file .consumer/jaws.yaml ${ACCOUNT:+--account "$ACCOUNT"} $COMMAND' in run["run"]
+    assert "--file .consumer/jaws.yaml $COMMAND" in run["run"]
     upload = steps[-1]
     assert upload["if"] == "always()"
     assert upload["with"]["path"] == ".jaws/"
@@ -397,12 +336,3 @@ def test_databricks_apply_refuses_an_unregistered_project(tmp_path: Path) -> Non
     )
     assert result.returncode != 0
     assert "not-a-project is not in foundation/databricks.tf" in result.stdout
-
-
-def test_the_databricks_plans_run_wherever_databricks_is_enabled() -> None:
-    """Databricks is enabled in one account at a time: the plans run when either
-    account enables it, not only management."""
-    ci = _yaml(REPO_ROOT / ".github" / "workflows" / "ci.yml")
-    step = next(s for s in ci["jobs"]["databricks-projects"]["steps"] if s.get("id") == "list")
-    assert ".production.overrides.databricks.enabled" in step["run"]
-    assert ".databricks.enabled" in step["run"]

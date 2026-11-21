@@ -31,7 +31,7 @@ from jaws.stack import (
     render_backend,
     render_tfvars,
 )
-from tests.conftest import FIXTURES, REPO_ROOT, management_only
+from tests.conftest import FIXTURES, REPO_ROOT
 
 #: What each site's infra/ directory produced before the migration, by project.
 #: Step 6's "no changes" plan depends on these staying identical.
@@ -40,19 +40,19 @@ EXPECTED_TFVARS = {
         "domain_name": "guitar.jwall.engineering",
         "dev_domain_name": None,
         "enable_preview": True,
-        "zone_id": "Z029546536VUFGDCPXZ21",
+        "zone_id": "Z0644006DW6W2HALU9BI",
     },
     "cs-survival-guide": {
         "domain_name": "survival-guide.jwall.engineering",
         "dev_domain_name": None,
         "enable_preview": True,
-        "zone_id": "Z029546536VUFGDCPXZ21",
+        "zone_id": "Z0644006DW6W2HALU9BI",
     },
     "main-site": {
         "domain_name": "jwall.engineering",
         "dev_domain_name": None,
         "enable_preview": True,
-        "zone_id": "Z029546536VUFGDCPXZ21",
+        "zone_id": "Z0644006DW6W2HALU9BI",
     },
 }
 
@@ -64,13 +64,13 @@ def test_rendered_tfvars_match_the_old_infra_directories(site: Site) -> None:
     assert tfvars["project"] == site.project
     assert tfvars["repository"] == site.config.repository
     assert tfvars["tags"]["Project"] == site.project
-    assert tfvars["tags"]["Organization"] == "jwall-engineering"
-    assert tfvars["tags"]["ManagedBy"] == "jwall-engineering-infra"
+    assert tfvars["tags"]["Organization"] == "jaws"
+    assert tfvars["tags"]["ManagedBy"] == "jaws"
 
 
 def test_rendered_backend_matches_the_old_backend_files(site: Site) -> None:
     assert render_backend(site) == (
-        'bucket       = "jwall-engineering-tfstate"\n'
+        'bucket       = "jaws-terraform-state-570327089884"\n'
         f'key          = "project={site.project}/env=prod/{site.project}-prod.tfstate"\n'
         'region       = "us-east-1"\n'
         "use_lockfile = true\n"
@@ -101,17 +101,17 @@ def test_render_tfvars_for_bot(bot: Project, settings: Settings) -> None:
         "project": "braveheart",
         "repository": "Braveheart-Chess/braveheart",
         "tags": {
-            "Organization": "jwall-engineering",
+            "Organization": "jaws",
             "Project": "braveheart",
             "Environment": "prod",
             "Repository": "Braveheart-Chess/braveheart",
             "Owner": "jwallace145",
-            "ManagedBy": "jwall-engineering-infra",
+            "ManagedBy": "jaws",
         },
         "bot_enabled": True,
         "instance_type": "t3.micro",
         "architecture": "x86_64",
-        "secret_parameters": {"LICHESS_TOKEN": "/jwall-engineering/braveheart/lichess-token"},
+        "secret_parameters": {"LICHESS_TOKEN": "/jaws/braveheart/lichess-token"},
         "container_environment": {"ENGINE_HASH_MB": "128", "ENGINE_MOVE_OVERHEAD_MS": "500"},
         "bot_name": "rusty-chess-bot",
         "records_enabled": True,
@@ -206,7 +206,7 @@ def test_render_tfvars_for_bot(bot: Project, settings: Settings) -> None:
         "datasets": [
             {
                 "name": "nnue",
-                "bucket": "jwall-engineering-braveheart-nnue",
+                "bucket": "jaws-braveheart-nnue",
                 "prefix": "data/",
                 "writers": ["task-runner"],
                 "readers": [],
@@ -615,7 +615,7 @@ def test_research_tfvars(research: Project, settings: Settings) -> None:
     assert tfvars["datasets"] == [
         {
             "name": "artifacts",
-            "bucket": "jwall-engineering-math-prover-artifacts",
+            "bucket": "jaws-math-prover-artifacts",
             "prefix": "data/",
             "writers": [],
             "readers": [],
@@ -679,19 +679,6 @@ def test_network_exists_for_a_bot_or_a_task_runner() -> None:
     assert modules["records"]["count"] == "var.records_enabled ? 1 : 0"
     assert modules["tasks"]["count"] == "var.task_runner_enabled ? 1 : 0"
     assert modules["task_results"]["count"] == "var.task_runner_enabled ? 1 : 0"
-
-
-def test_stack_has_moved_blocks() -> None:
-    moved = [
-        (attributes["from"], attributes["to"])
-        for kind, _, attributes in _blocks(REPO_ROOT / "stacks" / "bot" / "main.tf")
-        if kind == "moved"
-    ]
-    assert sorted(moved) == [
-        ("module.bot", "module.bot[0]"),
-        ("module.image", "module.image[0]"),
-        ("module.network", "module.network[0]"),
-    ]
 
 
 def test_gated_modules_are_only_referenced_by_index() -> None:
@@ -870,7 +857,7 @@ ACCOUNT_OUTPUTS: dict[str, Any] = {
     "admin_group_name": "databricks-poc-workspace-admins",
     "users_group_name": "databricks-poc-workspace-users",
     "metastore_id": "abcdef01-2345-6789-abcd-ef0123456789",
-    "root_bucket_name": "jwall-engineering-databricks-poc-databricks-root",
+    "root_bucket_name": "jaws-databricks-poc-databricks-root",
 }
 
 ACCOUNT_TFVARS_KEYS = {
@@ -926,7 +913,7 @@ def test_databricks_account_tfvars(databricks: Project, settings: Settings) -> N
         "tags": databricks.databricks_tags,
         "vpc_cidr": "10.40.0.0/16",
         "nat_ami_name": settings.databricks.nat_ami,
-        "metastore_name": "jwall-engineering-us-east-1",
+        "metastore_name": "jaws-us-east-1",
         "deployment_name": None,  # no prefix configured: Databricks picks the URL
         "admin_user_names": ["jimmy.wallace145@gmail.com"],
         "user_names": ["user@example.com"],  # the project file's users, not config.yaml
@@ -1106,10 +1093,10 @@ def test_workspace_tfvars_take_account_outputs(databricks: Project, settings: Se
     assert tfvars["fixed_tags"] == databricks.databricks_tags
     assert "governance_project" not in tfvars
     assert tfvars["apply_role_arn"] == (
-        "arn:aws:iam::650503560686:role/jwall-engineering-databricks-poc-ci-apply"
+        "arn:aws:iam::570327089884:role/jaws-databricks-poc-ci-apply"
     )
     assert tfvars["management_role_arns"] == [
-        "arn:aws:iam::650503560686:role/jwall-engineering-databricks-poc-ci-plan"
+        "arn:aws:iam::570327089884:role/jaws-databricks-poc-ci-plan"
     ]
     assert tfvars["catalog_tags"] == {"Project": "databricks-poc", "Owner": "owner@example.com"}
 
@@ -1377,9 +1364,9 @@ def test_extra_env_is_not_in_the_parent_environment(
 
 # -- readers and endpoints from handshakes (access.py) -----------------------------
 
-_ROLES = "arn:aws:iam::650503560686:role/"
-_TRAINER_GPU = _ROLES + "jwall-engineering-braveheart-trainer-task-gpu"
-_POSITIONS_ROLE = _ROLES + "jwall-engineering-ds-braveheart-selfplay-positions"
+_ROLES = "arn:aws:iam::570327089884:role/"
+_TRAINER_GPU = _ROLES + "jaws-braveheart-trainer-task-gpu"
+_POSITIONS_ROLE = _ROLES + "jaws-ds-braveheart-selfplay-positions"
 
 
 def _registry_project(name: str, settings: Settings) -> Project:
@@ -1407,7 +1394,6 @@ def _access(consumer_reads: bool = True) -> Any:
 
 
 def test_a_shared_dataset_names_its_platform_role_as_a_reader(settings: Settings) -> None:
-    settings = management_only(settings, "braveheart-selfplay", "braveheart-trainer")
     tfvars = render_tfvars(
         _registry_project("braveheart-selfplay", settings), settings, access=_access()
     )
@@ -1416,7 +1402,6 @@ def test_a_shared_dataset_names_its_platform_role_as_a_reader(settings: Settings
 
 
 def test_a_pending_handshake_adds_no_reader(settings: Settings) -> None:
-    settings = management_only(settings, "braveheart-selfplay", "braveheart-trainer")
     project = _registry_project("braveheart-selfplay", settings)
     for access in (_access(consumer_reads=False), None):
         (dataset,) = render_tfvars(project, settings, access=access)["datasets"]
@@ -1428,7 +1413,7 @@ def test_the_consumer_endpoint_gets_each_edge(settings: Settings) -> None:
     tfvars = render_tfvars(project, settings, stack="account", access=_access())
     assert tfvars["read_only_datasets"] == {
         "braveheart-selfplay-positions": {
-            "bucket": "jwall-engineering-braveheart-selfplay-positions",
+            "bucket": "jaws-braveheart-selfplay-positions",
             "prefix": "data/",
             "role_arn": _POSITIONS_ROLE,
         }

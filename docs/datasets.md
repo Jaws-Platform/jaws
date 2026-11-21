@@ -18,7 +18,7 @@ components:
   # ...container-image, lichess-bot, task-runner...
   - kind: dataset
     name: nnue                                 # kebab-case; not records or tasks
-    bucket: jwall-engineering-braveheart-nnue # <Organization>-<project>-<name>
+    bucket: jaws-braveheart-nnue # <Organization>-<project>-<name>
     prefix: data/                              # everything the project writes lives under it
     writers: [task-runner]                     # optional: who may add objects
     # readers: [braveheart-trainer/task-gpu]   # optional: <project>/<role> or a role ARN
@@ -66,12 +66,10 @@ module, in the bot stack.
   stops `PutObject` replacing a key. Prefixes that `config.yaml` lists under
   `write_once` are enforced: see [Write-once prefixes](#write-once-prefixes).
 - **Versioning is off unless the project turns it on** (and `config.yaml`
-  approves it). `jwall-engineering-braveheart-nnue` has it off, because it
-  would only store an accidental re-upload twice. The buckets the Braveheart
-  split copies it into, `jwall-engineering-braveheart-selfplay-positions` and
-  `jwall-engineering-braveheart-trainer-nets`, have it on with no expiry: the
-  data can't be regenerated cheaply, and an overwrite or a delete stays
-  recoverable. When it is on:
+  approves it). Off, an accidental re-upload is only stored once. Braveheart's
+  `jaws-braveheart-selfplay-positions` and `jaws-braveheart-trainer-nets` have
+  it on with no expiry: the data can't be regenerated cheaply, and an overwrite
+  or a delete stays recoverable. When it is on:
   - S3 advises waiting 15 minutes after enabling versioning before writing.
   - `expire_prefixes` only adds delete markers on a versioned bucket; the data
     stays, and is billed, until `expire_noncurrent_days` expires the
@@ -108,44 +106,6 @@ resources (the bucket, its policy and its configuration) from Terraform state
 before applying, as `destroy` does, then removes the dataset's grants from the
 task roles. The bucket is no longer managed here; the owner deletes it when its
 data has a home.
-
-## Moving a dataset project to production
-
-A research project moves with its datasets: a new, empty bucket in production,
-a server-side copy, an audit, then the cutover. The old bucket is released and
-kept. While the project is `moving` (`production.projects` in `config.yaml`):
-
-- The same project file renders in both accounts. Each account uses its own
-  bucket name, and `<project>/<role>` readers resolve to each account's roles.
-- `config.yaml` approves both buckets under `projects.<name>.datasets`. Each
-  account's foundation grants its CI roles the bucket with its own prefix.
-- The old bucket's policy lets production's admin role
-  (`production.overrides.aws.admin_role_arn`) read it. The owner copies as that
-  role, server-side in the same region, so no data leaves AWS.
-- No Databricks share role is named in an account whose Databricks is off. A
-  workspace in the old account keeps reading the old bucket until it moves too.
-
-Two projects that read each other's buckets (braveheart-selfplay and
-braveheart-trainer) become `moving` one release apart. The first's production
-bucket names no reader from the second until the second has a stack there.
-Apply the first again after the second's first apply.
-
-The copy and its audit, as the owner (`jaws-prod`), with every writer paused:
-
-```sh
-export AWS_PROFILE=jaws-prod
-old=jwall-engineering-<project>-<name>; new=jaws-<project>-<name>
-aws s3 sync "s3://$old/data/" "s3://$new/data/" --only-show-errors
-# key, size and ETag of every object (braveheart-selfplay's script)
-ci/bucket-copy-audit.sh --prefix data/ "$old" "$new"
-```
-
-Only current versions are copied; the old bucket keeps its history. A second
-`sync` copies only what changed, so the final one at the cutover is short. At
-the cutover the consumer's PR moves its pin to a release that lists the project
-`moving` and sets `bucket:` to the production name. `destroy --account management`
-then releases the old buckets from state, keeps them, and removes the rest of the
-old stack, and the project becomes `moved`.
 
 ## Who can do what
 
@@ -196,7 +156,7 @@ downloading and uploading again.
 The instances write with the AWS CLI and the instance role's credentials:
 
 ```sh
-aws s3 cp --only-show-errors FILE s3://jwall-engineering-braveheart-nnue/data/selfplay/v1/...
+aws s3 cp --only-show-errors FILE s3://jaws-braveheart-nnue/data/selfplay/v1/...
 ```
 
 ## Reading the data
@@ -206,7 +166,7 @@ Run these from your machine with the admin profile ([owner access](owner-access.
 ```sh
 aws sso login --profile jwall-admin
 export AWS_PROFILE=jwall-admin
-B=s3://jwall-engineering-braveheart-nnue/data
+B=s3://jaws-braveheart-nnue/data
 
 # Generations and runs
 aws s3 ls "$B/selfplay/v1/"

@@ -25,7 +25,7 @@ mock_provider "databricks" {
     defaults = {
       names = [
         "braveheart-databricks-catalog",
-        "jwall-engineering-ds-braveheart-selfplay-positions",
+        "jaws-ds-braveheart-selfplay-positions",
       ]
     }
   }
@@ -52,12 +52,12 @@ mock_provider "databricks" {
 variables {
   host_workspace_url = "https://dbc-01234567-89ab.cloud.databricks.com"
   fingerprint        = "0f5b6a3c9d8e7f60123456789abcdef0123456789abcdef0123456789abcdef0"
-  owner_group_name   = "jwall-engineering-metastore-admins"
+  owner_group_name   = "jaws-metastore-admins"
   datasets = {
     braveheart-selfplay-positions = {
       id              = "braveheart-selfplay/positions"
-      location_name   = "jwall-engineering-ds-braveheart-selfplay-positions"
-      credential_name = "jwall-engineering-ds-braveheart-selfplay-positions"
+      location_name   = "jaws-ds-braveheart-selfplay-positions"
+      credential_name = "jaws-ds-braveheart-selfplay-positions"
       catalog         = "braveheart_selfplay"
       schema          = "positions"
       volume          = "files"
@@ -179,8 +179,8 @@ run "a_dataset_nobody_reads_keeps_its_instance_and_binds_nothing" {
     datasets = {
       braveheart-selfplay-positions = {
         id              = "braveheart-selfplay/positions"
-        location_name   = "jwall-engineering-ds-braveheart-selfplay-positions"
-        credential_name = "jwall-engineering-ds-braveheart-selfplay-positions"
+        location_name   = "jaws-ds-braveheart-selfplay-positions"
+        credential_name = "jaws-ds-braveheart-selfplay-positions"
         catalog         = "braveheart_selfplay"
         schema          = "positions"
         volume          = "files"
@@ -225,15 +225,15 @@ run "two_datasets_of_one_producer_with_different_consumers" {
 
   override_data {
     target = data.databricks_external_locations.all
-    values = { names = ["jwall-engineering-ds-braveheart-selfplay-games", "jwall-engineering-ds-braveheart-selfplay-positions"] }
+    values = { names = ["jaws-ds-braveheart-selfplay-games", "jaws-ds-braveheart-selfplay-positions"] }
   }
 
   variables {
     datasets = {
       braveheart-selfplay-positions = {
         id              = "braveheart-selfplay/positions"
-        location_name   = "jwall-engineering-ds-braveheart-selfplay-positions"
-        credential_name = "jwall-engineering-ds-braveheart-selfplay-positions"
+        location_name   = "jaws-ds-braveheart-selfplay-positions"
+        credential_name = "jaws-ds-braveheart-selfplay-positions"
         catalog         = "braveheart_selfplay"
         schema          = "positions"
         volume          = "files"
@@ -243,8 +243,8 @@ run "two_datasets_of_one_producer_with_different_consumers" {
       }
       braveheart-selfplay-games = {
         id              = "braveheart-selfplay/games"
-        location_name   = "jwall-engineering-ds-braveheart-selfplay-games"
-        credential_name = "jwall-engineering-ds-braveheart-selfplay-games"
+        location_name   = "jaws-ds-braveheart-selfplay-games"
+        credential_name = "jaws-ds-braveheart-selfplay-games"
         catalog         = "braveheart_selfplay"
         schema          = "games"
         volume          = "files"
@@ -321,8 +321,8 @@ run "the_last_edge_into_a_producer_unbinds_its_catalog" {
     datasets = {
       braveheart-selfplay-positions = {
         id              = "braveheart-selfplay/positions"
-        location_name   = "jwall-engineering-ds-braveheart-selfplay-positions"
-        credential_name = "jwall-engineering-ds-braveheart-selfplay-positions"
+        location_name   = "jaws-ds-braveheart-selfplay-positions"
+        credential_name = "jaws-ds-braveheart-selfplay-positions"
         catalog         = "braveheart_selfplay"
         schema          = "positions"
         volume          = "files"

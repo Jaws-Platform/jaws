@@ -7,7 +7,7 @@ project: math-prover
 repository: jwallace145/math-prover
 
 tags:
-  Organization: jwall-engineering
+  Organization: jaws
   Project: math-prover
   Environment: prod
   Repository: jwallace145/math-prover
@@ -16,7 +16,7 @@ tags:
 components:
   - kind: dataset                   # sample: a versioned bucket for training artifacts
     name: artifacts
-    bucket: jwall-engineering-math-prover-artifacts
+    bucket: jaws-math-prover-artifacts
     prefix: data/
     versioning: true
     expire_noncurrent_days: 90

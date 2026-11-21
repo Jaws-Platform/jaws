@@ -1,10 +1,9 @@
-"""The composite action pulls the CLI image of the account its role is in.
+"""The composite action pulls the CLI image of config.yaml's account.
 
-Each account has its own image repository (`ecr.repository` in config.yaml:
-`jwall-engineering-sites` in management, `jaws-cli` in production) and ECR
-login reaches only the role's own registry. A step reads the role's account
-and takes the repository from config.yaml at the action's own commit. That
-step's script is run here, with a stand-in `aws` and the real `yq`.
+ECR login reaches only the role's own registry, so a step checks that the role
+is in config.yaml's account and takes the image repository (`ecr.repository`)
+from config.yaml at the action's own commit. That step's script is run here,
+with a stand-in `aws` and the real `yq`.
 """
 
 from __future__ import annotations
@@ -15,15 +14,13 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-import pytest
 import yaml
 
 from tests.conftest import REPO_ROOT
 
 ACTION_DIR = REPO_ROOT / ".github" / "actions" / "jaws"
 CONFIG = REPO_ROOT / "config.yaml"
-MANAGEMENT = "650503560686"
-PRODUCTION = "570327089884"
+ACCOUNT = "570327089884"
 
 
 def _steps() -> list[dict[str, Any]]:
@@ -90,19 +87,13 @@ def test_the_image_comes_from_the_resolved_repository() -> None:
     run = next(s for s in _steps() if s.get("id") == "run")
     assert run["env"]["REPOSITORY"] == "${{ steps.image.outputs.repository }}"
     assert 'image="$REGISTRY/$REPOSITORY:$IMAGE_TAG"' in run["run"]
-    assert "jwall-engineering-sites" not in (ACTION_DIR / "action.yml").read_text()
+    assert "jaws-cli" not in (ACTION_DIR / "action.yml").read_text()
 
 
-@pytest.mark.parametrize(
-    ("account", "repository"),
-    [(MANAGEMENT, "jwall-engineering-sites"), (PRODUCTION, "jaws-cli")],
-)
-def test_each_account_pulls_its_own_repository(
-    tmp_path: Path, account: str, repository: str
-) -> None:
-    result, output = _resolve(tmp_path, account, CONFIG)
+def test_the_account_pulls_its_repository(tmp_path: Path) -> None:
+    result, output = _resolve(tmp_path, ACCOUNT, CONFIG)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert output.splitlines() == [f"repository={repository}"]
+    assert output.splitlines() == ["repository=jaws-cli"]
 
 
 def test_an_account_config_yaml_does_not_name_stops_the_job(tmp_path: Path) -> None:
@@ -113,20 +104,9 @@ def test_an_account_config_yaml_does_not_name_stops_the_job(tmp_path: Path) -> N
     assert output == ""
 
 
-def test_without_a_production_section_only_management_resolves(tmp_path: Path) -> None:
-    config = _config_without(tmp_path, "production")
-    management, output = _resolve(tmp_path, MANAGEMENT, config)
-    assert management.returncode == 0, management.stdout + management.stderr
-    assert output.splitlines() == ["repository=jwall-engineering-sites"]
-    production, output = _resolve(tmp_path, PRODUCTION, config)
-    assert production.returncode != 0
-    assert PRODUCTION in production.stdout
-    assert output == ""
-
-
-def test_production_never_falls_back_to_management_s_repository(tmp_path: Path) -> None:
-    config = _config_without(tmp_path, "production", "overrides", "ecr")
-    result, output = _resolve(tmp_path, PRODUCTION, config)
+def test_a_config_without_an_image_repository_stops_the_job(tmp_path: Path) -> None:
+    config = _config_without(tmp_path, "ecr", "repository")
+    result, output = _resolve(tmp_path, ACCOUNT, config)
     assert result.returncode != 0
     assert "::error::" in result.stdout
     assert output == ""

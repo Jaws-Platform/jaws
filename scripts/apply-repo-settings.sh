@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Applies the jwall-engineering repository settings to this repo with the GitHub
+# Applies the owner's repository settings to this repo with the GitHub
 # CLI. Run once, after the conventions PR is merged and CI has run at least
 # once (ruleset status checks must name existing checks).
 #

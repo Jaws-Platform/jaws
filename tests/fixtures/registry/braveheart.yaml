@@ -17,11 +17,10 @@ repository: Braveheart-Chess/braveheart
 # The six tags every resource carries (through the provider's default_tags).
 # Project, Repository, Environment=prod and ManagedBy=terraform are cross-checked.
 tags:
-  Organization: jwall-engineering
+  Organization: jaws
   Project: braveheart
   Environment: prod
   Repository: Braveheart-Chess/braveheart
-  ManagedBy: terraform
   Owner: jwallace145
 
 components:

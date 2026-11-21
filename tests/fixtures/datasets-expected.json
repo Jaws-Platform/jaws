@@ -1,15 +1,15 @@
 {
   "braveheart-selfplay-positions": {
-    "bucket": "jwall-engineering-braveheart-selfplay-positions",
+    "bucket": "jaws-braveheart-selfplay-positions",
     "catalog": "braveheart_selfplay",
     "description": "Braveheart self-play positions and label sets, every generation",
     "id": "braveheart-selfplay/positions",
     "name": "positions",
     "owner": "braveheart-selfplay",
-    "platform_name": "jwall-engineering-ds-braveheart-selfplay-positions",
+    "platform_name": "jaws-ds-braveheart-selfplay-positions",
     "prefix": "data/",
     "schema": "positions",
-    "url": "s3://jwall-engineering-braveheart-selfplay-positions/data",
+    "url": "s3://jaws-braveheart-selfplay-positions/data",
     "volume": "files"
   }
 }

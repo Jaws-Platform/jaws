@@ -4,7 +4,7 @@ variable "directory" {
 }
 
 variable "organization" {
-  description = "The organization prefix of every name, for example `jwall-engineering`."
+  description = "The organization prefix of every name, for example `jaws`."
   type        = string
 }
 

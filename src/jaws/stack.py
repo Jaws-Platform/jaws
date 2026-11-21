@@ -256,38 +256,19 @@ def _dataset_readers(
     project: Project, dataset: Dataset, settings: Settings, access: Access | None
 ) -> list[str]:
     """Every role the dataset's bucket policy lets read, in this account."""
-    readers = [
-        arn for arn in (_reader_arn(r, settings) for r in dataset.readers) if arn is not None
-    ]
-    return (
-        readers
-        + _copy_readers(project, settings)
-        + _edge_readers(project, dataset.name, settings, access)
-    )
+    readers = [_reader_arn(r, settings) for r in dataset.readers]
+    return readers + _edge_readers(project, dataset.name, settings, access)
 
 
-def _reader_arn(reader: str, settings: Settings) -> str | None:
-    """A reader's role ARN in this account. A `<project>/<role>` reader is named
-    only once that project has a stack here: a bucket policy cannot name a role
-    that does not exist, and its first apply in an account creates it."""
+def _reader_arn(reader: str, settings: Settings) -> str:
+    """A reader's role ARN: an ARN as given, or a `<project>/<role>` reader's role
+    in the account (`<Organization>-<project>-<role>`)."""
     named = project_reader(reader)
     if named is None:
         return reader
     owner, role = named
-    if not settings.has_stack(owner):
-        return None
     name = f"{settings.context.organization}-{owner}-{role}"
     return f"arn:aws:iam::{settings.aws.account_id}:role/{name}"
-
-
-def _copy_readers(project: Project, settings: Settings) -> list[str]:
-    """Production's admin role, on a moving project's management buckets: the
-    owner copies them server-side into production's as that role."""
-    if settings.account != "management" or settings.project_state(project.project) != "moving":
-        return []
-    assert settings.production is not None  # a project is moving only with a production section
-    admin = settings.production.overrides.get("aws", {}).get("admin_role_arn")
-    return [str(admin)] if admin else []
 
 
 def _edge_readers(
