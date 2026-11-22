@@ -114,27 +114,50 @@
 
 ```python
 def test_recent_periods_are_the_previous_and_current_month(self):
-    self.assertEqual(export.periods_to_export("recent", date(2026, 11, 21), lambda: []), ["2026-10", "2026-11"])
+    self.assertEqual(
+        export.periods_to_export("recent", date(2026, 11, 21), lambda: []), ["2026-10", "2026-11"]
+    )
+
 
 def test_recent_periods_cross_the_year(self):
-    self.assertEqual(export.periods_to_export("recent", date(2026, 1, 3), lambda: []), ["2025-12", "2026-01"])
+    self.assertEqual(
+        export.periods_to_export("recent", date(2026, 1, 3), lambda: []), ["2025-12", "2026-01"]
+    )
+
 
 def test_all_uses_every_available_month_sorted(self):
-    self.assertEqual(export.periods_to_export("all", date(2026, 11, 21), lambda: ["2026-02", "2025-12"]), ["2025-12", "2026-02"])
+    self.assertEqual(
+        export.periods_to_export("all", date(2026, 11, 21), lambda: ["2026-02", "2025-12"]),
+        ["2025-12", "2026-02"],
+    )
+
 
 def test_explicit_months(self):
-    self.assertEqual(export.periods_to_export("2026-09, 2026-10", date(2026, 11, 21), lambda: []), ["2026-09", "2026-10"])
+    self.assertEqual(
+        export.periods_to_export("2026-09, 2026-10", date(2026, 11, 21), lambda: []),
+        ["2026-09", "2026-10"],
+    )
+
 
 def test_bad_periods_are_rejected(self):
     for spec in ("", "last", "2026-13", "2026-9", "2026-09,,2026-10"):
         with self.subTest(spec=spec), self.assertRaises(ValueError):
             export.periods_to_export(spec, date(2026, 11, 21), lambda: [])
 
+
 def test_month_bounds_and_keys(self):
     self.assertEqual(export.month_bounds("2026-12"), ("2026-12-01", "2027-01-01"))
-    self.assertEqual(export.run_stamp(datetime(2026, 11, 21, 6, 0, 7, tzinfo=UTC)), "20261121T060007Z")
-    self.assertEqual(export.usage_key("raw/p", "2026-11", "R"), "raw/p/table=usage/billing_period=2026-11/run=R/part-0.parquet")
-    self.assertEqual(export.table_key("raw/p", "list_prices", "R"), "raw/p/table=list_prices/run=R/part-0.parquet")
+    self.assertEqual(
+        export.run_stamp(datetime(2026, 11, 21, 6, 0, 7, tzinfo=UTC)), "20261121T060007Z"
+    )
+    self.assertEqual(
+        export.usage_key("raw/p", "2026-11", "R"),
+        "raw/p/table=usage/billing_period=2026-11/run=R/part-0.parquet",
+    )
+    self.assertEqual(
+        export.table_key("raw/p", "list_prices", "R"),
+        "raw/p/table=list_prices/run=R/part-0.parquet",
+    )
 ```
 
 Also, with a fixture `usage_row()`: a dict shaped like `Row.asDict(recursive=True)`, with `custom_tags={"Project": "a"}`, `usage_quantity=Decimal("2.5")`, a `usage_metadata` dict and a `product_features` dict.
