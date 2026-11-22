@@ -697,7 +697,6 @@ def test_outputs_keep_their_names_and_are_null_safe() -> None:
     expected = {
         "image_repository_url": "module.image[0].url",
         "instance_id": "module.bot[0].instance_id",
-        "public_ip": "module.bot[0].public_ip",
         "log_group_name": "module.bot[0].log_group_name",
         "parameter_names": "module.bot[0].parameter_names",
         "records_uri": "module.bot[0].records_uri",
@@ -713,6 +712,14 @@ def test_outputs_keep_their_names_and_are_null_safe() -> None:
         "dataset_uris",
         "task_profile_launch_templates",
     }
+
+
+def test_no_output_follows_the_public_ip() -> None:
+    """A scheduled bot gets a new public IP at every start, so an output of it
+    would put a change in every plan. `bot status` reads the IP from EC2."""
+    outputs = _bot_stack("output", "outputs.tf")
+    assert "public_ip" not in outputs
+    assert not [name for name, o in outputs.items() if "public_ip" in o["value"]]
 
 
 def test_rust_toolchain_follows_the_rust_flags() -> None:
