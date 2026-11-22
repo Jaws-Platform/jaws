@@ -45,8 +45,8 @@ third without being reshaped.
 6. A node that can die, be replaced, or be stopped on a schedule, and come
    back with its cost data and metrics history intact.
 7. Generic, optional modules: every feature is off until its input is
-   given. Jaws's `config.yaml` is the enforcement boundary that turns on
-   what Jaws uses.
+   given. Jaws's tool configuration (`config/`) is the enforcement
+   boundary that turns on what Jaws uses.
 8. Backfilled history for both providers, where the providers allow it. A
    nice-to-have, not a requirement (12.9).
 9. The cost of every task run, in a table with its project, task and launch
@@ -717,7 +717,7 @@ configuration.
 wants to hear about every expensive run. Before a planned big or overnight
 run, they add a temporary **silence** in Grafana's UI. Silences are
 operational state and allowed even though the rules are provisioned. To
-change a rule for good, they edit its threshold in `config.yaml`.
+change a rule for good, they edit its threshold in `config/monitoring.yaml`.
 
 Rules that depend on data from AWS (credits, status) use
 `execErrState: Alerting`. Pressure-stall metrics are used only if the
@@ -1000,7 +1000,7 @@ inputs, and tags from `default_tags`. Defaults are generic (for example
 
 ## 8. Jaws integration
 
-**`config.yaml`** (platform-owned; projects can't set any of this)
+**`config/monitoring.yaml`** (platform-owned; projects can't set any of this)
 
 ```yaml
 monitoring:
@@ -1036,7 +1036,9 @@ monitoring:
     from 6.10, including timezones with `zoneinfo`, the channel and route
     references, and positive budgets.
   - Project files get no monitoring keys (a test checks).
-  - `tests/fixtures/config.yaml` stays identical to `config.yaml`.
+  - The foundation's test fixtures (`foundation/tests/fixtures/*.yaml`,
+    `config/` as one file) are regenerated from `config/`
+    (`uv run python -m tests.test_foundation_fixtures`; a test checks).
 - **Foundation.**
   - `billing_bucket`, present when `monitoring.cost` is set; its policy
     names `management.account_id`.
@@ -1050,9 +1052,9 @@ monitoring:
     SSM under `/jaws/monitoring/`, and the one Route 53 record.
   - New `foundation.tftest.hcl` runs.
 - **`monitoring/`** is a new top-level stack, like `data-access/`. It reads
-  `config.yaml` and applies `monitoring-node` and `billing-normalizer`. Its
-  workflow plans on PRs and applies in the release apply job (`prod`
-  environment), following `data-access.yml`.
+  `config/` (like `foundation/config.tf`) and applies `monitoring-node`
+  and `billing-normalizer`. Its workflow plans on PRs and applies in the
+  release apply job (`prod` environment), following `data-access.yml`.
 - **`billing-export/`** is a new owner root in the management account.
   `tests/` checks that no CI role or state prefix references it, as with
   `owner-access/`.
