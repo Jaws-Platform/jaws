@@ -81,8 +81,9 @@ the keys Databricks reserves for itself.
 - **Owner access:**
   - `Organization` is `Jaws-Platform` and `ManagedBy` is `JAWS`, like every
     jaws stack.
-  - Its `Project` and `Repository` tags and its names keep the values it was
-    first applied with.
+  - `Project` is `jaws`, as the foundation's, and `Repository` is
+    `Jaws-Platform/jaws`, the repository that manages it. Its names keep the
+    values it was first applied with.
   - Only the owner applies it, so its retag waits for their next apply.
 
 ## Moving to derived tags

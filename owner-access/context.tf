@@ -22,13 +22,14 @@ locals {
   development_account_id = one([for account in values(local.accounts) : account.account_id if account.type == "development"])
 
   context = {
-    # The Organization and ManagedBy tags every jaws stack carries
-    # (docs/tagging.md): the GitHub owner of this repository, and JAWS. The
-    # Project and Repository tags keep the values it was first applied with.
+    # The tags every jaws stack carries (docs/tagging.md): Organization and
+    # ManagedBy from config/tool.yaml (the GitHub owner of this repository, and
+    # JAWS), Project jaws as the foundation's, and Repository the repository
+    # that manages this stack.
     organization = local.tool_config.context.organization
-    project      = "jwall-engineering-infra" # Project tag value
+    project      = "jaws"
     environment  = "prod"
-    repository   = "jwallace145/jwall-engineering-infra" # the Repository tag it was first applied with
+    repository   = "Jaws-Platform/jaws"
     owner        = local.tool_config.context.owner
   }
 }

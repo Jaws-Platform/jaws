@@ -66,6 +66,25 @@ override_resource {
   target = aws_s3_bucket_policy.state
 }
 
+# docs/tagging.md: like every jaws stack, the Organization and ManagedBy tags
+# come from config/tool.yaml, Project is jaws (as the foundation's) and
+# Repository is the repository that manages the stack.
+run "is_tagged_as_part_of_jaws" {
+  command = plan
+
+  assert {
+    condition = jsonencode(module.context.tags) == jsonencode({
+      Organization = "Jaws-Platform"
+      Project      = "jaws"
+      Environment  = "prod"
+      Repository   = "Jaws-Platform/jaws"
+      ManagedBy    = "JAWS"
+      Owner        = "jwallace145"
+    })
+    error_message = "owner-access is tagged Organization=Jaws-Platform, Project=jaws, Repository=Jaws-Platform/jaws, ManagedBy=JAWS"
+  }
+}
+
 run "state_lives_in_its_own_management_account_bucket" {
   command = plan
 
