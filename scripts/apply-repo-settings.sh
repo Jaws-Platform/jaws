@@ -65,7 +65,10 @@ ruleset='{
           { "context": "Databricks projects" },
           { "context": "Owner access stack validate, tflint, test" },
           { "context": "Data access stack validate, tflint, test" },
-          { "context": "Data access plan" }
+          { "context": "Data access plan" },
+          { "context": "Monitoring stack validate, tflint, test" },
+          { "context": "Billing export validate, tflint, test" },
+          { "context": "Monitoring plan" }
         ]
       }
     }

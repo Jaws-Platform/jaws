@@ -166,3 +166,19 @@ def test_the_monitoring_apply_job_applies_the_plan_it_made_with_its_role() -> No
     assert steps[init]["with"]["args"] == "-backend-config=backend/prod.hcl"
     assert "-out=tfplan" in steps[plan]["run"]
     assert steps[apply]["run"].rstrip().endswith("tfplan")
+
+
+def test_the_monitoring_checks_are_required() -> None:
+    """A pull request that breaks monitoring/ or billing-export/ can't merge:
+    their CI jobs are required checks, under their exact job names."""
+    script = (REPO_ROOT / "scripts" / "apply-repo-settings.sh").read_text()
+    required = set(re.findall(r'\{ "context": "([^"]+)" \}', script))
+    ci = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text())
+    names = {job.get("name") for job in ci["jobs"].values()}
+    for check in (
+        "Monitoring stack validate, tflint, test",
+        "Billing export validate, tflint, test",
+        "Monitoring plan",
+    ):
+        assert check in names, f"no ci.yml job is named {check!r}"
+        assert check in required, f"{check!r} is not a required check"
