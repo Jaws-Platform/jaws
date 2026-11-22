@@ -381,6 +381,17 @@ run "the_monitoring_roles_may_change_only_the_grafana_record" {
   }
 }
 
+# The node's Caddy gets its certificate for monitoring.domain from Let's
+# Encrypt, which honours the zone's apex CAA record (RFC 8659 climbs to it).
+run "lets_encrypt_may_issue_the_monitoring_nodes_certificate" {
+  command = plan
+
+  assert {
+    condition     = jsonencode(local.caa_issuers) == jsonencode(["amazon.com", "amazontrust.com", "awstrust.com", "amazonaws.com", "letsencrypt.org"])
+    error_message = "with monitoring.domain the zone's CAA allows ACM's four Amazon issuers and letsencrypt.org, nothing else"
+  }
+}
+
 run "the_monitoring_stack_reaches_its_state" {
   command = plan
 
@@ -432,6 +443,11 @@ run "nothing_of_the_platform_without_its_section" {
   assert {
     condition     = !anytrue([for key in keys(local.state_prefix_access) : startswith(key, "project=monitoring/")])
     error_message = "without the section no state prefix is the monitoring stack's"
+  }
+
+  assert {
+    condition     = jsonencode(local.caa_issuers) == jsonencode(["amazon.com", "amazontrust.com", "awstrust.com", "amazonaws.com"])
+    error_message = "without the section (no node, no monitoring.domain) the zone's CAA allows only ACM's four Amazon issuers"
   }
 }
 
