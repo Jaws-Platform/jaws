@@ -45,40 +45,28 @@ jobs:
           --from ${{ github.event.pull_request.base.sha }}
           --to ${{ github.event.pull_request.head.sha }}
           --verbose
-      - name: Unit test the only-coauthor-trailers rule
-        run: npm test
+      - name: Unit test the commitlint rules and the scopes, and check the fixtures
+        run: npm run test:commitlint
 
   pr-title:
     name: PR title
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: read
+      contents: read
     steps:
-      # Squash merges use the PR title as the commit message, so it must be a
-      # valid Conventional Commit too.
-      - uses: amannn/action-semantic-pull-request@v6
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          types: |
-            feat
-            fix
-            docs
-            chore
-            refactor
-            ci
-            build
-            perf
-            style
-            test
-            revert
-          requireScope: false
-          # Dependabot titles start with a capital; they are retitled at merge.
-          ignoreLabels: |
-            dependencies
-          subjectPattern: ^(?![A-Z]).+$
-          subjectPatternError: |
-            The subject "{subject}" must start with a lowercase letter.
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Squash merges use the PR title as the commit message, so it goes
+      # through the same commitlint config as a commit: type, scope, case and
+      # length. Dependabot's `chore(deps): Bump ...` titles pass as they are.
+      - name: Lint the title as a commit header
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$PR_TITLE" | npx commitlint --verbose
 
   terraform-static:
     name: Terraform fmt, validate, tflint
