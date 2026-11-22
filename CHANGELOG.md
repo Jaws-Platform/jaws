@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.74.4](https://github.com/Jaws-Platform/jaws/compare/v0.74.3...v0.74.4) (2026-11-22)
+
+
+### Bug Fixes
+
+* **bot:** stop the bot instance reading every SSM parameter in the account ([#291](https://github.com/Jaws-Platform/jaws/issues/291)) ([e7c557c](https://github.com/Jaws-Platform/jaws/commit/e7c557cc155d5e218fa1779ff628977eb6508e3f))
+
 ## [0.74.3](https://github.com/Jaws-Platform/jaws/compare/v0.74.2...v0.74.3) (2026-11-22)
 
 
