@@ -261,7 +261,7 @@ Two tags are the tool's, never the project file's: every stack the tool
 renders and every task instance it launches gets `Organization` (the GitHub
 organization or user the project is registered under in `config/projects.yaml`;
 `Jaws-Platform` for jaws's own stacks) and `ManagedBy` (`JAWS`). A project
-file leaves both out ([docs/tagging.md](docs/tagging.md)).
+file may not state either ([docs/tagging.md](docs/tagging.md)).
 
 Credentials must belong to the primary account, even where the role check
 is skipped (`JAWS_SKIP_ROLE_CHECK`), so a secret or a stack is never written
@@ -396,7 +396,7 @@ Every AWS resource this tool manages carries the same six tags, through the prov
 | `ManagedBy` | `JAWS` | this tool, which provisions and changes it |
 | `Owner` | `jwallace145` | the person responsible for it |
 
-Project files state `Project`, `Environment`, `Repository` and `Owner`; the CLI cross-checks the first three against the rest of the file and adds `Organization` and `ManagedBy` itself (a file that still states either is warned, and the value ignored). Names come from `context.name_root` (`jaws`), never from a tag. The foundation stack gets the same set from the library's `context` module. Components add `Component`, `Purpose` and `Lifecycle` where they apply. These tags are the cost allocation tags `cost report` groups by; [docs/costs.md](docs/costs.md) lists which must be active.
+Project files state `Project`, `Environment`, `Repository` and `Owner`; the CLI cross-checks the first three against the rest of the file and adds `Organization` and `ManagedBy` itself (a file that states either is refused). Names come from `context.name_root` (`jaws`), never from a tag. The foundation stack gets the same set from the library's `context` module. Components add `Component`, `Purpose` and `Lifecycle` where they apply. These tags are the cost allocation tags `cost report` groups by; [docs/costs.md](docs/costs.md) lists which must be active.
 
 ## State bucket and key convention
 

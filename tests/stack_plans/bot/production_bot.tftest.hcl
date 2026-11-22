@@ -10,7 +10,7 @@ run "plans_the_bot_under_production_s_names" {
 
   assert {
     condition     = var.tags["Organization"] == "Braveheart-Chess" && var.tags["ManagedBy"] == "JAWS" && var.name_root == "jaws"
-    error_message = "Organization (the project's GitHub owner) and ManagedBy are stamped over the file's, and names keep the name root"
+    error_message = "Organization (the project's GitHub owner) and ManagedBy are stamped by the tool, and names keep the name root"
   }
 
   assert {

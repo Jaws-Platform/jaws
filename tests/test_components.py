@@ -168,12 +168,14 @@ def test_bot_tags_are_cross_checked(tmp_path: Path, settings: Settings) -> None:
 
 
 def test_a_bot_is_tagged_with_its_github_owner(tmp_path: Path, settings: Settings) -> None:
-    """Whatever the file states, Organization is the owner in config/projects.yaml."""
-    raw = _raw()
-    raw["tags"]["Organization"] = "someone-else"
-    bot = _load(tmp_path, raw, settings)
+    """Organization is the owner in config/projects.yaml; the file may not state it."""
+    bot = _load(tmp_path, _raw(), settings)
     assert bot.tags["Organization"] == "Braveheart-Chess" and bot.tags["ManagedBy"] == "JAWS"
     assert bot.records_bucket == "jaws-braveheart-records"
+    raw = _raw()
+    raw["tags"]["Organization"] = "Braveheart-Chess"
+    with pytest.raises(ConfigError, match=r"tags\.Organization is set by jaws"):
+        _load(tmp_path, raw, settings)
 
 
 def _without_task_runner(raw: dict[str, Any]) -> dict[str, Any]:
@@ -749,9 +751,11 @@ def test_a_databricks_project_is_tagged_with_its_github_owner(
     tmp_path: Path, settings: Settings
 ) -> None:
     raw: dict[str, Any] = yaml.safe_load(DATABRICKS_FILE.read_text())
-    raw["tags"]["Organization"] = "someone-else"
     tags = _load(tmp_path, raw, settings).databricks_tags
     assert tags["Organization"] == "Test-Fixtures" and tags["ManagedBy"] == "JAWS"
+    raw["tags"]["ManagedBy"] = "JAWS"
+    with pytest.raises(ConfigError, match=r"tags\.ManagedBy is set by jaws"):
+        _load(tmp_path, raw, settings)
 
 
 DATABRICKS_FILE = FIXTURES / "bots" / "databricks-poc.yaml"

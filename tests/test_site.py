@@ -15,7 +15,6 @@ from jaws.site import (
     Site,
     SiteConfig,
     load_site_config,
-    tool_tag_warnings,
 )
 from tests.conftest import FIXTURES
 
@@ -96,11 +95,11 @@ def test_cross_checked_tags(tmp_path: Path, tag: str, value: str) -> None:
         load_site_config(_write(tmp_path, _raw({f"tags.{tag}": value})))
 
 
-@pytest.mark.parametrize("stated", [None, MANAGED_BY, "jaws", "hand"])
-def test_the_tool_owns_managed_by(tmp_path: Path, settings: Settings, stated: str | None) -> None:
-    raw = _raw() if stated is None else _raw({"tags.ManagedBy": stated})
-    config = load_site_config(_write(tmp_path, raw))
-    assert Site.from_config(config, settings).tags["ManagedBy"] == "JAWS" == MANAGED_BY
+@pytest.mark.parametrize("stated", [MANAGED_BY, "jaws", "hand"])
+def test_a_stated_managed_by_is_refused(tmp_path: Path, stated: str) -> None:
+    """The tool sets ManagedBy; a file may not state it, even with the tool's value."""
+    with pytest.raises(ConfigError, match=r"tags\.ManagedBy is set by jaws \(JAWS\); remove it"):
+        load_site_config(_write(tmp_path, _raw({"tags.ManagedBy": stated})))
 
 
 def test_empty_tag_value(tmp_path: Path) -> None:
@@ -108,27 +107,49 @@ def test_empty_tag_value(tmp_path: Path) -> None:
         load_site_config(_write(tmp_path, _raw({"tags.Owner": "  "})))
 
 
-@pytest.mark.parametrize("stated", [None, "jaws", "someone-else"])
-def test_the_tool_owns_organization(tmp_path: Path, settings: Settings, stated: str | None) -> None:
-    """Organization is the GitHub owner the project is registered under, whatever
-    the file states; the names keep the name root."""
-    raw = _raw() if stated is None else _raw({"tags.Organization": stated})
-    site = Site.from_config(load_site_config(_write(tmp_path, raw)), settings)
+@pytest.mark.parametrize("stated", ["jwallace145", "jaws", "someone-else"])
+def test_a_stated_organization_is_refused(tmp_path: Path, stated: str) -> None:
+    """The tool sets Organization; a file may not state it, even with the right owner."""
+    with pytest.raises(
+        ConfigError,
+        match=r"tags\.Organization is set by jaws \(the project's GitHub owner in "
+        r"config/projects\.yaml\); remove it",
+    ):
+        load_site_config(_write(tmp_path, _raw({"tags.Organization": stated})))
+
+
+def test_both_stated_tool_tags_are_named(tmp_path: Path) -> None:
+    raw = _raw({"tags.Organization": "jaws", "tags.ManagedBy": "jaws"})
+    with pytest.raises(ConfigError, match=r"tags\.Organization.*tags\.ManagedBy"):
+        load_site_config(_write(tmp_path, raw))
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    [
+        FIXTURES / "sites" / "guitar-knowledge-base.yaml",
+        FIXTURES / "bots" / "braveheart.yaml",
+        FIXTURES / "bots" / "math-prover.yaml",
+        FIXTURES / "bots" / "databricks-poc.yaml",
+    ],
+    ids=["site", "bot", "research", "databricks"],
+)
+@pytest.mark.parametrize("tag", TOOL_TAGS)
+def test_every_kind_refuses_a_tool_tag(tmp_path: Path, fixture: Path, tag: str) -> None:
+    raw: dict[str, Any] = yaml.safe_load(fixture.read_text())
+    raw["tags"][tag] = "jaws"
+    with pytest.raises(ConfigError, match=rf"tags\.{tag} is set by jaws"):
+        load_site_config(_write(tmp_path, raw))
+
+
+def test_the_tool_stamps_organization_and_names_keep_the_root(
+    tmp_path: Path, settings: Settings
+) -> None:
+    """Organization is the GitHub owner the project is registered under; the
+    names keep the name root."""
+    site = Site.from_config(load_site_config(_write(tmp_path, _raw())), settings)
     assert site.tags["Organization"] == settings.owner(site.project) == "jwallace145"
     assert site.bucket == f"jaws-{site.project}" and site.name_root == "jaws"
-
-
-def test_a_stated_tool_tag_is_warned_about(tmp_path: Path, settings: Settings) -> None:
-    raw = _raw({"tags.Organization": "jaws", "tags.ManagedBy": "jaws"})
-    config = load_site_config(_write(tmp_path, raw))
-    warnings = tool_tag_warnings(config, settings.owner(config.project), MANAGED_BY)
-    assert warnings == [
-        f"jaws.yaml: tags.{key} is set by jaws ({value!r} for guitar-knowledge-base); the "
-        "stated 'jaws' is ignored. Remove it: a later jaws release refuses it"
-        for key, value in (("Organization", "jwallace145"), ("ManagedBy", "JAWS"))
-    ]
-    clean = load_site_config(_write(tmp_path, _raw()))
-    assert tool_tag_warnings(clean, "jwallace145", MANAGED_BY) == []
 
 
 def test_a_file_without_the_tool_tags_is_stamped(tmp_path: Path, settings: Settings) -> None:

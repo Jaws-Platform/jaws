@@ -30,7 +30,6 @@ from .site import (
     SiteConfig,
     project_organization,
     stamped_tags,
-    warn_tool_tags,
 )
 
 Role = Literal["plan", "preview", "apply", "release", "task"]
@@ -125,12 +124,10 @@ class Project(BaseModel):
             problems += guardrails.check(config, settings)
         if problems:
             raise ConfigError("; ".join(problems))
-        organization = project_organization(config, settings)
-        warn_tool_tags(config, organization, settings.context.managed_by)
         return cls(
             config=config,
             name_root=name_root,
-            organization=organization,
+            organization=project_organization(config, settings),
             managed_by=settings.context.managed_by,
             state_bucket=settings.state.bucket,
             state_key=settings.state_key(config.project, ENVIRONMENT),
