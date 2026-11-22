@@ -296,6 +296,26 @@ monitoring from the day it is created.
   more. That's my call; the automation principal is a fallback.
 - **Cost.** About $0.50 to $3 a month (estimated; measure it in the first
   week). The Databricks dashboard shows this job's own spend.
+- **As built in `terraform-aws-jaws-databricks` v0.2.0 (plan 03):**
+  - **Identity.** The job runs as the identity that applies the module,
+    which in Jaws is the automation service principal. It does not use the
+    dedicated principal above.
+    - A dedicated principal needs an authoritative rule set granting the
+      creator `roles/servicePrincipal.user`, and the Databricks docs
+      conflict on that.
+    - The job's AWS reach is the credential's put-only role either way.
+  - **Grants.** The applying identity gets per-principal `databricks_grant`s:
+    `USE_CATALOG` on `system`, `USE_SCHEMA` and `SELECT` on
+    `system.billing`, and `ACCESS` on the credential. Jaws must grant that
+    identity on these securables nowhere else.
+  - **The credential** is `ISOLATION_MODE_OPEN`, so only its owner group and
+    `ACCESS` holders can use it.
+  - **Its role** may only `PutObject` under
+    `raw/provider=databricks/source=system-tables/`.
+  - **The script** lives in the identity's home folder, not `/Shared`.
+  - **Workspace names.** The `workspaces` table is opt-in
+    (`include_workspaces`, which needs the `access` system schema enabled).
+    Until then, names come from the normalizer's `workspace_names`.
 
 ### 6.4 The normalizer (Lambda)
 
@@ -1103,8 +1123,24 @@ Check each of these before relying on it; each has a fallback.
 3. **Writing from serverless jobs.** Can serverless jobs compute use a
    Unity Catalog service credential to `PutObject` with boto3? Fallback:
    an external volume over `staging/`.
+   - **Partly verified 2026-11-21.** Service credentials are GA on
+     Runtime 16.2+. The documented Python is
+     `boto3.Session(botocore_session=dbutils.credentials.getServiceCredentialsProvider(name), …)`.
+     The role's trust uses a per-credential external ID and must be
+     self-assuming.
+   - **Not documented:** whether direct (non-UDF) use works on a serverless
+     Python task.
+   - **Plan 08's first run must confirm four things:**
+     - the credential works;
+     - a collected `usage_start_time` matches SQL with an explicit offset
+       (the process time zone);
+     - two runs give equal `list_prices` ETags;
+     - day two rebuilds nothing.
 4. **Workspace names.** A Databricks system table with workspace names.
    Fallback: a `workspace_names` input.
+   - **Verified 2026-11-21:** `system.access.workspaces_latest` has
+     `workspace_id` and `workspace_name` (Public Preview, no region). The
+     `access` schema must be enabled. Exporting it is opt-in.
 5. **T9g.** Price in us-east-1, which availability zones offer it, AL2023
    support, maximum credits per size, and credit retention while stopped.
    Fallback: `t4g.medium`, if T9g isn't offered in a usable zone or its

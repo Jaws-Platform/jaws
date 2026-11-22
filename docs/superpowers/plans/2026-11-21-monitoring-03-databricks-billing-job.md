@@ -107,10 +107,10 @@
   - snappy compression;
   - `write_statistics=False`, so the output doesn't depend on the pyarrow build's statistics details.
 
-- [ ] **Step 1: Port the uv tooling** from `terraform-aws-jaws-monitoring` (`scripts/check-module.sh`'s Python step, the CI step and the CONTRIBUTING sentence). Then run `scripts/check.sh`.
+- [x] **Step 1: Port the uv tooling** from `terraform-aws-jaws-monitoring` (`scripts/check-module.sh`'s Python step, the CI step and the CONTRIBUTING sentence). Then run `scripts/check.sh`.
   Expected: `All checks passed.` (no module uses it yet).
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 ```python
 def test_recent_periods_are_the_previous_and_current_month(self):
@@ -142,18 +142,18 @@ Also, with a fixture `usage_row()`: a dict shaped like `Row.asDict(recursive=Tru
 - **`test_unknown_fields_are_dropped`:** an extra top-level key and an extra `usage_metadata` key give the same bytes as the row without them.
 - **`test_parquet_is_byte_identical_for_the_same_rows`:** two price rows written in either order give equal bytes.
 
-- [ ] **Step 3: Run them to see them fail**
+- [x] **Step 3: Run them to see them fail**
 
 Run: `scripts/check-module.sh modules/databricks-billing-export`
 Expected: FAIL at "script unit tests" (no `billing_export.py` yet).
 
-- [ ] **Step 4: Implement the pure functions and schemas.** A `periods` spec matches `^\d{4}-(0[1-9]|1[0-2])$` after splitting on commas and stripping.
+- [x] **Step 4: Implement the pure functions and schemas.** A `periods` spec matches `^\d{4}-(0[1-9]|1[0-2])$` after splitting on commas and stripping.
 
-- [ ] **Step 5: Run them to see them pass**
+- [x] **Step 5: Run them to see them pass**
 
 Expected: `Ran 9 tests … OK`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 `feat(databricks-billing-export): add the exporter's periods, keys and deterministic parquet` (with the trailer).
 
@@ -185,7 +185,7 @@ Expected: `Ran 9 tests … OK`.
   - prints each key written.
 - `if __name__ == "__main__": main(sys.argv[1:])`.
 
-- [ ] **Step 1: Write the failing tests** (a fake `query` maps each SQL string to rows; a fake `put` records keys and bytes)
+- [x] **Step 1: Write the failing tests** (a fake `query` maps each SQL string to rows; a fake `put` records keys and bytes)
 
 - **`test_recent_export_writes_prices_then_each_period`:** with `now = 2026-11-21T06:00Z`, the keys are:
   - `[…list_prices/run=20261121T060000Z/part-0.parquet, …usage/billing_period=2026-10/run=…, …usage/billing_period=2026-11/run=…]`;
@@ -196,13 +196,13 @@ Expected: `Ran 9 tests … OK`.
 - **`test_an_empty_period_writes_an_empty_snapshot`:** no usage rows still `put`s the period's object, and it reads back with 0 rows and the usage schema.
 - **`test_nothing_is_written_when_periods_is_malformed`:** `periods="soon"` raises `ValueError`, and `put` was never called.
 
-- [ ] **Step 2: Run them to see them fail.** Expected: `AttributeError: … 'export'`.
+- [x] **Step 2: Run them to see them fail.** Expected: `AttributeError: … 'export'`.
 
-- [ ] **Step 3: Implement `export` and `main`.** Resolve the periods before querying or writing anything. In `main`, import pyspark, boto3 and the databricks SDK, so the tests never need them.
+- [x] **Step 3: Implement `export` and `main`.** Resolve the periods before querying or writing anything. In `main`, import pyspark, boto3 and the databricks SDK, so the tests never need them.
 
-- [ ] **Step 4: Run them to see them pass.** Expected: `Ran 14 tests … OK`.
+- [x] **Step 4: Run them to see them pass.** Expected: `Ran 14 tests … OK`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `feat(databricks-billing-export): export billing snapshots through a service credential` (with the trailer).
 
@@ -229,7 +229,7 @@ Expected: `Ran 9 tests … OK`.
   - `component` (default `"databricks-billing-export"`).
 - **Outputs:** `job_id`, `job_name`, `credential_name`, `role_arn`, `role_name`, `prefix`, `run_as` (the applying identity's user name).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/databricks_billing_export.tftest.hcl` uses mocked `aws` (`override_during = plan`, `aws_caller_identity` = `123456789012`, `aws_region` = `us-east-1`), mocked `databricks` with:
 - `mock_data "databricks_current_user" { defaults = { user_name = "11111111-2222-3333-4444-555555555555" } }`;
@@ -261,9 +261,9 @@ Its runs:
 - **`the_schedule_is_an_input`:** `{ cron = "0 30 7 * * ?", paused = true }` gives that cron and `PAUSED`.
 - **`rejects_prefixes_with_stray_slashes`** and **`rejects_an_invalid_name`.**
 
-- [ ] **Step 2: Run them to see them fail.** Expected: undeclared variables and resources.
+- [x] **Step 2: Run them to see them fail.** Expected: undeclared variables and resources.
 
-- [ ] **Step 3: Implement the module**, following `databricks-dataset`.
+- [x] **Step 3: Implement the module**, following `databricks-dataset`.
 
 **`main.tf`:**
 - the data sources `aws_caller_identity`, `aws_region` and `databricks_current_user`;
@@ -288,11 +288,11 @@ Its runs:
 - that this job's own spend shows on the Databricks dashboard;
 - a usage snippet with `# x-release-please-version`.
 
-- [ ] **Step 4: Run them to see them pass.** Expected: `Success! 9 passed, 0 failed.`
+- [x] **Step 4: Run them to see them pass.** Expected: `Success! 9 passed, 0 failed.`
 
-- [ ] **Step 5: Run the whole suite.** Run: `scripts/check.sh`. Expected: `All checks passed.`
+- [x] **Step 5: Run the whole suite.** Run: `scripts/check.sh`. Expected: `All checks passed.`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 `feat(databricks-billing-export): run the billing export daily on serverless` (with the trailer).
 
@@ -300,9 +300,9 @@ Its runs:
 
 ### Task 4: Publish 0.2.0 (owner permission, asked for at this step)
 
-- [ ] **Step 1:** Push `feat/databricks-billing-export` and open the PR with `--template feat.md`. Expected: CI is green, including `terraform (databricks-billing-export)` running the Python tests.
-- [ ] **Step 2:** Squash-merge, then merge the `release 0.2.0` PR. Expected: the tag `v0.2.0` exists.
-- [ ] **Step 3: Record it on the Jaws docs branch.**
+- [x] **Step 1:** Push `feat/databricks-billing-export` and open the PR with `--template feat.md`. Expected: CI is green, including `terraform (databricks-billing-export)` running the Python tests.
+- [x] **Step 2:** Squash-merge, then merge the `release 0.2.0` PR. Expected: the tag `v0.2.0` exists.
+- [x] **Step 3: Record it on the Jaws docs branch.**
   - Tick this plan, and set the roadmap row to `released`.
   - Update spec 6.3: the job runs as the applying identity; the credential is open, with `ACCESS` only for that identity; the workspace table is opt-in.
   - Update spec 12.3 and 12.4 with what was verified and what plan 08's first run must confirm.
