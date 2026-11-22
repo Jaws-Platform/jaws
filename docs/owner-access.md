@@ -108,7 +108,8 @@ terraform apply owner-access.tfplan
 ```
 
 The stack refuses to plan until Identity Center is enabled and this account is
-its organization's management account.
+its organization's management account: the account of type `management` in
+`config/aws.yaml`.
 
 The user and the permission set have `prevent_destroy`. Recreating the
 permission set gives its role a new suffix, which locks the old ARN out of the
@@ -116,14 +117,15 @@ production account's bucket policies (this stack's own state bucket matches
 the role by name, so it keeps working); recreating the user drops its
 passkeys. Do either only on purpose, and expect to update `foundation/state.tf`.
 
-The stack also assigns the same permission set in the production account
-(`aws.account_id` in `config.yaml`), where everything jaws builds lives, and
+The stack also assigns the same permission set in the production account (the
+primary account in `config/aws.yaml`), where everything jaws builds lives, and
 `terraform output -raw aws_config` prints a `jaws-prod` profile for it beside
 `jwall-admin`. The role Identity Center provisions there has its own suffix:
-`config.yaml`'s `aws.admin_role_arn` names it.
+the primary account's `admin_role_arn` in `config/aws.yaml` names it.
 
-It assigns it in the development account too (`development.account_id` in
-`config.yaml`), and prints a `jaws-dev` profile for it. Nothing is built there
+It assigns it in the development account too (the account of type
+`development` in `config/aws.yaml`), and prints a `jaws-dev` profile for it.
+Nothing is built there
 yet; the access is for the console and the CLI, such as asking for its EC2
 quotas. All three profiles share the one `jwall-engineering`
 SSO session, so one sign-in covers them:

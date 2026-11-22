@@ -73,7 +73,7 @@ A file is either a site (`domain` and `site`) or a bot project
 | Field | Type, default | Meaning |
 |---|---|---|
 | `version` | `1` | File format version. |
-| `project` | kebab-case, ≤ 30 | The project; every name below is derived from it. A bot project registered in `foundation/bots.tf` takes at most 15 characters (a research project up to 30: its policies are much smaller): its apply role's `container/manage` policy repeats the name in 17 ARNs and IAM caps a managed policy at 6,144 characters. The project can differ from the repository name (`braveheart-bot` deploys from `Braveheart-Chess/braveheart-lichess-bot`). |
+| `project` | kebab-case, ≤ 30 | The project; every name below is derived from it. A project of type `bot` in `config/projects.yaml` takes at most 15 characters (a `research` project up to 30: its policies are much smaller): its apply role's `container/manage` policy repeats the name in 17 ARNs and IAM caps a managed policy at 6,144 characters. The project can differ from the repository name (`braveheart-bot` deploys from `Braveheart-Chess/braveheart-lichess-bot`). |
 | `repository` | `owner/repo` | Where the releases are published. Must match `tags.Repository`. |
 | `tags` | five required keys | Applied to every AWS resource for cost allocation. `Project`, `Repository` and `Environment: prod` are cross-checked; extra keys pass through. `Organization` and `ManagedBy` are the tool's: it stamps `jaws` / `jaws` whatever the file says. A stated `Organization` must be `jaws`; leave `ManagedBy` out. |
 | `container-image.architecture` | `x86_64` \| `arm64`, `x86_64` | Must match the release asset. `arm64` also needs a `t4g` instance type. |
@@ -158,7 +158,7 @@ components:
 ## Names the tool derives
 
 Every name starts with the organization, `jaws` (`context.organization` in
-`config.yaml`); state is in `jaws-terraform-state-570327089884`.
+`config/tool.yaml`); state is in `jaws-terraform-state-570327089884`.
 
 | What | Name |
 |---|---|
@@ -181,7 +181,7 @@ Every name starts with the organization, `jaws` (`context.organization` in
    - waits for the Linux asset and its `.sha256` to be attached. Release
      workflows publish the release first and upload the build afterwards, so
      this usually takes under a minute; it gives up after `bot.asset_wait`
-     in `config.yaml`, 30 minutes by default;
+     in `config/bots.yaml`, 30 minutes by default;
    - downloads them and verifies the checksum;
    - builds the image and runs `braveheart bench --depth 6` inside it;
    - pushes the image under the tag;
@@ -332,8 +332,9 @@ jobs:
 
 Pin the tool release that ships the workflow, and let Dependabot bump it.
 The bot repository sets no variables or secrets. The workflow builds the
-release role's ARN from this tool's `config.yaml` (`aws.account_id`,
-`context.organization`) and `project`, and the role's trust policy accepts
+release role's ARN from this tool's configuration (the primary account's
+`account_id` in `config/aws.yaml`, `context.organization` in
+`config/tool.yaml`) and `project`, and the role's trust policy accepts
 only that repository's `v*` tags. A `release-role-arn` input can override the
 derived role.
 
@@ -442,7 +443,7 @@ stop and its next start proposed one, and a Bot apply then would have run it.
 The library now ignores that read-back, so a replacement in a bot plan always
 comes from one of the changes above.
 
-**The image is pinned by name.** `bot.amis` in `config.yaml` holds one
+**The image is pinned by name.** `bot.amis` in `config/bots.yaml` holds one
 Amazon Linux 2023 image per architecture, by its Amazon image name, such as
 `al2023-ami-2023.12.20261026.1-kernel-6.18-x86_64`. The bot stack resolves
 the name to the image ID among Amazon-owned images, including deprecated
@@ -530,14 +531,16 @@ each, which task instances may add to and nothing automated may delete. See
 ## Owner setup, once
 
 No repository variables or secrets are needed: every role ARN is derived
-from `aws.account_id` and `context.organization` in this tool's
-`config.yaml` and the project name.
+from the primary account in `config/aws.yaml`, `context.organization` in
+`config/tool.yaml` and the project name.
 
 1. **Register the bot.**
-   - Add it to `foundation/bots.tf` (repository and `repository_id`, and
-     `owner_id` when the repository belongs to an organisation and not to this
-     account), to the `Bot plan` matrix in `ci.yml`, and to the `Bot apply`
-     choices. A test keeps the three in sync.
+   - Add its entry to `config/projects.yaml`, under its repository's GitHub
+     owner: a `description`, `type: bot`, the `repository` and its
+     `repository_id` (`gh api repos/<owner>/<repo> --jq .id`). A new owner gets
+     its group and `owner_id` (`gh api users/<owner> --jq .id`). Nothing else
+     changes: the `Bot plan` job and the **Bot apply** workflow take the
+     project from the file.
    - Merge, then release this repository. The foundation apply creates the
      three CI roles; until then, bot plans are skipped with a notice.
 2. **Prepare the bot repository.** On its default branch, commit the project

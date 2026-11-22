@@ -33,10 +33,10 @@ role, security group, log group and parameters, and keeps the rest:
 3. **Until that apply, plans are not run.** The plan role cannot change state,
    so `plan` reports the pending release in its comment instead of failing on
    `prevent_destroy`, and plans normally afterwards.
-4. **Then switch the roles.** Add the project to `research_projects` in
-   `foundation/bots.tf` and release. Its plan and apply roles swap
-   `container/*` for `compute/*`, and its release role is deleted. Do this
-   after the apply: the research roles cannot delete the bot's resources.
+4. **Then switch the roles.** Change the project's `type` from `bot` to
+   `research` in `config/projects.yaml` and release. Its plan and apply roles
+   swap `container/*` for `compute/*`, and its release role is deleted. Do
+   this after the apply: the research roles cannot delete the bot's resources.
 
 Stop the bot before the apply, between games. The apply terminates the instance
 and would end a game in progress.
@@ -48,40 +48,56 @@ with bot projects.
 
 ## Central guardrails
 
-What a project may ask for is decided in this repository, in `config.yaml`,
-never in the project's own file:
+What a project may ask for is decided in this repository, in the tool
+configuration (`config/`), never in the project's own file: the limits for
+every project in `config/bots.yaml`, and each project's allow-lists in its
+entry in `config/projects.yaml`:
 
 ```yaml
+# config/bots.yaml
 tasks:
   limits: { max_hours: 6, max_vcpus: 256, root_volume_gb: 200 }
   max_run_cost_usd: 50
 
+# config/projects.yaml
 projects:
-  braveheart:
-    instance_types: [c8a.xlarge, ...]
-    task_profiles: [cpu, gpu, sprt, match, datagen, relabel]
-    datasets:
-      jaws-braveheart-nnue: {}
+  Braveheart-Chess:
+    owner_id: "356866252"
+    projects:
+      braveheart-selfplay:
+        description: Braveheart's self-play dataset and the datagen and relabel pipeline that grows it
+        type: research
+        repository: braveheart-selfplay
+        repository_id: "1459456470"
+        instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge]
+        task_profiles: [cpu, datagen, relabel]
+        datasets:
+          jaws-braveheart-selfplay-positions:
+            prefix: data/
+            versioning: true
 ```
 
-`foundation/bots.tf` reads `projects` for the launch role's allow-lists and
+`foundation/bots.tf` reads each entry for the launch role's allow-lists and
 the dataset policies. `task run` and `plan` cross-check the project file
 against it and refuse a file that asks for more: an instance type, profile or
 bucket that is not listed, a limit above `tasks.limits`, or retention that
-differs from the entry (see [Retention](#retention-is-approved-in-configyaml)).
+differs from the entry (see
+[Retention](#retention-is-approved-in-configprojectsyaml)).
 
-Which version of `config.yaml` applies depends on where the check runs:
+Which version of the tool configuration applies depends on where the check
+runs:
 
 | Check | Takes effect |
 |---|---|
 | IAM allow-lists (instance types, profiles, dataset policies) | at the foundation apply, after the release |
-| `task run` checks (cost ceiling, limits, cross-checks) | when the consumer bumps its pinned tool version, because `remote-task.yml` reads `config.yaml` from that version |
+| `task run` checks (cost ceiling, limits, cross-checks) | when the consumer bumps its pinned tool version, because `remote-task.yml` reads `config/` from that version |
 | **Bot apply** (retention and allow-list checks) | at once: it runs this repository's current code |
 
 ### Changing a guardrail
 
-1. A pull request here that changes `config.yaml` (and `foundation/bots.tf`
-   if the registry changes). A reviewer reads it as a decision.
+1. A pull request here that changes the project's entry in
+   `config/projects.yaml` (or `tasks` in `config/bots.yaml`). A reviewer reads
+   it as a decision.
 2. A release. The foundation apply updates the IAM allow-lists.
 3. A pin bump in the consumer, so its `task run` uses the new checks.
 
@@ -104,46 +120,48 @@ apply** check it out, and task instances fetch it anonymously.
 In the consumer, first:
 
 1. Merge the project file (`jaws.yaml`) to the default
-   branch. **Bot plan** and **Bot apply** read it from there, and from step 6 on
+   branch. **Bot plan** and **Bot apply** read it from there, and from step 5 on
    every pull request here runs a plan that fails without it. Add no workflow
-   that uses the CLI yet: no release carries the project's entry until step 6.
+   that uses the CLI yet: no release carries the project's entry until step 5.
 
-Then, in this repository:
+Then, in this repository, one pull request:
 
-2. Add the project to `local.bots` in `foundation/bots.tf`, and to
-   `local.research_projects` there, which gives it `compute/*` instead of
-   `container/*` and no release role.
-3. Add its `projects:` entry to `config.yaml`: instance types, task profiles,
-   and each dataset bucket with its retention, named
-   `<Organization>-<project>-<name>` (`jaws-<project>-<name>`). Keep
-   `tests/fixtures/config.yaml` identical to `config.yaml`, and regenerate the
-   foundation's fixtures with `uv run python -m tests.test_foundation_fixtures`.
-4. Add a copy of the project file as `tests/fixtures/registry/<project>.yaml`.
-   `tests/test_bots_registry.py` checks steps 2 and 3 against it. Add the
-   project to that file's `test_registry_lists_braveheart`, which lists every
-   entry. (`tests/fixtures/bots/` holds samples, such as
-   `math-prover`, that are not registered.)
-5. Add it to the CI matrices: `bot-plan` in `.github/workflows/ci.yml` and
-   the `project` options in `.github/workflows/bot-apply.yml`. On this pull
-   request **Bot plan** for the project is expected to skip with a warning,
-   because its plan role does not exist yet.
-6. Release. The foundation apply creates the project's roles and grants. From
+2. Add the project's entry to `config/projects.yaml`, under its GitHub owner.
+   A new owner gets its group and `owner_id`
+   (`gh api users/<owner> --jq .id`). The entry has a `description`,
+   `type: research` (which gives it `compute/*` instead of `container/*` and
+   no release role), its `repository` and `repository_id`, and its
+   guardrails: instance types, task profiles, and each dataset bucket with its
+   retention, named `<Organization>-<project>-<name>`
+   (`jaws-<project>-<name>`). Regenerate the foundation's test fixtures with
+   `uv run python -m tests.test_foundation_fixtures`.
+3. Add a copy of the project file as `tests/fixtures/registry/<project>.yaml`.
+   `tests/test_bots_registry.py` checks step 2 against it. Add the project to
+   that file's `test_registry_lists_braveheart`, which lists every entry.
+   (`tests/fixtures/bots/` holds samples, such as `math-prover`, that are not
+   registered.)
+4. Open the pull request. Nothing else changes: the foundation takes its bots
+   and research projects from `config/projects.yaml`, **Bot plan** takes its
+   matrix from it, and **Bot apply** checks the project's name against it. On
+   this pull request **Bot plan** for the project is expected to skip with a
+   warning, because its plan role does not exist yet.
+5. Release. The foundation apply creates the project's roles and grants. From
    then on **Bot plan** runs for the project on every pull request here.
 
 Then, in the consumer and by the owner:
 
-7. Run **Bot apply** for the project. It creates the buckets, launch
+6. Run **Bot apply** for the project. It creates the buckets, launch
    templates, roles, network and log group.
-8. Add the consumer's workflows, pinned to the release from step 6 or later.
-   `remote-task.yml` reads `config.yaml` from the pinned version, so an older
-   pin has no entry for the project and refuses its file.
-9. If a dataset is versioned, wait 15 minutes before the first task writes (see
+7. Add the consumer's workflows, pinned to the release from step 5 or later.
+   `remote-task.yml` reads `config/` from the pinned version, so an older pin
+   has no entry for the project and refuses its file.
+8. If a dataset is versioned, wait 15 minutes before the first task writes (see
    **Versioning order** below).
-10. Raise the GPU quota if needed. On 2026-11-02 the account had 5 on-demand
-    G/VT vCPUs and 0 G/VT spot vCPUs, so one `g6e.xlarge` (4 vCPUs) at a time,
-    and no `g6e.2xlarge` (8). See [remote-tasks.md](remote-tasks.md#quotas).
-    Keep the profile's `max_vcpus` within the quota.
-11. Run a GPU smoke test first (see [Not yet proven](#not-yet-proven)).
+9. Raise the GPU quota if needed. On 2026-11-02 the account had 5 on-demand
+   G/VT vCPUs and 0 G/VT spot vCPUs, so one `g6e.xlarge` (4 vCPUs) at a time,
+   and no `g6e.2xlarge` (8). See [remote-tasks.md](remote-tasks.md#quotas).
+   Keep the profile's `max_vcpus` within the quota.
+10. Run a GPU smoke test first (see [Not yet proven](#not-yet-proven)).
 
 **Project names.** The project's roles are `<org>-<project>-...`, and the
 policies match them as `<org>-<project>-*`. A project named `math` would
@@ -210,20 +228,28 @@ components:
             write_once: [runs/, models/]
 ```
 
-The matching central entry would be:
+The matching entry in `config/projects.yaml` would be, under the repository's
+owner (`jwallace145` is already in the file with its `owner_id`):
 
 ```yaml
 projects:
-  math-prover:
-    instance_types: [c8a.xlarge, g6e.xlarge, g6e.2xlarge, g6e.4xlarge]
-    task_profiles: [cpu, train]
-    datasets:
-      jaws-math-prover-artifacts:
-        prefix: data/
-        versioning: true
-        write_once: [runs/, models/]
-        expire_prefixes: { tmp/: 30 }
-        expire_noncurrent_days: 90
+  jwallace145:
+    owner_id: "35950238"
+    projects:
+      math-prover:
+        description: Fine-tunes open-weight models on a GPU and checks the proofs
+        type: research
+        repository: math-prover
+        repository_id: "<gh api repos/jwallace145/math-prover --jq .id>"
+        instance_types: [c8a.xlarge, g6e.xlarge, g6e.2xlarge, g6e.4xlarge]
+        task_profiles: [cpu, train]
+        datasets:
+          jaws-math-prover-artifacts:
+            prefix: data/
+            versioning: true
+            write_once: [runs/, models/]
+            expire_prefixes: { tmp/: 30 }
+            expire_noncurrent_days: 90
 ```
 
 `rust: false` (on the task-runner and on each profile; default `true`) skips
@@ -353,10 +379,11 @@ The resume logic belongs to the consumer. `OUT_DIR` is for small files only
 (results, summaries, logs): it goes to the results bucket, which expires after
 `results_days`, and its upload at the end of a task has a 50-second budget.
 
-## Retention is approved in `config.yaml`
+## Retention is approved in `config/projects.yaml`
 
-The project file declares retention on each `dataset`, and `config.yaml` must
-approve exactly the same values under `projects.<name>.datasets.<bucket>`:
+The project file declares retention on each `dataset`, and the project's entry
+in `config/projects.yaml` must approve exactly the same values under
+`datasets.<bucket>`:
 
 | Field | Meaning |
 |---|---|
@@ -400,7 +427,8 @@ Encryption stays SSE-S3.
   ceiling and `max_vcpus` are enforced by the CLI. The launch role is assumed
   by non-fork pull requests and `main`, so code there can call AWS directly
   and skip the CLI, bounded only by the allow-list. When a type is added to
-  `projects.<name>.instance_types`, review its price in the same pull request.
+  the project's `instance_types` in `config/projects.yaml`, review its price in
+  the same pull request.
 
 At $50 and six hours the threshold is $8.33 an hour. On-demand prices from the
 Pricing API on 2026-11-02, us-east-1:
@@ -423,8 +451,8 @@ roles, log group and network, and keeps the dataset buckets and the task
 results bucket: before destroying, it removes the buckets from Terraform state
 so `prevent_destroy` does not reject the plan, and logs each one. The IAM
 grants stay in state and are destroyed with the roles they sit on. It refuses
-while task instances run. It also refuses a file that `config.yaml` no longer
-allows, so destroy before removing the project's central entry.
+while task instances run. It also refuses a file that `config/projects.yaml` no
+longer allows, so destroy before removing the project's entry there.
 
 Applying the project again afterwards is not automated. The kept buckets
 exist in AWS but not in state, so an administrator imports them first.
@@ -441,7 +469,8 @@ checkout of this repository, not of the consumer, which holds no Terraform. The
 stack is here, and the rendered `terraform.tfvars.json` and `backend.hcl` exist
 only in a temporary directory that the CLI deletes unless the run failed and
 `JAWS_KEEP_WORKDIR=1` or debug logging is on. So render them with the CLI's code,
-from this repository's root, and with the Terraform version in `config.yaml`:
+from this repository's root, and with the Terraform version in
+`config/terraform.yaml`:
 
 ```sh
 consumer_file=../math-prover/jaws.yaml   # its default branch
@@ -457,7 +486,7 @@ from jaws.settings import load_settings
 from jaws.site import load_site_config
 from jaws.stack import render_backend, render_tfvars
 
-settings = load_settings(Path("config.yaml"))
+settings = load_settings(Path("config"))
 project = Project.from_config(load_site_config(Path(sys.argv[1])), settings)
 work = Path(sys.argv[2])
 (work / "terraform.tfvars.json").write_text(json.dumps(render_tfvars(project, settings), indent=2))
@@ -515,7 +544,8 @@ objects (and, on a versioned bucket, every version and delete marker), then
 the bucket. No CI role can delete dataset or results objects: the only
 `s3:DeleteObject` a project's roles hold is on Terraform's lock files
 (`tfstate/read` and `tfstate/write` delete `*.tflock`). The apply role can still write a bucket's
-lifecycle configuration, which is why retention is approved in `config.yaml`.
+lifecycle configuration, which is why retention is approved in
+`config/projects.yaml`.
 
 ## Not yet proven
 

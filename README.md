@@ -11,11 +11,11 @@ The foundation stack for every [jwall.engineering](https://jwall.engineering) si
 - the shared Terraform state bucket `jaws-terraform-state-570327089884`
 - a reference to the account's GitHub Actions OIDC identity provider (owned by prog-strength-infra for now)
 - the `jwall.engineering` Route 53 hosted zone (zone-level records only)
-- for each site in the `projects` registry, an S3 bucket and three CI roles
+- for each site onboarded in `config/projects.yaml`, an S3 bucket and three CI roles
 - its own plan and apply CI roles
 - the `jaws` CLI that every site repository's CI runs to plan, preview, apply and publish, its image in a private ECR repository, and the reusable workflows that run it
 - the owner's admin access: an IAM Identity Center user with the AdministratorAccess permission set, in its own stack that only the owner applies ([guide](docs/owner-access.md))
-- bot and research projects: for each entry in the `bots` registry, CI roles (a research project has no release role), and the bot stack (`stacks/bot`) that runs a repository's GitHub releases as a permanent Lichess bot ([guide](docs/lichess-bot.md))
+- bot and research projects: for each one onboarded in `config/projects.yaml`, CI roles (a research project has no release role), and the bot stack (`stacks/bot`) that runs a repository's GitHub releases as a permanent Lichess bot ([guide](docs/lichess-bot.md))
 
 Everything is in `us-east-1`, managed with Terraform `>= 1.11` and the AWS provider `~> 6.0`. The shared building blocks are consumed from the public Terraform Registry, see [Shared modules](#shared-modules-from-the-terraform-registry). Releases are cut and applied by [Release Please](#releases-and-applies). Contribution rules are in [CONTRIBUTING.md](CONTRIBUTING.md); the rules for coding agents are in [AGENTS.md](AGENTS.md).
 
@@ -30,7 +30,8 @@ workspaces. It was called JWall Engineering Infra, with the command
 `jaws` is the Python CLI (Typer, managed with `uv`) that
 provisions and publishes every site from one YAML file in its repository,
 `jaws.yaml`. It wraps Terraform and S3: it renders the
-bundled site stack in `stacks/site/` from that file and `config.yaml`, runs
+bundled site stack in `stacks/site/` from that file and the tool
+configuration (`config/`), runs
 `terraform` against the shared state bucket, syncs built content and
 invalidates CloudFront. Site repositories keep no Terraform. It ships as a
 versioned image in the account's private ECR repository (`jaws-cli`),
@@ -70,7 +71,7 @@ this repository publishes. The design is in
 
 Every command checks that the credentials are the role it expects, that the
 built site and bucket exist, and that the Terraform in the image is the
-version `config.yaml` pins, before touching anything. Failures exit 1
+version `config/terraform.yaml` pins, before touching anything. Failures exit 1
 (Terraform or AWS), 2 (configuration) or 3 (preflight). Run artifacts and a
 debug log go to `./.jaws/`.
 
@@ -78,7 +79,7 @@ debug log go to `./.jaws/`.
 uv sync                                  # the CLI and its dev tools
 uv run jaws --help
 uv run ruff check && uv run mypy && uv run pytest
-docker build --build-arg "TERRAFORM_VERSION=$(yq -r .terraform.version config.yaml)" -t jaws:local .
+docker build --build-arg "TERRAFORM_VERSION=$(yq -r .terraform.version config/terraform.yaml)" -t jaws:local .
 ```
 
 ### Reusable workflows for site repositories
@@ -168,15 +169,16 @@ profile per workflow (`profile: sprt`).
 training data, in kept-forever, append-only S3 buckets that task instances
 can add to: [docs/datasets.md](docs/datasets.md). A dataset can also be
 versioned, expire named prefixes, and protect prefixes from overwriting, all
-as approved in `config.yaml`.
+as approved in the project's entry in `config/projects.yaml`.
 
 ### Research projects
 
 A repository with only `dataset` and `task-runner` components (no image, no
 bot) is a research project, such as a GPU training project. It uses the same
 stack with the bot parts switched off, and its CI roles get `compute/*`
-instead of `container/*`. What it may ask for, and the $50 per-task cost
-ceiling, are central guardrails in `config.yaml`. Onboarding, the
+instead of `container/*`. What it may ask for (its entry in
+`config/projects.yaml`) and the $50 per-task cost ceiling (`config/bots.yaml`)
+are central guardrails. Onboarding, the
 `task-artifact` helper, resuming a training across runs, costs and destroy:
 [docs/research-projects.md](docs/research-projects.md).
 
@@ -212,7 +214,7 @@ on what the plan found:
 
 The resource table lists at most 40 resources (the rest are in the full
 output) and the whole comment is kept under `plan.comment_max_bytes` from
-`config.yaml`, truncating the plan text from the head. This repository's own
+`config/tool.yaml`, truncating the plan text from the head. This repository's own
 `Terraform plan` job renders its comment with `report plan-comment`, so the
 foundation plan and the site plans look the same.
 
@@ -233,19 +235,27 @@ image for an existing tag without cutting a release.
 ## Accounts
 
 Everything jaws builds lives in one AWS account, the JWall Engineering
-production account (570327089884), and `config.yaml` describes it: its account,
-its owner's admin role, the `jaws` name prefix (`context.organization`), the
-state bucket, the image repository and the `jwall.engineering` zone. A run
-never chooses an account, and every workflow builds its role ARNs from `jaws
-config env`.
+production account (570327089884). `config/aws.yaml` is the account registry,
+and its `primary` account is that one, with its owner's admin role
+(`admin_role_arn`). The rest of the tool configuration describes what jaws
+builds there: the `jaws` name prefix (`context.organization`), the state
+bucket, the image repository and the `jwall.engineering` zone. A run never
+chooses an account, and every workflow builds its role ARNs from
+`jaws config env`.
 
-`config.yaml` also records the organization's other two accounts, where jaws
-builds nothing and no run goes:
+Each account in the registry has a free-form name, a type (`management`,
+`development`, `staging` or `production`; at most one is `management`) and its
+ID. The registry also records the organization's other two accounts, where
+jaws builds nothing and no run goes:
 
-- **management** (`management.account_id`): AWS Organizations and IAM Identity
+- **management** (type `management`): AWS Organizations and IAM Identity
   Center, and with them [owner access](docs/owner-access.md) (the `jwall-admin`
   profile);
-- **development** (`development.account_id`): reached as the `jaws-dev` profile.
+- **development** (type `development`): reached as the `jaws-dev` profile.
+
+Projects choosing their own environments and accounts from the registry is
+planned ([#294](https://github.com/Jaws-Platform/jaws/issues/294)); today every
+project is built in the primary account.
 
 The tags the account decides are the tool's, never the project file's: every
 stack the tool renders and every task instance it launches gets `Organization`
@@ -253,7 +263,7 @@ and `ManagedBy` from `context.organization` and `context.managed_by` (both
 `jaws`). A project file may state `Organization: jaws` or leave it out, and
 leaves `ManagedBy` out.
 
-Credentials must belong to `config.yaml`'s account, even where the role check
+Credentials must belong to the primary account, even where the role check
 is skipped (`JAWS_SKIP_ROLE_CHECK`), so a secret or a stack is never written
 into another account by an admin profile left active. The foundation's plan
 stops the same way (`foundation/config.tf`).
@@ -276,6 +286,10 @@ stops the same way (`foundation/config.tf`).
   two-account code was removed. Its runbooks are in the git history, under
   `docs/production-bootstrap.md`, `docs/migration.md` and
   `docs/management-retirement.md`.
+- **2026-11-22:** `config.yaml` became the `config/` directory, and the project
+  registries moved from `foundation/*.tf` into `config/projects.yaml`, with the
+  accounts in a typed registry, `config/aws.yaml` (#292). Onboarding a project
+  became one change to `config/projects.yaml`; nothing in AWS changed.
 
 ## Shared modules from the Terraform Registry
 
@@ -293,7 +307,7 @@ This stack is a consumer of the seven Jaws module families, published to the pub
 
 Until Jaws 0.66 these were one library, [`jwallace145/jaws/aws`](https://registry.terraform.io/modules/jwallace145/jaws/aws), which is deprecated at its last version, 0.29.0. Version 0.1.0 of each family holds the same module code, so the move changed no resource.
 
-The root module itself creates no resources directly. It is the composition: identity, the `projects` map, module calls, and outputs.
+The root module itself creates no resources directly. It is the composition: identity, the projects it reads from `config/projects.yaml`, module calls, and outputs.
 
 Module sources look like this, with an exact `version` on every block:
 
@@ -307,7 +321,7 @@ module "site_bucket" {
 }
 ```
 
-Versions are pinned exactly, not with `~>`, because Terraform records provider versions in `.terraform.lock.hcl` but not module versions; an exact pin is the only way two applies of the same commit resolve the same code. Every pin of a family (in `foundation/`, the stacks under `stacks/`, `owner-access/` and `data-access/`) is always bumped together, and so is that family's entry under `library.families` in `config.yaml`.
+Versions are pinned exactly, not with `~>`, because Terraform records provider versions in `.terraform.lock.hcl` but not module versions; an exact pin is the only way two applies of the same commit resolve the same code. Every pin of a family (in `foundation/`, the stacks under `stacks/`, `owner-access/` and `data-access/`) is always bumped together, and so is that family's entry under `library.families` in `config/terraform.yaml`.
 
 **Upgrading.** When a family publishes a release, Dependabot's Terraform ecosystem opens a `chore(deps)` PR bumping its pins. The CI plan comment on that PR shows exactly what the new version changes in AWS. Read the family's changelog entry (`CHANGELOG.md` in `Jaws-Platform/terraform-aws-jaws-<family>`), check the plan, merge, and the change applies with the next release of this repo. While a family is on `0.x`, a breaking change bumps the minor version and is marked `!` in its changelog.
 
@@ -315,38 +329,59 @@ Versions are pinned exactly, not with `~>`, because Terraform records provider v
 
 The foundation Terraform stack lives in `foundation/`; every `.tf` path below
 is relative to it. The repository root holds the `jaws`
-CLI and `config.yaml`, the tool configuration shared by the stack and the CLI
-([design](https://github.com/Jaws-Platform/jaws/pull/26)).
+CLI and `config/`, the tool configuration shared by the stack and the CLI
+([design](https://github.com/Jaws-Platform/jaws/pull/26); [its
+files](#the-tool-configuration-config)).
 
 | Path | Owns |
 | --- | --- |
 | `versions.tf`, `providers.tf`, `context.tf` | Terraform and provider constraints, region, identity, and the registry `context` module whose tags are applied through `default_tags` |
 | `backend.tf`, `backend/prod.hcl` | S3 backend with native lockfile locking (no DynamoDB) |
-| `config.tf` | `config.yaml` as the foundation reads it, and the check that the credentials are its account's |
+| `config.tf` | The tool configuration (`config/`) as the foundation reads it: the primary account, every onboarded project (`local.registry`), and the check that the credentials are the primary account's |
 | `state.tf` | The shared state bucket (`tfstate-bucket` module) |
 | `oidc.tf` | GitHub OIDC provider (data source; owned by prog-strength-infra, see the TODO there) |
 | `dns.tf` | The hosted zone, its CAA record and the zone owner's TXT records (`hosted-zone` module) |
 | `ci-roles.tf` | This repo's own plan and apply roles (`ci-plan-role` and `ci-apply-role` modules) |
-| `ecr.tf` | The ECR repository for the infra CLI image, configured from `config.yaml` at the repository root |
-| `config.yaml` (root) | Tool configuration for the infra CLI and the foundation stack: Terraform version, module family pins, state bucket, DNS zone, ECR lifecycle, sync headers, and the central guardrails (`tasks.limits`, `tasks.max_run_cost_usd`, and per project the instance types, task profiles and dataset retention) |
+| `ecr.tf` | The ECR repository for the infra CLI image, configured from `ecr` in `config/tool.yaml` |
+| `config/` (root) | Tool configuration for the infra CLI and the foundation stack: the account registry, every onboarded project with its central guardrails, Terraform version, module family pins, state bucket, DNS zone, ECR lifecycle, sync headers, the bot and task runtimes and Databricks ([its files](#the-tool-configuration-config)) |
 | `src/jaws/`, `tests/`, `pyproject.toml` | The infra CLI, its tests and its `uv` project |
 | `stacks/site/` | The site stack the CLI renders for each site, pinned to the static-site module family like any consumer |
 | `stacks/bot/` | The bot stack the CLI renders for each bot or research project: ECR repository, VPC, records bucket, bot instance (the image and bot are off for a research project), task runner and dataset buckets |
 | `src/jaws/kinds/lichess_bot/` | The harness Dockerfile and entrypoint of the bot image |
-| `bots.tf` | The `bots` map: one entry per bot or research project, each with plan and apply roles, a release role for bots, and a task role where `config.yaml` lists instance types |
+| `bots.tf` | The bot and research projects' roles (types `bot` and `research` in `config/projects.yaml`): plan and apply roles, a release role for bots, and a task role where the project's entry lists instance types |
 | `docs/lichess-bot.md`, `docs/consumer-note.md` | The bot projects guide and the note a bot repository links to |
 | `docs/remote-tasks.md`, `docs/datasets.md`, `docs/research-projects.md`, `docs/costs.md` | Task instances, dataset buckets, research projects, and cost reports |
 | `docs/databricks.md` | Databricks workspace projects: setup, checks, apply and destroy, layout, costs, known gaps and the runbook |
-| `stacks/databricks-account/`, `stacks/databricks-workspace/`, `foundation/databricks.tf` | The two stacks of a Databricks project; the metastore, audit log delivery and the project registry |
-| `Dockerfile` | The CLI image: a pinned Terraform, the stack with modules and providers vendored, `config.yaml` |
+| `stacks/databricks-account/`, `stacks/databricks-workspace/`, `foundation/databricks.tf` | The two stacks of a Databricks project; the metastore, audit log delivery and each Databricks project's roles (type `databricks` in `config/projects.yaml`) |
+| `Dockerfile` | The CLI image: a pinned Terraform, the stack with modules and providers vendored, `config/` (at `/etc/jaws/config`) |
 | `.github/actions/terraform-init` | `terraform init` with a retry for the registry's lag after a library release |
-| `projects.tf` | The `projects` map: one entry per site, each fed to the registry `site-bucket`, `ci-plan-role`, `ci-preview-role` and `ci-apply-role` modules |
+| `projects.tf` | The sites (type `site` in `config/projects.yaml`), each fed to the registry `site-bucket`, `ci-plan-role`, `ci-preview-role` and `ci-apply-role` modules |
 | `outputs.tf` | Values the project repos and this repo's CI consume |
 | `registry/` | Derives the onboarded datasets from `datasets/` (each platform name, bucket and URL), tested against the CLI's derivation |
 | `scripts/apply-repo-settings.sh` | GitHub repository settings and the `main` ruleset |
+| `scripts/projects.sh` | The projects of the given types in `config/projects.yaml`, as JSON: the CI plan matrices and the apply workflows' check of a project's name |
 | `owner-access/` (root) | The owner's admin access through IAM Identity Center: a separate stack, applied only by the owner, never by CI ([docs/owner-access.md](docs/owner-access.md)) |
 | `datasets/` (root) | Onboarded datasets, one `<owner>/<name>.yaml` each ([datasets/README.md](datasets/README.md)) |
 | `data-access/` (root) | The reconcile: binds and grants each agreed dataset handshake, applied by the **Data access** workflow ([guide](docs/databricks.md#datasets-and-access)) |
+
+### The tool configuration: `config/`
+
+`config/` is one YAML document split across files: each file holds some of the
+top-level sections, and a section lives in one file only (the CLI and the
+foundation both refuse a section defined twice). One file holding every section
+is also accepted, as the tests' fixtures do. The CLI reads `./config` by
+default; `--config` and `JAWS_CONFIG` take the directory or one file, and the
+image bakes it at `/etc/jaws/config`.
+
+| File | Sections |
+| --- | --- |
+| `aws.yaml` | `aws`: the account registry, and `primary`, the account jaws builds in ([Accounts](#accounts)) |
+| `projects.yaml` | `projects`: every onboarded project, by GitHub owner, with its type, repository and central guardrails ([Projects registry](#projects-registry)) |
+| `terraform.yaml` | `terraform` (version, lock and plan timeouts), `library` (the module family pins, `library.families`), `state` (the state bucket, its region and key template) |
+| `tool.yaml` | `tool` (logging), `context` (organization, owner, managed_by), `plan` (the comment's size), `ecr` (the CLI image repository and its lifecycle) |
+| `sites.yaml` | `dns` (the Route 53 zone), `sync` (the cache headers `publish` sets) |
+| `bots.yaml` | `bot` (the bot runtime: AMIs, availability zones, health check, records prefix, `asset_wait`), `tasks` (remote tasks: Rust toolchain, images, `limits`, `max_run_cost_usd`) |
+| `databricks.yaml` | `databricks` (`enabled`, the account, service principal, metastore, compute policies and `shared_host_url`) |
 
 ## Tags
 
@@ -361,7 +396,7 @@ Every AWS resource this tool manages carries the same six tags, through the prov
 | `ManagedBy` | `jaws` | this tool, which provisions and changes it |
 | `Owner` | `jwallace145` | the person responsible for it |
 
-Project files state the first five; the CLI cross-checks `Project`, `Repository`, `Environment` and `Organization` against the rest of the file and `config.yaml`, and adds `ManagedBy` itself. The foundation stack gets the same set from the library's `context` module. Components add `Component`, `Purpose` and `Lifecycle` where they apply. These tags are the cost allocation tags `cost report` groups by; [docs/costs.md](docs/costs.md) lists which must be active.
+Project files state the first five; the CLI cross-checks `Project`, `Repository`, `Environment` and `Organization` against the rest of the file and the tool configuration (`config/`), and adds `ManagedBy` itself. The foundation stack gets the same set from the library's `context` module. Components add `Component`, `Purpose` and `Lifecycle` where they apply. These tags are the cost allocation tags `cost report` groups by; [docs/costs.md](docs/costs.md) lists which must be active.
 
 ## State bucket and key convention
 
@@ -380,7 +415,74 @@ Every statement is a deny matched on `aws:PrincipalArn`, so it grants nothing: i
 
 ## Projects registry
 
-`local.projects` in `projects.tf` is the single list of sites:
+`config/projects.yaml` is the one place a project is onboarded: every site, bot,
+research project and Databricks workspace. Projects are grouped by the GitHub
+account that owns their repository, an organization or a user, which states its
+numeric ID once:
+
+```yaml
+projects:
+  Braveheart-Chess:                  # the GitHub owner
+    owner_id: "356866252"            # gh api users/<owner> --jq .id
+    projects:
+      braveheart-trainer:            # the key: kebab-case, unique across owners
+        description: The trainer for Braveheart's NNUE nets, with bullet on GPU instances
+        type: research               # site, bot, research or databricks
+        repository: braveheart-trainer
+        repository_id: "1459456509"  # gh api repos/<owner>/<repo> --jq .id
+        instance_types: [c8a.xlarge, g6.xlarge, g6.2xlarge, g6e.xlarge]
+        task_profiles: [cpu, gpu]
+        datasets:
+          jaws-braveheart-trainer-nets:
+            prefix: data/
+            versioning: true
+```
+
+`type` decides what the foundation gives the project:
+
+| Type | Gets |
+| --- | --- |
+| `site` | a site bucket and plan, preview and apply roles (`projects.tf`); needs `domain` |
+| `bot` | the bot stack's roles, a release role included (`bots.tf`) |
+| `research` | the bot stack's roles without a release role, with `compute/*` instead of `container/*` (`bots.tf`) |
+| `databricks` | Databricks plan and apply roles (`databricks.tf`); needs its `databricks` entry |
+
+The rest of an entry is the project's central guardrails, reviewed here:
+`instance_types`, `task_profiles`, `datasets` and `max_run_cost_usd` for a bot
+or research project ([guide](docs/research-projects.md#central-guardrails)),
+and `databricks` for a Databricks project
+([guide](docs/databricks.md#onboarding-a-project)). The CLI refuses an entry
+that does not fit its type: a site needs a `domain` and has no task or dataset
+guardrails, only a site has a domain, and only a Databricks project has a
+`databricks` entry. Keys are lowercase kebab-case and unique across owners.
+
+The foundation reads the file as `local.registry` (`config.tf`), and
+`projects.tf`, `bots.tf` and `databricks.tf` take the projects of their types
+from it (`local.projects`, `local.bots` and `local.databricks_projects`). They
+define the roles and buckets; none of them lists a project.
+
+**Onboarding a project** is one reviewed change to `config/projects.yaml`:
+
+1. Add its entry under its GitHub owner, with its description, type,
+   repository, `repository_id` and guardrails. A new owner gets its group and
+   `owner_id` as well.
+2. Open a pull request. No workflow changes: the `Bot plan` and
+   `Databricks plan` jobs take their projects from the file
+   (`scripts/projects.sh`), and **Bot apply** and **Databricks apply** take
+   the project's name as text and check it against the file.
+3. Release. The foundation apply creates the project's roles, and a site's
+   bucket.
+
+What follows the release is in each kind's guide:
+[bots](docs/lichess-bot.md#owner-setup-once),
+[research projects](docs/research-projects.md#onboarding-a-research-project)
+and [Databricks workspaces](docs/databricks.md#onboarding-a-project); a site
+sets its role ARNs as repository variables ([Owner hand-off](#owner-hand-off)).
+
+### Sites
+
+The sites are the entries of type `site`, which `projects.tf` takes as
+`local.projects`:
 
 | Key | Repository | Domain |
 | --- | --- | --- |
@@ -403,10 +505,11 @@ The zone itself is owned here; every other record is owned by the project repos.
 
 ## Bot projects registry
 
-`local.bots` in `bots.tf` is the single list of bot and research projects. A
-research project (a `dataset` or `task-runner` and no bot) is also in
-`local.research_projects`; it gets `compute/*` instead of `container/*` and no
-release role ([docs/research-projects.md](docs/research-projects.md)):
+The bot and research projects are the entries of type `bot` and `research` in
+`config/projects.yaml`, which `bots.tf` takes as `local.bots`. A research
+project (type `research`: a `dataset` or `task-runner` and no bot) gets
+`compute/*` instead of `container/*` and no release role
+([docs/research-projects.md](docs/research-projects.md)):
 
 | Key | Repository |
 | --- | --- |
@@ -418,16 +521,16 @@ release role ([docs/research-projects.md](docs/research-projects.md)):
 | `pi-prover` | `Pi-Mathematical-Reasoning/pi` |
 | `prog-strength-archive` | `Prog-Strength/prog-strength-archive` |
 
-An entry for a repository outside this account also carries `owner_id`, the
-numeric ID of the organisation that owns it, because the release and task roles
+Each project takes `owner_id`, the numeric ID of the organization or user that
+owns its repository, from its owner's group, because the release and task roles
 trust GitHub's `repo:<owner>@<owner_id>/<name>@<repository_id>` subject.
 
 `braveheart` was registered as `rusty-chess` until 2026-11-15. Its stack was
 rebuilt under the new name and the old one destroyed.
 
-Each entry gets three roles (two for a research project), and a fourth when
-the project lists `instance_types` under `projects` in `config.yaml` (a
-`task-runner` component). Their state is `project=<key>/` in the shared
+Each project gets three roles (two for a research project), and a fourth when
+its entry in `config/projects.yaml` lists `instance_types` (a `task-runner`
+component). Their state is `project=<key>/` in the shared
 bucket, readable by the plan role and writable by the apply role:
 
 | Role | Trusted for | Policies |
@@ -470,7 +573,8 @@ state in a local file and then migrates it into the bucket.
 1. **Give the owner admin access to the account** with `owner-access/`
    ([docs/owner-access.md](docs/owner-access.md)), and put the admin role's ARN
    (`aws iam list-roles --path-prefix /aws-reserved/sso.amazonaws.com/`) in
-   `config.yaml` as `aws.admin_role_arn`. The hardened bucket policies exempt
+   `config/aws.yaml` as the primary account's `admin_role_arn`. The hardened
+   bucket policies exempt
    exactly that role: a wrong suffix locks the owner out of the state bucket.
 2. **Ask for the quotas** the task runners need (Running On-Demand Standard
    and Standard Spot vCPUs, VPCs per Region, and G and VT for GPU profiles).
@@ -497,8 +601,8 @@ state in a local file and then migrates it into the bucket.
    ```
 
 6. **Record the zone:** `terraform output -raw hosted_zone_id` is `dns.zone_id`
-   in `config.yaml`; the registrar's name servers follow once the zone holds
-   every record.
+   in `config/sites.yaml`; the registrar's name servers follow once the zone
+   holds every record.
 7. **Finish the hand-off** listed at the end of this file.
 
 ## CI/CD
@@ -513,22 +617,22 @@ state in a local file and then migrates it into the bucket.
 - `Image build and smoke test`: builds the CLI image, runs `validate` inside it offline, checks its Terraform version and enforces the compressed-size budget
 - `Bot stack validate, tflint` (`stacks/bot/`), `Databricks account stack validate, tflint` (`stacks/databricks-account/`) and `Databricks workspace stack validate, tflint` (`stacks/databricks-workspace/`)
 - `Stack plans against mock providers`: `scripts/test-stack-plans.sh` plans `stacks/bot` and both Databricks stacks with tfvars the CLI renders for the cases in `tests/stack_plans/<stack>/`; no AWS or Databricks
-- `Bot plan (<project>)`: for each bot in `bots.tf`, assumes the bot's plan role and posts its plan as a sticky comment. Until the release that creates the bot's roles, it skips with a notice instead of failing.
-- `Databricks plan (<project>)`: for each project in `foundation/databricks.tf`, while `databricks.enabled` is true, plans both stacks with the project's plan role and posts one sticky comment (the workspace plan is deferred until the workspace exists, and marked stale if the account plan replaces it).
+- `Bot plan (<project>)`: for each bot and research project in `config/projects.yaml` (the `Bot projects` job lists them with `scripts/projects.sh bot research`), assumes the project's plan role and posts its plan as a sticky comment. Until the release that creates the project's roles, it skips with a notice instead of failing.
+- `Databricks plan (<project>)`: for each Databricks project in `config/projects.yaml` (`scripts/projects.sh databricks`), while `databricks.enabled` in `config/databricks.yaml` is true, plans both stacks with the project's plan role and posts one sticky comment (the workspace plan is deferred until the workspace exists, and marked stale if the account plan replaces it).
 
 Every `terraform init` goes through `.github/actions/terraform-init`, which retries the registry's few-minute lag after a library release.
 
 **Releases, applies and the image** (`.github/workflows/release-please.yml`, on push to `main`):
 
-Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`; then the `image` job, also in `prod`, builds the CLI image and pushes it to the account's repository as `<repository>:<tag>` (`ecr.repository` in `config.yaml`, `jaws-cli`). Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
+Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`; then the `image` job, also in `prod`, builds the CLI image and pushes it to the account's repository as `<repository>:<tag>` (`ecr.repository` in `config/tool.yaml`, `jaws-cli`). Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
 
-No role ARN is a secret, and this repository needs none as a variable. The foundation's plan and apply jobs build their role (`<organization>-infra-ci-plan` / `-ci-apply`) from the account and organization `jaws config env` reads from `config.yaml`, and keep their state through `backend/prod.hcl`. Bot role ARNs need no variable either: the workflows build them the same way, with the bot's name.
+No role ARN is a secret, and this repository needs none as a variable. The foundation's plan and apply jobs build their role (`<organization>-infra-ci-plan` / `-ci-apply`) from the account and organization `jaws config env` reads from the tool configuration (the primary account in `config/aws.yaml`, `context.organization` in `config/tool.yaml`), and keep their state through `backend/prod.hcl`. Bot role ARNs need no variable either: the workflows build them the same way, with the bot's name.
 
-**Bot projects** (`.github/workflows/bot-apply.yml`, by hand): applies or destroys one bot's stack in the `prod` environment with its apply role. `.github/workflows/container-release.yml` is the reusable workflow a bot repository calls on each release ([guide](docs/lichess-bot.md#the-caller-workflow)).
+**Bot projects** (`.github/workflows/bot-apply.yml`, by hand): `workflow_dispatch` with the project's name, which must be a bot or research project in `config/projects.yaml`, applies or destroys its stack in the `prod` environment with its apply role. `.github/workflows/container-release.yml` is the reusable workflow a bot repository calls on each release ([guide](docs/lichess-bot.md#the-caller-workflow)).
 
-**Databricks projects** (`.github/workflows/databricks-apply.yml`, by hand): `workflow_dispatch` with the project name applies both stacks in the `prod` environment with the project's apply role (`action: apply`, the default); `action: destroy` empties the catalog bucket and destroys them; `action: doctor` runs the read-only checks and changes nothing. Re-running after a partial apply is safe ([guide](docs/databricks.md#what-apply-does)).
+**Databricks projects** (`.github/workflows/databricks-apply.yml`, by hand): `workflow_dispatch` with the project name, which must be a Databricks project in `config/projects.yaml`, applies both stacks in the `prod` environment with the project's apply role (`action: apply`, the default); `action: destroy` empties the catalog bucket and destroys them; `action: doctor` runs the read-only checks and changes nothing. Re-running after a partial apply is safe ([guide](docs/databricks.md#what-apply-does)).
 
-**Dataset access** (`.github/workflows/data-access.yml`): plans on every pull request, against the base branch's `datasets/` so that dropping a dataset a handshake still names fails, and sweeps every 15 minutes in the `prod` environment with `jaws-data-access-ci-apply`: each sweep plans and applies exactly what its plan found, so a failed apply is retried and drift undone by the next one; `workflow_dispatch` runs a sweep now. Its role ARNs are built from `config.yaml` like the bots' ([guide](docs/databricks.md#datasets-and-access)).
+**Dataset access** (`.github/workflows/data-access.yml`): plans on every pull request, against the base branch's `datasets/` so that dropping a dataset a handshake still names fails, and sweeps every 15 minutes in the `prod` environment with `jaws-data-access-ci-apply`: each sweep plans and applies exactly what its plan found, so a failed apply is retried and drift undone by the next one; `workflow_dispatch` runs a sweep now. Its role ARNs are built from the tool configuration like the bots' ([guide](docs/databricks.md#datasets-and-access)).
 
 ## Local development
 
@@ -559,7 +663,7 @@ Not automated; these need the owner's credentials or the GitHub UI.
 
 - Run the bootstrap steps above.
 - Create the GitHub `prod` environment with a deployment branch restriction to `main`.
-- In each site's repository, set its role ARNs and bucket name as repository variables (from `terraform output projects`). This repository needs none: its workflows derive the foundation's roles from `config.yaml`. (`AWS_PLAN_ROLE_ARN` and `AWS_APPLY_ROLE_ARN`, set here before v0.47, are no longer read and can be deleted.)
+- In each site's repository, set its role ARNs and bucket name as repository variables (from `terraform output projects`). This repository needs none: its workflows derive the foundation's roles from the tool configuration (`config/`). (`AWS_PLAN_ROLE_ARN` and `AWS_APPLY_ROLE_ARN`, set here before v0.47, are no longer read and can be deleted.)
 - Optional, for comments authored by the product rather than `github-actions[bot]`: create a GitHub App for the tool (the owner's is still named **JWall Engineering Infra**; the name shown beside a comment is the app's, and renaming it is the owner's; no webhook; permissions *Pull requests: read and write*; upload an avatar), generate a private key, and install it on this repo and every site repo. In each of those repos set the variable `JAWS_APP_CLIENT_ID` to the app's client ID and the secret `JAWS_APP_PRIVATE_KEY` to the full `.pem` contents, and pass them to the reusable workflows as shown above.
 - Activate cost allocation tags in Billing: `Organization`, `Project`, `Environment`, `Repository`, `ManagedBy`, `Owner`, `Component`, `Purpose`, `Profile` and `Lifecycle` (task instances carry `Purpose=ci-task`, `Profile=cpu|gpu` and `Lifecycle=spot|on-demand`, for the later tag-based cost tooling).
 - For GPU task profiles, raise the EC2 quotas in Service Quotas (us-east-1) as needed: *Running On-Demand G and VT instances* (5 vCPUs today, one `g6.xlarge` at a time) and *All G and VT Spot Instance Requests* (0 today). See [docs/remote-tasks.md](docs/remote-tasks.md#quotas).
@@ -572,9 +676,9 @@ Not automated; these need the owner's credentials or the GitHub UI.
 - For bot projects with a `task-runner`, after the release that creates the `ci-task` role:
   - run the **Bot apply** workflow (it creates the launch template and the task results bucket);
   - add the caller workflow to the bot repository ([docs/remote-tasks.md](docs/remote-tasks.md#the-caller)).
-- For projects with `dataset` components (listed under `projects.<name>.datasets` in `config.yaml`), after the release that grants `dataset/*` to their roles: run the **Bot apply** workflow; it creates the buckets ([docs/datasets.md](docs/datasets.md)). A versioned bucket needs the foundation apply that grants `s3:PutBucketVersioning` first.
+- For projects with `dataset` components (listed under `datasets` in the project's entry in `config/projects.yaml`), after the release that grants `dataset/*` to their roles: run the **Bot apply** workflow; it creates the buckets ([docs/datasets.md](docs/datasets.md)). A versioned bucket needs the foundation apply that grants `s3:PutBucketVersioning` first.
 - For a new research project, follow the onboarding order in [docs/research-projects.md](docs/research-projects.md#onboarding-a-research-project).
-- For Databricks workspace projects, follow [One-time setup](docs/databricks.md#one-time-setup): the service principal, the IDs and emails in `config.yaml`, `databricks credentials set`, deleting a pre-existing us-east-1 metastore (only with the owner's go-ahead), then `databricks.enabled: true`.
+- For Databricks workspace projects, follow [One-time setup](docs/databricks.md#one-time-setup): the service principal, the IDs and emails in `config/databricks.yaml`, `databricks credentials set`, deleting a pre-existing us-east-1 metastore (only with the owner's go-ahead), then `databricks.enabled: true` there.
 
 ## License
 
