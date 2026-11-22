@@ -61,7 +61,7 @@ module "infra_ci_plan" {
   version = "0.2.0"
 
   project                    = local.infra_ci.project
-  name_root                  = local.context.organization
+  name_root                  = local.context.name_root
   repository                 = local.context.repository
   repository_aliases         = local.context.repository_aliases
   repository_alias_owner_ids = local.context.repository_alias_owner_ids
@@ -83,7 +83,7 @@ module "infra_ci_apply" {
   version = "0.2.0"
 
   project                    = local.infra_ci.project
-  name_root                  = local.context.organization
+  name_root                  = local.context.name_root
   repository                 = local.context.repository
   repository_aliases         = local.context.repository_aliases
   repository_alias_owner_ids = local.context.repository_alias_owner_ids
@@ -133,7 +133,7 @@ module "data_access_ci_plan" {
   version = "0.2.0"
 
   project                    = local.data_access_ci.project
-  name_root                  = local.context.organization
+  name_root                  = local.context.name_root
   repository                 = local.context.repository
   repository_aliases         = local.context.repository_aliases
   repository_alias_owner_ids = local.context.repository_alias_owner_ids
@@ -154,7 +154,7 @@ module "data_access_ci_apply" {
   version = "0.2.0"
 
   project                    = local.data_access_ci.project
-  name_root                  = local.context.organization
+  name_root                  = local.context.name_root
   repository                 = local.context.repository
   repository_aliases         = local.context.repository_aliases
   repository_alias_owner_ids = local.context.repository_alias_owner_ids

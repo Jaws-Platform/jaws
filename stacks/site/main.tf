@@ -6,7 +6,7 @@
 # repository and only referenced here by name.
 
 locals {
-  bucket_name = "${var.tags["Organization"]}-${var.project}"
+  bucket_name = "${var.name_root}-${var.project}"
 }
 
 module "site" {

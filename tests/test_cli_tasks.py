@@ -409,11 +409,11 @@ def test_cleanup_commands_still_refuse_other_load_errors(
     """Only the central guardrails are skipped: the file must still be valid."""
     path = research_workspace / "jaws.yaml"
     raw = yaml.safe_load(path.read_text())
-    raw["tags"]["Organization"] = "someone-else"
+    raw["tags"]["Project"] = "someone-else"
     path.write_text(yaml.safe_dump(raw))
     result = runner.invoke(cli.app, command)
     assert result.exit_code == 2, result.output
-    assert "tags.Organization" in result.output
+    assert "Project must be" in result.output
     assert research_fleet == []
 
 

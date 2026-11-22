@@ -168,7 +168,7 @@ def policies_installed(ctx: CheckContext) -> Iterable[CheckResult]:
 @_live(AFT_004, stage=Stage.AFTER)
 def egress_routes(ctx: CheckContext) -> Iterable[CheckResult]:
     ec2 = _session(ctx).client("ec2", region_name=REGION)
-    base = f"{ctx.project.databricks_tags['Organization']}-{ctx.project.project}"
+    base = f"{ctx.project.name_root}-{ctx.project.project}"
     tables = ec2.describe_route_tables(
         Filters=[{"Name": "tag:Name", "Values": [f"{base}-private"]}]
     )["RouteTables"]

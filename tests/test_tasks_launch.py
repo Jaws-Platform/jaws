@@ -105,12 +105,12 @@ def _launch(ec2: FakeEC2, spec: tasks.TaskSpec, clock: Clock | None = None) -> t
 def test_task_tags(bot: Project) -> None:
     tags = tasks.task_tags(_spec(bot, pull_request="84"), "spot")
     assert tags == {
-        "Organization": "jaws",
+        "Organization": "Braveheart-Chess",
         "Project": "braveheart",
         "Environment": "prod",
         "Repository": "Braveheart-Chess/braveheart",
         "Owner": "jwallace145",
-        "ManagedBy": "jaws",
+        "ManagedBy": "JAWS",
         "Component": "task-runner",
         "Purpose": "ci-task",
         "Profile": "cpu",

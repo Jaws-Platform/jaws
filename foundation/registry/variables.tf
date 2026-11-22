@@ -3,8 +3,8 @@ variable "directory" {
   type        = string
 }
 
-variable "organization" {
-  description = "The organization prefix of every name, for example `jaws`."
+variable "name_root" {
+  description = "The root of every name (config/tool.yaml `context.name_root`), for example `jaws`."
   type        = string
 }
 

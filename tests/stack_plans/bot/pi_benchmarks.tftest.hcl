@@ -34,7 +34,7 @@ run "plans_one_bucket_and_nothing_else" {
   }
 
   assert {
-    condition     = var.tags["Organization"] == "jaws" && var.tags["ManagedBy"] == "jaws" && var.tags["Project"] == "pi-benchmarks"
-    error_message = "the stack is stamped with production's organization"
+    condition     = var.tags["Organization"] == "Pi-Mathematical-Reasoning" && var.tags["ManagedBy"] == "JAWS" && var.tags["Project"] == "pi-benchmarks"
+    error_message = "the stack is stamped with the project's GitHub owner and JAWS"
   }
 }

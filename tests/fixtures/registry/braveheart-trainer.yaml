@@ -12,7 +12,6 @@ repository: Braveheart-Chess/braveheart-trainer
 # The tags every resource carries (through the provider's default_tags).
 # Project, Repository and Environment=prod are cross-checked.
 tags:
-  Organization: jaws
   Project: braveheart-trainer
   Environment: prod
   Repository: Braveheart-Chess/braveheart-trainer
@@ -52,7 +51,7 @@ components:
   # https://github.com/Jaws-Platform/jaws/blob/main/docs/datasets.md
   - kind: dataset
     name: nets
-    bucket: jaws-braveheart-trainer-nets  # <Organization>-<project>-<name>
+    bucket: jaws-braveheart-trainer-nets  # <name_root>-<project>-<name>
     prefix: data/
     versioning: true
     readers:

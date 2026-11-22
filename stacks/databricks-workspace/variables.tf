@@ -25,6 +25,16 @@ variable "environment" {
   }
 }
 
+variable "name_root" {
+  description = "The root of every name in this stack (`<name_root>-<project>...`): config/tool.yaml `context.name_root`, for example `jaws`. A name only; the `Organization` tag is the project's GitHub owner."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]+(-[a-z0-9]+)*$", var.name_root))
+    error_message = "name_root must be kebab-case: lowercase letters, digits and single hyphens."
+  }
+}
+
 variable "repository" {
   description = "GitHub repository of the project, as `owner/repo`. Must match `tags.Repository`."
   type        = string
@@ -52,9 +62,9 @@ variable "tags" {
       lookup(var.tags, "Project", null) == var.project &&
       lookup(var.tags, "Repository", null) == var.repository &&
       lookup(var.tags, "Environment", null) == var.environment &&
-      lookup(var.tags, "ManagedBy", "") == "jaws"
+      lookup(var.tags, "ManagedBy", "") == "JAWS"
     )
-    error_message = "tags.Project, tags.Repository and tags.Environment must equal project, repository and environment, and tags.ManagedBy must be `jaws` (stamped by the CLI)."
+    error_message = "tags.Project, tags.Repository and tags.Environment must equal project, repository and environment, and tags.ManagedBy must be `JAWS` (stamped by the CLI)."
   }
 }
 

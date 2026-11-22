@@ -45,7 +45,7 @@ on:
         type: string
         default: ""
       release-role-arn:
-        description: Override the release role. Default, derived from this tool's configuration (config/) and `project`, `arn:aws:iam::<account>:role/<organization>-<project>-ci-release`.
+        description: Override the release role. Default, derived from this tool's configuration (config/) and `project`, `arn:aws:iam::<account>:role/<name_root>-<project>-ci-release`.
         required: false
         type: string
         default: ""
@@ -111,9 +111,9 @@ jobs:
           else
             resolved=$(uv run --no-dev --project .jaws-tool jaws --config "$CONFIG" config env)
             account=$(sed -n 's/^account_id=//p' <<<"$resolved")
-            organization=$(sed -n 's/^organization=//p' <<<"$resolved")
-            [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
-            arn="arn:aws:iam::${account}:role/${organization}-${PROJECT}-ci-release"
+            name_root=$(sed -n 's/^name_root=//p' <<<"$resolved")
+            [[ "$account" =~ ^[0-9]{12}$ && -n "$name_root" ]] || { echo "::error::jaws config env named no account or name root for $PROJECT"; exit 1; }
+            arn="arn:aws:iam::${account}:role/${name_root}-${PROJECT}-ci-release"
           fi
           echo "arn=$arn" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6

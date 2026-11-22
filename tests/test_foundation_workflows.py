@@ -17,7 +17,7 @@ from tests.conftest import CONFIG_DIR, REPO_ROOT
 
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 ACCOUNT_ID = "${{ needs.account.outputs.account_id }}"
-ORGANIZATION = "${{ needs.account.outputs.organization }}"
+NAME_ROOT = "${{ needs.account.outputs.name_root }}"
 
 
 def _jobs(name: str) -> dict[str, Any]:
@@ -41,7 +41,7 @@ def _uses(action: str) -> Any:
 def test_the_account_comes_from_the_tool(workflow: str) -> None:
     job = _jobs(workflow)["account"]
     assert job["outputs"]["account_id"] == "${{ steps.env.outputs.account_id }}"
-    assert job["outputs"]["organization"] == "${{ steps.env.outputs.organization }}"
+    assert job["outputs"]["name_root"] == "${{ steps.env.outputs.name_root }}"
     step = _step(job, lambda s: s.get("id") == "env")
     # Two commands, so that a failing `jaws` fails the step instead of writing
     # nothing (a command substitution inside `echo` hides its exit code).
@@ -65,7 +65,7 @@ def test_each_job_runs_as_the_accounts_role(workflow: str, job_name: str, role: 
     assert "account" in job["needs"] and "strategy" not in job
     credentials = _step(job, _uses("aws-actions/configure-aws-credentials"))
     assert credentials["with"]["role-to-assume"] == (
-        f"arn:aws:iam::{ACCOUNT_ID}:role/{ORGANIZATION}-" + role
+        f"arn:aws:iam::{ACCOUNT_ID}:role/{NAME_ROOT}-" + role
     )
 
 

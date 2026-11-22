@@ -132,7 +132,7 @@ Then, in this repository, one pull request:
    `type: research` (which gives it `compute/*` instead of `container/*` and
    no release role), its `repository` and `repository_id`, and its
    guardrails: instance types, task profiles, and each dataset bucket with its
-   retention, named `<Organization>-<project>-<name>`
+   retention, named `<name_root>-<project>-<name>`
    (`jaws-<project>-<name>`). Regenerate the foundation's test fixtures with
    `uv run python -m tests.test_foundation_fixtures`.
 3. Add a copy of the project file as `tests/fixtures/registry/<project>.yaml`.
@@ -187,7 +187,6 @@ project: math-prover
 repository: jwallace145/math-prover
 
 tags:
-  Organization: jaws
   Project: math-prover
   Environment: prod
   Repository: jwallace145/math-prover

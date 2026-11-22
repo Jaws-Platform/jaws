@@ -18,7 +18,7 @@ components:
   # ...container-image, lichess-bot, task-runner...
   - kind: dataset
     name: nnue                                 # kebab-case; not records or tasks
-    bucket: jaws-braveheart-nnue # <Organization>-<project>-<name>
+    bucket: jaws-braveheart-nnue # <name_root>-<project>-<name>
     prefix: data/                              # everything the project writes lives under it
     writers: [task-runner]                     # optional: who may add objects
     # readers: [braveheart-trainer/task-gpu]   # optional: <project>/<role> or a role ARN
@@ -32,14 +32,14 @@ components:
 | Field | Meaning |
 |---|---|
 | `name` | The dataset's name, in kebab-case. `records` and `tasks` are reserved, because the project already has those buckets. Names must be unique within the file. |
-| `bucket` | Where the project's workflows read and write: `<Organization>-<project>-<name>` in the account they run in. It is written out so they can read it with `yq` without installing the tool. The tool always uses the addressed account's derivation and accepts either account's name here, so one file renders in both while the project moves ([below](#moving-a-dataset-project-to-production)); any other name is refused. |
+| `bucket` | Where the project's workflows read and write: `<name_root>-<project>-<name>` in the account they run in. It is written out so they can read it with `yq` without installing the tool. The tool always uses the addressed account's derivation and accepts either account's name here, so one file renders in both while the project moves ([below](#moving-a-dataset-project-to-production)); any other name is refused. |
 | `prefix` | Path segments ending in `/` with no leading `/`, for example `data/`. Writers and readers are granted this prefix only. |
 | `writers` | Components whose roles may add objects under the prefix. Only `task-runner`, the task instances, is accepted today, and it needs a `task-runner` component. The default is none. |
-| `readers` | Roles granted read access under the prefix through the bucket policy: a role ARN, or `<project>/<role>` for another project's role in whichever account the run addresses (`braveheart-trainer/task-gpu` is `<Organization>-braveheart-trainer-task-gpu`). A `<project>/<role>` reader must name a project in `config/projects.yaml`, and is named only once that project has a stack in the account, since a bucket policy cannot name a role that does not exist yet: apply again after the reader's project is first applied there. The default is none; the account's administrators can always read. |
+| `readers` | Roles granted read access under the prefix through the bucket policy: a role ARN, or `<project>/<role>` for another project's role in whichever account the run addresses (`braveheart-trainer/task-gpu` is `<name_root>-braveheart-trainer-task-gpu`). A `<project>/<role>` reader must name a project in `config/projects.yaml`, and is named only once that project has a stack in the account, since a bucket policy cannot name a role that does not exist yet: apply again after the reader's project is first applied there. The default is none; the account's administrators can always read. |
 | `transition_days` | Days before objects move to S3 Intelligent-Tiering. The default is 0, which means at the next daily lifecycle run. |
 | `versioning` | Keep prior versions of overwritten or deleted objects. The default is `false`. |
 | `expire_noncurrent_days` | Days before noncurrent versions expire. Needs `versioning: true`. |
-| `consumers` | Databricks workspace projects that may read the prefix, read-only: this project's half of each handshake ([Datasets and access](databricks.md#datasets-and-access)). A workspace reads only once it also lists the dataset under its `reads` and the dataset is onboarded (`datasets/<owner>/<name>.yaml` in the infra repository); the dataset's role (`<organization>-ds-<owner>-<name>`) is then added to `readers`. Each must be a Databricks workspace project other than this one. The default is none. |
+| `consumers` | Databricks workspace projects that may read the prefix, read-only: this project's half of each handshake ([Datasets and access](databricks.md#datasets-and-access)). A workspace reads only once it also lists the dataset under its `reads` and the dataset is onboarded (`datasets/<owner>/<name>.yaml` in the infra repository); the dataset's role (`<name_root>-ds-<owner>-<name>`) is then added to `readers`. Each must be a Databricks workspace project other than this one. The default is none. |
 | `expire_prefixes` | Sub-prefixes of `prefix` whose current objects expire, in days, such as `{tmp/: 30}`. |
 
 `versioning`, `expire_noncurrent_days` and `expire_prefixes` must equal what

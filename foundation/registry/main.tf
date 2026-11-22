@@ -3,7 +3,7 @@
 # is both implementations' expected output). Pure: no resources, no providers.
 #
 # Two registry datasets can never overlap each other: each id has its own bucket
-# (<organization>-<owner>-<name>), so two URLs could meet only through two ids
+# (<name_root>-<owner>-<name>), so two URLs could meet only through two ids
 # sharing a key, which is refused below. Overlap with locations already in the
 # metastore is the foundation's live check (databricks.tf).
 
@@ -46,9 +46,9 @@ locals {
       name          = split("/", local.ids[f])[1]
       prefix        = local.raw[f].prefix
       description   = local.raw[f].description
-      platform_name = "${var.organization}-ds-${local.keys[f]}"
-      bucket        = "${var.organization}-${local.keys[f]}"
-      url           = "s3://${var.organization}-${local.keys[f]}/${trimsuffix(local.raw[f].prefix, "/")}"
+      platform_name = "${var.name_root}-ds-${local.keys[f]}"
+      bucket        = "${var.name_root}-${local.keys[f]}"
+      url           = "s3://${var.name_root}-${local.keys[f]}/${trimsuffix(local.raw[f].prefix, "/")}"
       # In Unity Catalog: the producer's catalog, the dataset's schema in it,
       # and its external volume (/Volumes/<catalog>/<schema>/files/).
       catalog = replace(split("/", local.ids[f])[0], "-", "_")

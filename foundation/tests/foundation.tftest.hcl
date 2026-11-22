@@ -112,14 +112,19 @@ run "the_account_is_config_yamls" {
 
   assert {
     condition = jsonencode(module.context.tags) == jsonencode({
-      Organization = "jaws"
+      Organization = "Jaws-Platform"
       Project      = "jaws"
       Environment  = "prod"
       Repository   = "Jaws-Platform/jaws"
-      ManagedBy    = "jaws"
+      ManagedBy    = "JAWS"
       Owner        = "jwallace145"
     })
-    error_message = "the foundation's tags are Organization=jaws, Project=jaws, ManagedBy=jaws"
+    error_message = "the foundation's tags are Organization=Jaws-Platform (this repository's GitHub owner), Project=jaws, ManagedBy=JAWS"
+  }
+
+  assert {
+    condition     = local.context.name_root == "jaws" && module.context.name_prefix == "jaws-jaws-prod"
+    error_message = "names keep the name root (context.name_root), whatever the Organization tag says"
   }
 
   assert {
@@ -234,7 +239,7 @@ run "takes_its_managed_by_from_the_configuration" {
   }
 
   assert {
-    condition     = module.context.tags["ManagedBy"] == "jaws-relabelled" && module.context.tags["Organization"] == "jaws"
+    condition     = module.context.tags["ManagedBy"] == "jaws-relabelled" && module.context.tags["Organization"] == "Jaws-Platform"
     error_message = "the ManagedBy tag is config/tool.yaml's context.managed_by, as the CLI stamps it on every stack it renders"
   }
 }

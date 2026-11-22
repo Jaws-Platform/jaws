@@ -24,7 +24,7 @@ output "datasets" {
 
   precondition {
     condition     = length(local.clashing) == 0
-    error_message = "two ids share a platform name (<organization>-ds-<owner>-<name>): ${join("; ", local.clashing)}."
+    error_message = "two ids share a platform name (<name_root>-ds-<owner>-<name>): ${join("; ", local.clashing)}."
   }
 }
 

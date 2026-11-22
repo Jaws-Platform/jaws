@@ -64,8 +64,9 @@ def test_rendered_tfvars_match_the_old_infra_directories(site: Site) -> None:
     assert tfvars["project"] == site.project
     assert tfvars["repository"] == site.config.repository
     assert tfvars["tags"]["Project"] == site.project
-    assert tfvars["tags"]["Organization"] == "jaws"
-    assert tfvars["tags"]["ManagedBy"] == "jaws"
+    assert tfvars["name_root"] == "jaws"
+    assert tfvars["tags"]["Organization"] == site.organization == "jwallace145"
+    assert tfvars["tags"]["ManagedBy"] == "JAWS"
 
 
 def test_rendered_backend_matches_the_old_backend_files(site: Site) -> None:
@@ -100,13 +101,14 @@ def test_render_tfvars_for_bot(bot: Project, settings: Settings) -> None:
     assert render_tfvars(bot, settings) == {
         "project": "braveheart",
         "repository": "Braveheart-Chess/braveheart",
+        "name_root": "jaws",
         "tags": {
-            "Organization": "jaws",
             "Project": "braveheart",
             "Environment": "prod",
             "Repository": "Braveheart-Chess/braveheart",
             "Owner": "jwallace145",
-            "ManagedBy": "jaws",
+            "Organization": "Braveheart-Chess",
+            "ManagedBy": "JAWS",
         },
         "bot_enabled": True,
         "instance_type": "t3.micro",
@@ -546,7 +548,8 @@ def _strip_new_keys(tfvars: dict[str, Any]) -> dict[str, Any]:
     old = {
         k: v
         for k, v in tfvars.items()
-        if k not in ("bot_enabled", "task_rust", "schedule", "bucket_admin_principal_arns")
+        if k
+        not in ("bot_enabled", "task_rust", "schedule", "bucket_admin_principal_arns", "name_root")
     }
     old["task_profiles"] = [
         {
@@ -878,6 +881,7 @@ ACCOUNT_OUTPUTS: dict[str, Any] = {
 ACCOUNT_TFVARS_KEYS = {
     "deployer",
     "project",
+    "name_root",
     "environment",
     "repository",
     "tags",
@@ -894,6 +898,7 @@ ACCOUNT_TFVARS_KEYS = {
 
 WORKSPACE_TFVARS_KEYS = {
     "project",
+    "name_root",
     "environment",
     "repository",
     "tags",
@@ -923,6 +928,7 @@ def test_databricks_account_tfvars(databricks: Project, settings: Settings) -> N
     assert settings.databricks is not None
     assert tfvars == {
         "project": "databricks-poc",
+        "name_root": "jaws",
         "environment": "prod",
         "repository": "example-org/databricks-poc",
         "tags": databricks.databricks_tags,

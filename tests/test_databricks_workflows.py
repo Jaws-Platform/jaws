@@ -280,7 +280,7 @@ def test_the_plan_job_uses_the_projects_plan_role_and_skips_until_it_exists() ->
     steps = _steps("ci.yml", "databricks-plan")
     role = steps[_index(steps, lambda s: s.get("id") == "role")]
     assert "uv run jaws config env" in role["run"]
-    assert ':role/${organization}-${PROJECT}-ci-plan"' in role["run"]
+    assert ':role/${name_root}-${PROJECT}-ci-plan"' in role["run"]
     assume = steps[_index(steps, lambda s: s.get("id") == "assume")]
     assert assume["continue-on-error"] is True
     assert assume["with"]["role-to-assume"] == "${{ steps.role.outputs.arn }}"
@@ -320,7 +320,7 @@ def test_databricks_apply_runs_the_projects_file_with_its_apply_role() -> None:
     checkout = steps[_index(steps, lambda s: s.get("with", {}).get("path") == ".consumer")]
     assert checkout["with"]["repository"] == "${{ steps.project.outputs.repository }}"
     role = steps[_index(steps, lambda s: s.get("id") == "role")]
-    assert ':role/${organization}-${PROJECT}-ci-apply"' in role["run"]
+    assert ':role/${name_root}-${PROJECT}-ci-apply"' in role["run"]
     run = steps[_index(steps, lambda s: "$COMMAND" in str(s.get("run", "")))]
     assert run["env"]["COMMAND"] == (
         "${{ inputs.action == 'destroy' && 'destroy --yes' || "

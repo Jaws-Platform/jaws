@@ -12,7 +12,7 @@ section defined twice, and a `.yml` file instead of skipping it.
 | [`projects.yaml`](projects.yaml) | `projects` | Every onboarded project, grouped by its GitHub owner: its type, repository, and what it is approved for |
 | [`aws.yaml`](aws.yaml) | `aws` | The account registry: every account by type, and `primary`, the one jaws builds in |
 | [`terraform.yaml`](terraform.yaml) | `terraform`, `library`, `state` | The Terraform version and timeouts, the module family versions, the state bucket and key template |
-| [`tool.yaml`](tool.yaml) | `tool`, `context`, `plan`, `ecr` | Logging, the organization, owner and ManagedBy tag, the plan comment size, the CLI's image repository |
+| [`tool.yaml`](tool.yaml) | `tool`, `context`, `plan`, `ecr` | Logging, the name root, the Organization tag of jaws's own stacks, the owner and the ManagedBy tag, the plan comment size, the CLI's image repository |
 | [`sites.yaml`](sites.yaml) | `dns`, `sync` | The hosted zone sites live in, and the cache headers every publish sets |
 | [`bots.yaml`](bots.yaml) | `bot`, `tasks` | How a bot instance runs, and how remote tasks run and what any task may ask for |
 | [`databricks.yaml`](databricks.yaml) | `databricks` | The Databricks account, its service principal, the metastore and the compute policies |

@@ -167,11 +167,13 @@ def test_bot_tags_are_cross_checked(tmp_path: Path, settings: Settings) -> None:
         _load(tmp_path, raw, settings)
 
 
-def test_bot_organization_tag_is_checked(tmp_path: Path, settings: Settings) -> None:
+def test_a_bot_is_tagged_with_its_github_owner(tmp_path: Path, settings: Settings) -> None:
+    """Whatever the file states, Organization is the owner in config/projects.yaml."""
     raw = _raw()
     raw["tags"]["Organization"] = "someone-else"
-    with pytest.raises(ConfigError, match=r"tags\.Organization"):
-        _load(tmp_path, raw, settings)
+    bot = _load(tmp_path, raw, settings)
+    assert bot.tags["Organization"] == "Braveheart-Chess" and bot.tags["ManagedBy"] == "JAWS"
+    assert bot.records_bucket == "jaws-braveheart-records"
 
 
 def _without_task_runner(raw: dict[str, Any]) -> dict[str, Any]:
@@ -743,13 +745,13 @@ def test_databricks_accessors_refuse_on_other_kinds(bot: Project) -> None:
         _ = bot.databricks_tags
 
 
-def test_organization_tag_is_still_checked_for_databricks(
+def test_a_databricks_project_is_tagged_with_its_github_owner(
     tmp_path: Path, settings: Settings
 ) -> None:
     raw: dict[str, Any] = yaml.safe_load(DATABRICKS_FILE.read_text())
     raw["tags"]["Organization"] = "someone-else"
-    with pytest.raises(ConfigError, match="Organization"):
-        _load(tmp_path, raw, settings)
+    tags = _load(tmp_path, raw, settings).databricks_tags
+    assert tags["Organization"] == "Test-Fixtures" and tags["ManagedBy"] == "JAWS"
 
 
 DATABRICKS_FILE = FIXTURES / "bots" / "databricks-poc.yaml"

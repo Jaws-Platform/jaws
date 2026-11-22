@@ -15,7 +15,7 @@ module "catalog" {
     databricks = databricks.workspace
   }
 
-  name_root        = var.tags["Organization"]
+  name_root        = var.name_root
   project          = var.project
   workspace_id     = var.workspace_id
   admin_group_name = var.admin_group_name

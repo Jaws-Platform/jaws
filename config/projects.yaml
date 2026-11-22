@@ -1,6 +1,6 @@
 # Every project onboarded to jaws: the one place a project is registered.
 # Onboarding a project is one reviewed change to this file. The foundation
-# gives each entry its CI roles (<organization>-<key>-ci-*), its state prefix
+# gives each entry its CI roles (<name_root>-<key>-ci-*), its state prefix
 # (project=<key>/) and, by type, its buckets and other roles; CI plans its stack.
 #
 # Projects are grouped by the GitHub account that owns their repository, an
@@ -32,7 +32,7 @@
 #
 #   instance_types     the instance types its task launch role may start
 #   task_profiles      the task profiles whose instance roles it may pass
-#   datasets           its dataset buckets, <Organization>-<project>-<name>, and their retention
+#   datasets           its dataset buckets, <name_root>-<project>-<name>, and their retention
 #   max_run_cost_usd   optional override of tasks.max_run_cost_usd (config/bots.yaml)
 #   databricks         a Databricks project's workspace settings
 

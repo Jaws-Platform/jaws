@@ -245,8 +245,8 @@ def test_bot_apply_looks_up_only_bot_and_research_projects(
 def test_bot_plan_and_apply_use_the_bots_roles() -> None:
     ci = (REPO_ROOT / ".github/workflows/ci.yml").read_text()
     apply = (REPO_ROOT / ".github/workflows/bot-apply.yml").read_text()
-    assert ':role/${organization}-${PROJECT}-ci-plan"' in ci
-    assert ':role/${organization}-${PROJECT}-ci-apply"' in apply
+    assert ':role/${name_root}-${PROJECT}-ci-plan"' in ci
+    assert ':role/${name_root}-${PROJECT}-ci-apply"' in apply
     assert "environment:" in apply and "name: prod" in apply
 
 
@@ -424,7 +424,7 @@ def test_dataset_buckets_match_the_project_files() -> None:
     for project in registry():
         components = project_file(project)["components"]
         names = [c["name"] for c in components if c["kind"] == "dataset"]
-        # Approved under the organization's name: <Organization>-<project>-<name>.
+        # Approved under the name root: <name_root>-<project>-<name>.
         buckets = [f"jaws-{project}-{name}" for name in names]
         if buckets:
             expected[project] = buckets
@@ -705,7 +705,7 @@ def test_the_shared_host_waits_for_the_metastore_module() -> None:
     host = _squashed(_module("databricks_shared_host", DATABRICKS_TF))
     assert "depends_on = [module.databricks_metastore]" in host
     metastore = _squashed(_module("databricks_metastore", DATABRICKS_TF))
-    assert 'admin_group_name = "${local.context.organization}-metastore-admins"' in metastore
+    assert 'admin_group_name = "${local.context.name_root}-metastore-admins"' in metastore
 
 
 def yaml_config() -> dict[str, Any]:

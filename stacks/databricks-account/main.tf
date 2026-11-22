@@ -8,7 +8,7 @@
 # makes the workspace stack's plan stale; the plan comment says so.
 
 locals {
-  name = "${var.tags["Organization"]}-${var.project}"
+  name = "${var.name_root}-${var.project}"
 
   # Two /20s (with a /16) in the upper half of the VPC, clear of the public /24s
   # vpc carves from its start; one per availability zone.
@@ -79,7 +79,7 @@ module "workspace" {
   }
 
   account_id      = var.account_id
-  name_root       = var.tags["Organization"]
+  name_root       = var.name_root
   project         = var.project
   environment     = var.environment
   vpc_id          = module.network.vpc_id

@@ -123,7 +123,7 @@ In this order:
    refuses a name that is not a Databricks project in `config/projects.yaml`.
 
 The project name must be at most 21 characters:
-`<organization>-<project>-databricks-cross-account` must fit IAM's 64
+`<name_root>-<project>-databricks-cross-account` must fit IAM's 64
 characters (`DBX-CFG-004`).
 
 ## The project file
@@ -134,7 +134,6 @@ project: databricks-poc
 repository: example-org/databricks-poc
 
 tags:
-  Organization: jaws
   Project: databricks-poc
   Environment: prod
   Repository: example-org/databricks-poc
@@ -153,8 +152,8 @@ and workspace admins are central (the project's `databricks` entry in
 `config/projects.yaml`); a project cannot widen a compute policy, add a node
 type or pick its own range.
 `compute_policies` must be kebab-case, must not repeat, and must be a subset
-of the project's approved list. The CLI adds `ManagedBy`, `CostCenter` and
-`Workspace` to the tags itself. The state is `project=<name>/env=prod/` in the
+of the project's approved list. The CLI adds `Organization`, `ManagedBy`,
+`CostCenter` and `Workspace` to the tags itself ([tagging](tagging.md)). The state is `project=<name>/env=prod/` in the
 shared bucket, one file per stack:
 `<name>-prod-account.tfstate` and `<name>-prod-workspace.tfstate`.
 
@@ -177,7 +176,7 @@ entry there no longer loads: move it to the project file.
 ### The deployer
 
 `deployer: true` gives the project a deploy identity: a service principal,
-`<organization>-<project>-deployer`, that GitHub Actions in the project's
+`<name_root>-<project>-deployer`, that GitHub Actions in the project's
 repository signs in as with no secret. The workspace module creates it in the
 account stack, with a federation policy that trusts:
 
@@ -364,7 +363,7 @@ consumer:
    `datasets/<owner>/<name>.yaml` ([datasets/README.md](../datasets/README.md)),
    registers the dataset once. The foundation creates its read-only IAM role,
    storage credential and external location, all named
-   `<organization>-ds-<owner>-<name>`, through the shared host, and binds them
+   `<name_root>-ds-<owner>-<name>`, through the shared host, and binds them
    to the host only. In Unity Catalog the dataset becomes a schema in its
    producer's catalog holding one external volume, `files` (below).
    Onboarding lets nobody read.
@@ -420,7 +419,7 @@ hold. Either side ends it alone by removing its half.
   Explorer next to their own catalog and read
   `/Volumes/<producer>/<dataset>/files/`, `-` replaced by `_` (the positions:
   `/Volumes/braveheart_selfplay/positions/files/`). The producer catalogs'
-  managed storage is one platform bucket, `<organization>-dataset-catalogs`,
+  managed storage is one platform bucket, `<name_root>-dataset-catalogs`,
   where nothing is written. A producer catalog may not take a workspace
   project's own catalog name; the foundation's plan refuses it.
 - **Separation.** A producer's catalog is bound only to the workspaces with an
@@ -552,7 +551,7 @@ continues.
 ## Tags on every resource
 
 Every AWS resource carries `Organization`, `Project`, `Environment`,
-`Repository`, `ManagedBy` and `Owner` through `default_tags`, plus
+`Repository`, `ManagedBy` and `Owner` through `default_tags` ([tagging](tagging.md)), plus
 `CostCenter` (the project's `databricks.cost_center` in `config/projects.yaml`)
 and `Workspace` (`<project>-prod`). The
 workspace and its clusters carry the same keys: the workspace's `custom_tags`

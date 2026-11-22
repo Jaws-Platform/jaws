@@ -34,7 +34,7 @@ class DerivedNames:
 
 
 def derived_names(project: Project) -> DerivedNames:
-    base = f"{project.organization}-{project.project}-databricks"
+    base = f"{project.name_root}-{project.project}-databricks"
     return DerivedNames(
         root_bucket=f"{base}-root",
         catalog_bucket=f"{base}-catalog",

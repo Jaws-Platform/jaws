@@ -32,7 +32,6 @@ project: braveheart
 repository: Braveheart-Chess/braveheart
 
 tags:
-  Organization: jaws
   Project: braveheart
   Environment: prod
   Repository: Braveheart-Chess/braveheart
@@ -53,7 +52,7 @@ components:
     config: lichess/config.yml
     lichess_user: rusty-chess-bot
     secrets:
-      LICHESS_TOKEN: lichess-token     # /<organization>/<project>/lichess-token in the account
+      LICHESS_TOKEN: lichess-token     # /<name_root>/<project>/lichess-token in the account
     engine:
       hash_mb: 128
       move_overhead_ms: 500
@@ -75,7 +74,7 @@ A file is either a site (`domain` and `site`) or a bot project
 | `version` | `1` | File format version. |
 | `project` | kebab-case, ≤ 30 | The project; every name below is derived from it. A project of type `bot` in `config/projects.yaml` takes at most 15 characters (a `research` project up to 30: its policies are much smaller): its apply role's `container/manage` policy repeats the name in 17 ARNs and IAM caps a managed policy at 6,144 characters. The project can differ from the repository name (`braveheart-bot` deploys from `Braveheart-Chess/braveheart-lichess-bot`). |
 | `repository` | `owner/repo` | Where the releases are published. Must match `tags.Repository`. |
-| `tags` | five required keys | Applied to every AWS resource for cost allocation. `Project`, `Repository` and `Environment: prod` are cross-checked; extra keys pass through. `Organization` and `ManagedBy` are the tool's: it stamps `jaws` / `jaws` whatever the file says. A stated `Organization` must be `jaws`; leave `ManagedBy` out. |
+| `tags` | four required keys | Applied to every AWS resource for cost allocation: `Project`, `Environment: prod`, `Repository` and `Owner`. `Project`, `Repository` and `Environment` are cross-checked; extra keys pass through. Leave `Organization` and `ManagedBy` out: the tool sets them, to the project's GitHub owner in `config/projects.yaml` and `JAWS` ([tagging](tagging.md)). A stated value is ignored with a warning, and a later release refuses it. |
 | `container-image.architecture` | `x86_64` \| `arm64`, `x86_64` | Must match the release asset. `arm64` also needs a `t4g` instance type. |
 | `container-image.artifact.asset` | file name with `{version}` | The release asset that holds the binary. `{version}` is the release tag. |
 | `container-image.artifact.checksum` | file name with `{version}` | Its `sha256sum` file. The build stops if the digest differs. |
@@ -87,7 +86,7 @@ A file is either a site (`domain` and `site`) or a bot project
 | `lichess-bot.instance_type` | `t3.micro` | EC2 instance type. Changing it replaces the instance. |
 | `lichess-bot.config` | relative `.yml` path | Your lichess-bot config. It must contain the token as `LICHESS_TOKEN_PLACEHOLDER`. |
 | `lichess-bot.lichess_user` | Lichess user name, none | Shown by `bot status` and written into every game record. |
-| `lichess-bot.secrets` | map | Environment variable to SSM parameter. Must include `LICHESS_TOKEN`. Name the parameter relative to the project (`lichess-token`): it is `/<organization>/<project>/lichess-token` in whichever account a run addresses. An absolute path also works, in the one account whose prefix it carries. Never `bot` or under `.../bot/`, which the release role writes. |
+| `lichess-bot.secrets` | map | Environment variable to SSM parameter. Must include `LICHESS_TOKEN`. Name the parameter relative to the project (`lichess-token`): it is `/<name_root>/<project>/lichess-token` in whichever account a run addresses. An absolute path also works, in the one account whose prefix it carries. Never `bot` or under `.../bot/`, which the release role writes. |
 | `lichess-bot.engine.hash_mb` | 1–4096, 128 | UCI `Hash`. |
 | `lichess-bot.engine.move_overhead_ms` | 0–5000, 500 | UCI `Move Overhead`, when the engine offers it. lichess-bot's own `move_overhead` stays in your config. |
 | `lichess-bot.records.s3` | bool, `true` | Ship finished games to S3. |
@@ -157,8 +156,8 @@ components:
 
 ## Names the tool derives
 
-Every name starts with the organization, `jaws` (`context.organization` in
-`config/tool.yaml`); state is in `jaws-terraform-state-570327089884`.
+Every name starts with the name root, `jaws` (`context.name_root` in
+`config/tool.yaml`); no tag carries it. State is in `jaws-terraform-state-570327089884`.
 
 | What | Name |
 |---|---|
@@ -340,7 +339,7 @@ jobs:
 Pin the tool release that ships the workflow, and let Dependabot bump it.
 The bot repository sets no variables or secrets. The workflow builds the
 release role's ARN from this tool's configuration (the primary account's
-`account_id` in `config/aws.yaml`, `context.organization` in
+`account_id` in `config/aws.yaml`, `context.name_root` in
 `config/tool.yaml`) and `project`, and the role's trust policy accepts
 only that repository's `v*` tags. A `release-role-arn` input can override the
 derived role.
@@ -538,7 +537,7 @@ each, which task instances may add to and nothing automated may delete. See
 ## Owner setup, once
 
 No repository variables or secrets are needed: every role ARN is derived
-from the primary account in `config/aws.yaml`, `context.organization` in
+from the primary account in `config/aws.yaml`, `context.name_root` in
 `config/tool.yaml` and the project name.
 
 1. **Register the bot.**

@@ -43,9 +43,9 @@ def _role_steps(name: str) -> list[tuple[str, dict[str, Any]]]:
 
 
 @pytest.mark.parametrize("name", sorted(p.name for p in WORKFLOWS_DIR.glob("*.yml")))
-def test_no_workflow_reads_the_account_or_the_organization_itself(name: str) -> None:
+def test_no_workflow_reads_the_account_or_the_name_root_itself(name: str) -> None:
     for job, step in _run_steps(name):
-        for key in (".aws.account_id", ".context.organization"):
+        for key in (".aws.account_id", ".context.name_root", ".context.organization"):
             assert key not in step["run"], f"{name} job {job}: reads {key} with yq"
 
 

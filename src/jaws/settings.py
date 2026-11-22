@@ -121,6 +121,8 @@ class StateSection(_Section):
 #: Organizations and IAM Identity Center; the others can hold workloads.
 ACCOUNT_TYPES = ("management", "development", "staging", "production")
 _ACCOUNT_NAME = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+#: A GitHub organization or user name, as GitHub spells it.
+_GITHUB_OWNER = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$")
 
 
 class Account(_Section):
@@ -209,10 +211,15 @@ class AwsSection(_Section):
 
 
 class ContextSection(_Section):
-    organization: str = Field(pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")
-    owner: str = Field(pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$")
-    #: The ManagedBy tag the tool stamps on everything it renders in this account.
-    managed_by: str = Field(default="jaws", pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")
+    #: The root of every name the tool gives (`<name_root>-<project>-...`, the
+    #: `<name_root>-infra-ci-*` roles). A name only, never a tag value.
+    name_root: str = Field(pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")
+    #: The Organization tag of the tool's own stacks: the GitHub owner of this
+    #: repository. A project's resources carry its own owner (`projects`).
+    organization: str = Field(pattern=_GITHUB_OWNER.pattern)
+    owner: str = Field(pattern=_GITHUB_OWNER.pattern)
+    #: The ManagedBy tag the tool stamps on everything it builds.
+    managed_by: str = Field(default="JAWS", pattern=r"^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$")
 
 
 class DnsSection(_Section):
@@ -512,7 +519,6 @@ class ProjectGuardrails(_Section):
 #: Databricks workspace.
 PROJECT_TYPES = ("site", "bot", "research", "databricks")
 _PROJECT_KEY = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-_GITHUB_OWNER = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$")
 
 
 class OnboardedProject(ProjectGuardrails):
@@ -656,7 +662,11 @@ class Settings(_Section):
 
     def repository(self, project: str) -> str:
         """An onboarded project's repository, as `<owner>/<name>`."""
-        return f"{self._project_owners[project]}/{self._projects[project].repository}"
+        return f"{self.owner(project)}/{self._projects[project].repository}"
+
+    def owner(self, project: str) -> str:
+        """The GitHub organization or user an onboarded project is registered under."""
+        return self._project_owners[project]
 
     @model_validator(mode="after")
     def _databricks_consistency(self) -> Settings:

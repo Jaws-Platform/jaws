@@ -2,7 +2,7 @@
 
 Each file here onboards one dataset to the platform. The foundation creates
 its one read-only, platform-owned IAM role, storage credential and Unity
-Catalog external location, all named `<organization>-ds-<owner>-<name>` (for
+Catalog external location, all named `<name_root>-ds-<owner>-<name>` (for
 example `jaws-ds-braveheart-selfplay-positions`).
 
 **Onboarding lets nobody read.** A Databricks workspace reads a dataset only
@@ -33,7 +33,7 @@ prefix: data/
 
 - `<owner>` is a registered project (`foundation/bots.tf`), and `<name>` is
   one of its `dataset` components. The bucket is that component's,
-  `<organization>-<owner>-<name>`.
+  `<name_root>-<owner>-<name>`.
 - `description` is required: what the data is.
 - `prefix` is required: what is onboarded, path segments ending in `/`, with
   no leading `/`, within the component's own prefix.
