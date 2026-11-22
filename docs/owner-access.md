@@ -31,7 +31,8 @@ Organizations and Identity Center are free.
   nor a stray apply can change your access.
 - **The infra CLI works as before.** Commands that check for a CI role still
   need `JAWS_SKIP_ROLE_CHECK=1` from your shell; owner-shell commands
-  (`bot secrets set`, `cost report`, `databricks credentials set`) need nothing.
+  (`bot secrets set`, `cost report`, `databricks credentials set`,
+  `monitoring secrets set`) need nothing.
 
 ## Daily use
 

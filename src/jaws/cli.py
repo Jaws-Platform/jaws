@@ -34,6 +34,7 @@ from . import (
     databricks_destroy,
     github,
     image,
+    monitoring,
     releases,
     report,
     rollout,
@@ -60,6 +61,7 @@ from .log import annotate_error, artifacts_dir, phase, setup_logging
 from .project import Project, Role
 from .settings import (
     DatabricksSection,
+    MonitoringSection,
     Settings,
     default_config_path,
     load_settings,
@@ -105,6 +107,14 @@ cost_app = typer.Typer(
     help="The account's spend from Cost Explorer, by the tags every resource carries.",
     no_args_is_help=True,
 )
+monitoring_app = typer.Typer(
+    help="The monitoring and cost platform (config/monitoring.yaml).", no_args_is_help=True
+)
+monitoring_secrets_app = typer.Typer(
+    help="The monitoring stack's secrets in SSM Parameter Store, under /jaws/monitoring/ "
+    "(values are never printed).",
+    no_args_is_help=True,
+)
 bot_app.add_typer(secrets_app, name="secrets")
 app.add_typer(task_app, name="task")
 app.add_typer(bot_app, name="bot")
@@ -115,6 +125,8 @@ app.add_typer(cost_app, name="cost")
 app.add_typer(databricks_app, name="databricks")
 app.add_typer(access_app, name="access")
 databricks_app.add_typer(credentials_app, name="credentials")
+app.add_typer(monitoring_app, name="monitoring")
+monitoring_app.add_typer(monitoring_secrets_app, name="secrets")
 
 LOG_FILE = "jaws.log"
 
@@ -2148,5 +2160,83 @@ def databricks_credentials_check(ctx: typer.Context) -> None:
             parameter,
             modified.strftime("%Y-%m-%d") if modified else "unknown",
         )
+
+    _command(body)(ctx)
+
+
+# -- monitoring -----------------------------------------------------------------
+
+
+def _monitoring_section(run: Run) -> MonitoringSection:
+    section = run.settings.monitoring
+    if section is None:
+        raise ConfigError(
+            "the tool configuration has no monitoring section (config/monitoring.yaml), "
+            "so the monitoring stack has no secrets"
+        )
+    return section
+
+
+def _owner_session(run: Run) -> boto3.session.Session:
+    """A session in the primary account's region, after checking the credentials
+    are that account's: the owner's shell, as `databricks credentials` runs."""
+    session = boto3.session.Session(region_name=run.settings.state.region)
+    with phase("preflight"):
+        account, arn = aws.caller_identity(session.client("sts"))
+        aws.check_account(account, run.settings.aws.account_id, arn)
+        run.logger.info("running as %s", arn)
+    return session
+
+
+@monitoring_secrets_app.command("set")
+def monitoring_secrets_set(
+    ctx: typer.Context,
+    name: Annotated[
+        str,
+        typer.Argument(
+            help="grafana-admin-user, grafana-admin-password, or slack/<channel> for a "
+            "channel in monitoring.slack.channels."
+        ),
+    ],
+) -> None:
+    """Prompt for a secret (no echo) and write it as a SecureString. Run from the owner's shell."""
+
+    def body(run: Run) -> None:
+        parameter = monitoring.secret_parameter(_monitoring_section(run), name)
+        session = _owner_session(run)
+        value = typer.prompt(f"{name}", hide_input=True)
+        if not value.strip():
+            raise PreflightError(f"{name} must not be empty")
+        botlib.put_secret(session.client("ssm"), parameter, value.strip())
+        run.logger.info(
+            "wrote %s to %s; the node picks it up at its next reconcile (5 minutes)",
+            name,
+            parameter,
+        )
+
+    _command(body)(ctx)
+
+
+@monitoring_secrets_app.command("check")
+def monitoring_secrets_check(ctx: typer.Context) -> None:
+    """List the secrets that are not set: exit 0 if every one is, 3 if any is
+    missing. Never reads a value."""
+
+    def body(run: Run) -> None:
+        secrets = monitoring.secret_parameters(_monitoring_section(run))
+        session = _owner_session(run)
+        ssm = session.client("ssm")
+        missing = [n for n, p in secrets.items() if not botlib.secret_exists(ssm, p)]
+        for name, parameter in secrets.items():
+            if name in missing:
+                run.logger.warning("missing %s (%s)", name, parameter)
+            else:
+                run.logger.info("%s (%s) is set", name, parameter)
+        if missing:
+            raise PreflightError(
+                f"{len(missing)} of {len(secrets)} monitoring secrets are not set: "
+                f"{', '.join(missing)} (`jaws monitoring secrets set <name>`)"
+            )
+        run.logger.info("all %d monitoring secrets are set", len(secrets))
 
     _command(body)(ctx)
