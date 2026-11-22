@@ -577,10 +577,10 @@ tasks end.
 
 | Command | Role | What it does |
 |---|---|---|
-| `task run --script P --ref SHA [--profile NAME] [--instance-type T] [--market spot\|on-demand] [--max-price-fraction F] [--on-demand-fallback\|--no-on-demand-fallback] [--max-hours N] [--out DIR] [--run-id ID] [--task-id ID] [--pull-request N] -- ARGS...` | `ci-task` | Runs the task, writes `outcome` and `interrupted-at` to `GITHUB_OUTPUT`, and exits with the task's code |
+| `task run --script P --ref SHA [--profile NAME] [--instance-type T] [--market spot\|on-demand] [--max-price-fraction F] [--on-demand-fallback\|--no-on-demand-fallback] [--max-hours N] [--campaign SLUG] [--out DIR] [--run-id ID] [--task-id ID] [--pull-request N] -- ARGS...` | `ci-task` | Runs the task, writes `outcome` and `interrupted-at` to `GITHUB_OUTPUT`, writes its `started` and `finished` [run records](#run-records), and exits with the task's code |
 | `task list` | `ci-plan` or `ci-task` | Lists the project's running task instances and their profiles (read-only) |
 | `task terminate (--instance ID \| --run-id ID [--task-id ID] \| --all)` | `ci-task` | Terminates matching task instances |
-| `task sweep [--dry-run]` | `ci-task` | Terminates task instances past their `MaxLifetimeHours` |
+| `task sweep [--dry-run]` | `ci-task` | Terminates task instances past their `MaxLifetimeHours`, writing a `swept` record for each |
 
 ## Names, tags and costs
 
@@ -606,11 +606,13 @@ Every task instance and its volume carry the project's six tags: the four from t
 | `TaskId` | the task's ID |
 | `PullRequest` | the pull request number, when there is one |
 | `MaxLifetimeHours` | the task's hour limit |
+| `Campaign` | the run's campaign, only with `--campaign` ([run records](#run-records)) |
 
 `Project`, `Component`, `Purpose`, `Profile`, `Lifecycle`, `Workflow`, `RunId`
 and `TaskId` are active cost allocation tags, so `cost report --project <name>`
 splits task spend by workflow (training, data generation, SPRT, ...); see
-[costs](costs.md).
+[costs](costs.md). `Campaign` is not active yet; the owner activates it before
+campaigns are used.
 
 us-east-1 prices on 2026-10-29, rounded. Billing is per second.
 
@@ -624,6 +626,82 @@ us-east-1 prices on 2026-10-29, rounded. Billing is per second.
 
 A 20-minute SPRT leg on a spot `c8a.16xlarge` at about $1 an hour costs
 about $0.35.
+
+## Run records
+
+Every task run leaves records of what ran, so the monitoring stack's
+**Cost · Tasks** dashboard can show one row per run with its cost and its
+launch metadata ([docs/monitoring.md](monitoring.md#dashboards-and-alerts)).
+They are written while `monitoring.cost` is set in `config/monitoring.yaml`,
+as it is in Jaws; without it there are none, and nothing is said.
+
+| Event | Written by | When |
+|---|---|---|
+| `started` | `task run` | the moment its instance launches |
+| `finished` | `task run` | once the task has ended and its instance is terminated, whatever the outcome |
+| `swept` | `task sweep` | for each leaked instance it terminates (not with `--dry-run`); an instance without `RunId` and `TaskId` tags gets none, and a warning |
+
+**Where.** One JSON object per event, in the billing bucket:
+
+```text
+s3://jaws-billing-570327089884/raw/provider=jaws/source=task-runs/
+  project=<project>/date=YYYY-MM-DD/<run-id>.<task-id>.<event>.json
+```
+
+The date is the event's UTC date. A record is written once and never
+replaced: a retry finds it there and moves on. The project's `ci-task` role
+writes it (its `task/records` policy), and may put objects only under its own
+`project=<project>/` prefix, nothing else in the bucket.
+
+**What.** The records follow the monitoring module's `runs-1` schema (the
+[normalizer's task runs](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.0/modules/billing-normalizer/README.md#what-it-reads)):
+
+| Field | In | Holds |
+|---|---|---|
+| `schema`, `event`, `at`, `project` | every record | `runs-1`, the event, its time and the project |
+| `tags` | every record | the instance's tags, `RunId` and `TaskId` among them: the run's billing rows are joined to it on those two |
+| `campaign`, `kind` | every record | the campaign, if any, and the calling workflow |
+| `instance` | every record | type, GPU count, market, zone and instance ID (`swept`: type, market and ID) |
+| `prices` | `started`, `finished` | the hourly price paid at launch (spot or on demand), the on-demand price, the worst-case cost, the ceiling and `max_hours` |
+| `links` | `started`, `finished` | the GitHub Actions run (with its attempt), the pull request and the commit |
+| `attributes` | every record | the profile, lifecycle, repository, commit, workflow, pull request, zone, image, spot cap and placement score; `finished` adds the GPU model, its memory, and the driver and CUDA versions from the runner's environment block; `swept` has the profile, lifecycle, launch time and `max_hours` |
+| `outcome`, `exit_code`, `interrupted_at` | `finished` | how it ended (`passed`, `failed`, `interrupted`), the task's exit code, and when spot reclaimed it |
+| `reason` | `swept` | why the sweep terminated it |
+
+The normalizer turns them into an event table every hour, and the node joins
+each run to the billing rows that carry its `RunId` and `TaskId`. Until the
+bill arrives, a day or two later, the run's cost is an estimate marked `~`: its
+hours times the hourly price at launch. Two pipeline alerts watch the runs: a
+run with no `finished` or `swept` record an hour past its `max_hours` (a
+possibly leaked instance), and a run whose billed cost is over its ceiling.
+
+**Campaigns.** A campaign is a set of runs toward one goal, such as a
+data-generation push made of many small spot runs, some interrupted and run
+again. Name one at launch with `task run --campaign <slug>`, or with the
+reusable workflow's `campaign` input:
+
+```yaml
+    uses: Jaws-Platform/jaws/.github/workflows/remote-task.yml@vX.Y.Z
+    with:
+      project: braveheart-selfplay
+      script: ci/datagen.sh
+      campaign: datagen-2026-12   # lowercase letters, digits and -, at most 63
+```
+
+The slug goes in the run's records and on its instance and volume as the
+`Campaign` tag; anything else is refused before launch (exit 2). Without it the
+run carries no `Campaign` tag. There is no registry of campaigns: the name is
+the campaign, and **Cost · Tasks** groups by it. Once `Campaign` is an active
+cost allocation tag ([costs](costs.md#cost-allocation-tags)), the billing rows
+carry it too, so a run's cost still groups by campaign when its records failed
+to write.
+
+**A failed write is a warning only.** The S3 client gives up within seconds,
+and a record that cannot be written (no permission, a slow bucket, any error)
+is logged as a warning. It never fails the task, never changes its exit code or
+outcome, and never holds up the launch, the task or the termination. The run
+still shows on **Cost · Tasks** from its tags once its bill arrives, without
+the launch metadata.
 
 ## Runbook
 
