@@ -9,7 +9,7 @@ them from drifting.
 
 Regenerate after changing config/:
 
-    uv run python tests/test_foundation_fixtures.py
+    uv run python -m tests.test_foundation_fixtures
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ def _expected(name: str) -> dict[str, Any]:
 def test_a_foundation_fixture_is_the_config_with_its_few_changes(name: str) -> None:
     actual = yaml.safe_load((FIXTURES_DIR / name).read_text())
     assert actual == _expected(name), (
-        f"{name} has drifted from config/: uv run python tests/test_foundation_fixtures.py"
+        f"{name} has drifted from config/: uv run python -m tests.test_foundation_fixtures"
     )
 
 

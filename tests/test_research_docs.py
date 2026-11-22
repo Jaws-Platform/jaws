@@ -22,9 +22,19 @@ def test_the_docs_sample_is_the_fixture() -> None:
 
 
 def test_the_docs_central_entry_is_the_one_the_tests_approve() -> None:
+    """The sample's entry in config/projects.yaml, under its GitHub owner: its
+    guardrails are the ones the tests approve, and it is a research project."""
     entries = [
-        b["projects"]["math-prover"]
+        group["projects"]["math-prover"]
         for b in _yaml_blocks()
-        if "math-prover" in b.get("projects", {})
+        for group in (b.get("projects") or {}).values()
+        if isinstance(group, dict) and "math-prover" in (group.get("projects") or {})
     ]
-    assert [ProjectGuardrails.model_validate(e) for e in entries] == [MATH_PROVER_GUARDRAILS]
+    approved = [
+        ProjectGuardrails.model_validate(
+            {k: v for k, v in e.items() if k in ProjectGuardrails.model_fields}
+        )
+        for e in entries
+    ]
+    assert approved == [MATH_PROVER_GUARDRAILS]
+    assert [e["type"] for e in entries] == ["research"]
