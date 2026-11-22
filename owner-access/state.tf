@@ -7,10 +7,17 @@
 # created by hand before the first `terraform init` that uses it (a backend
 # cannot create its own bucket) and is adopted here by the imports below.
 #
-# Its policy only requires TLS. The account holds nothing but the organization,
-# Identity Center and billing data, and its only principals are the owner's
-# admin role and root, so there is no CI role to fence off, and no role ARN is
-# pinned that a recreated permission set could lock out.
+# Its policy requires TLS and denies every principal except the owner's
+# Identity Center admin role and root: this state names every account the
+# owner can reach, and no one else, not even another admin in this account,
+# needs it. No CI role applies this stack, so none is listed. Like the shared
+# bucket's policy (foundation/state.tf), every statement is a deny: it bounds
+# what IAM allows and grants nothing.
+#
+# The admin role is matched by name, not by its exact ARN. Identity Center
+# creates it under a path IAM reserves for Identity Center, so no one can
+# create a look-alike, and a recreated permission set, whose role gets a new
+# generated suffix, cannot lock the owner out of the state that recreates it.
 
 locals {
   state_bucket_name = "jaws-owner-access-state-${local.account_id}"
@@ -91,32 +98,55 @@ resource "aws_s3_bucket_ownership_controls" "state" {
   }
 }
 
-data "aws_iam_policy_document" "state" {
-  statement {
-    sid     = "DenyInsecureTransport"
-    effect  = "Deny"
-    actions = ["s3:*"]
-    resources = [
-      aws_s3_bucket.state.arn,
-      "${aws_s3_bucket.state.arn}/*",
+locals {
+  # Who may touch the state at all. Root is the emergency path when Identity
+  # Center is down (docs/owner-access.md#root-the-emergency-path).
+  state_admin_principal_arns = [
+    "arn:aws:iam::${local.account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_${module.owner_admin.permission_set_name}_*",
+    "arn:aws:iam::${local.account_id}:root",
+  ]
+
+  state_bucket_resources = [
+    aws_s3_bucket.state.arn,
+    "${aws_s3_bucket.state.arn}/*",
+  ]
+
+  state_bucket_policy = {
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource  = local.state_bucket_resources
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      },
+      {
+        # Reading, writing, listing and reconfiguring alike, so no one outside
+        # the list can replace this policy and undo it.
+        Sid       = "DenyAllButTheOwner"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource  = local.state_bucket_resources
+        Condition = {
+          ArnNotLike = {
+            "aws:PrincipalArn" = local.state_admin_principal_arns
+          }
+        }
+      },
     ]
-
-    principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
-
-    condition {
-      test     = "Bool"
-      variable = "aws:SecureTransport"
-      values   = ["false"]
-    }
   }
 }
 
 resource "aws_s3_bucket_policy" "state" {
   bucket = aws_s3_bucket.state.id
-  policy = data.aws_iam_policy_document.state.json
+  policy = jsonencode(local.state_bucket_policy)
 
   depends_on = [aws_s3_bucket_public_access_block.state]
 }
