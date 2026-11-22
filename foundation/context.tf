@@ -46,7 +46,7 @@ locals {
 
 module "context" {
   source  = "Jaws-Platform/jaws-foundation/aws//modules/context"
-  version = "0.1.2"
+  version = "0.1.3"
 
   project      = local.context.project
   environment  = local.context.environment
