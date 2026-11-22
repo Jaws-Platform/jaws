@@ -473,6 +473,26 @@ follows `container-instance` from `terraform-aws-jaws-lichess-bot`:
 - If a pull ever fails, the pinned images get mirrored into a private ECR
   repository, at about $0.10 a month, without ECR's pull-through cache.
 
+**As built in v0.3.0 (plan 04):**
+
+- **Instance metadata:** IMDSv2 with a hop limit of 2, so containers reach the instance role.
+- **Role:** an inline Session-Manager-only statement replaces
+  `AmazonSSMManagedInstanceCore`, which would let the node read every
+  SecureString in the account.
+- **Config delivery:** the bundle is one JSON object, `monitoring-bundle-1`,
+  holding `files`, `secrets` and `generated`, stored at
+  `bundles/<sha256>.json`. The reconciler applies it at boot and every 5
+  minutes, with no State Manager association.
+- **The reconciler's order:**
+  1. start the current release;
+  2. read the bundle name and the secrets;
+  3. download, generate, write the release and pull (with retries);
+  4. save the values, swap and `up`;
+  5. apply a rotated Grafana password with `grafana cli admin reset-admin-password`.
+- **Where state lives:** what runs is recorded on the root volume, so a replaced instance reconciles in full.
+- **Mounts:** config is mounted through `/data/config/current`, so only services whose files changed are recreated.
+- **Secrets in Compose:** they are `${NAME:?}`, so a missing one fails `up` instead of starting with a blank value.
+
 **Containers** (Docker Compose under systemd, with digest-pinned images and
 a memory limit each; exact values are the builder's)
 

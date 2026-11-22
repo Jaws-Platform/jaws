@@ -178,7 +178,7 @@ blackbox-exporter  docker.io/prom/blackbox-exporter:v0.29.1@sha256:ea1c7aa3ef3f3
   - `<name>-config-<account id>`, for the config bucket;
   - `/<name>/node/{config-bundle,status,running-config}`, for the parameters.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 The tests mock `aws`, with `override_during = plan`:
 - `aws_caller_identity` = `123456789012`, `aws_region` = `us-east-1`;
@@ -218,9 +218,9 @@ Its runs:
 - **`rejects_a_domain_without_a_zone`:** `expect_failures = [aws_route53_record.this]`, through a precondition, or `[var.zone_id]` through validation.
 - **`rejects_an_invalid_name`**, and **`rejects_a_tiny_data_volume`** (`data_volume_gb = 5`).
 
-- [ ] **Step 2: Run them to see them fail.** Run: `cd $MOD && terraform init -backend=false >/dev/null && terraform test`. Expected: undeclared resources.
+- [x] **Step 2: Run them to see them fail.** Run: `cd $MOD && terraform init -backend=false >/dev/null && terraform test`. Expected: undeclared resources.
 
-- [ ] **Step 3: Implement the infrastructure**
+- [x] **Step 3: Implement the infrastructure**
   - `network.tf`: the security group and the record.
   - `storage.tf`: the data volume, the attachment, the DLM role and policy, and the config bucket (versioned, private, SSE-S3, `prevent_destroy` not set, noncurrent versions expiring after 30 days).
   - `iam.tf`: as tested.
@@ -228,9 +228,9 @@ Its runs:
 
   `user_data` is a placeholder `local.user_data` that Task 2 replaces. `aws_s3_object.bundle` is a placeholder too, which Task 4 fills.
 
-- [ ] **Step 4: Run them to see them pass.** Expected: `Success! 10 passed`.
+- [x] **Step 4: Run them to see them pass.** Expected: `Success! 10 passed`.
 
-- [ ] **Step 5: Commit.** `feat(monitoring-node): add the node's instance, data volume, network and role` (with the trailer).
+- [x] **Step 5: Commit.** `feat(monitoring-node): add the node's instance, data volume, network and role` (with the trailer).
 
 ---
 
@@ -256,7 +256,7 @@ Its runs:
   
   `runcmd` installs `docker` with dnf, then enables `docker` and all the units. Per-boot work lives only in units, never in `runcmd`.
 
-- [ ] **Step 1: Write the failing tftest run, `the_user_data_bootstraps_every_boot`:**
+- [x] **Step 1: Write the failing tftest run, `the_user_data_bootstraps_every_boot`:**
   - the rendered `aws_instance.this.user_data` contains `v5.6.1/docker-compose-linux-aarch64` and `42cfa75f51ad0ccf290bad37899e0038a8c10a0069e85233ecc1d53e3ff1347d`;
   - it contains `PARAMETER_PREFIX='/acme-monitoring/node'` and the data volume ID;
   - `monitoring-bootstrap.service` has `Before=docker.service`;
@@ -264,7 +264,7 @@ Its runs:
 
   Run: `terraform test`. Expected: FAIL.
 
-- [ ] **Step 2: Write the two scripts and the template.** `monitoring-bootstrap.sh`:
+- [x] **Step 2: Write the two scripts and the template.** `monitoring-bootstrap.sh`:
   - finds the volume through `/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_<vol id without hyphen>`;
   - runs `mkfs.xfs` only if `blkid` finds no filesystem;
   - adds an fstab entry with `nofail`;
@@ -274,9 +274,9 @@ Its runs:
   - installs the Compose plugin only if its checksum matches;
   - with a domain, gets the public IPv4 address from IMDSv2 and upserts the record with `aws route53 change-resource-record-sets`, retrying 5 times.
 
-- [ ] **Step 3: Run the checks.** Run: `scripts/check-module.sh modules/monitoring-node`. Expected: shellcheck is clean, and terraform test shows `11 passed`.
+- [x] **Step 3: Run the checks.** Run: `scripts/check-module.sh modules/monitoring-node`. Expected: shellcheck is clean, and terraform test shows `11 passed`.
 
-- [ ] **Step 4: Commit.** `feat(monitoring-node): bootstrap the node on every boot` (with the trailer).
+- [x] **Step 4: Commit.** `feat(monitoring-node): bootstrap the node on every boot` (with the trailer).
 
 ---
 
@@ -304,7 +304,7 @@ Its runs:
   12. `compose up -d --remove-orphans`.
   13. Put `status` and `running-config`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - **`test_a_first_run_installs_the_bundle_and_starts_the_stack`:**
     - `current` points to `releases/<sha>`;
     - the files match the bundle;
@@ -319,13 +319,13 @@ Its runs:
   - **`test_a_bad_bundle_is_refused`:** a wrong `schema` gives `failed:bundle schema`.
   - **`test_with_ssm_unreachable_the_current_release_still_starts`:** the fake aws fails every call, so `up -d` still ran on the current release and the exit code is 1.
 
-- [ ] **Step 2: Run them to see them fail.** Run: `scripts/check-module.sh modules/monitoring-node`. Expected: FAIL (no script).
+- [x] **Step 2: Run them to see them fail.** Run: `scripts/check-module.sh modules/monitoring-node`. Expected: FAIL (no script).
 
-- [ ] **Step 3: Implement the reconciler.**
+- [x] **Step 3: Implement the reconciler.**
 
-- [ ] **Step 4: Run them to see them pass.** Expected: `Ran 8 tests … OK`, and terraform test unchanged.
+- [x] **Step 4: Run them to see them pass.** Expected: `Ran 8 tests … OK`, and terraform test unchanged.
 
-- [ ] **Step 5: Commit.** `feat(monitoring-node): converge the node to its config bundle` (with the trailer).
+- [x] **Step 5: Commit.** `feat(monitoring-node): converge the node to its config bundle` (with the trailer).
 
 ---
 
@@ -340,7 +340,7 @@ Its runs:
 - `local.bundle` is the object in Global Constraints. `aws_s3_object.bundle` is at key `bundles/<sha256(jsonencode(local.bundle))>.json` with `content_type = "application/json"`.
 - Plan 05 adds files under `grafana/provisioning/alerting/` and `grafana/dashboards/`, and keys in `secrets` for the Slack webhooks, by merging into `local.bundle_files` and `local.bundle_secrets`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - **`every_image_is_pinned_by_digest`:** `alltrue([for s in values(yamldecode(local.bundle.files["compose.yaml"]).services) : strcontains(s.image, "@sha256:")])`.
   - **`the_stack_has_memory_limits_and_restarts`:** every service has `mem_limit` (`prometheus` 1g, `grafana` 512m) and `restart == "unless-stopped"`.
   - **`without_a_domain_grafana_is_only_on_localhost`:** the services are exactly `grafana`, `prometheus`, `node-exporter`, `cadvisor`, `postgres` and `postgres-exporter`, and `grafana.ports == ["127.0.0.1:3000:3000"]`.
@@ -358,13 +358,13 @@ Its runs:
     - `generated == ["POSTGRES_PASSWORD"]`.
   - **`a_service_is_recreated_only_when_its_files_change`:** `compose.services.prometheus.labels["monitoring.config-hash"] == sha256(local.bundle.files["prometheus/prometheus.yml"])`.
 
-- [ ] **Step 2: Run them to see them fail.** Expected: FAIL.
+- [x] **Step 2: Run them to see them fail.** Expected: FAIL.
 
-- [ ] **Step 3: Implement `bundle.tf`, the Caddyfile and the blackbox config.**
+- [x] **Step 3: Implement `bundle.tf`, the Caddyfile and the blackbox config.**
 
-- [ ] **Step 4: Run the whole suite.** Run: `scripts/check.sh`. Expected: `All checks passed.`
+- [x] **Step 4: Run the whole suite.** Run: `scripts/check.sh`. Expected: `All checks passed.`
 
-- [ ] **Step 5: README.** Cover:
+- [x] **Step 5: README.** Cover:
   - what it creates, and the data volume layout;
   - how a change rolls out (the bundle, the 5-minute timer, or `systemctl start monitoring-reconcile` through Session Manager);
   - the status parameter's values;
@@ -372,12 +372,12 @@ Its runs:
   - reaching Grafana without a domain: `aws ssm start-session --document-name AWS-StartPortForwardingSession --parameters portNumber=3000,localPortNumber=3000`;
   - the secrets the owner must set first.
 
-- [ ] **Step 6: Commit.** `feat(monitoring-node): render the container stack as a content-addressed bundle` (with the trailer).
+- [x] **Step 6: Commit.** `feat(monitoring-node): render the container stack as a content-addressed bundle` (with the trailer).
 
 ---
 
 ### Task 5: Publish 0.3.0 (owner permission, asked for at this step)
 
-- [ ] **Step 1:** Push and open the PR (`feat.md`). Expected: CI is green.
-- [ ] **Step 2:** Squash-merge, then merge the `release 0.3.0` PR. Expected: the tag `v0.3.0` exists.
-- [ ] **Step 3:** Record it on the Jaws docs branch: tick this plan, set the roadmap, and update spec 6.5 with what was built (the hop limit of 2, the bundle format, the reconciler order).
+- [x] **Step 1:** Push and open the PR (`feat.md`). Expected: CI is green.
+- [x] **Step 2:** Squash-merge, then merge the `release 0.3.0` PR. Expected: the tag `v0.3.0` exists.
+- [x] **Step 3:** Record it on the Jaws docs branch: tick this plan, set the roadmap, and update spec 6.5 with what was built (the hop limit of 2, the bundle format, the reconciler order).
