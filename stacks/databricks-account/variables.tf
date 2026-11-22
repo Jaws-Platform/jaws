@@ -5,7 +5,7 @@
 # not a variable: it reaches the provider through the environment.
 
 variable "project" {
-  description = "Project name in kebab-case, at most 21 characters (`<Organization>-<project>-databricks-cross-account` must fit IAM's 64)."
+  description = "Project name in kebab-case, at most 21 characters (`<name_root>-<project>-databricks-cross-account` must fit IAM's 64)."
   type        = string
 
   validation {
@@ -21,6 +21,16 @@ variable "environment" {
   validation {
     condition     = var.environment == "prod"
     error_message = "environment must be `prod`."
+  }
+}
+
+variable "name_root" {
+  description = "The root of every name in this stack (`<name_root>-<project>...`): config/tool.yaml `context.name_root`, for example `jaws`. A name only; the `Organization` tag is the project's GitHub owner."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]+(-[a-z0-9]+)*$", var.name_root))
+    error_message = "name_root must be kebab-case: lowercase letters, digits and single hyphens."
   }
 }
 
@@ -53,11 +63,11 @@ variable "tags" {
 
   validation {
     condition = (
-      lookup(var.tags, "ManagedBy", "") == "jaws" &&
+      lookup(var.tags, "ManagedBy", "") == "JAWS" &&
       lookup(var.tags, "Environment", null) == var.environment &&
       lookup(var.tags, "Workspace", null) == "${var.project}-${var.environment}"
     )
-    error_message = "tags.ManagedBy must be `jaws` (stamped by the CLI), tags.Environment must equal environment and tags.Workspace must be `<project>-<environment>`."
+    error_message = "tags.ManagedBy must be `JAWS` (stamped by the CLI), tags.Environment must equal environment and tags.Workspace must be `<project>-<environment>`."
   }
 }
 

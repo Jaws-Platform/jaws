@@ -49,7 +49,7 @@ def check(config: SiteConfig, settings: Settings) -> list[str]:
                     "in config/projects.yaml"
                 )
             problems += _profile_problems(name, profile, approved, limits, project)
-    problems += _dataset_problems(config, approved, settings.context.organization)
+    problems += _dataset_problems(config, approved, settings.context.name_root)
     problems += _access_problems(config, settings)
     return problems
 
@@ -87,7 +87,7 @@ def _access_problems(config: SiteConfig, settings: Settings) -> list[str]:
                 if owner == project:
                     problems.append(f"reads {read.dataset}: {project} reads its own dataset")
                     continue
-                bucket = f"{settings.context.organization}-{owner}-{name}"
+                bucket = f"{settings.context.name_root}-{owner}-{name}"
                 approved = settings.projects.get(owner)
                 if approved is None or bucket not in approved.datasets:
                     problems.append(
@@ -163,16 +163,14 @@ def _profile_problems(
     return problems
 
 
-def _dataset_problems(
-    config: SiteConfig, approved: ProjectGuardrails, organization: str
-) -> list[str]:
+def _dataset_problems(config: SiteConfig, approved: ProjectGuardrails, name_root: str) -> list[str]:
     """Each dataset against the retention approved for its bucket in this account,
-    `<organization>-<project>-<name>` (not the file's `bucket`, which names either
+    `<name_root>-<project>-<name>` (not the file's `bucket`, which names either
     account's while the project moves)."""
     problems: list[str] = []
     protected_by_name: dict[str, tuple[str, ...]] = {}
     for dataset in config.datasets:
-        bucket = f"{organization}-{config.project}-{dataset.name}"
+        bucket = f"{name_root}-{config.project}-{dataset.name}"
         retention = approved.datasets.get(bucket)
         if retention is None:
             problems.append(

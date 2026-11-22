@@ -33,7 +33,7 @@ module "zone" {
   version = "0.1.2"
 
   name        = local.zone_name
-  comment     = "${local.context.organization}: zone owned by ${local.context.repository_tag}; records owned by project repos"
+  comment     = "${local.context.name_root}: zone owned by ${local.context.repository_tag}; records owned by project repos"
   caa_issuers = local.caa_issuers
   txt_records = local.txt_records
   name_tag    = "${local.name_prefix}-dns-zone"

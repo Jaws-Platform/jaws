@@ -39,7 +39,7 @@ module "site_bucket" {
   version  = "0.1.2"
 
   project   = each.key
-  name_root = local.context.organization
+  name_root = local.context.name_root
 
   # Hardened bucket policy: only the project's apply role writes prod/ and
   # dev/, only its preview role writes previews/, and only the break-glass
@@ -69,7 +69,7 @@ locals {
         # Built from the bucket's fixed name, not module.site_bucket[key].arn:
         # each site bucket's policy names these roles, so reading the bucket
         # module here would be a dependency cycle.
-        bucket_arn   = "arn:aws:s3:::${local.context.organization}-${key}"
+        bucket_arn   = "arn:aws:s3:::${local.context.name_root}-${key}"
         zone_id      = module.zone.zone_id
         record_names = local.project_record_names[key]
       }
@@ -86,7 +86,7 @@ module "site_ci_plan" {
   version  = "0.2.0"
 
   project           = each.key
-  name_root         = local.context.organization
+  name_root         = local.context.name_root
   repository        = each.value.repository
   owner_id          = each.value.owner_id
   repository_id     = each.value.repository_id
@@ -107,7 +107,7 @@ module "site_ci_preview" {
   version  = "0.2.0"
 
   project           = each.key
-  name_root         = local.context.organization
+  name_root         = local.context.name_root
   repository        = each.value.repository
   owner_id          = each.value.owner_id
   repository_id     = each.value.repository_id
@@ -127,7 +127,7 @@ module "site_ci_apply" {
   version  = "0.2.0"
 
   project           = each.key
-  name_root         = local.context.organization
+  name_root         = local.context.name_root
   repository        = each.value.repository
   owner_id          = each.value.owner_id
   repository_id     = each.value.repository_id

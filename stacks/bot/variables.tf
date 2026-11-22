@@ -7,12 +7,22 @@
 # at these defaults, which nothing reads while the bot's modules are gated off.
 
 variable "project" {
-  description = "Project name in kebab-case. Resources are named `<Organization>-<project>[-...]`."
+  description = "Project name in kebab-case. Resources are named `<name_root>-<project>[-...]`."
   type        = string
 
   validation {
     condition     = can(regex("^[a-z0-9]+(-[a-z0-9]+)*$", var.project)) && length(var.project) <= 30
     error_message = "project must be kebab-case and at most 30 characters."
+  }
+}
+
+variable "name_root" {
+  description = "The root of every name in this stack (`<name_root>-<project>...`): config/tool.yaml `context.name_root`, for example `jaws`. A name only; the `Organization` tag is the project's GitHub owner."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]+(-[a-z0-9]+)*$", var.name_root))
+    error_message = "name_root must be kebab-case: lowercase letters, digits and single hyphens."
   }
 }
 
@@ -44,8 +54,8 @@ variable "tags" {
   }
 
   validation {
-    condition     = lookup(var.tags, "ManagedBy", "") == "jaws" && lookup(var.tags, "Environment", null) == "prod"
-    error_message = "tags.ManagedBy must be `jaws` (stamped by the CLI) and tags.Environment must be `prod`."
+    condition     = lookup(var.tags, "ManagedBy", "") == "JAWS" && lookup(var.tags, "Environment", null) == "prod"
+    error_message = "tags.ManagedBy must be `JAWS` (stamped by the CLI) and tags.Environment must be `prod`."
   }
 }
 
@@ -204,7 +214,7 @@ variable "task_rust_toolchain" {
 }
 
 variable "task_profiles" {
-  description = "The task-runner's profiles beyond `cpu` (task-runner.profiles): each gets its own launch template and instance role, `<Organization>-<project>-task-<name>`, sharing the cpu profile's log group, security group and results bucket. `ami_name` is the pinned image name (tasks.images in config/bots.yaml), null for the bot's image; `rust` installs the Rust toolchain; `datasets` grants the profile's instances read, write and add-only (`write_once`) sub-prefixes of datasets."
+  description = "The task-runner's profiles beyond `cpu` (task-runner.profiles): each gets its own launch template and instance role, `<name_root>-<project>-task-<name>`, sharing the cpu profile's log group, security group and results bucket. `ami_name` is the pinned image name (tasks.images in config/bots.yaml), null for the bot's image; `rust` installs the Rust toolchain; `datasets` grants the profile's instances read, write and add-only (`write_once`) sub-prefixes of datasets."
   type = list(object({
     name                  = string
     default_instance_type = string
@@ -239,7 +249,7 @@ variable "task_profiles" {
 }
 
 variable "datasets" {
-  description = "The project's dataset components: kept-forever, append-only buckets named `<Organization>-<project>-<name>`. `writers` lists the components whose roles may add objects under `prefix` (`task-runner`: the task instances); `readers` lists role ARNs that may read under it. `versioning`, `expire_noncurrent_days` and `expire_prefixes` are the retention the tool configuration (config/) approves."
+  description = "The project's dataset components: kept-forever, append-only buckets named `<name_root>-<project>-<name>`. `writers` lists the components whose roles may add objects under `prefix` (`task-runner`: the task instances); `readers` lists role ARNs that may read under it. `versioning`, `expire_noncurrent_days` and `expire_prefixes` are the retention the tool configuration (config/) approves."
   type = list(object({
     name                   = string
     bucket                 = string
@@ -254,8 +264,8 @@ variable "datasets" {
   default = []
 
   validation {
-    condition     = alltrue([for d in var.datasets : d.bucket == "${var.tags["Organization"]}-${var.project}-${d.name}"])
-    error_message = "each dataset's bucket must be <Organization>-<project>-<name>."
+    condition     = alltrue([for d in var.datasets : d.bucket == "${var.name_root}-${var.project}-${d.name}"])
+    error_message = "each dataset's bucket must be <name_root>-<project>-<name>."
   }
 
   validation {

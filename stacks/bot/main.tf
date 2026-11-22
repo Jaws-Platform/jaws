@@ -19,7 +19,7 @@
 # The CI roles live in the foundation stack (foundation/bots.tf).
 
 locals {
-  name            = "${var.tags["Organization"]}-${var.project}"
+  name            = "${var.name_root}-${var.project}"
   network_enabled = var.bot_enabled || var.task_runner_enabled
 
   # The project's CI roles, which the foundation creates under this name
@@ -113,7 +113,7 @@ module "bot" {
 
   name                 = "${local.name}-bot"
   project              = var.project
-  name_root            = var.tags["Organization"]
+  name_root            = var.name_root
   image_repository_url = module.image[0].url
   image_repository_arn = module.image[0].arn
   instance_type        = var.instance_type
@@ -154,7 +154,7 @@ module "tasks" {
   version = "0.1.2"
   count   = var.task_runner_enabled ? 1 : 0
 
-  name_root             = var.tags["Organization"]
+  name_root             = var.name_root
   project               = var.project
   vpc_id                = module.network[0].vpc_id
   architecture          = var.architecture
@@ -172,7 +172,7 @@ module "task_profiles" {
   version  = "0.1.2"
   for_each = { for p in var.task_profiles : p.name => p }
 
-  name_root             = var.tags["Organization"]
+  name_root             = var.name_root
   project               = var.project
   profile               = each.key
   shared                = module.tasks[0].shared

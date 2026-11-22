@@ -22,7 +22,10 @@ locals {
   development_account_id = one([for account in values(local.accounts) : account.account_id if account.type == "development"])
 
   context = {
-    organization = "jwall-engineering"
+    # The Organization and ManagedBy tags every jaws stack carries
+    # (docs/tagging.md): the GitHub owner of this repository, and JAWS. The
+    # Project and Repository tags keep the values it was first applied with.
+    organization = local.tool_config.context.organization
     project      = "jwall-engineering-infra" # Project tag value
     environment  = "prod"
     repository   = "jwallace145/jwall-engineering-infra" # the Repository tag it was first applied with
@@ -40,8 +43,7 @@ module "context" {
   owner        = local.context.owner
   organization = local.context.organization
 
-  # Stated since the context module lost its organisation-specific defaults:
-  # the values this stack has always had.
+  # The name root this stack has always had: its names never change.
   name_root  = "jwall-engineering"
-  managed_by = "jwall-engineering-infra"
+  managed_by = local.tool_config.context.managed_by
 }

@@ -406,7 +406,7 @@ jobs:
       contents: read
     outputs:
       account_id: ${{ steps.env.outputs.account_id }}
-      organization: ${{ steps.env.outputs.organization }}
+      name_root: ${{ steps.env.outputs.name_root }}
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
@@ -439,7 +439,7 @@ jobs:
           terraform_wrapper: false
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: arn:aws:iam::${{ needs.account.outputs.account_id }}:role/${{ needs.account.outputs.organization }}-infra-ci-plan
+          role-to-assume: arn:aws:iam::${{ needs.account.outputs.account_id }}:role/${{ needs.account.outputs.name_root }}-infra-ci-plan
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: gha-plan-pr-${{ github.event.pull_request.number }}
       - name: terraform init
@@ -557,9 +557,9 @@ jobs:
         run: |
           resolved=$(uv run jaws config env)
           account=$(sed -n 's/^account_id=//p' <<<"$resolved")
-          organization=$(sed -n 's/^organization=//p' <<<"$resolved")
-          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
-          echo "arn=arn:aws:iam::${account}:role/${organization}-${PROJECT}-ci-plan" >> "$GITHUB_OUTPUT"
+          name_root=$(sed -n 's/^name_root=//p' <<<"$resolved")
+          [[ "$account" =~ ^[0-9]{12}$ && -n "$name_root" ]] || { echo "::error::jaws config env named no account or name root for $PROJECT"; exit 1; }
+          echo "arn=arn:aws:iam::${account}:role/${name_root}-${PROJECT}-ci-plan" >> "$GITHUB_OUTPUT"
       # Two registry entries can share one repository while a project is being
       # renamed, and its file names only one of them. The other entry's plan is
       # skipped, loudly: its stack is applied from another ref (Bot apply, consumer-ref).
@@ -702,9 +702,9 @@ jobs:
         run: |
           resolved=$(uv run jaws config env)
           account=$(sed -n 's/^account_id=//p' <<<"$resolved")
-          organization=$(sed -n 's/^organization=//p' <<<"$resolved")
-          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
-          echo "arn=arn:aws:iam::${account}:role/${organization}-${PROJECT}-ci-plan" >> "$GITHUB_OUTPUT"
+          name_root=$(sed -n 's/^name_root=//p' <<<"$resolved")
+          [[ "$account" =~ ^[0-9]{12}$ && -n "$name_root" ]] || { echo "::error::jaws config env named no account or name root for $PROJECT"; exit 1; }
+          echo "arn=arn:aws:iam::${account}:role/${name_root}-${PROJECT}-ci-plan" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6
         id: assume
         continue-on-error: true # the role does not exist until the foundation apply

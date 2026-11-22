@@ -7,7 +7,6 @@ project: math-prover
 repository: jwallace145/math-prover
 
 tags:
-  Organization: jaws
   Project: math-prover
   Environment: prod
   Repository: jwallace145/math-prover

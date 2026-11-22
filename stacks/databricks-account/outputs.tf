@@ -22,7 +22,7 @@ output "users_group_name" {
 }
 
 output "root_bucket_name" {
-  description = "Name of the workspace root bucket (`<Organization>-<project>-databricks-root`)."
+  description = "Name of the workspace root bucket (`<name_root>-<project>-databricks-root`)."
   value       = module.workspace.root_bucket_name
 }
 

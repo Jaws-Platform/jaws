@@ -66,7 +66,7 @@ locals {
   # task runner counts.
   hosts_task_runners = length(local.bot_task_types) > 0
 
-  # Bots with dataset components, and their buckets, <Organization>-<project>-<name>.
+  # Bots with dataset components, and their buckets, <name_root>-<project>-<name>.
   # Their plan and apply roles may read and configure these buckets, never
   # their objects.
   bot_dataset_names = {
@@ -88,7 +88,7 @@ module "bot_ci_plan" {
   version  = "0.2.0"
 
   project                    = each.key
-  name_root                  = local.context.organization
+  name_root                  = local.context.name_root
   repository                 = local.context.repository
   repository_aliases         = local.context.repository_aliases
   repository_alias_owner_ids = local.context.repository_alias_owner_ids
@@ -113,7 +113,7 @@ module "bot_ci_apply" {
   version  = "0.2.0"
 
   project                    = each.key
-  name_root                  = local.context.organization
+  name_root                  = local.context.name_root
   repository                 = local.context.repository
   repository_aliases         = local.context.repository_aliases
   repository_alias_owner_ids = local.context.repository_alias_owner_ids
@@ -139,7 +139,7 @@ module "bot_ci_release" {
   version  = "0.2.0"
 
   project           = each.key
-  name_root         = local.context.organization
+  name_root         = local.context.name_root
   repository        = each.value.repository
   owner_id          = each.value.owner_id
   repository_id     = each.value.repository_id
@@ -158,7 +158,7 @@ module "bot_ci_task" {
   version  = "0.2.0"
 
   project           = each.key
-  name_root         = local.context.organization
+  name_root         = local.context.name_root
   repository        = local.bots[each.key].repository
   owner_id          = local.bots[each.key].owner_id
   repository_id     = local.bots[each.key].repository_id

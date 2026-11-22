@@ -966,7 +966,7 @@ def config_env(
     settings = ctx.obj.settings
     lines = [
         ("account_id", settings.aws.account_id),
-        ("organization", settings.context.organization),
+        ("name_root", settings.context.name_root),
         ("state_bucket", settings.state.bucket),
         ("ecr_repository", settings.ecr.repository),
     ]

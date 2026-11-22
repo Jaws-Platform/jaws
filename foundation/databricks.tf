@@ -107,7 +107,7 @@ module "databricks_metastore" {
   providers = { databricks = databricks.account }
 
   name                             = local.databricks.metastore_name
-  admin_group_name                 = "${local.context.organization}-metastore-admins" # as access.py names it
+  admin_group_name                 = "${local.context.name_root}-metastore-admins" # as access.py names it
   admin_user_names                 = local.databricks.metastore_admins
   service_principal_application_id = local.databricks.client_id
 }
@@ -140,7 +140,7 @@ module "databricks_shared_host" {
   admin_group_name = module.databricks_metastore[0].admin_group_name
 
   tags = merge(module.context.tags, {
-    CostCenter = local.account.context.managed_by
+    CostCenter = local.context.name_root # the platform's own workspace
     Workspace  = local.databricks_host_name
   })
 
@@ -154,7 +154,7 @@ module "databricks_shared_host" {
 
 # Each file under datasets/ (datasets/<owner>/<name>.yaml) onboards one dataset:
 # one read-only role, storage credential and external location, all named
-# <organization>-ds-<owner>-<name>, created through the host and bound to it
+# <name_root>-ds-<owner>-<name>, created through the host and bound to it
 # only. Onboarding grants nothing: the role reads only once the owner's bucket
 # policy names it (the owner's Bot apply, for an agreed handshake), and a
 # workspace is bound and granted only by the data-access stack (data-access/).
@@ -163,8 +163,8 @@ module "databricks_shared_host" {
 module "dataset_registry" {
   source = "./registry"
 
-  directory    = "${path.module}/../datasets"
-  organization = local.context.organization
+  directory = "${path.module}/../datasets"
+  name_root = local.context.name_root
 
   # Each workspace's own catalog is <project> with - replaced by _.
   reserved_catalogs = [for p in keys(local.databricks_projects) : replace(p, "-", "_")]
@@ -176,9 +176,9 @@ module "dataset_registry" {
 
 locals {
   # The host, the audit log delivery's role and its Databricks credential are
-  # named for the organization (jaws-shared, jaws-databricks-log-delivery).
-  databricks_host_name              = "${local.context.organization}-shared"
-  databricks_log_delivery_role_name = "${local.context.organization}-databricks-log-delivery"
+  # named for the name root (jaws-shared, jaws-databricks-log-delivery).
+  databricks_host_name              = "${local.context.name_root}-shared"
+  databricks_log_delivery_role_name = "${local.context.name_root}-databricks-log-delivery"
 
   # Datasets are onboarded through the host, whose URL configures their
   # provider, so an account builds Databricks in two applies: the host first,
@@ -201,7 +201,7 @@ module "dataset_catalog_storage" {
   version   = "0.1.2"
   providers = { aws = aws, databricks = databricks.shared }
 
-  name              = "${local.context.organization}-dataset-catalogs"
+  name              = "${local.context.name_root}-dataset-catalogs"
   host_workspace_id = module.databricks_shared_host[0].workspace_id
   owner_group_name  = module.databricks_metastore[0].admin_group_name
   apply_role_arn    = module.infra_ci_apply.role_arn
@@ -294,7 +294,7 @@ module "databricks_ci_plan" {
   version  = "0.2.0"
 
   project                    = each.key
-  name_root                  = local.context.organization
+  name_root                  = local.context.name_root
   repository                 = local.context.repository
   repository_aliases         = local.context.repository_aliases
   repository_alias_owner_ids = local.context.repository_alias_owner_ids
@@ -316,7 +316,7 @@ module "databricks_ci_apply" {
   version  = "0.2.0"
 
   project                    = each.key
-  name_root                  = local.context.organization
+  name_root                  = local.context.name_root
   repository                 = local.context.repository
   repository_aliases         = local.context.repository_aliases
   repository_alias_owner_ids = local.context.repository_alias_owner_ids

@@ -4,7 +4,7 @@
 # two implementations, one expected output, no source-text matching.
 
 variables {
-  organization = "jaws"
+  name_root = "jaws"
 }
 
 run "derives_what_python_derives" {

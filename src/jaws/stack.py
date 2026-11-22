@@ -124,6 +124,7 @@ def render_tfvars(
 def _site_tfvars(site: Site) -> dict[str, Any]:
     return {
         "project": site.project,
+        "name_root": site.name_root,
         "repository": site.config.repository,
         "domain_name": site.domain,
         "dev_domain_name": site.config.dev.domain if site.config.dev else None,
@@ -137,6 +138,7 @@ def _site_tfvars_from_project(project: Project) -> dict[str, Any]:
     config = project.config
     return {
         "project": project.project,
+        "name_root": project.name_root,
         "repository": config.repository,
         "domain_name": config.domain,
         "dev_domain_name": config.dev.domain if config.dev else None,
@@ -205,6 +207,7 @@ def _bot_tfvars(
     )
     return {
         "project": project.project,
+        "name_root": project.name_root,
         "repository": project.config.repository,
         "tags": project.tags,
         **kind_tfvars,
@@ -268,12 +271,12 @@ def _dataset_readers(
 
 def _reader_arn(reader: str, settings: Settings) -> str:
     """A reader's role ARN: an ARN as given, or a `<project>/<role>` reader's role
-    in the account (`<Organization>-<project>-<role>`)."""
+    in the account (`<name_root>-<project>-<role>`)."""
     named = project_reader(reader)
     if named is None:
         return reader
     owner, role = named
-    name = f"{settings.context.organization}-{owner}-{role}"
+    name = f"{settings.context.name_root}-{owner}-{role}"
     return f"arn:aws:iam::{settings.aws.account_id}:role/{name}"
 
 
@@ -291,7 +294,7 @@ def _edge_readers(
         return []
     for edge in access.edges:
         if edge.dataset.owner == project.project and edge.dataset.name == dataset:
-            return [edge.dataset.role_arn(settings.aws.account_id, settings.context.organization)]
+            return [edge.dataset.role_arn(settings.aws.account_id, settings.context.name_root)]
     return []
 
 
@@ -301,12 +304,12 @@ def _read_only_datasets(
     """The onboarded datasets a workspace reads, for its S3 endpoint policy."""
     if access is None:
         return {}
-    organization = settings.context.organization
+    name_root = settings.context.name_root
     return {
         e.dataset.key: {
-            "bucket": e.dataset.bucket(organization),
+            "bucket": e.dataset.bucket(name_root),
             "prefix": e.dataset.prefix,
-            "role_arn": e.dataset.role_arn(settings.aws.account_id, organization),
+            "role_arn": e.dataset.role_arn(settings.aws.account_id, name_root),
         }
         for e in access.consumed_by(project.project)
     }
@@ -362,6 +365,7 @@ def _databricks_account_tfvars(
     approved = _approved(project)
     return {
         "project": project.project,
+        "name_root": project.name_root,
         "environment": ENVIRONMENT,
         "repository": project.config.repository,
         "tags": project.databricks_tags,
@@ -441,6 +445,7 @@ def _databricks_workspace_tfvars(
     account = settings.aws.account_id
     return {
         "project": project.project,
+        "name_root": project.name_root,
         "environment": ENVIRONMENT,
         "repository": project.config.repository,
         "tags": tags,

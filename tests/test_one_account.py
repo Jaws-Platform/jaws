@@ -32,7 +32,10 @@ def test_the_primary_account_is_production() -> None:
     settings = load_settings(CONFIG_DIR, environ={})
     assert settings.aws.primary == "production"
     assert settings.aws.account_id == "570327089884"
-    assert settings.context.organization == "jaws" and settings.context.managed_by == "jaws"
+    assert settings.context.name_root == "jaws"
+    assert (
+        settings.context.organization == "Jaws-Platform" and settings.context.managed_by == "JAWS"
+    )
     assert settings.state.bucket == "jaws-terraform-state-570327089884"
     assert settings.ecr.repository == "jaws-cli"
     by_type = {a.type: a.account_id for a in settings.aws.accounts.values()}
@@ -65,7 +68,7 @@ def test_config_env_prints_the_account_the_workflows_build_roles_from(tmp_path: 
     assert result.exit_code == 0, result.output
     assert result.stdout.splitlines() == [
         "account_id=570327089884",
-        "organization=jaws",
+        "name_root=jaws",
         "state_bucket=jaws-terraform-state-570327089884",
         "ecr_repository=jaws-cli",
     ]

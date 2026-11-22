@@ -18,7 +18,7 @@ _ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _GITHUB_REPOSITORY = r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?/[A-Za-z0-9._-]+$"
 _RELEASE_TAG = r"^v\d+\.\d+\.\d+$"
 _PARAMETER = re.compile(r"^/[a-z0-9-]+(/[a-z0-9-]+)+$")
-#: A secret named relative to the project: the parameter `/<organization>/<project>/<name>`
+#: A secret named relative to the project: the parameter `/<name_root>/<project>/<name>`
 #: of whichever account a run addresses (`Project.secret_parameters`).
 _RELATIVE_SECRET = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
@@ -411,9 +411,9 @@ class TaskRunner(_Model):
 
 _ROLE_ARN = re.compile(r"^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$")
 #: A reader named by project: `<project>/<role>`, the role
-#: `<Organization>-<project>-<role>` in whichever account the run addresses.
+#: `<name_root>-<project>-<role>` in whichever account the run addresses.
 _PROJECT_ROLE = re.compile(r"^([a-z0-9]+(?:-[a-z0-9]+)*)/([a-z0-9]+(?:-[a-z0-9]+)*)$")
-#: Names whose buckets the project already has: <Organization>-<project>-<name>.
+#: Names whose buckets the project already has: <name_root>-<project>-<name>.
 _RESERVED_DATASET_NAMES = ("records", "tasks")
 
 
@@ -424,7 +424,7 @@ def project_reader(reader: str) -> tuple[str, str] | None:
 
 
 class Dataset(_Model):
-    """A kept-forever, append-only S3 bucket, `<Organization>-<project>-<name>`."""
+    """A kept-forever, append-only S3 bucket, `<name_root>-<project>-<name>`."""
 
     kind: Literal["dataset"]
     name: str

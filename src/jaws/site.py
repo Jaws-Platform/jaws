@@ -23,17 +23,24 @@ from .components import (
     TaskRunner,
 )
 from .errors import ConfigError
+from .log import annotate_warning, get_logger
 from .settings import Settings
 
 SITE_FILE = Path("jaws.yaml")
 
-#: The tags the site file must state. Every resource also carries ManagedBy.
-REQUIRED_TAGS = ("Organization", "Project", "Environment", "Repository", "Owner")
+#: The tags the project file must state.
+REQUIRED_TAGS = ("Project", "Environment", "Repository", "Owner")
+
+#: The tags the tool decides for every resource, whatever a file states
+#: (docs/tagging.md): Organization is the GitHub organization or user the project
+#: is registered under (config/projects.yaml), and ManagedBy is `context.managed_by`.
+#: A file that still states one is warned and the value ignored; a later release
+#: refuses it.
+TOOL_TAGS = ("Organization", "ManagedBy")
 
 #: The ManagedBy value the tool stamps (`context.managed_by`); the stacks'
-#: variables accept exactly this. The tool owns the tag, so a file leaves it out
-#: (or states this value).
-MANAGED_BY = "jaws"
+#: variables accept exactly this.
+MANAGED_BY = "JAWS"
 
 ENVIRONMENT = "prod"
 PROD_PREFIX = "prod/"
@@ -98,16 +105,6 @@ class SiteConfig(_Model):
     preview: PreviewSection = PreviewSection()
     dev: DevSection | None = None
     components: tuple[Component, ...] = ()
-
-    @field_validator("tags")
-    @classmethod
-    def _managed_by(cls, value: dict[str, str]) -> dict[str, str]:
-        stated = value.get("ManagedBy")
-        if stated is not None and stated != MANAGED_BY:
-            raise ValueError(
-                f"ManagedBy must be {MANAGED_BY!r} or left out (the tool sets it), got {stated!r}"
-            )
-        return value
 
     @model_validator(mode="after")
     def _one_kind(self) -> SiteConfig:
@@ -264,26 +261,51 @@ def _format_validation_error(exc: ValidationError) -> str:
     return "; ".join(lines)
 
 
-def account_tags(tags: Mapping[str, str], organization: str, managed_by: str) -> dict[str, str]:
-    """`tags` with the two config/tool.yaml decides (`context.organization` and
-    `context.managed_by`), whatever the file states."""
-    return {**tags, "Organization": organization, "ManagedBy": managed_by}
+def stamped_tags(tags: Mapping[str, str], organization: str, managed_by: str) -> dict[str, str]:
+    """The file's `tags` with the tool's own (TOOL_TAGS) in place of anything it states."""
+    own = {key: value for key, value in tags.items() if key not in TOOL_TAGS}
+    return {**own, "Organization": organization, "ManagedBy": managed_by}
 
 
-def organization_problems(tags: Mapping[str, str], settings: Settings) -> list[str]:
-    """A stated Organization must be config/tool.yaml's `context.organization`, which is
-    also what is stamped at render (`account_tags`)."""
-    stated = tags.get("Organization")
-    organization = settings.context.organization
-    if stated is None or stated == organization:
-        return []
-    return [f"tags.Organization must be {organization!r}, got {stated!r}"]
+def project_organization(config: SiteConfig, settings: Settings) -> str:
+    """The Organization tag of a project's resources: the GitHub organization or user
+    it is registered under in config/projects.yaml, or, for a project not onboarded
+    (which only the stop commands accept), the owner of its repository."""
+    if config.project in settings.projects:
+        return settings.owner(config.project)
+    return config.repository.split("/", 1)[0]
+
+
+_warned: set[str] = set()
+
+
+def tool_tag_warnings(config: SiteConfig, organization: str, managed_by: str) -> list[str]:
+    """One line per tool tag (TOOL_TAGS) the file states: it is ignored."""
+    stamped = {"Organization": organization, "ManagedBy": managed_by}
+    return [
+        f"{SITE_FILE}: tags.{key} is set by jaws ({stamped[key]!r} for {config.project}); "
+        f"the stated {config.tags[key]!r} is ignored. Remove it: a later jaws release refuses it"
+        for key in TOOL_TAGS
+        if key in config.tags
+    ]
+
+
+def warn_tool_tags(config: SiteConfig, organization: str, managed_by: str) -> None:
+    """Log, and annotate in GitHub Actions, each tool tag the file states, once a run."""
+    for message in tool_tag_warnings(config, organization, managed_by):
+        if message not in _warned:
+            _warned.add(message)
+            get_logger().warning("%s", message)
+            annotate_warning(message, title="Jaws: deprecated tag")
 
 
 class Site(_Model):
     """A validated site plus everything derived from it and the tool configuration."""
 
     config: SiteConfig
+    #: The root of every name (config/tool.yaml `context.name_root`).
+    name_root: str
+    #: The Organization tag: the project's GitHub owner (project_organization).
     organization: str
     managed_by: str
     zone_id: str
@@ -298,7 +320,7 @@ class Site(_Model):
                 f"{config.project} is a {config.kind} project, not a site; "
                 "this command works on sites only"
             )
-        problems = organization_problems(config.tags, settings)
+        problems: list[str] = []
         zone_suffix = "." + settings.dns.zone
         for label, domain in (
             ("domain", config.domain),
@@ -308,9 +330,12 @@ class Site(_Model):
                 problems.append(f"{label} {domain!r} is not under the zone {settings.dns.zone!r}")
         if problems:
             raise ConfigError("; ".join(problems))
+        organization = project_organization(config, settings)
+        warn_tool_tags(config, organization, settings.context.managed_by)
         return cls(
             config=config,
-            organization=settings.context.organization,
+            name_root=settings.context.name_root,
+            organization=organization,
             managed_by=settings.context.managed_by,
             zone_id=settings.dns.zone_id,
             state_bucket=settings.state.bucket,
@@ -324,15 +349,15 @@ class Site(_Model):
 
     @property
     def tags(self) -> dict[str, str]:
-        """The tags every resource of the site carries, as this account stamps them."""
-        return account_tags(self.config.tags, self.organization, self.managed_by)
+        """The tags every resource of the site carries (docs/tagging.md)."""
+        return stamped_tags(self.config.tags, self.organization, self.managed_by)
 
     @property
     def bucket(self) -> str:
-        return f"{self.organization}-{self.project}"
+        return f"{self.name_root}-{self.project}"
 
     def role_name(self, role: Literal["plan", "preview", "apply"]) -> str:
-        return f"{self.organization}-{self.project}-ci-{role}"
+        return f"{self.name_root}-{self.project}-ci-{role}"
 
     @property
     def domain(self) -> str:

@@ -176,8 +176,8 @@ jobs:
         run: |
           resolved=$(uv run --no-dev --project .jaws-tool jaws --config "$CONFIG" config env)
           account=$(sed -n 's/^account_id=//p' <<<"$resolved")
-          organization=$(sed -n 's/^organization=//p' <<<"$resolved")
-          [[ "$account" =~ ^[0-9]{12}$ && -n "$organization" ]] || { echo "::error::jaws config env named no account or organization for $PROJECT"; exit 1; }
+          name_root=$(sed -n 's/^name_root=//p' <<<"$resolved")
+          [[ "$account" =~ ^[0-9]{12}$ && -n "$name_root" ]] || { echo "::error::jaws config env named no account or name root for $PROJECT"; exit 1; }
           [[ "$PROFILE" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "::error::profile must be kebab-case, got $PROFILE"; exit 2; }
           file=jaws.yaml
           hours="$MAX_HOURS"
@@ -191,7 +191,7 @@ jobs:
           duration=$(( (hours + 1) * 3600 ))
           if [ "$duration" -gt 43200 ]; then duration=43200; fi
           {
-            echo "arn=arn:aws:iam::${account}:role/${organization}-${PROJECT}-ci-task"
+            echo "arn=arn:aws:iam::${account}:role/${name_root}-${PROJECT}-ci-task"
             echo "duration=$duration"
           } >> "$GITHUB_OUTPUT"
       - name: Assume the task role

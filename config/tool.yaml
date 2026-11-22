@@ -6,11 +6,17 @@ tool:
   log_format: console # json in CI
 
 context:
-  organization: jaws
+  # The root of every name the tool gives: jaws-<project>-..., jaws-infra-ci-*.
+  # A name only: no tag carries it (docs/tagging.md).
+  name_root: jaws
+  # The Organization tag of this tool's own stacks (the foundation): the GitHub
+  # owner of this repository. A project's resources carry its own owner, the key
+  # it is registered under in config/projects.yaml.
+  organization: Jaws-Platform
   owner: jwallace145
-  # The ManagedBy tag the tool stamps on everything it renders, like Organization
-  # above: the tool's, never the project file's.
-  managed_by: jaws
+  # The ManagedBy tag the tool stamps on everything it builds; like Organization,
+  # the tool's, never a project file's.
+  managed_by: JAWS
 
 plan:
   comment_max_bytes: 60000

@@ -248,7 +248,8 @@ tool:
   log_level: info
   log_format: console
 context:
-  organization: jaws
+  name_root: jaws
+  organization: Jaws-Platform
   owner: jwallace145
   managed_by: jaws-relabelled
 plan:

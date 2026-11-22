@@ -3,12 +3,22 @@
 # the tool configuration (config/); the CLI writes them to terraform.tfvars.json.
 
 variable "project" {
-  description = "Project name in kebab-case. The site bucket is `<organization>-<project>`, for example `jaws-<project>`."
+  description = "Project name in kebab-case. The site bucket is `<name_root>-<project>`, for example `jaws-<project>`."
   type        = string
 
   validation {
     condition     = can(regex("^[a-z0-9]+(-[a-z0-9]+)*$", var.project)) && length(var.project) <= 30
     error_message = "project must be kebab-case and at most 30 characters."
+  }
+}
+
+variable "name_root" {
+  description = "The root of every name in this stack (`<name_root>-<project>...`): config/tool.yaml `context.name_root`, for example `jaws`. A name only; the `Organization` tag is the project's GitHub owner."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]+(-[a-z0-9]+)*$", var.name_root))
+    error_message = "name_root must be kebab-case: lowercase letters, digits and single hyphens."
   }
 }
 
@@ -72,7 +82,7 @@ variable "tags" {
   }
 
   validation {
-    condition     = lookup(var.tags, "ManagedBy", "") == "jaws" && lookup(var.tags, "Environment", null) == "prod"
-    error_message = "tags.ManagedBy must be `jaws` (stamped by the CLI) and tags.Environment must be `prod`."
+    condition     = lookup(var.tags, "ManagedBy", "") == "JAWS" && lookup(var.tags, "Environment", null) == "prod"
+    error_message = "tags.ManagedBy must be `JAWS` (stamped by the CLI) and tags.Environment must be `prod`."
   }
 }

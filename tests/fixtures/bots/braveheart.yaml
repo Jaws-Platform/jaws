@@ -6,7 +6,6 @@ repository: Braveheart-Chess/braveheart
 # ManagedBy=jaws, which the tool adds.
 # Project, Repository and Environment=prod are cross-checked.
 tags:
-  Organization: jaws
   Project: braveheart
   Environment: prod
   Repository: Braveheart-Chess/braveheart
@@ -96,6 +95,6 @@ components:
 
   - kind: dataset                   # optional: a kept-forever, append-only S3 bucket (docs/datasets.md)
     name: nnue
-    bucket: jaws-braveheart-nnue  # <Organization>-<project>-<name>, written out for workflows
+    bucket: jaws-braveheart-nnue  # <name_root>-<project>-<name>, written out for workflows
     prefix: data/                   # everything the project writes lives under it
     writers: [task-runner]          # task instances may add objects under the prefix, never read or delete

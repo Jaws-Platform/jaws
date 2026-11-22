@@ -11,7 +11,6 @@ repository: Braveheart-Chess/braveheart-selfplay
 # The tags every resource carries (through the provider's default_tags).
 # Project, Repository and Environment=prod are cross-checked.
 tags:
-  Organization: jaws
   Project: braveheart-selfplay
   Environment: prod
   Repository: Braveheart-Chess/braveheart-selfplay
@@ -67,7 +66,7 @@ components:
   # https://github.com/Jaws-Platform/jaws/blob/main/docs/datasets.md
   - kind: dataset
     name: positions
-    bucket: jaws-braveheart-selfplay-positions  # <Organization>-<project>-<name>
+    bucket: jaws-braveheart-selfplay-positions  # <name_root>-<project>-<name>
     prefix: data/
     versioning: true
     readers:

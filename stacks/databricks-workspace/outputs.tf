@@ -4,7 +4,7 @@ output "catalog_name" {
 }
 
 output "catalog_bucket_name" {
-  description = "Name of the catalog bucket (`<Organization>-<project>-databricks-catalog`)."
+  description = "Name of the catalog bucket (`<name_root>-<project>-databricks-catalog`)."
   value       = module.catalog.bucket_name
 }
 

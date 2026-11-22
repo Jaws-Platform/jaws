@@ -24,7 +24,14 @@ from .components import (
 )
 from .errors import ConfigError
 from .settings import DatabricksProject, Settings
-from .site import ENVIRONMENT, Site, SiteConfig, account_tags, organization_problems
+from .site import (
+    ENVIRONMENT,
+    Site,
+    SiteConfig,
+    project_organization,
+    stamped_tags,
+    warn_tool_tags,
+)
 
 Role = Literal["plan", "preview", "apply", "release", "task"]
 
@@ -36,6 +43,9 @@ class Project(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     config: SiteConfig
+    #: The root of every name (config/tool.yaml `context.name_root`).
+    name_root: str
+    #: The Organization tag: the project's GitHub owner (site.project_organization).
     organization: str
     managed_by: str
     state_bucket: str
@@ -55,6 +65,7 @@ class Project(BaseModel):
             site = Site.from_config(config, settings)
             return cls(
                 config=config,
+                name_root=site.name_root,
                 organization=site.organization,
                 managed_by=site.managed_by,
                 state_bucket=site.state_bucket,
@@ -62,9 +73,9 @@ class Project(BaseModel):
                 region=site.region,
                 zone_id=site.zone_id,
             )
-        organization = settings.context.organization
-        problems = organization_problems(config.tags, settings)
-        own = f"/{organization}/{config.project}/"
+        name_root = settings.context.name_root
+        problems: list[str] = []
+        own = f"/{name_root}/{config.project}/"
         if config.kind == "databricks":
             reserved = sorted(set(config.tags) & set(DATABRICKS_RESERVED_TAGS))
             if reserved:
@@ -83,11 +94,11 @@ class Project(BaseModel):
                         "which the release role can write"
                     )
         for dataset in config.datasets:
-            name = f"{organization}-{config.project}-{dataset.name}"
+            name = f"{name_root}-{config.project}-{dataset.name}"
             if dataset.bucket != name:
                 problems.append(
                     f"dataset {dataset.name}: bucket must be {name!r} "
-                    f"(<Organization>-<project>-<name>), got {dataset.bucket!r}"
+                    f"(<name_root>-<project>-<name>), got {dataset.bucket!r}"
                 )
             if True:
                 if len(name) > 63:
@@ -114,8 +125,11 @@ class Project(BaseModel):
             problems += guardrails.check(config, settings)
         if problems:
             raise ConfigError("; ".join(problems))
+        organization = project_organization(config, settings)
+        warn_tool_tags(config, organization, settings.context.managed_by)
         return cls(
             config=config,
+            name_root=name_root,
             organization=organization,
             managed_by=settings.context.managed_by,
             state_bucket=settings.state.bucket,
@@ -139,8 +153,8 @@ class Project(BaseModel):
 
     @property
     def tags(self) -> dict[str, str]:
-        """The tags every resource of the project carries, as this account stamps them."""
-        return account_tags(self.config.tags, self.organization, self.managed_by)
+        """The tags every resource of the project carries (docs/tagging.md)."""
+        return stamped_tags(self.config.tags, self.organization, self.managed_by)
 
     @property
     def has_components(self) -> bool:
@@ -167,8 +181,8 @@ class Project(BaseModel):
     @property
     def secret_parameters(self) -> dict[str, str]:
         """Each secret's SSM parameter in this account: a name relative to the project
-        is `/<organization>/<project>/<name>`; an absolute path is itself."""
-        own = f"/{self.organization}/{self.config.project}/"
+        is `/<name_root>/<project>/<name>`; an absolute path is itself."""
+        own = f"/{self.name_root}/{self.config.project}/"
         return {
             name: value if value.startswith("/") else f"{own}{value}"
             for name, value in self.bot.secrets.items()
@@ -198,7 +212,7 @@ class Project(BaseModel):
     @property
     def site_bucket(self) -> str:
         self._require("site")
-        return f"{self.organization}-{self.project}"
+        return f"{self.name_root}-{self.project}"
 
     @property
     def release_repository(self) -> str:
@@ -213,23 +227,23 @@ class Project(BaseModel):
 
     @property
     def image_repository(self) -> str:
-        return f"{self.organization}-{self.project}"
+        return f"{self.name_root}-{self.project}"
 
     @property
     def bot_name(self) -> str:
-        return f"{self.organization}-{self.project}-bot"
+        return f"{self.name_root}-{self.project}-bot"
 
     @property
     def records_bucket(self) -> str:
-        return f"{self.organization}-{self.project}-records"
+        return f"{self.name_root}-{self.project}-records"
 
     @property
     def vpc_name(self) -> str:
-        return f"{self.organization}-{self.project}"
+        return f"{self.name_root}-{self.project}"
 
     @property
     def parameter_prefix(self) -> str:
-        return f"/{self.organization}/{self.project}/bot"
+        return f"/{self.name_root}/{self.project}/bot"
 
     @property
     def log_group(self) -> str:
@@ -243,7 +257,7 @@ class Project(BaseModel):
     @property
     def task_name(self) -> str:
         """The task launch template, instance role, profile and security group."""
-        return f"{self.organization}-{self.project}-task"
+        return f"{self.name_root}-{self.project}-task"
 
     @property
     def task_template(self) -> str:
@@ -256,11 +270,11 @@ class Project(BaseModel):
 
     @property
     def task_log_group(self) -> str:
-        return f"/{self.organization}/{self.project}/tasks"
+        return f"/{self.name_root}/{self.project}/tasks"
 
     @property
     def task_bucket(self) -> str:
-        return f"{self.organization}-{self.project}-tasks"
+        return f"{self.name_root}-{self.project}-tasks"
 
     @property
     def task_prefix(self) -> str:
@@ -272,13 +286,13 @@ class Project(BaseModel):
         return self.config.datasets
 
     def dataset_bucket(self, name: str) -> str:
-        return f"{self.organization}-{self.project}-{name}"
+        return f"{self.name_root}-{self.project}-{name}"
 
     def parameter(self, name: str) -> str:
         return f"{self.parameter_prefix}/{name}"
 
     def role_name(self, role: Role) -> str:
-        return f"{self.organization}-{self.project}-ci-{role}"
+        return f"{self.name_root}-{self.project}-ci-{role}"
 
     @property
     def profile_url(self) -> str | None:

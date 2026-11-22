@@ -3,7 +3,7 @@
 A dataset is onboarded once, centrally, by one file in this repository,
 `datasets/<owner>/<name>.yaml`: the foundation creates its one read-only,
 platform-owned role, storage credential and external location, named
-`<organization>-ds-<owner>-<name>`. Onboarding grants nothing. A Databricks
+`<name_root>-ds-<owner>-<name>`. Onboarding grants nothing. A Databricks
 workspace reads a dataset only while the producing project lists it under the
 dataset's `consumers` and the consuming project lists the dataset under its
 workspace's `reads`: a handshake (docs/databricks.md, "Datasets and access").
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 #: The longest `<owner>-<name>`: the key of the consumer endpoint's
 #: `read_only_datasets` (databricks-workspace), stricter than IAM's 43
-#: characters under `<organization>-ds-`.
+#: characters under `<name_root>-ds-`.
 ONBOARDING_KEY_MAX = 40
 #: The infra checkout the registry and the project registries are read from.
 ENV_INFRA_ROOT = "JAWS_INFRA_ROOT"
@@ -77,20 +77,20 @@ class OnboardedDataset:
         """`<owner>-<name>`: the endpoint key and the platform name's suffix."""
         return f"{self.owner}-{self.name}"
 
-    def bucket(self, organization: str) -> str:
-        """The owner's dataset bucket, `<organization>-<owner>-<name>`."""
-        return f"{organization}-{self.key}"
+    def bucket(self, name_root: str) -> str:
+        """The owner's dataset bucket, `<name_root>-<owner>-<name>`."""
+        return f"{name_root}-{self.key}"
 
-    def platform_name(self, organization: str) -> str:
-        """The role, storage credential and external location, `<organization>-ds-<key>`."""
-        return f"{organization}-ds-{self.key}"
+    def platform_name(self, name_root: str) -> str:
+        """The role, storage credential and external location, `<name_root>-ds-<key>`."""
+        return f"{name_root}-ds-{self.key}"
 
-    def role_arn(self, account_id: str, organization: str) -> str:
-        return f"arn:aws:iam::{account_id}:role/{self.platform_name(organization)}"
+    def role_arn(self, account_id: str, name_root: str) -> str:
+        return f"arn:aws:iam::{account_id}:role/{self.platform_name(name_root)}"
 
-    def url(self, organization: str) -> str:
+    def url(self, name_root: str) -> str:
         """The location's URL, without the trailing slash Databricks drops."""
-        return f"s3://{self.bucket(organization)}/{self.prefix.removesuffix('/')}"
+        return f"s3://{self.bucket(name_root)}/{self.prefix.removesuffix('/')}"
 
     @property
     def catalog(self) -> str:
@@ -107,7 +107,7 @@ class OnboardedDataset:
         """The dataset's external volume in its schema: /Volumes/<catalog>/<schema>/files/."""
         return ONBOARDED_VOLUME
 
-    def as_dict(self, organization: str) -> dict[str, str]:
+    def as_dict(self, name_root: str) -> dict[str, str]:
         """Every derived value, as the foundation's registry module outputs it."""
         return {
             "id": self.id,
@@ -115,9 +115,9 @@ class OnboardedDataset:
             "name": self.name,
             "prefix": self.prefix,
             "description": self.description,
-            "platform_name": self.platform_name(organization),
-            "bucket": self.bucket(organization),
-            "url": self.url(organization),
+            "platform_name": self.platform_name(name_root),
+            "bucket": self.bucket(name_root),
+            "url": self.url(name_root),
             "catalog": self.catalog,
             "schema": self.schema,
             "volume": self.volume,
@@ -542,12 +542,12 @@ def workspace_users_group(project: str) -> str:
     return f"{project}-workspace-users"
 
 
-def metastore_admin_group(organization: str) -> str:
-    """The metastore admin group, `<organization>-metastore-admins` (the
+def metastore_admin_group(name_root: str) -> str:
+    """The metastore admin group, `<name_root>-metastore-admins` (the
     databricks-metastore module's default, which the foundation keeps): it owns
     every onboarded dataset's objects and is in every grant set the reconcile
     manages."""
-    return f"{organization}-metastore-admins"
+    return f"{name_root}-metastore-admins"
 
 
 def fingerprint(variables: Mapping[str, Any]) -> str:
@@ -568,7 +568,7 @@ def data_access_tfvars(
             "the data-access stack binds "
             "and grants through the shared host (the foundation's databricks_shared_host output)"
         )
-    organization = settings.context.organization
+    name_root = settings.context.name_root
     datasets: dict[str, Any] = {}
     for dataset in registry:
         consumers = {
@@ -581,8 +581,8 @@ def data_access_tfvars(
         }
         datasets[dataset.key] = {
             "id": dataset.id,
-            "location_name": dataset.platform_name(organization),
-            "credential_name": dataset.platform_name(organization),
+            "location_name": dataset.platform_name(name_root),
+            "credential_name": dataset.platform_name(name_root),
             "catalog": dataset.catalog,
             "schema": dataset.schema,
             "volume": dataset.volume,
@@ -590,7 +590,7 @@ def data_access_tfvars(
         }
     variables: dict[str, Any] = {
         "host_workspace_url": databricks.shared_host_url,
-        "owner_group_name": metastore_admin_group(organization),
+        "owner_group_name": metastore_admin_group(name_root),
         "datasets": datasets,
     }
     return variables | {"fingerprint": fingerprint(variables)}

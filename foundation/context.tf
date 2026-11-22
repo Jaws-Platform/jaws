@@ -10,6 +10,10 @@ locals {
   account_id = local.account.aws.account_id
 
   context = {
+    # The root of every name (config/tool.yaml context.name_root): jaws-infra-ci-*,
+    # jaws-<project>-*. The Organization tag is context.organization, the GitHub
+    # owner of this repository (docs/tagging.md).
+    name_root    = local.account.context.name_root
     organization = local.account.context.organization
     # Project tag value, and the prefix of this stack's Name tags.
     project     = "jaws"
@@ -54,6 +58,6 @@ module "context" {
   repository   = local.context.repository_tag
   owner        = local.context.owner
   organization = local.context.organization
-  name_root    = local.context.organization
+  name_root    = local.context.name_root
   managed_by   = local.account.context.managed_by
 }
