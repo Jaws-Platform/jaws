@@ -1,6 +1,6 @@
 # CI Policies for the Monitoring Stack Implementation Plan (08)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add a `monitoring` family to `terraform-aws-jaws-ci`'s policy catalog, so Jaws's monitoring CI roles can plan and apply the `monitoring/` stack, and release it as 0.3.0. The stack is the root module of `Jaws-Platform/jaws-monitoring/aws` 0.8.0: the billing normalizer plus the monitoring node.
 
@@ -71,16 +71,16 @@ So IAM and Lambda patterns are `<prefix>` and `<prefix>-*`: the node's own role 
 **Files:**
 - Create: `modules/ci-policies/monitoring/{read,node,config,functions,backup}/{main,variables,outputs,versions}.tf`, `README.md`, and `tests/<leaf>.tftest.hcl` in each.
 
-- [ ] **Step 1: Write each leaf's tests** in the `container_schedule.tftest.hcl` style, with `name_root = "jaws"` and `project = "monitoring"`:
+- [x] **Step 1: Write each leaf's tests** in the `container_schedule.tftest.hcl` style, with `name_root = "jaws"` and `project = "monitoring"`:
   - **`<leaf>_grants_exactly_these_statements`:** every statement's Sid, actions, resources and conditions, with `jaws-monitoring` names.
   - **`<leaf>_grants_nothing_else`:** the Sid list, and no `Resource = "*"` outside the leaf's listed Known gaps.
   - **`description_is_frozen`.**
   - **`monitoring_node_manages_the_node_role_by_its_exact_name`:** the IAM role and instance-profile statements list both `role/jaws-monitoring` and `role/jaws-monitoring-*`.
   - **`monitoring_config_without_a_domain_changes_no_records`:** with `zone_id` null, no `route53:ChangeResourceRecordSets`.
-- [ ] **Step 2: Run** `scripts/check-module.sh modules/ci-policies/monitoring/<leaf>`. Expected: it fails, with no module yet.
-- [ ] **Step 3: Implement** each leaf to the table.
-- [ ] **Step 4: Run it again.** Expected: it passes, and each policy is under 6,144 characters.
-- [ ] **Step 5: Commit** each leaf: `feat(ci-policies): add the monitoring/<leaf> policy`.
+- [x] **Step 2: Run** `scripts/check-module.sh modules/ci-policies/monitoring/<leaf>`. Expected: it fails, with no module yet.
+- [x] **Step 3: Implement** each leaf to the table.
+- [x] **Step 4: Run it again.** Expected: it passes, and each policy is under 6,144 characters.
+- [x] **Step 5: Commit** each leaf: `feat(ci-policies): add the monitoring/<leaf> policy`.
 
 ### Task 2: The catalog and the roles
 
@@ -90,17 +90,17 @@ So IAM and Lambda patterns are `<prefix>` and `<prefix>-*`: the node's own role 
   - `modules/ci-policies/tests/ci_policies.tftest.hcl`;
   - the plan and apply role modules' variable docs and READMEs.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - **`a_plan_role_takes_monitoring_read`:** `monitoring/read` is accepted for the plan role, and the write leaves are rejected.
   - **`an_apply_role_takes_every_monitoring_leaf`.**
   - **The size run** covers the five new leaves (19 in all).
-- [ ] **Step 2: Run** `scripts/check-module.sh modules/ci-policies`. Expected: it fails.
-- [ ] **Step 3: Register the five leaves** in `local.catalog`, the module blocks, `local.created` and `policy_inputs` (`monitoring/config`'s `zone_id` and `domain`).
-- [ ] **Step 4: Run** `scripts/check.sh`. Expected: all checks pass.
-- [ ] **Step 5: Commit** `feat(ci-policies): add the monitoring family to the catalog`.
+- [x] **Step 2: Run** `scripts/check-module.sh modules/ci-policies`. Expected: it fails.
+- [x] **Step 3: Register the five leaves** in `local.catalog`, the module blocks, `local.created` and `policy_inputs` (`monitoring/config`'s `zone_id` and `domain`).
+- [x] **Step 4: Run** `scripts/check.sh`. Expected: all checks pass.
+- [x] **Step 5: Commit** `feat(ci-policies): add the monitoring family to the catalog`.
 
 ### Task 3: Review and release
 
-- [ ] **Step 1: Final review** (opus, whole branch), focused on the Review Focus. One fix pass for Critical and Important findings, each RED→GREEN.
-- [ ] **Step 2: Push, open the PR** (`feat.md` template) with the title `feat(ci-policies): add the monitoring family for the monitoring stack`, **merge it once CI is green, and merge the Release Please PR for 0.3.0.** The owner allowed this for the overnight run of 2026-11-22. Releasing a policy module applies nothing.
-- [ ] **Step 3: Record it** in the roadmap (08 released) and a spec note.
+- [x] **Step 1: Final review** (opus, whole branch), focused on the Review Focus. One fix pass for Critical and Important findings, each RED→GREEN.
+- [x] **Step 2: Push, open the PR** (`feat.md` template) with the title `feat(ci-policies): add the monitoring family for the monitoring stack`, **merge it once CI is green, and merge the Release Please PR for 0.3.0.** The owner allowed this for the overnight run of 2026-11-22. Releasing a policy module applies nothing.
+- [x] **Step 3: Record it** in the roadmap (08 released) and a spec note.

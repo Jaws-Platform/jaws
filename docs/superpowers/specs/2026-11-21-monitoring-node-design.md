@@ -1086,6 +1086,16 @@ monitoring:
   [costs.md](../../costs.md): `cost report` stays as the ad hoc tool and
   points to the dashboards. Update the README's stack list.
 
+**As built in jaws-ci v0.3.0 (plan 08):**
+
+- **The catalog gains `monitoring/read`, `node`, `config`, `functions` and `backup`.**
+  - Each is scoped to `<name_root>-<project>`: the exact name and the `-*` names.
+  - EC2 creates need the request tag `Project`, and later changes need the resource tag.
+  - Every PassRole names its service.
+- **`monitoring/functions` may create CloudWatch's service-linked role** (`AWSServiceRoleForCloudWatchEvents`) and no other. PutMetricAlarm asks for `iam:CreateServiceLinkedRole` on every alarm that has EC2 actions.
+- **`monitoring/config`** takes `zone_id` and `domain` together, for the one Route 53 record.
+- **The node's VPC** comes from the catalog's existing `compute/*` leaves: `monitoring/` creates it with `jaws-network`'s `vpc` module, as the bot stacks do (6.5).
+
 ## 9. Cost (monthly, us-east-1, running 24/7)
 
 | Item | Estimate |

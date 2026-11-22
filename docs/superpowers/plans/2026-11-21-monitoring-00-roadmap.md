@@ -18,7 +18,7 @@ build-start checks in section 12 of the spec change their details.
 | 06b | Cost model and alerts: the model in SQL (daily, month to date, forecast, budgets, anomalies, untagged), the cost alerts, Cost · Overview | `terraform-aws-jaws-monitoring` | 06a | 6.6–6.8, 12.7 | released v0.6.0 (2026-11-22, [plan](2026-11-22-monitoring-06b-cost-model.md)) |
 | 06c | Cost views: Cost · Project, Cost · Databricks, Cost · Tasks (runs, campaigns, estimates) | `terraform-aws-jaws-monitoring` | 06b | 6.7, 6.12 | released v0.7.0 (2026-11-22, [plan](2026-11-22-monitoring-06c-cost-views.md)) |
 | 07 | Off-hours and watchdog: the schedule, mute timings, status-check alarms, the watchdog Lambda, the root composition | `terraform-aws-jaws-monitoring` | 05 | 6.9, 6.10, 7 | released v0.8.0 (2026-11-22, [plan](2026-11-22-monitoring-07-off-hours-watchdog.md)) |
-| 08 | CI policy set for the monitoring stack | `terraform-aws-jaws-ci` | 04–07 (resource list) | 8 (foundation) | written ([plan](2026-11-22-monitoring-08-ci-policies.md)) |
+| 08 | CI policy set for the monitoring stack | `terraform-aws-jaws-ci` | 04–07 (resource list) | 8 (foundation) | released jaws-ci v0.3.0 (2026-11-22, [plan](2026-11-22-monitoring-08-ci-policies.md)) |
 | 09 | Jaws integration: settings, foundation, `billing-export/`, the `monitoring/` stack, CLI (secrets, task records, `--campaign`, backfill), docs, rollout and first-run checks | `jaws` | 01–08 published | 8, 10, 11, 12.5 | written ([plan](2026-11-22-monitoring-09-jaws-integration.md)) |
 
 Each plan's release, the Terraform Registry publish, the repository's
