@@ -654,6 +654,18 @@ environment, daily and month to date, against its budget.
 **Units.** Amounts are `BilledCost` in USD. Tax and credits stay as their
 own `ChargeCategory` rows and are excluded from "untagged".
 
+**As built in v0.7.0 (plan 06c):**
+
+- **One panel builder** (`grafana/cost-panels.tf`) renders all four cost dashboards.
+  - A multi-value filter says "All" as `'__all'`, and every query guards it, so an empty filter never breaks a panel.
+  - Grafana 13.3 inserts a single-value string variable unquoted, so the Project filter reads `${project:sqlstring}`. The smoke test expands variables the same way.
+- **Cost · Project** shows each month's running spend against the budget as a dashed line. `cost.daily` gained `component`.
+- **Cost · Databricks** is rendered only when `databricks` is a provider.
+  - Its all-in cost adds the AWS rows whose `databricks_workspace_tag` tag (default `Workspace`) names the workspace.
+  - `Workspace` isn't an active cost allocation tag yet, so the AWS part reads 0 until it is, and until workspace names are exported.
+- **Tag keys:** `cost.tag()` reads a tag in any of FOCUS's three key forms.
+- **Schema version 3.** Upgrading rebuilds the database and reloads every twin once.
+
 ### 6.8 Alerts and Slack
 
 All rules are Grafana-managed and provisioned in YAML, using the
@@ -914,6 +926,23 @@ duration × its on-demand price with what was billed.
   and billed cost over the ceiling. Records are written the moment a run
   starts, and the normalizer runs hourly, so the leak rule fires within
   about 90 minutes of the run's max hours plus one hour.
+
+**As built in v0.7.0 (plan 06c):**
+
+- **`cost.runs`** has one row per run: recorded runs, and runs built from tagged cost rows.
+  - Tag-only runs take their duration from `Hrs` usage.
+  - A run with a record shows the record's metadata.
+  - A run's cost is an estimate (its hours × the hourly price paid) until its last day is complete.
+  - A running run is estimated up to now.
+  - A swept run ends at the sweep.
+- **`cost.run_lines`** reads the tagged cost rows once, keyed by the run their join tags name, in any key form. Before, 06a matched plain keys only.
+- **`cost.campaigns`** adds savings against on demand, and cost per passed run.
+- **The Runs table:**
+  - Its Cost and $/GPU-hour are text, with `~` marking an estimate.
+  - Run, PR and Commit read `links.run`, `links.pr` and `links.commit`.
+- **Known gaps** (deferred):
+  - A run that finished and was swept later ends at the finish.
+  - A record with no end event stays "running" until it is swept.
 
 ## 7. Modules
 

@@ -1,6 +1,6 @@
 # Cost Views Implementation Plan (06c)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add the three remaining cost dashboards, and release them as 0.7.0 of `terraform-aws-jaws-monitoring`:
 - **Cost · Project:** one project's spend against its budget;
@@ -146,16 +146,16 @@ A tag-only run has every join tag on its cost rows and no record with its `run_k
   - **`local.cost_dashboards`:** board → the full dashboard object. Variables carry `allValue = "'__all'"` when multi; a single-value variable has `includeAll = false`.
 - Consumes: the Overview's specs and its tests from 06b.
 
-- [ ] **Step 1: Write the failing tests** in `tests/grafana.tftest.hcl`, with `cost = { providers = ["aws", "databricks"] }`. For every `grafana/dashboards/Cost/*.json` file:
+- [x] **Step 1: Write the failing tests** in `tests/grafana.tftest.hcl`, with `cost = { providers = ["aws", "databricks"] }`. For every `grafana/dashboards/Cost/*.json` file:
   - **`every_cost_filter_guards_all`:**
     - each templating variable with `multi` has `allValue == "'__all'"`;
     - each `rawSql` that mentions `$<name>` of a multi variable also contains `'__all' IN ($<name>)`.
   - **`every_cost_panel_reads_the_cost_database`:** generalised from the Overview to every Cost dashboard, replacing 06b's run.
-- [ ] **Step 2: Run** `cd $MOD && terraform test -filter=tests/grafana.tftest.hcl`. Expected: `every_cost_filter_guards_all` fails, because the Overview has no `allValue`.
-- [ ] **Step 3: Implement `cost-panels.tf`.** Rebuild the Overview on it: `local.cost_dashboards.overview` replaces `local.cost_overview`, with its filters from `local.cost_filter.overview`. Every Overview panel, id and query is otherwise unchanged.
-- [ ] **Step 4: Update `grafana_smoke.py`'s `cost_query_problems`.** A variable with `allValue` replaces `$<name>` (regex `\$<name>\b`) with that value, which is what Grafana does for "All". Any other variable keeps 06b's `($<name>)` → `(<its query>)`.
-- [ ] **Step 5: Run** `terraform test`, then `bash tests/test-grafana-provisioning.sh`. Expected: all pass, and smoke prints "every cost dashboard query runs on the cost database".
-- [ ] **Step 6: Commit** `refactor(monitoring-node): build every cost panel in one place and guard All in filters`.
+- [x] **Step 2: Run** `cd $MOD && terraform test -filter=tests/grafana.tftest.hcl`. Expected: `every_cost_filter_guards_all` fails, because the Overview has no `allValue`.
+- [x] **Step 3: Implement `cost-panels.tf`.** Rebuild the Overview on it: `local.cost_dashboards.overview` replaces `local.cost_overview`, with its filters from `local.cost_filter.overview`. Every Overview panel, id and query is otherwise unchanged.
+- [x] **Step 4: Update `grafana_smoke.py`'s `cost_query_problems`.** A variable with `allValue` replaces `$<name>` (regex `\$<name>\b`) with that value, which is what Grafana does for "All". Any other variable keeps 06b's `($<name>)` → `(<its query>)`.
+- [x] **Step 5: Run** `terraform test`, then `bash tests/test-grafana-provisioning.sh`. Expected: all pass, and smoke prints "every cost dashboard query runs on the cost database".
+- [x] **Step 6: Commit** `refactor(monitoring-node): build every cost panel in one place and guard All in filters`.
 
 ### Task 2: Cost · Project
 
@@ -181,17 +181,17 @@ A tag-only run has every join tag on its cost rows and no record with its `run_k
 | 20 · 22–24 | **Daily:** spend by component, by service (top 8, the rest as `other`), by environment, as stacked bars, `$__timeFilter(day)` | `cost.daily` |
 | 30 · 32–34 | **Month to date:** by component, by service, by environment, as bar gauges | `cost.daily` |
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - **Postgres** (new final section, with rows P1 and P2): `the_daily_view_carries_the_component` → `string_agg(component \|\| '=' \|\| billed_cost, ',' ORDER BY component)` for `web-app` on Nov 20 is `api=1,site=2`.
   - **Postgres:** `a_schema_version_change_rebuilds` now expects version 3.
   - **Terraform:**
     - `the_project_board_follows_the_house_style`: uid, title, `editable` false, refresh 30s, time `now-90d`, variables `["project","environment"]`, `project.includeAll` false, unique ids, every row followed by text, every other panel with a description, and panels 12, 22 and 32 present;
     - `the_project_board_draws_its_budget`: panel 12 has an override on `budget` with `custom.lineStyle.fill == "dash"`;
     - `the_project_board_needs_cost`: without `cost`, there is no `Cost/project.json`.
-- [ ] **Step 2: Run** the Postgres test and `terraform test`. Expected: the component case fails (no column), and the three Terraform runs fail.
-- [ ] **Step 3: Implement it.** Add `component` to `cost.daily` and bump the schema version. Add `dashboard-cost-project.tf`, and register `project` in `cost_board_vars` and `cost_boards`. Add `"Cost/project.json"` to `module_dashboards` when cost is on.
-- [ ] **Step 4: Run** the Postgres test, `terraform test` and the smoke test. Expected: all pass. Smoke runs every Project query.
-- [ ] **Step 5: Commit** `feat(monitoring-node): add the cost project dashboard`.
+- [x] **Step 2: Run** the Postgres test and `terraform test`. Expected: the component case fails (no column), and the three Terraform runs fail.
+- [x] **Step 3: Implement it.** Add `component` to `cost.daily` and bump the schema version. Add `dashboard-cost-project.tf`, and register `project` in `cost_board_vars` and `cost_boards`. Add `"Cost/project.json"` to `module_dashboards` when cost is on.
+- [x] **Step 4: Run** the Postgres test, `terraform test` and the smoke test. Expected: all pass. Smoke runs every Project query.
+- [x] **Step 5: Commit** `feat(monitoring-node): add the cost project dashboard`.
 
 ### Task 3: Cost · Databricks
 
@@ -229,7 +229,7 @@ The All-in descriptions name the tag from `databricks_workspace_tag`. They also 
 
 Until then, the AWS part is 0.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - **Postgres:**
     - `databricks_daily_names_products_and_counts_dbus`: the ws-1 rows by product are `ALL_PURPOSE f 4 2.2` and `JOBS t 10 3.5`;
     - `the_all_in_adds_the_workspaces_aws_rows_in_any_tag_key_form`: `braveheart-prod` on Nov 20 is `5.70 1.50 7.20`, and on Nov 19 `0.00 0.10 0.10`;
@@ -243,10 +243,10 @@ Until then, the AWS part is 0.
     - `the_databricks_board_says_list_price`: panels 1 and 12 have "list price" in their title or description;
     - `the_all_in_names_its_tag`: with `databricks_workspace_tag = "DbxWs"`, panel 42's description contains `DbxWs`;
     - `the_databricks_board_needs_databricks`: with `providers = ["aws"]`, there is no `Cost/databricks.json`.
-- [ ] **Step 2: Run** them. Expected: each fails, on missing views, keys or files.
-- [ ] **Step 3: Implement** to the tables above. `cost-sync` reads `config.get("databricks_workspace_tag", "Workspace")`, and the SQL takes it through `lit()`.
-- [ ] **Step 4: Run** the Postgres test, `terraform test` and the smoke test. Expected: all pass; the phase 1 smoke lists `cost-databricks`.
-- [ ] **Step 5: Commit** `feat(monitoring-node): add the cost databricks dashboard and the all-in cost`.
+- [x] **Step 2: Run** them. Expected: each fails, on missing views, keys or files.
+- [x] **Step 3: Implement** to the tables above. `cost-sync` reads `config.get("databricks_workspace_tag", "Workspace")`, and the SQL takes it through `lit()`.
+- [x] **Step 4: Run** the Postgres test, `terraform test` and the smoke test. Expected: all pass; the phase 1 smoke lists `cost-databricks`.
+- [x] **Step 5: Commit** `feat(monitoring-node): add the cost databricks dashboard and the all-in cost`.
 
 ### Task 4: Task runs and campaigns in the model
 
@@ -258,7 +258,7 @@ Until then, the AWS part is 0.
 - Consumes: Task 3's `cost.tag()`; 06a's `cost.task_runs` and `run_join_tags`.
 - Produces: `cost.runs` and `cost.campaigns` with exactly the columns in Global Constraints. Task 5 reads them by those names.
 
-- [ ] **Step 1: Write the failing Postgres cases**, at `now` unless noted.
+- [x] **Step 1: Write the failing Postgres cases**, at `now` unless noted.
   - **`a_run_matches_its_cost_rows_in_any_tag_key_form`:** `string_agg(round(billed_cost::numeric, 2)::text, ',' ORDER BY run_key)` over `cost.task_run_costs` is `4.80,1.70,0.00,16.00`.
   - **`a_finished_run_shows_its_bill`** (R1): `source outcome estimated cost hours gpu_hours on_demand_cost ceiling_percent cost_per_gpu_hour pr commit` is `record passed f 4.80 5 5 10.00 9.60 0.96 #88 a1b2c3d`.
   - **`a_run_is_estimated_until_its_last_day_is_complete`** (R2): `estimated cost billed_cost` is `t 2.00 1.70`. At `2026-11-23T12:00:00Z` it is `f 1.70 1.70`.
@@ -269,10 +269,10 @@ Until then, the AWS part is 0.
   - **`campaigns_add_up_their_runs`:**
     - `net-v12`: `project runs passed failed interrupted instance_hours gpu_hours cost on_demand_cost saved saved_percent cost_per_passed_run` is `braveheart-trainer 2 1 0 1 7 7 6.80 14.00 7.20 51.43 6.80`;
     - `net-v11`'s `cost_per_passed_run` is null.
-- [ ] **Step 2: Run** `bash tests/test-cost-sync-postgres.sh`. Expected: it fails at the first case. `task_run_costs` gives `4.80,0.00,0.00,0.00`, because only plain keys match.
-- [ ] **Step 3: Implement `tasks_sql(join_tags: List[str]) -> str`**, rendered into `schema_sql` in place of 06a's `task_run_costs`. It builds the three key forms of each join tag from `join_tags`, and the tag-only `run_key` in the normalizer's format.
-- [ ] **Step 4: Run** the Postgres and Python tests. Expected: all pass, and `the_model_reads_only_its_window` still passes.
-- [ ] **Step 5: Commit** `feat(monitoring-node): model task runs and campaigns, matching tags in any key form`.
+- [x] **Step 2: Run** `bash tests/test-cost-sync-postgres.sh`. Expected: it fails at the first case. `task_run_costs` gives `4.80,0.00,0.00,0.00`, because only plain keys match.
+- [x] **Step 3: Implement `tasks_sql(join_tags: List[str]) -> str`**, rendered into `schema_sql` in place of 06a's `task_run_costs`. It builds the three key forms of each join tag from `join_tags`, and the tag-only `run_key` in the normalizer's format.
+- [x] **Step 4: Run** the Postgres and Python tests. Expected: all pass, and `the_model_reads_only_its_window` still passes.
+- [x] **Step 5: Commit** `feat(monitoring-node): model task runs and campaigns, matching tags in any key form`.
 
 ### Task 5: Cost · Tasks
 
@@ -315,7 +315,7 @@ Until then, the AWS part is 0.
   | running | blue |
 - **% of ceiling** turns yellow at 75 and red at 100.
 
-- [ ] **Step 1: Write the failing Terraform tests.**
+- [x] **Step 1: Write the failing Terraform tests.**
   - `the_tasks_board_follows_the_house_style`: uid, title, refresh, time `now-30d`, the six variables in order, unique ids, rows followed by text, descriptions, and panels 12, 22, 32, 42 present.
   - `the_runs_table_links_and_colours`:
     - panel 22 has `links` overrides on `Run`, `PR` and `Commit`;
@@ -325,24 +325,24 @@ Until then, the AWS part is 0.
   - `a_campaign_click_filters_the_runs`: panel 12's `Campaign` link url contains `var-campaign=${__value.raw}`.
   - `gpu_spend_counts_only_gpu_runs`: panel 2's `rawSql` contains `accelerators > 0`.
   - `the_tasks_board_needs_cost`.
-- [ ] **Step 2: Run** `terraform test -filter=tests/grafana.tftest.hcl`. Expected: the five runs fail.
-- [ ] **Step 3: Implement** to the tables above, extending the builder only where the specs need it.
-- [ ] **Step 4: Run** `terraform test` and the smoke test. Expected: all pass, and phase 1 lists 6 dashboards.
-- [ ] **Step 5: Commit** `feat(monitoring-node): add the cost tasks dashboard`.
+- [x] **Step 2: Run** `terraform test -filter=tests/grafana.tftest.hcl`. Expected: the five runs fail.
+- [x] **Step 3: Implement** to the tables above, extending the builder only where the specs need it.
+- [x] **Step 4: Run** `terraform test` and the smoke test. Expected: all pass, and phase 1 lists 6 dashboards.
+- [x] **Step 5: Commit** `feat(monitoring-node): add the cost tasks dashboard`.
 
 ### Task 6: Docs and release
 
-- [ ] **Step 1: README** (`$MOD/README.md`): the three dashboards, and `databricks_workspace_tag`, with the activation note.
+- [x] **Step 1: README** (`$MOD/README.md`): the three dashboards, and `databricks_workspace_tag`, with the activation note.
   - **The run fields read:** `links.run`, `links.pr`, `links.commit`, `attributes.profile`, `attributes.lifecycle`.
   - **Tag-only runs:** duration comes from `Hrs` usage.
   - **Estimates:** marked `~` until the run's last day is complete.
   - **Tag keys:** read in any of the three forms.
 
   Regenerate terraform-docs.
-- [ ] **Step 2: Run** `$REPO/scripts/check.sh`. Expected: `All checks passed.`
-- [ ] **Step 3: Final review** (opus, whole branch), and one fix pass for Critical and Important findings, each RED→GREEN.
-- [ ] **Step 4: Ask the owner** before push, PR, merge and the 0.7.0 release.
-- [ ] **Step 5: Record it.**
+- [x] **Step 2: Run** `$REPO/scripts/check.sh`. Expected: `All checks passed.`
+- [x] **Step 3: Final review** (opus, whole branch), and one fix pass for Critical and Important findings, each RED→GREEN.
+- [x] **Step 4: Ask the owner** before push, PR, merge and the 0.7.0 release.
+- [x] **Step 5: Record it.**
   - Tick this plan.
   - Mark 06c released in the roadmap.
   - Add an "As built in v0.7.0" note to spec 6.7 and 6.12.
