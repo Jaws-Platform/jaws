@@ -94,6 +94,17 @@ variable "records_enabled" {
   type        = bool
 }
 
+variable "bucket_admin_principal_arns" {
+  description = "Principals exempt from the records bucket's hardened policy besides this project's apply role, which applies it: the owner's admin role in the primary account and its root user (config/aws.yaml)."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for arn in var.bucket_admin_principal_arns : can(regex("^arn:aws:iam::[0-9]{12}:(root|role/.+)$", arn))])
+    error_message = "bucket_admin_principal_arns must be IAM role ARNs or an account's root user ARN."
+  }
+}
+
 variable "records_prefix" {
   description = "Key prefix of the game records in the bucket (bot.records_prefix in config/bots.yaml)."
   type        = string

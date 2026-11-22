@@ -247,6 +247,13 @@ How solid the records are:
 - **Finished games only.** Games without a final result are never shipped.
 - **Add only.** Nothing is ever deleted. The instance may add records but not
   read or delete them, and the bucket is versioned and survives `destroy`.
+- **Only the bot and the admins.** The bucket's policy denies everyone else,
+  whatever their IAM policies allow (the `private-bucket` module's `access`):
+  the bot's instance role may only add objects under `records/` (it cannot
+  read, delete or replicate them); the bot's plan role may list the bucket,
+  which its refresh needs, and read no object; only the owner's admin role in
+  the primary account, its root user and the bot's apply role may read or
+  delete records or change the bucket. Reading the records is an admin's job.
 - **Fixed schema.** Any change to the layout or the keys becomes `schema=2`.
 - **Known gaps.** Games that ended in the minutes before an unclean instance
   loss are lost. A game interrupted by an instance replacement and resumed is

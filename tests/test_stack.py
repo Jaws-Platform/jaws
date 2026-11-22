@@ -116,6 +116,10 @@ def test_render_tfvars_for_bot(bot: Project, settings: Settings) -> None:
         "bot_name": "rusty-chess-bot",
         "records_enabled": True,
         "records_prefix": "records/",
+        "bucket_admin_principal_arns": [
+            "arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_013589f39f92382a",
+            "arn:aws:iam::570327089884:root",
+        ],
         "records_container_path": "/opt/lichess-bot/game_records",
         "log_retention_days": 30,
         "health_log_pattern": "awaiting challenges",
@@ -539,7 +543,11 @@ def _bot_stack(block_type: str, file: str = "main.tf") -> dict[str, dict[str, st
 
 def _strip_new_keys(tfvars: dict[str, Any]) -> dict[str, Any]:
     """`tfvars` without the keys stack gating added."""
-    old = {k: v for k, v in tfvars.items() if k not in ("bot_enabled", "task_rust", "schedule")}
+    old = {
+        k: v
+        for k, v in tfvars.items()
+        if k not in ("bot_enabled", "task_rust", "schedule", "bucket_admin_principal_arns")
+    }
     old["task_profiles"] = [
         {
             **{k: v for k, v in profile.items() if k != "rust"},
@@ -1395,3 +1403,19 @@ def test_the_consumer_endpoint_gets_each_edge(settings: Settings) -> None:
         project, settings, stack="account", access=_access(consumer_reads=False)
     )
     assert pending["read_only_datasets"] == {}
+
+
+def test_the_records_bucket_admins_are_the_break_glass_principals(
+    bot: Project, settings: Settings
+) -> None:
+    """The stack adds the project's apply role, which applies the bucket; the CLI
+    names the owner's admin role and root of the primary account."""
+    assert render_tfvars(bot, settings)["bucket_admin_principal_arns"] == [
+        settings.aws.admin_role_arn,
+        f"arn:aws:iam::{settings.aws.account_id}:root",
+    ]
+    main = (REPO_ROOT / "stacks" / "bot" / "main.tf").read_text()
+    admins = "admin_principal_arns = distinct(concat(var.bucket_admin_principal_arns, "
+    assert admins + '["${local.ci_role_arn}-apply"]))' in main
+    assert 'listers              = ["${local.ci_role_arn}-plan"]' in main
+    assert "{ (var.records_prefix) = [module.bot[0].role_arn] }" in main

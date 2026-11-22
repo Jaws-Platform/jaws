@@ -161,6 +161,12 @@ def _lichess_bot_tfvars(project: Project, settings: Settings) -> dict[str, Any]:
         "bot_name": bot.lichess_user or "",
         "records_enabled": bot.records.s3,
         "records_prefix": settings.bot.records_prefix,
+        # Besides the project's own apply role, which the stack adds: the
+        # break-glass principals of the records bucket's policy.
+        "bucket_admin_principal_arns": [
+            *([settings.aws.admin_role_arn] if settings.aws.admin_role_arn else []),
+            f"arn:aws:iam::{settings.aws.account_id}:root",
+        ],
         "records_container_path": RECORDS_CONTAINER_PATH,
         "log_retention_days": bot.logs.retention_days,
         "health_log_pattern": settings.bot.health_log_pattern,
