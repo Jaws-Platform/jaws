@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.74.2](https://github.com/Jaws-Platform/jaws/compare/v0.74.1...v0.74.2) (2026-11-22)
+
+
+### Bug Fixes
+
+* harden the terraform state bucket policies ([#286](https://github.com/Jaws-Platform/jaws/issues/286)) ([c2d5f44](https://github.com/Jaws-Platform/jaws/commit/c2d5f445218e439616c2a216974b4c41ee779ef9))
+
 ## [0.74.1](https://github.com/Jaws-Platform/jaws/compare/v0.74.0...v0.74.1) (2026-11-21)
 
 
