@@ -76,8 +76,6 @@ def _bot_in_production() -> dict[str, Any]:
     raw = _registered("braveheart-bot")
     bot = next(c for c in raw["components"] if c["kind"] == "lichess-bot")
     bot["secrets"] = {"LICHESS_TOKEN": "/jaws/braveheart-bot/lichess-token"}
-    # The live file still states the tag it had to before #290: the tool's value wins.
-    raw["tags"]["Organization"] = "jaws"
     return raw
 
 

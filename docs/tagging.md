@@ -17,7 +17,8 @@ place: nothing is renamed or replaced, and no access is granted or revoked.
 | `Owner` | The person responsible, e.g. `jwallace145` | the project file | the project file |
 
 A project file (`jaws.yaml`) states `Project`, `Environment`, `Repository` and
-`Owner`, and leaves `Organization` and `ManagedBy` out:
+`Owner`. It may not state `Organization` or `ManagedBy`: the CLI refuses a file
+that does, even with the value the tool would set.
 
 ```yaml
 tags:
@@ -87,15 +88,16 @@ the keys Databricks reserves for itself.
 ## Moving to derived tags
 
 Until #290 a project file stated `Organization: jaws`, and the tool stamped
-`ManagedBy: jaws`. From the release that derives them:
+`ManagedBy: jaws`. The move took three steps, all done:
 
-1. Files may still state `Organization` or `ManagedBy`. The value is ignored,
-   and every run warns, as a `::warning::` annotation in GitHub Actions.
-   Remove both from `jaws.yaml` in the PR that bumps to that release.
-2. Each stack retags on its next apply. `Organization` changes from `jaws` to
-   the project's owner, and `ManagedBy` from `jaws` to `JAWS`. Each is an
-   in-place change.
-3. A later release refuses `Organization` and `ManagedBy` in a project file.
+1. v0.76.0 derived both tags. It ignored a stated value, with a warning in
+   every run, and every onboarded project dropped `Organization: jaws` from
+   `jaws.yaml`.
+2. Each stack retagged on its next apply: `Organization` from `jaws` to the
+   project's owner, and `ManagedBy` from `jaws` to `JAWS`, in place. Sites
+   retag on their next deploy.
+3. The release after that refuses `Organization` and `ManagedBy` in a project
+   file (#300).
 
 ## Adding a tag
 

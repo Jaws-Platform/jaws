@@ -23,7 +23,6 @@ from .components import (
     TaskRunner,
 )
 from .errors import ConfigError
-from .log import annotate_warning, get_logger
 from .settings import Settings
 
 SITE_FILE = Path("jaws.yaml")
@@ -31,11 +30,10 @@ SITE_FILE = Path("jaws.yaml")
 #: The tags the project file must state.
 REQUIRED_TAGS = ("Project", "Environment", "Repository", "Owner")
 
-#: The tags the tool decides for every resource, whatever a file states
-#: (docs/tagging.md): Organization is the GitHub organization or user the project
-#: is registered under (config/projects.yaml), and ManagedBy is `context.managed_by`.
-#: A file that still states one is warned and the value ignored; a later release
-#: refuses it.
+#: The tags the tool decides for every resource (docs/tagging.md): Organization is
+#: the GitHub organization or user the project is registered under
+#: (config/projects.yaml), and ManagedBy is `context.managed_by`. A project file
+#: may not state either.
 TOOL_TAGS = ("Organization", "ManagedBy")
 
 #: The ManagedBy value the tool stamps (`context.managed_by`); the stacks'
@@ -198,6 +196,20 @@ class SiteConfig(_Model):
     def datasets(self) -> tuple[Dataset, ...]:
         return tuple(c for c in self.components if isinstance(c, Dataset))
 
+    @field_validator("tags")
+    @classmethod
+    def _no_tool_tags(cls, value: dict[str, str]) -> dict[str, str]:
+        source = {
+            "Organization": "the project's GitHub owner in config/projects.yaml",
+            "ManagedBy": MANAGED_BY,
+        }
+        stated = [key for key in TOOL_TAGS if key in value]
+        if stated:
+            raise ValueError(
+                "; ".join(f"tags.{key} is set by jaws ({source[key]}); remove it" for key in stated)
+            )
+        return value
+
     @model_validator(mode="after")
     def _required_tags(self) -> SiteConfig:
         missing = [tag for tag in REQUIRED_TAGS if tag not in self.tags]
@@ -262,9 +274,8 @@ def _format_validation_error(exc: ValidationError) -> str:
 
 
 def stamped_tags(tags: Mapping[str, str], organization: str, managed_by: str) -> dict[str, str]:
-    """The file's `tags` with the tool's own (TOOL_TAGS) in place of anything it states."""
-    own = {key: value for key, value in tags.items() if key not in TOOL_TAGS}
-    return {**own, "Organization": organization, "ManagedBy": managed_by}
+    """The file's `tags` and the tool's own (TOOL_TAGS), which the file may not state."""
+    return {**tags, "Organization": organization, "ManagedBy": managed_by}
 
 
 def project_organization(config: SiteConfig, settings: Settings) -> str:
@@ -274,29 +285,6 @@ def project_organization(config: SiteConfig, settings: Settings) -> str:
     if config.project in settings.projects:
         return settings.owner(config.project)
     return config.repository.split("/", 1)[0]
-
-
-_warned: set[str] = set()
-
-
-def tool_tag_warnings(config: SiteConfig, organization: str, managed_by: str) -> list[str]:
-    """One line per tool tag (TOOL_TAGS) the file states: it is ignored."""
-    stamped = {"Organization": organization, "ManagedBy": managed_by}
-    return [
-        f"{SITE_FILE}: tags.{key} is set by jaws ({stamped[key]!r} for {config.project}); "
-        f"the stated {config.tags[key]!r} is ignored. Remove it: a later jaws release refuses it"
-        for key in TOOL_TAGS
-        if key in config.tags
-    ]
-
-
-def warn_tool_tags(config: SiteConfig, organization: str, managed_by: str) -> None:
-    """Log, and annotate in GitHub Actions, each tool tag the file states, once a run."""
-    for message in tool_tag_warnings(config, organization, managed_by):
-        if message not in _warned:
-            _warned.add(message)
-            get_logger().warning("%s", message)
-            annotate_warning(message, title="Jaws: deprecated tag")
 
 
 class Site(_Model):
@@ -330,12 +318,10 @@ class Site(_Model):
                 problems.append(f"{label} {domain!r} is not under the zone {settings.dns.zone!r}")
         if problems:
             raise ConfigError("; ".join(problems))
-        organization = project_organization(config, settings)
-        warn_tool_tags(config, organization, settings.context.managed_by)
         return cls(
             config=config,
             name_root=settings.context.name_root,
-            organization=organization,
+            organization=project_organization(config, settings),
             managed_by=settings.context.managed_by,
             zone_id=settings.dns.zone_id,
             state_bucket=settings.state.bucket,
