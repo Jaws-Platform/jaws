@@ -34,6 +34,9 @@ name: Remote task
 # In a matrix, give each leg its own artifact (it names the task too).
 # `profile: gpu` (or another of the project's task-runner.profiles) runs on
 # that profile's instances, image and vCPU budget; the default is cpu.
+# `campaign: datagen-2026-12` names the set of runs this one belongs to: the
+# Campaign tag on its instance and volume, and its run records, so the cost
+# dashboards group by it. Without it, the run carries no Campaign tag.
 
 on:
   workflow_call:
@@ -91,6 +94,11 @@ on:
         required: false
         type: boolean
         default: false
+      campaign:
+        description: The campaign this run belongs to, lowercase letters, digits and - (at most 63), such as datagen-2026-12. It tags the instance and volume Campaign and goes in the run's records; empty for none.
+        required: false
+        type: string
+        default: ""
     outputs:
       outcome:
         description: passed, failed, interrupted (spot reclaimed the instance; no result, re-run), no-capacity (neither spot nor on-demand had room) or no-price (the cost ceiling could not be checked).
@@ -214,6 +222,7 @@ jobs:
           MAX_HOURS: ${{ inputs.max-hours }}
           OUT: ${{ inputs.artifact-path }}
           DEBUG: ${{ inputs.debug }}
+          CAMPAIGN: ${{ inputs.campaign }}
           REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           if ! jq -e 'type == "array" and all(.[]; type == "string" and (contains("\n") | not))' <<<"$ARGS" >/dev/null; then
@@ -228,6 +237,7 @@ jobs:
           if [ "$MAX_HOURS" != "0" ]; then flags+=(--max-hours "$MAX_HOURS"); fi
           if [ -n "$MARKET" ]; then flags+=(--market "$MARKET"); fi
           if [ -n "$PULL_REQUEST" ]; then flags+=(--pull-request "$PULL_REQUEST"); fi
+          if [ -n "$CAMPAIGN" ]; then flags+=(--campaign "$CAMPAIGN"); fi
           # exec: on cancel GitHub signals this step's process, which must be the
           # CLI itself (not bash or uv) so its handlers terminate the instance.
           exec .jaws-tool/.venv/bin/jaws \

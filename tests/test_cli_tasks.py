@@ -172,6 +172,7 @@ def fleet(monkeypatch: pytest.MonkeyPatch, bot_workspace: Path) -> list[str]:
     monkeypatch.setattr(tasks, "running_tasks", lambda ec2, project: _instances())
     monkeypatch.setattr(tasks, "terminate", lambda ec2, i, logger: terminated.append(i))
     monkeypatch.setattr(cli, "_now", lambda: NOW)
+    monkeypatch.setattr(cli, "_run_records", lambda run, session: None)  # tests/test_tasks.py
     return terminated
 
 
@@ -298,6 +299,7 @@ def research_fleet(monkeypatch: pytest.MonkeyPatch, research_workspace: Path) ->
     monkeypatch.setattr(tasks, "running_tasks", running)
     monkeypatch.setattr(tasks, "terminate", lambda ec2, i, logger: terminated.append(i))
     monkeypatch.setattr(cli, "_now", lambda: NOW)
+    monkeypatch.setattr(cli, "_run_records", lambda run, session: None)  # tests/test_tasks.py
     return terminated
 
 

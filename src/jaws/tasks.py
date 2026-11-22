@@ -11,6 +11,10 @@ A task runs in one of the project's *profiles* (`cpu`, or one under
 `task-runner.profiles` such as `gpu`): each has its own launch template,
 instance types, market and vCPU budget, and instances carry it as the
 `Profile` tag.
+
+With the monitoring stack's billing bucket configured, a run writes a `started`
+record when its instance launches and a `finished` record when it ends
+(run_records.py); a record that cannot be written is a warning, never a failure.
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ import signal
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from logging import Logger
 from pathlib import Path, PurePosixPath
@@ -35,11 +39,12 @@ from typing import TYPE_CHECKING, Any
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-from . import github
+from . import github, run_records
 from .components import CPU_PROFILE
 from .errors import ConfigError, PreflightError, RunError, SitesError
 from .log import annotate_warning
 from .project import Project
+from .run_records import RunRecords
 
 if TYPE_CHECKING:
     from mypy_boto3_ec2 import EC2Client
@@ -74,6 +79,8 @@ _QUOTAS = {
 
 _LIVE_STATES = ["pending", "running", "stopping"]
 _TAG_VALUE_UNSAFE = re.compile(r"[^A-Za-z0-9 +\-=._:/@]")
+#: A campaign's name (`task run --campaign`): a set of runs toward one goal.
+CAMPAIGN = re.compile(r"[a-z0-9-]{1,63}")
 
 
 @dataclass(frozen=True)
@@ -104,6 +111,8 @@ class TaskSpec:
     scratch: str = "root-volume"
     #: Refuse to launch above this worst-case cost; `None` skips the check.
     max_run_cost_usd: float | None = None
+    #: The campaign the run belongs to: its Campaign tag and its records. None: no tag.
+    campaign: str | None = None
 
 
 @dataclass(frozen=True)
@@ -117,6 +126,8 @@ class TaskInstance:
     max_hours: int | None
     #: Instances launched before profiles existed carry no tag: they are cpu.
     profile: str = CPU_PROFILE
+    #: Every tag the instance carries.
+    tags: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -177,6 +188,8 @@ def task_tags(spec: TaskSpec, lifecycle: str) -> dict[str, str]:
     }
     if spec.pull_request:
         tags["PullRequest"] = _tag_value(spec.pull_request)
+    if spec.campaign:
+        tags["Campaign"] = _tag_value(spec.campaign)
     return tags
 
 
@@ -210,6 +223,7 @@ def running_tasks(ec2: EC2Client, project: str) -> list[TaskInstance]:
                         launched_at=instance["LaunchTime"],
                         max_hours=int(hours) if hours.isdigit() else None,
                         profile=tags.get("Profile", CPU_PROFILE),
+                        tags=tags,
                     )
                 )
     return sorted(found, key=lambda t: (t.launched_at, t.id))
@@ -240,6 +254,19 @@ def instance_types_info(ec2: EC2Client, types: list[str]) -> dict[str, tuple[int
         )
         for t in response["InstanceTypes"]
     }
+
+
+def accelerator_count(ec2: EC2Client, instance_type: str) -> int | None:
+    """The type's GPUs (0 without any), from DescribeInstanceTypes, for the run's
+    records; None when the lookup fails, which never stops a task."""
+    try:
+        response = ec2.describe_instance_types(InstanceTypes=[instance_type])  # type: ignore[list-item]
+        gpus = response["InstanceTypes"][0].get("GpuInfo", {}).get("Gpus", [])
+        return sum(int(gpu.get("Count", 0)) for gpu in gpus)
+    except TaskInterrupted:
+        raise
+    except Exception:  # a record's detail never stops a task
+        return None
 
 
 def wait_for_slot(
@@ -619,11 +646,14 @@ def _check(spec: TaskSpec) -> None:
         raise ConfigError(f"ref must be a full 40-character commit SHA: {spec.ref!r}")
     if not _REPOSITORY.match(spec.repository):
         raise ConfigError(f"repository must be owner/name: {spec.repository!r}")
-    for field in ("run_id", "task_id"):
-        if not _ID.match(getattr(spec, field)):
-            raise ConfigError(
-                f"{field} must be letters, digits, . _ and -: {getattr(spec, field)!r}"
-            )
+    for name in ("run_id", "task_id"):
+        if not _ID.match(getattr(spec, name)):
+            raise ConfigError(f"{name} must be letters, digits, . _ and -: {getattr(spec, name)!r}")
+    if spec.campaign is not None and not CAMPAIGN.fullmatch(spec.campaign):
+        raise ConfigError(
+            "campaign must be lowercase letters, digits and -, at most 63 characters: "
+            f"{spec.campaign!r}"
+        )
 
 
 #: Puts /work/scratch on the instance's local NVMe SSD. The Deep Learning AMIs
@@ -1121,10 +1151,13 @@ def run_task(
     poll: float = 5.0,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
+    records: RunRecords | None = None,
 ) -> int:
     """Run one task end to end and return its exit code. The instance is
     terminated on every path: success, task failure, AWS errors, timeouts
-    and SIGINT/SIGTERM."""
+    and SIGINT/SIGTERM. With `records`, the run's `started` record is written
+    once its instance launches and its `finished` record once the instance is
+    terminated; neither can fail the task."""
     project = spec.project
     runner = project.task_runner
     if runner is None:
@@ -1152,6 +1185,15 @@ def run_task(
     collected: list[Path] = []
     launching = False
     outcome, interrupted_at = "failed", ""
+    exit_code = 1
+    #: The started record's account of the launch, which the finished record repeats.
+    launch_fields: dict[str, Any] = {}
+    output = _EnvironmentBlock(write) if records is not None else None
+
+    def done(code: int) -> int:
+        nonlocal exit_code
+        exit_code = code
+        return code
 
     def reclaimed() -> str | None:
         """On a failure after a spot launch: was it spot reclaiming the instance?"""
@@ -1165,6 +1207,9 @@ def run_task(
             if spec.max_run_cost_usd is not None:
                 on_demand = check_ceiling(pricing, spec, logger, sleep)
             info = instance_types_info(ec2, [spec.instance_type])
+            accelerators = (
+                accelerator_count(ec2, spec.instance_type) if records is not None else None
+            )
             vcpus, threads = info[spec.instance_type]
             if threads > 1 and spec.whole_cores:
                 raise ConfigError(
@@ -1181,11 +1226,18 @@ def run_task(
             launched = launch(ec2, spec, template, plan, logger, sleep, clock)
             instance_id = launched.id
             _log_launch(logger, spec, launched, plan)
+            if records is not None:
+
+                def started() -> None:
+                    launch_fields.update(_launch_fields(spec, launched, plan, accelerators))
+                    records.write(_record("started", spec, records.now(), launch_fields))
+
+                _never_fail(logger, "started", started)
             wait_for_agent(ssm, instance_id, sleep=sleep)
             command_id = send(ssm, instance_id, script, project.task_log_group, spec.max_hours)
             code = stream(
-                logs, ssm, project.task_log_group, command_id, instance_id, write, poll, sleep,
-                alive=lambda: _alive(ec2, launched.id),
+                logs, ssm, project.task_log_group, command_id, instance_id, output or write,
+                poll, sleep, alive=lambda: _alive(ec2, launched.id),
             )  # fmt: skip
             logger.info("the task exited with %d", code)
             copied = True
@@ -1203,37 +1255,217 @@ def run_task(
                 at = reclaimed()
                 if at is not None:
                     outcome, interrupted_at = "interrupted", at
-                    return _interrupted(logger, at)
+                    return done(_interrupted(logger, at))
             outcome = "passed" if code == 0 and copied else "failed"
-            return code if copied else code or 1
+            return done(code if copied else code or 1)
         except NoCapacity as exc:
             logger.error("%s", exc)
             outcome = "no-capacity"
-            return exc.exit_code
+            return done(exc.exit_code)
         except NoPrice as exc:
             logger.error("%s", exc)
             outcome = "no-price"
-            return exc.exit_code
+            return done(exc.exit_code)
         except TaskInterrupted as exc:
             logger.warning("%s; terminating the task instance", exc)
-            return exc.exit_code
+            return done(exc.exit_code)
         except (SitesError, ClientError, BotoCoreError) as exc:
             # Reclaimed while booting, sending or following: never a failure.
             at = reclaimed()
             if at is not None:
                 logger.warning("%s", exc)
                 outcome, interrupted_at = "interrupted", at
-                return _interrupted(logger, at)
+                return done(_interrupted(logger, at))
             if isinstance(exc, SitesError):
                 logger.error("%s", exc)
-                return exc.exit_code
+                return done(exc.exit_code)
             logger.error("AWS call failed: %s", exc)
-            return 1
+            return done(1)
         finally:
             shield()
             # The outcome first: a failing cleanup must not lose it.
             _report(outcome, interrupted_at)
             _cleanup(ec2, spec, instance_id, launching, logger)
+            # The record last, once the instance is gone: it never holds one up.
+            if records is not None and launch_fields:
+                environment = output.values if output is not None else {}
+                ended = _ended_fields(
+                    launch_fields, outcome, exit_code, interrupted_at, environment
+                )
+                _never_fail(
+                    logger,
+                    "finished",
+                    lambda: records.write(
+                        _record("finished", spec, records.now(), launch_fields, ended)
+                    ),
+                )
+
+
+# --- task-run records -------------------------------------------------------------
+
+#: The environment block's first and last lines (task_script).
+ENVIRONMENT_START = "== task-runner environment"
+ENVIRONMENT_END = "=="
+#: What a finished record keeps from the environment block: the GPU, its driver and CUDA.
+ENVIRONMENT_ATTRIBUTES = ("gpu_model", "gpu_memory", "nvidia_driver", "cuda_version")
+
+
+class _EnvironmentBlock:
+    """Passes every output line on, and keeps the `key=value` lines of the
+    task's first environment block (the runner's, printed before the task)."""
+
+    def __init__(self, write: Callable[[str], None]) -> None:
+        self._write = write
+        self._state = "before"
+        self.values: dict[str, str] = {}
+
+    def __call__(self, line: str) -> None:
+        if self._state == "before" and line == ENVIRONMENT_START:
+            self._state = "inside"
+        elif self._state == "inside":
+            if line == ENVIRONMENT_END:
+                self._state = "after"
+            elif "=" in line:
+                name, _, value = line.partition("=")
+                self.values[name] = value
+        self._write(line)
+
+
+def _never_fail(logger: Logger, event: str, step: Callable[[], object]) -> None:
+    """Run a record's step; anything it raises is a warning, never the task's
+    failure. A cancellation still cancels."""
+    try:
+        step()
+    except TaskInterrupted:
+        raise
+    except Exception as exc:  # a record never fails a task
+        logger.warning("the %s record was not written: %s: %s", event, type(exc).__name__, exc)
+
+
+def _launch_fields(
+    spec: TaskSpec, launched: Launched, plan: PricePlan, accelerators: int | None
+) -> dict[str, Any]:
+    """What a run's records say about its launch (spec 6.12): its tags, its
+    campaign and workflow, what it runs on, its prices and limits, and its links."""
+    lifecycle = launched.lifecycle
+    on_demand = plan.on_demand
+    paid = plan.spot.get(launched.zone) if lifecycle == "spot" else on_demand
+    worst = (
+        round(worst_case_rate(spec, on_demand) * spec.max_hours, 6)
+        if on_demand is not None
+        else None
+    )
+    zone_id = next((s.zone_id for s in plan.subnets if s.zone == launched.zone and s.zone_id), "")
+    score = plan.scores.get(launched.zone)
+    attributes = {
+        "profile": spec.profile,
+        "lifecycle": lifecycle,
+        "repository": spec.repository,
+        "commit": spec.ref,
+        "run_id": spec.run_id,
+        "task_id": spec.task_id,
+        "workflow": spec.workflow,
+        "pull_request": spec.pull_request,
+        "availability_zone": launched.zone,
+        "image": launched.image,
+        "spot_cap_usd": plan.max_price if lifecycle == "spot" else None,
+        "spot_placement_score": str(score) if score is not None else None,
+    }
+    return {
+        "tags": task_tags(spec, lifecycle),
+        "campaign": spec.campaign,
+        "kind": spec.workflow,
+        "instance": {
+            "type": spec.instance_type,
+            "accelerators": accelerators,
+            "market": lifecycle,
+            "zone": zone_id or launched.zone,
+            "id": launched.id,
+        },
+        "prices": {
+            "hourly_usd": paid,
+            "on_demand_hourly_usd": on_demand,
+            "worst_case_usd": worst,
+            "ceiling_usd": spec.max_run_cost_usd,
+            "max_hours": spec.max_hours,
+        },
+        "links": run_records.links(spec.repository, spec.ref, spec.pull_request),
+        "attributes": {k: v for k, v in attributes.items() if v is not None},
+    }
+
+
+def _iso_time(value: str) -> str | None:
+    """`interrupted_at` as the record needs it: an ISO 8601 time, or None ("unknown")."""
+    try:
+        datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return value
+
+
+def _ended_fields(
+    launch: dict[str, Any],
+    outcome: str,
+    exit_code: int,
+    interrupted_at: str,
+    environment: dict[str, str],
+) -> dict[str, Any]:
+    """A finished record's own fields: how the task ended, and the GPU, driver
+    and CUDA its environment block reported."""
+    hardware = {k: environment[k][:256] for k in ENVIRONMENT_ATTRIBUTES if environment.get(k)}
+    return {
+        "outcome": outcome,
+        "exit_code": exit_code,
+        "interrupted_at": _iso_time(interrupted_at),
+        "attributes": {**launch.get("attributes", {}), **hardware},
+    }
+
+
+def _record(event: str, spec: TaskSpec, at: datetime, *parts: dict[str, Any]) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    for part in parts:
+        fields.update(part)
+    return run_records.record(event, project=spec.project.project, at=at, **fields)
+
+
+def swept_record(project: str, instance: TaskInstance, reason: str, at: datetime) -> dict[str, Any]:
+    """The record of a leaked instance `task sweep` terminated: its run, from
+    the instance's tags, and why."""
+    tags = {**instance.tags, "RunId": instance.run_id or "", "TaskId": instance.task_id or ""}
+    lifecycle = instance.tags.get("Lifecycle")
+    attributes = {
+        "profile": instance.profile,
+        "lifecycle": lifecycle,
+        "launched_at": run_records.timestamp(instance.launched_at),
+        "max_hours": str(instance.max_hours) if instance.max_hours is not None else None,
+    }
+    return run_records.record(
+        "swept",
+        project=project,
+        tags=tags,
+        at=at,
+        campaign=instance.tags.get("Campaign"),
+        kind=instance.tags.get("Workflow"),
+        instance={"type": instance.type, "market": lifecycle, "id": instance.id},
+        reason=reason,
+        attributes={k: v for k, v in attributes.items() if v is not None},
+    )
+
+
+def write_swept(
+    records: RunRecords, project: str, instance: TaskInstance, reason: str, logger: Logger
+) -> None:
+    """Write a swept instance's record; a failure is a warning, never the sweep's."""
+    if not (instance.run_id and instance.task_id):
+        logger.warning(
+            "no record for %s: it has no RunId and TaskId tags to name its run", instance.id
+        )
+        return
+    _never_fail(
+        logger,
+        "swept",
+        lambda: records.write(swept_record(project, instance, reason, records.now())),
+    )
 
 
 def _interrupted(logger: Logger, at: str) -> int:

@@ -113,6 +113,7 @@ jobs:
 | `artifact` | `task-output` |
 | `artifact-path` | `out` |
 | `debug` | false |
+| `campaign` | empty: no campaign. Otherwise a slug (lowercase letters, digits and `-`, at most 63) naming the set of runs this one belongs to: the `Campaign` tag on its instance and volume, and its run records |
 
 **Outputs.** The workflow sets two outputs:
 

@@ -38,6 +38,7 @@ from . import (
     releases,
     report,
     rollout,
+    run_records,
     stack,
     sync,
     tasks,
@@ -1555,6 +1556,12 @@ def _task_runner(project: Project) -> TaskRunner:
     return runner
 
 
+def _run_records(run: Run, session: boto3.session.Session) -> run_records.RunRecords | None:
+    """The task-run records' writer (run_records.py), or None without
+    monitoring.cost: then no record is written, and nothing is said."""
+    return run_records.RunRecords.from_settings(run.settings, session, run.logger)
+
+
 def _default_run_id() -> str:
     run_id = os.environ.get("GITHUB_RUN_ID")
     if run_id:
@@ -1610,6 +1617,14 @@ def task_run(
     pull_request: Annotated[
         str | None, typer.Option("--pull-request", help="Pull request number, for the tags.")
     ] = None,
+    campaign: Annotated[
+        str | None,
+        typer.Option(
+            "--campaign",
+            help="The campaign this run belongs to (lowercase letters, digits and -, at most "
+            "63): the Campaign tag on its instance and volume, and its run records.",
+        ),
+    ] = None,
 ) -> None:
     """Run one script on a fresh instance (spot by default) and exit with its code.
 
@@ -1649,6 +1664,11 @@ def task_run(
             raise ConfigError(f"--max-price-fraction must be above 0 and at most 1, got {fraction}")
         if pull_request is not None and not pull_request.isdigit():
             raise ConfigError(f"--pull-request must be a number, got {pull_request}")
+        if campaign is not None and not tasks.CAMPAIGN.fullmatch(campaign):
+            raise ConfigError(
+                "--campaign must be lowercase letters, digits and -, at most 63 characters, "
+                f"got {campaign!r}"
+            )
         spec = tasks.TaskSpec(
             project=project,
             instance_type=chosen,
@@ -1672,6 +1692,7 @@ def task_run(
             gpu=profile.gpu,
             scratch=profile.scratch,
             max_run_cost_usd=run.settings.run_cost_ceiling(project.project),
+            campaign=campaign,
         )
         session = _project_session(run, roles=["task"])
         run.logger.info(
@@ -1685,6 +1706,7 @@ def task_run(
             run.logger,
             write=lambda line: print(line, flush=True),
             poll=run.settings.tasks.poll_seconds,
+            records=_run_records(run, session),
         )
         if code:
             raise typer.Exit(code)
@@ -1771,13 +1793,15 @@ def task_sweep(
 ) -> None:
     """Terminate task instances past their MaxLifetimeHours. Run by hand: leaks are
     normally impossible (the CLI, the workflow's cleanup step and the instance's
-    own shutdown all terminate), so there is no scheduled sweeper."""
+    own shutdown all terminate), so there is no scheduled sweeper. Each instance
+    it terminates gets a `swept` run record."""
 
     def body(run: Run) -> None:
         project = _cleanup_project(run)
         runner = _task_runner(project)
         session = _project_session(run, roles=["task"])
         ec2 = session.client("ec2")
+        records = None if dry_run else _run_records(run, session)
         now = _now()
         expired = [
             t
@@ -1794,6 +1818,12 @@ def task_sweep(
             else:
                 run.logger.warning("terminating %s (%.1fh old, run %s)", t.id, age, t.run_id)
                 tasks.terminate(ec2, t.id, run.logger)
+                if records is not None:
+                    reason = (
+                        f"past its lifetime: {age:.1f} h since launch, over MaxLifetimeHours "
+                        f"{t.max_hours or runner.max_hours} plus {SWEEP_SETUP_HOURS} h of setup"
+                    )
+                    tasks.write_swept(records, project.project, t, reason, run.logger)
 
     _command(body)(ctx)
 

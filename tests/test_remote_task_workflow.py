@@ -30,7 +30,7 @@ def test_it_is_reusable_with_the_planned_inputs() -> None:
     call = _workflow()[True]["workflow_call"]
     assert set(call["inputs"]) == {
         "project", "script", "args", "profile", "instance-type", "market", "max-hours",
-        "task-id", "artifact", "artifact-path", "debug",
+        "task-id", "artifact", "artifact-path", "debug", "campaign",
     }  # fmt: skip
     assert call["inputs"]["project"]["required"] and call["inputs"]["script"]["required"]
     assert call["inputs"]["args"]["default"] == "[]"
@@ -138,3 +138,13 @@ def test_the_task_step_passes_the_market_and_the_pull_request() -> None:
     assert step["env"]["PULL_REQUEST"] == "${{ github.event.pull_request.number }}"
     assert 'flags+=(--market "$MARKET")' in step["run"]
     assert 'flags+=(--pull-request "$PULL_REQUEST")' in step["run"]
+
+
+def test_the_task_step_passes_a_campaign_only_when_named() -> None:
+    """No campaign input, no --campaign: such a run carries no Campaign tag."""
+    inputs = _workflow()[True]["workflow_call"]["inputs"]
+    assert inputs["campaign"]["default"] == "" and inputs["campaign"]["type"] == "string"
+    step = _steps()[_index(lambda s: s.get("id") == "task")]
+    assert step["env"]["CAMPAIGN"] == "${{ inputs.campaign }}"
+    assert 'if [ -n "$CAMPAIGN" ]; then flags+=(--campaign "$CAMPAIGN"); fi' in step["run"]
+    assert "inputs.campaign" not in str(step["run"])  # through the environment, never inlined
