@@ -23,13 +23,6 @@ mock_provider "aws" {
     }
   }
 
-  # The state bucket's policy (state.tf) must parse as JSON.
-  mock_data "aws_iam_policy_document" {
-    defaults = {
-      json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
-    }
-  }
-
   mock_resource "aws_identitystore_user" {
     defaults = {
       user_id = "90676d2e5d-11111111-2222-3333-4444-555555555555"
@@ -84,6 +77,70 @@ run "state_lives_in_its_own_management_account_bucket" {
   assert {
     condition     = aws_s3_bucket_versioning.state.versioning_configuration[0].status == "Enabled"
     error_message = "the state bucket must keep every prior state"
+  }
+}
+
+# The state names every account the owner can reach, so its bucket denies
+# everyone but the owner's admin role and root (issue #285).
+run "state_bucket_denies_everyone_but_the_owner" {
+  command = plan
+
+  assert {
+    condition     = [for st in jsondecode(aws_s3_bucket_policy.state.policy).Statement : st.Sid] == ["DenyInsecureTransport", "DenyAllButTheOwner"]
+    error_message = "the state bucket policy is the TLS rule and the owner-only rule, in that order"
+  }
+
+  assert {
+    condition     = alltrue([for st in jsondecode(aws_s3_bucket_policy.state.policy).Statement : st.Effect == "Deny" && st.Principal == "*"])
+    error_message = "every statement is a deny for every principal: the policy bounds IAM and grants nothing"
+  }
+
+  assert {
+    condition = jsondecode(aws_s3_bucket_policy.state.policy).Statement[1].Action == "s3:*" && jsondecode(aws_s3_bucket_policy.state.policy).Statement[1].Resource == [
+      "arn:aws:s3:::jaws-owner-access-state-650503560686",
+      "arn:aws:s3:::jaws-owner-access-state-650503560686/*",
+    ]
+    error_message = "the owner-only rule covers every action on the bucket and every object, its configuration and policy included"
+  }
+
+  assert {
+    condition = jsondecode(aws_s3_bucket_policy.state.policy).Statement[1].Condition == {
+      ArnNotLike = {
+        "aws:PrincipalArn" = [
+          "arn:aws:iam::650503560686:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_*",
+          "arn:aws:iam::650503560686:root",
+        ]
+      }
+    }
+    error_message = "only the owner's AdministratorAccess role in this account (any generated suffix) and this account's root may reach the state; no CI role is listed"
+  }
+}
+
+# The admin role is matched by name so a recreated permission set, whose role
+# gets a new suffix, keeps access. The pattern must match the role Identity
+# Center actually provisions, path included: the first ARN below is the
+# management account's role as IAM lists it on 2026-11-21.
+run "state_bucket_pattern_matches_the_provisioned_admin_role" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for arn in [
+        "arn:aws:iam::650503560686:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_22a17d3bc2bca2d3",
+        "arn:aws:iam::650503560686:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_0123456789abcdef",
+      ] : can(regex("^${replace(local.state_admin_principal_arns[0], "*", "[0-9a-f]+")}$", arn))
+    ])
+    error_message = "the admin pattern in the state bucket policy must match the role Identity Center provisions for the permission set, whatever its suffix"
+  }
+
+  assert {
+    condition     = !can(regex("^${replace(local.state_admin_principal_arns[0], "*", "[0-9a-f]+")}$", "arn:aws:iam::650503560686:role/AWSReservedSSO_AdministratorAccess_0123456789abcdef"))
+    error_message = "a role outside the path IAM reserves for Identity Center must not match the admin pattern"
+  }
+
+  assert {
+    condition     = !can(regex("^${replace(local.state_admin_principal_arns[0], "*", "[0-9a-f]+")}$", "arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_013589f39f92382a"))
+    error_message = "the same permission set's role in another account must not match: the pattern is pinned to this account"
   }
 }
 

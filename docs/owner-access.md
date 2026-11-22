@@ -112,8 +112,9 @@ its organization's management account.
 
 The user and the permission set have `prevent_destroy`. Recreating the
 permission set gives its role a new suffix, which locks the old ARN out of the
-bucket policies; recreating the user drops its passkeys. Do either only on
-purpose, and expect to update `foundation/state.tf`.
+production account's bucket policies (this stack's own state bucket matches
+the role by name, so it keeps working); recreating the user drops its
+passkeys. Do either only on purpose, and expect to update `foundation/state.tf`.
 
 The stack also assigns the same permission set in the production account
 (`aws.account_id` in `config.yaml`), where everything jaws builds lives, and
@@ -160,12 +161,27 @@ others.
 
 The stack keeps its state in `jaws-owner-access-state-650503560686`, a bucket
 in the management account that the stack itself manages (`owner-access/state.tf`):
-versioned, SSE-S3, Block Public Access, `BucketOwnerEnforced` ownership,
-`prevent_destroy`, and a policy that only requires TLS. It is not in the
-production account's shared bucket on purpose: this stack grants access to
-every account, so repairing that access must never need access to another
-account. The management account has no CI roles, so the policy pins no role
-ARN, and a recreated permission set cannot lock you out of it.
+versioned, SSE-S3, Block Public Access, `BucketOwnerEnforced` ownership and
+`prevent_destroy`. It is not in the production account's shared bucket on
+purpose: this stack grants access to every account, so repairing that access
+must never need access to another account.
+
+Its policy requires TLS and denies every principal except two, for every S3
+action on the bucket and its objects (its own policy included):
+
+| Principal | Matched by `aws:PrincipalArn` |
+| --- | --- |
+| Your Identity Center admin role in this account | `arn:aws:iam::650503560686:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_*` |
+| The account's root user | `arn:aws:iam::650503560686:root` |
+
+Any other role in the account, admin or not, is denied, whatever its IAM
+policies allow. No CI role applies this stack, so none is listed. The admin
+role is matched by its permission set's name rather than its exact ARN: only
+Identity Center can create roles under the `aws-reserved/sso.amazonaws.com/`
+path, and a recreated permission set, whose role gets a new suffix, keeps
+access to the state that recreates it. If you rename the permission set, apply
+from root (see [Root: the emergency path](#root-the-emergency-path)), since
+the new role will not match until the policy is applied.
 
 On a rebuild the bucket must exist before `terraform init`, since a backend
 cannot create its own bucket. Create it by hand, then let the first apply
@@ -189,9 +205,10 @@ aws s3api put-bucket-policy --bucket "$B" --policy "$(jq -nc --arg b "$B" '{
     Condition: {Bool: {"aws:SecureTransport": "false"}}}]}')"
 ```
 
-The plan after `terraform init` then shows six imports and two in-place
-updates (the bucket's tags, and the policy re-rendered from its data source),
-and the plan after the apply shows no changes.
+The bootstrap policy above only requires TLS; the first apply replaces it
+with the owner-only policy. The plan after `terraform init` then shows six
+imports and two in-place updates (the bucket's tags, and the policy), and the
+plan after the apply shows no changes.
 
 Until 2026-11-21 the state lived in `jwall-engineering-tfstate`, the old
 foundation's state bucket from before the move to production. That bucket is
