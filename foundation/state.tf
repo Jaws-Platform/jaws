@@ -34,8 +34,8 @@ locals {
     module.infra_ci_apply.role_arn,
   ]
 
-  # State prefix -> who may read and write it. The infra and data-access
-  # entries are those stacks' exact keys (which also match their .tflock);
+  # State prefix -> who may read and write it. The infra, data-access and
+  # monitoring entries are those stacks' exact keys (which also match their .tflock);
   # each project gets its prefix. A role whose state is not listed here is
   # denied it, whatever its IAM allows (foundation/tests/state_access.tftest.hcl).
   state_prefix_access = merge(
@@ -50,6 +50,13 @@ locals {
       (local.data_access_ci.tfstate.key) = {
         read  = [module.data_access_ci_plan.role_arn]
         write = [module.data_access_ci_apply.role_arn]
+      }
+    },
+    # The monitoring stack (monitoring/, monitoring.tf), with its section only.
+    local.monitoring == null ? {} : {
+      (local.monitoring_ci.tfstate.key) = {
+        read  = [module.monitoring_ci_plan[0].role_arn]
+        write = [module.monitoring_ci_apply[0].role_arn]
       }
     },
     {

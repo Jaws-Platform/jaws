@@ -99,7 +99,7 @@ locals {
 module "access" {
   for_each  = local.ready
   source    = "Jaws-Platform/jaws-databricks/aws//modules/databricks-dataset-access"
-  version   = "0.1.2"
+  version   = "0.2.0"
   providers = { databricks = databricks.host }
 
   external_location_name  = each.value.location_name
@@ -117,7 +117,7 @@ module "access" {
 module "catalog_access" {
   for_each  = local.catalog_consumers
   source    = "Jaws-Platform/jaws-databricks/aws//modules/databricks-producer-catalog-access"
-  version   = "0.1.2"
+  version   = "0.2.0"
   providers = { databricks = databricks.host }
 
   catalog_name     = each.key

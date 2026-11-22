@@ -9,7 +9,7 @@
 
 module "catalog" {
   source  = "Jaws-Platform/jaws-databricks/aws//modules/databricks-catalog"
-  version = "0.1.2"
+  version = "0.2.0"
 
   providers = {
     databricks = databricks.workspace
@@ -29,7 +29,7 @@ module "catalog" {
 
 module "workspace_config" {
   source  = "Jaws-Platform/jaws-databricks/aws//modules/databricks-workspace-config"
-  version = "0.1.2"
+  version = "0.2.0"
 
   providers = {
     databricks = databricks.workspace

@@ -2,10 +2,11 @@
 
 `foundation/tests/foundation.tftest.hcl` plans the tool configuration (config/)
 as written, and a few states it isn't in: a ManagedBy no code spells, no task
-runner, the Databricks host before its URL is recorded, and an admin role of
-another account. Each fixture under `foundation/tests/fixtures/` is config/ as
-one file (`jaws.settings.load_document`) with a few values set; this test keeps
-them from drifting.
+runner, the Databricks host before its URL is recorded, an admin role of
+another account, and no monitoring section. Each fixture under
+`foundation/tests/fixtures/` is config/ as one file
+(`jaws.settings.load_document`) with a few values set; this test keeps them
+from drifting.
 
 Regenerate after changing config/:
 
@@ -55,11 +56,18 @@ def _foreign_admin(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
+def _no_monitoring(config: dict[str, Any]) -> dict[str, Any]:
+    """No monitoring section: no billing bucket, job, roles or state prefix."""
+    config.pop("monitoring")
+    return config
+
+
 FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "relabelled.yaml": _relabelled,
     "no-task-runners.yaml": _no_task_runners,
     "awaiting-host.yaml": _awaiting_host,
     "foreign-admin.yaml": _foreign_admin,
+    "no-monitoring.yaml": _no_monitoring,
 }
 
 
