@@ -17,7 +17,7 @@ the platform it feeds is [docs/monitoring.md](monitoring.md).
 | Covers | every account in the organization: management, production and development, and any added later |
 | Lives in | the management account (650503560686), the payer |
 | Delivers to | `s3://jaws-billing-570327089884/raw/provider=aws/source=data-exports/jaws-focus-daily/`, in production (570327089884) |
-| Module | [`aws-billing-export`](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.0/modules/aws-billing-export/README.md) of `Jaws-Platform/jaws-monitoring/aws`, v0.8.0 |
+| Module | [`aws-billing-export`](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.1/modules/aws-billing-export/README.md) of `Jaws-Platform/jaws-monitoring/aws`, v0.8.1 |
 | Turned on by | `monitoring.cost.aws` in `config/monitoring.yaml` |
 
 It is the whole bill, as AWS itself reports it: tax, credits and the charges

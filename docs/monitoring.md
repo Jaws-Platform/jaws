@@ -10,8 +10,8 @@ settings are [`config/monitoring.yaml`](../config/monitoring.yaml), which only
 this repository can change (no project file can set any of it).
 
 The modules are the [`jaws-monitoring`
-family](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/tree/v0.8.0),
-v0.8.0. Their READMEs hold the detail (every rule, panel, table and input), and
+family](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/tree/v0.8.1),
+v0.8.1. Their READMEs hold the detail (every rule, panel, table and input), and
 this page links to them rather than repeating it.
 
 Contents: [what runs](#what-runs), [configuration](#configuration),
@@ -70,11 +70,11 @@ roles are scoped to.
   contact point and policy) is one content-addressed bundle in the config
   bucket. A reconciler on the node applies it at boot and every 5 minutes, so a
   dashboard, alert or channel change never replaces the instance
-  ([how a change rolls out](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.0/modules/monitoring-node/README.md#how-a-change-rolls-out)).
+  ([how a change rolls out](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.1/modules/monitoring-node/README.md#how-a-change-rolls-out)).
 - **The normalizer** rebuilds each billing period whose newest delivery
   changed, from `raw/` into FOCUS-aligned rows under `normalized/`, and the
   task-run records into an event table
-  ([billing-normalizer](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.0/modules/billing-normalizer/README.md)).
+  ([billing-normalizer](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.1/modules/billing-normalizer/README.md)).
   The bucket stays complete whether the node is up, stopped or gone, and
   `cost-sync` on the node loads whatever changed into Postgres.
 
@@ -244,7 +244,7 @@ names every missing secret while any is missing.
 - **On the node itself**, through Session Manager: `aws ssm start-session
   --target <instance-id>`. With a domain, Grafana listens only behind Caddy;
   a node without one is reached through a port forward instead
-  ([reaching Grafana](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.0/modules/monitoring-node/README.md#reaching-grafana)).
+  ([reaching Grafana](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.1/modules/monitoring-node/README.md#reaching-grafana)).
 
 ## The schedule
 
@@ -270,7 +270,7 @@ it; a stop is a normal shutdown, so every service stops cleanly.
   node all day, for about $9.40 a month more.
 
 The module's [off-hours
-section](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.0/modules/monitoring-node/README.md#off-hours)
+section](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.1/modules/monitoring-node/README.md#off-hours)
 has the rest.
 
 ## Dashboards and alerts
@@ -289,9 +289,9 @@ change with a module release or with `config/monitoring.yaml`.
 Amounts are `BilledCost` in USD. Days are UTC calendar days, as AWS bills,
 and a day is complete 48 hours after it ends, so yesterday is still partial.
 Every panel and table is described in the module's [what the node
-watches](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.0/modules/monitoring-node/README.md#what-the-node-watches)
+watches](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.1/modules/monitoring-node/README.md#what-the-node-watches)
 and [cost
-data](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.0/modules/monitoring-node/README.md#cost-data).
+data](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.1/modules/monitoring-node/README.md#cost-data).
 
 Alert rules come in warning and critical pairs, and each carries an `area`,
 which `monitoring.slack.routes` sends to a channel:
@@ -308,7 +308,7 @@ too.
 
 - **To change a threshold for good**, override it by name under
   `monitoring.thresholds`, in a pull request. The names and defaults are the
-  module's ([thresholds](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.0/modules/monitoring-node/README.md#thresholds)):
+  module's ([thresholds](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.1/modules/monitoring-node/README.md#thresholds)):
 
   ```yaml
   thresholds:
@@ -344,7 +344,7 @@ resolves. The watchdog keeps its state in `/jaws-monitoring/node/watchdog-state`
 and saves it only after every post succeeded, so a post that failed (the
 `slack/platform` webhook missing, say) is retried on the next run. The
 module's [watchdog
-section](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.0/modules/monitoring-node/README.md#the-watchdog)
+section](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.1/modules/monitoring-node/README.md#the-watchdog)
 has the rest.
 
 ## Recovery
@@ -469,7 +469,7 @@ any, so a stray destroy never deletes the backups.
 A provider is a source that delivers whole billing periods into the bucket,
 and a mapper in the normalizer from its columns to the normalized schema
 ([the bucket
-layout](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.0/README.md#the-bucket-layout)).
+layout](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.1/README.md#the-bucket-layout)).
 The module family holds the mapper; Jaws turns it on.
 
 1. **The module**, in `Jaws-Platform/terraform-aws-jaws-monitoring` (never

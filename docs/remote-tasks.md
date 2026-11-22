@@ -654,7 +654,7 @@ writes it (its `task/records` policy), and may put objects only under its own
 `project=<project>/` prefix, nothing else in the bucket.
 
 **What.** The records follow the monitoring module's `runs-1` schema (the
-[normalizer's task runs](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.0/modules/billing-normalizer/README.md#what-it-reads)):
+[normalizer's task runs](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.1/modules/billing-normalizer/README.md#what-it-reads)):
 
 | Field | In | Holds |
 |---|---|---|
