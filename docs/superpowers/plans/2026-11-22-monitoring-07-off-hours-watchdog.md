@@ -1,6 +1,6 @@
 # Off-hours and the Watchdog Implementation Plan (07)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Let the node keep office hours, and report when it is down. Release it as 0.8.0 of `terraform-aws-jaws-monitoring`. It covers:
 - **The optional schedule**, with Grafana muted for the first 15 minutes after each start, and snapshots taken while the node is off;
@@ -116,7 +116,7 @@ Series: [00-roadmap](2026-11-21-monitoring-00-roadmap.md).
   - `local.schedule_json`: `jsonencode(var.schedule)`, or `""`;
   - the resources `aws_scheduler_schedule.start` and `.stop`, and `aws_iam_role.schedule`, all with count `var.schedule == null ? 0 : 1`.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - **`without_a_schedule_the_node_runs_all_day`:** no `aws_scheduler_schedule.start` or `.stop`.
   - **`a_schedule_starts_and_stops_the_node`** (Jaws's schedule):
     - start is `cron(0 8 ? * MON,TUE,WED,THU,FRI,SAT,SUN *)`;
@@ -132,10 +132,10 @@ Series: [00-roadmap](2026-11-21-monitoring-00-roadmap.md).
     - `rejects_an_unknown_day` (`funday`);
     - `rejects_a_repeated_day`;
     - `rejects_no_days`.
-- [ ] **Step 2: Run** `cd $MOD && terraform test -filter=tests/monitoring_node.tftest.hcl`. Expected: the new runs fail, with no `schedule` variable.
-- [ ] **Step 3: Implement** `var.schedule` with its validations, and `schedule.tf`. Day names become `MON`…`SUN`. With `off = "24:00"`, the stop's days are each day's successor.
-- [ ] **Step 4: Run** it again. Expected: all pass.
-- [ ] **Step 5: Commit** `feat(monitoring-node): start and stop the node on an optional schedule`.
+- [x] **Step 2: Run** `cd $MOD && terraform test -filter=tests/monitoring_node.tftest.hcl`. Expected: the new runs fail, with no `schedule` variable.
+- [x] **Step 3: Implement** `var.schedule` with its validations, and `schedule.tf`. Day names become `MON`…`SUN`. With `off = "24:00"`, the stop's days are each day's successor.
+- [x] **Step 4: Run** it again. Expected: all pass.
+- [x] **Step 5: Commit** `feat(monitoring-node): start and stop the node on an optional schedule`.
 
 ### Task 2: Mute Grafana after each scheduled start
 
@@ -151,19 +151,19 @@ Series: [00-roadmap](2026-11-21-monitoring-00-roadmap.md).
 - **With a schedule,** a route exists for every area, `host`, `pipeline` and `cost` (the last with cost on). An area without its own channel uses `host`'s, so no alert falls through to the unmuted root.
 - **Without a schedule,** the file is `{ deleteMuteTimes = [{ orgId = 1, name = "after-scheduled-start" }] }`. If Grafana 13.3 refuses that while the old policy still names it, render no file instead, and ledger a ruling: an unreferenced mute timing mutes nothing.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - **`a_schedule_mutes_the_first_15_minutes`:** Jaws's schedule with Slack:
     - the mute timing has `08:00`–`08:15`, all seven weekdays and `America/Denver`;
     - every route has `mute_time_intervals = ["after-scheduled-start"]`;
     - the routes' area matchers cover `host`, `pipeline` and `cost`.
   - **`without_a_schedule_nothing_is_muted`:** no route has `mute_time_intervals`.
-- [ ] **Step 2: Run** `terraform test -filter=tests/grafana.tftest.hcl`. Expected: both fail.
-- [ ] **Step 3: Implement it,** and render phase 1 of the smoke test with Jaws's schedule.
-- [ ] **Step 4: Run** `terraform test`, then `bash tests/test-grafana-provisioning.sh`. Expected:
+- [x] **Step 2: Run** `terraform test -filter=tests/grafana.tftest.hcl`. Expected: both fail.
+- [x] **Step 3: Implement it,** and render phase 1 of the smoke test with Jaws's schedule.
+- [x] **Step 4: Run** `terraform test`, then `bash tests/test-grafana-provisioning.sh`. Expected:
   - all pass;
   - phase 1 provisions the mute timing, and Grafana accepts the policy that names it;
   - phase 2 starts cleanly.
-- [ ] **Step 5: Commit** `feat(monitoring-node): mute alerts for the first 15 minutes after a scheduled start`.
+- [x] **Step 5: Commit** `feat(monitoring-node): mute alerts for the first 15 minutes after a scheduled start`.
 
 ### Task 3: Snapshots in the off window
 
@@ -175,7 +175,7 @@ Series: [00-roadmap](2026-11-21-monitoring-00-roadmap.md).
 - Consumes: `var.schedule`, `local.schedule_off_hour` (Task 1).
 - Produces: `local.snapshot_hour` (0–23) and `local.snapshot_timezone`; the resources `aws_backup_vault.snapshots`, `aws_backup_plan.snapshots`, `aws_backup_selection.snapshots` and `aws_iam_role.snapshots` (principal `backup.amazonaws.com`, with `AWSBackupServiceRolePolicyForBackup`).
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - **`snapshots_without_a_schedule_run_at_time_utc`:** `time_utc = "03:00"` gives a rule with `cron(0 3 ? * * *)` and time zone `Etc/UTC`.
   - **`with_a_schedule_snapshots_run_after_the_stop`:** Jaws's schedule gives `cron(0 3 ? * * *)` in `America/Denver`. `mon`–`fri` `08:00`–`20:00` gives `cron(0 21 ? * * *)`.
   - **`snapshots_keep_the_last_n_days`:** `keep = 7` gives `lifecycle.delete_after = 7`.
@@ -183,10 +183,10 @@ Series: [00-roadmap](2026-11-21-monitoring-00-roadmap.md).
   - **`the_snapshot_vault_keeps_its_recovery_points`:** `force_destroy == false`.
   - **`without_snapshots_there_is_no_backup_plan`.**
   - Remove the DLM assertions they replace.
-- [ ] **Step 2: Run** them. Expected: they fail, because there is no `aws_backup_plan`.
-- [ ] **Step 3: Implement it.** Use `start_window = 60` and `completion_window = 180`.
-- [ ] **Step 4: Run** `terraform test`. Expected: all pass.
-- [ ] **Step 5: Commit** `feat(monitoring-node): take snapshots with aws backup, in the off window when scheduled`.
+- [x] **Step 2: Run** them. Expected: they fail, because there is no `aws_backup_plan`.
+- [x] **Step 3: Implement it.** Use `start_window = 60` and `completion_window = 180`.
+- [x] **Step 4: Run** `terraform test`. Expected: all pass.
+- [x] **Step 5: Commit** `feat(monitoring-node): take snapshots with aws backup, in the off window when scheduled`.
 
 ### Task 4: The watchdog's code
 
@@ -211,7 +211,7 @@ Series: [00-roadmap](2026-11-21-monitoring-00-roadmap.md).
 
   It then describes the instance and the alarms, fetches the health URL, and calls `assess` and `notify`. It posts each message as `{"text": …}` with `urllib.request`, and saves the state only if every post succeeded. An SNS event and a scheduled event are handled the same way.
 
-- [ ] **Step 1: Write the failing tests** in `files/test_watchdog.py`, with fake clients and fixed `now`, and Jaws's schedule unless named.
+- [x] **Step 1: Write the failing tests** in `files/test_watchdog.py`, with fake clients and fixed `now`, and Jaws's schedule unless named.
   - `test_a_24_7_node_that_is_stopped_is_critical_on_the_second_check`
   - `test_one_not_running_check_is_not_critical`
   - `test_a_scheduled_node_is_not_flagged_in_its_first_15_minutes`: stopped at 08:10 local.
@@ -227,11 +227,11 @@ Series: [00-roadmap](2026-11-21-monitoring-00-roadmap.md).
   - `test_a_failed_post_leaves_the_state_unchanged`
   - `test_unreadable_state_counts_as_empty`
   - `test_an_sns_event_is_judged_like_a_scheduled_one`
-- [ ] **Step 2: Run** `python3 -m unittest files/test_watchdog.py`. Expected: an import error, because there's no `watchdog.py` yet.
-- [ ] **Step 3: Implement `watchdog.py`.**
-- [ ] **Step 4: Run** the unit tests, then `bash tests/test-watchdog-runtime.sh`. Expected: both pass. The second proves `zoneinfo` has `America/Denver` and `boto3` imports, in the real runtime.
+- [x] **Step 2: Run** `python3 -m unittest files/test_watchdog.py`. Expected: an import error, because there's no `watchdog.py` yet.
+- [x] **Step 3: Implement `watchdog.py`.**
+- [x] **Step 4: Run** the unit tests, then `bash tests/test-watchdog-runtime.sh`. Expected: both pass. The second proves `zoneinfo` has `America/Denver` and `boto3` imports, in the real runtime.
   - **If the Lambda runtime has no zone database: stop and ask the owner.** The way out, vendoring `tzdata`, breaks the spec's "standard library plus boto3".
-- [ ] **Step 5: Commit** `feat(monitoring-node): add the watchdog's code`.
+- [x] **Step 5: Commit** `feat(monitoring-node): add the watchdog's code`.
 
 ### Task 5: The watchdog's infrastructure
 
@@ -258,7 +258,7 @@ Series: [00-roadmap](2026-11-21-monitoring-00-roadmap.md).
 - `ssm:PutParameter` on the state parameter;
 - its own log group.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - **`without_slack_there_is_no_watchdog`.**
   - **`with_slack_the_watchdog_watches`:**
     - the two alarms, with their `recover` and `reboot` actions plus the topic on alarm and OK, `notBreaching`, 60 s and 2 periods;
@@ -266,10 +266,10 @@ Series: [00-roadmap](2026-11-21-monitoring-00-roadmap.md).
     - the 5-minute schedule targets the Lambda.
   - **`the_watchdog_reads_the_schedule_and_the_domain`:** with Jaws's schedule and a domain, `SCHEDULE` decodes to the schedule and `DOMAIN` is the domain.
   - **`the_watchdog_may_read_only_its_webhook_and_state`:** the policy's `ssm` actions name exactly those two parameter ARNs, and `PutParameter` names only the state's.
-- [ ] **Step 2: Run** them. Expected: they fail.
-- [ ] **Step 3: Implement `watchdog.tf`.**
-- [ ] **Step 4: Run** `scripts/check-module.sh modules/monitoring-node`. Expected: it passes, with tflint clean.
-- [ ] **Step 5: Commit** `feat(monitoring-node): watch the node from outside with status alarms and a lambda`.
+- [x] **Step 2: Run** them. Expected: they fail.
+- [x] **Step 3: Implement `watchdog.tf`.**
+- [x] **Step 4: Run** `scripts/check-module.sh modules/monitoring-node`. Expected: it passes, with tflint clean.
+- [x] **Step 5: Commit** `feat(monitoring-node): watch the node from outside with status alarms and a lambda`.
 
 ### Task 6: The root module
 
@@ -292,29 +292,29 @@ Series: [00-roadmap](2026-11-21-monitoring-00-roadmap.md).
   - the three cost settings above.
 - **Outputs:** `normalizer` (all the normalizer's outputs) and `node` (all the node's).
 
-- [ ] **Step 1: Write the failing tests** in `tests/root.tftest.hcl` (mock `aws`):
+- [x] **Step 1: Write the failing tests** in `tests/root.tftest.hcl` (mock `aws`):
   - **`the_root_plans_with_only_the_required_inputs`:** name, bucket, VPC and subnet, plus `aws = {}`. This fails today, because the root takes no inputs. It would also fail if a null reached a child input that needs its default.
   - **`the_root_wires_the_normalizer_into_the_node`:** with `aws = {}`, `databricks = {}` and `runs = { prefixes = ["raw/provider=jaws"], join_tags = ["RunId", "TaskId"] }`, `local.node_cost` has the bucket, `normalized`, `["aws", "databricks"]` and the join tags.
   - **`a_databricks_only_root_expects_only_databricks`.**
-- [ ] **Step 2: Run** `cd $REPO && terraform init -backend=false && terraform test`. Expected: it fails, because the root has no variables.
-- [ ] **Step 3: Implement it.** Update the root README.
-- [ ] **Step 4: Run** `terraform test` at the root and in both submodules. Expected: all pass, and the submodules' tests are unchanged.
-- [ ] **Step 5: Commit** once per scope, since a commit takes exactly one:
+- [x] **Step 2: Run** `cd $REPO && terraform init -backend=false && terraform test`. Expected: it fails, because the root has no variables.
+- [x] **Step 3: Implement it.** Update the root README.
+- [x] **Step 4: Run** `terraform test` at the root and in both submodules. Expected: all pass, and the submodules' tests are unchanged.
+- [x] **Step 5: Commit** once per scope, since a commit takes exactly one:
   - `feat(billing-normalizer): treat a null input as its default`;
   - `feat(monitoring-node): treat a null input as its default`;
   - `feat(examples): wire the normalizer and the monitoring node in the root module`.
 
 ### Task 7: Docs and release
 
-- [ ] **Step 1: README** (`$MOD/README.md`):
+- [x] **Step 1: README** (`$MOD/README.md`):
   - **Off-hours:** Jaws's example, the allowed shapes, the times to avoid (01:00–03:00), the mute timing, and that snapshots move into the off window.
   - **The watchdog:** what posts and when, and the alarms' actions.
   - **Snapshots on AWS Backup,** and the vault's delete rule.
   - Regenerate terraform-docs.
-- [ ] **Step 2: Run** `$REPO/scripts/check.sh`. Expected: `All checks passed.`
-- [ ] **Step 3: Final review** (opus, whole branch), then one fix pass for Critical and Important findings, each RED→GREEN.
-- [ ] **Step 4: Ask the owner** before push, PR, merge and the 0.8.0 release.
-- [ ] **Step 5: Record it.**
+- [x] **Step 2: Run** `$REPO/scripts/check.sh`. Expected: `All checks passed.`
+- [x] **Step 3: Final review** (opus, whole branch), then one fix pass for Critical and Important findings, each RED→GREEN.
+- [x] **Step 4: Ask the owner** before push, PR, merge and the 0.8.0 release.
+- [x] **Step 5: Record it.**
   - Tick this plan.
   - Mark 07 released in the roadmap.
   - Add an "As built in v0.8.0" note to spec 6.9 and 6.10, recording AWS Backup in place of DLM.

@@ -761,6 +761,16 @@ whenever Slack is configured.
     hours, and posts when the problem resolves.
   - It posts to the `host` channel's webhook.
 
+**As built in v0.8.0 (plan 07):**
+
+- **The alarms:** each has a 60-second period, 2 evaluation periods, and notifies the topic on ALARM and on OK.
+- **The watchdog** is a `python3.13` arm64 Lambda, checked inside the Lambda base image. That image has `zoneinfo` and boto3.
+  - "Not running" needs 2 checks in a row.
+  - The health check waits 15 minutes after any start (its `LaunchTime`), not only after a scheduled one.
+  - It also waits 15 minutes after a scheduled stop before calling the node "running off-hours".
+  - Its state is saved only after every post succeeds.
+- **Checked at plan 09's first run:** `cloudwatch:DescribeAlarms` scoped to alarm ARNs, and the `recover` action on T9g.
+
 ### 6.10 Off-hours schedule (optional; 24/7 by default)
 
 `schedule` defaults to none, which means always on. Any caller can add one.
@@ -806,6 +816,13 @@ schedule = {
 - **CPU credits.** T4g keeps earned credits for 7 days while stopped. Verify
   that T9g does the same; the T9g announcement says it uses the same credit
   system.
+
+**As built in v0.8.0 (plan 07):**
+
+- **Snapshots use AWS Backup, not DLM.** DLM takes only UTC times, and Terraform can't convert a time zone. With a schedule, the snapshot runs an hour after the stop in the schedule's zone, or at 03:00 when that falls between 01:00 and 02:59. The vault `<name>-snapshots` keeps its recovery points on destroy.
+- **Validation** refuses a whole-day schedule (`00:00`–`24:00`), whose start and stop would fire together.
+- **The mute timing** `after-scheduled-start` is on every child route, and every area has a route. It is deleted when the schedule goes.
+- **The root module** wires the normalizer into the node. The submodules' defaulted inputs are `nullable = false`.
 
 ### 6.11 Recovery
 
