@@ -264,7 +264,10 @@ jaws bot secrets check LICHESS_TOKEN  # exit 0 if set
 ```
 
 Run these from your own shell with admin credentials. Only the instance role
-can read the value. The release role can't: it writes only `.../bot/*`.
+can read the value. The release role can't: it writes only `.../bot/*`. The
+instance role, in turn, reads only the parameters the project names, never
+the account's other SecureStrings. It gets the SSM Agent's own calls (Session
+Manager and Run Command), not the `AmazonSSMManagedInstanceCore` policy.
 
 `bot secrets set LICHESS_TOKEN` writes `/jaws/<project>/lichess-token` for a
 secret named `lichess-token` in the project file.
