@@ -9,12 +9,13 @@ terraform:
 library:
   # The module families, published from Jaws-Platform/terraform-aws-jaws-<family>.
   # Each family has one version: every pin of it in this repository (sites,
-  # bots, Databricks, the foundation) moves with the entry here.
+  # bots, Databricks, the foundation, the monitoring stack) moves with the entry here.
   families:
     Jaws-Platform/jaws-ci/aws: 0.2.0
     Jaws-Platform/jaws-databricks/aws: 0.1.2
     Jaws-Platform/jaws-foundation/aws: 0.2.0
     Jaws-Platform/jaws-lichess-bot/aws: 0.1.4
+    Jaws-Platform/jaws-monitoring/aws: 0.8.0
     Jaws-Platform/jaws-network/aws: 0.1.2
     Jaws-Platform/jaws-research/aws: 0.1.2
     Jaws-Platform/jaws-static-site/aws: 0.1.2

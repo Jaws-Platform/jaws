@@ -270,6 +270,7 @@ library:
     Jaws-Platform/jaws-databricks/aws: 0.1.2
     Jaws-Platform/jaws-foundation/aws: 0.2.0
     Jaws-Platform/jaws-lichess-bot/aws: 0.1.4
+    Jaws-Platform/jaws-monitoring/aws: 0.8.0
     Jaws-Platform/jaws-network/aws: 0.1.2
     Jaws-Platform/jaws-research/aws: 0.1.2
     Jaws-Platform/jaws-static-site/aws: 0.1.2

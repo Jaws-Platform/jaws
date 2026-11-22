@@ -1010,8 +1010,9 @@ class Settings(_Section):
 class _ConfigLoader(yaml.SafeLoader):
     """YAML 1.2's booleans, true and false only. PyYAML follows YAML 1.1, where
     on, off, yes and no are booleans too, so the schedule's `on:` would be the key
-    True; the foundation's yamldecode and the workflows' yq read config/ as YAML
-    1.2, and the CLI reads it as they do."""
+    True; the workflows' yq reads config/ as YAML 1.2, and the CLI reads it as yq
+    does. Terraform's yamldecode reads a bare `on:` key as "true", so monitoring/
+    accepts either."""
 
 
 _ConfigLoader.yaml_implicit_resolvers = {

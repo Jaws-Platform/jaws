@@ -89,7 +89,8 @@ def test_an_empty_directory_is_refused(tmp_path: Path) -> None:
 def test_the_config_is_read_as_terraform_and_yq_read_it(tmp_path: Path) -> None:
     """YAML 1.2's booleans, true and false only: PyYAML's YAML 1.1 would read the
     schedule's `on:` and `off:` keys (and yes, no) as booleans, while the
-    foundation's yamldecode and the workflows' yq read them as strings."""
+    workflows' yq reads them as strings. (Terraform's yamldecode reads a bare
+    `on:` key as "true"; monitoring/ accepts either.)"""
     (tmp_path / "a.yaml").write_text(
         'a:\n  on: "08:00"\n  off: "24:00"\n  yes: no\n  flag: true\n  other: False\n'
     )

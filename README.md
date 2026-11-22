@@ -385,9 +385,11 @@ image bakes it at `/etc/jaws/config`.
 | `databricks.yaml` | `databricks` (`enabled`, the account, service principal, metastore, compute policies and `shared_host_url`) |
 | `monitoring.yaml` | `monitoring` (the monitoring node's `instance_type`, `ami`, `domain`, `snapshots` and off-hours `schedule`; `cost`: the billing bucket, its providers, `budgets` and the anomaly floor; `slack`: the channels' webhook parameters and the alert routes; `thresholds` overrides). Platform-owned: no project file can set it |
 
-The CLI reads these files as YAML 1.2 does, as the foundation's `yamldecode`
-and the workflows' `yq` do: only `true` and `false` are booleans, so a key
-such as `on:` stays the string `on`.
+The CLI reads these files as YAML 1.2 does, as the workflows' `yq` does: only
+`true` and `false` are booleans, so a key such as `on:` stays the string `on`.
+Terraform's `yamldecode` follows YAML 1.1 there and reads a bare `on:` and
+`off:` as the keys `"true"` and `"false"`, so `monitoring/` reads the
+schedule's `on` and `off` under either name.
 
 ## Tags
 
