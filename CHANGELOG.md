@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.74.3](https://github.com/Jaws-Platform/jaws/compare/v0.74.2...v0.74.3) (2026-11-22)
+
+
+### Bug Fixes
+
+* **bot:** stop replacing a scheduled bot's instance while it is stopped ([#288](https://github.com/Jaws-Platform/jaws/issues/288)) ([f39445a](https://github.com/Jaws-Platform/jaws/commit/f39445a3434b2c0e17a228ec6b0cf16292e64671))
+
 ## [0.74.2](https://github.com/Jaws-Platform/jaws/compare/v0.74.1...v0.74.2) (2026-11-22)
 
 
