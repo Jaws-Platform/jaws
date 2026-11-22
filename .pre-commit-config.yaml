@@ -61,7 +61,7 @@ repos:
         language: system
         stages: [pre-push]
         pass_filenames: false
-        files: ^(src|tests|scripts|stacks|foundation|data-access|owner-access|datasets|kinds|\.github)/|^(config\.yaml|pyproject\.toml|uv\.lock|package\.json|commitlint\.config\.mjs)$
+        files: ^(src|tests|scripts|stacks|foundation|data-access|owner-access|monitoring|billing-export|datasets|kinds|\.github)/|^(config\.yaml|pyproject\.toml|uv\.lock|package\.json|commitlint\.config\.mjs)$
       - id: terraform-test-foundation
         name: terraform test, foundation (pre-push)
         entry: bash -c 'cd foundation && terraform init -backend=false -input=false >/dev/null && terraform test'
@@ -83,6 +83,20 @@ repos:
         stages: [pre-push]
         pass_filenames: false
         files: ^owner-access/|^config\.yaml$
+      - id: terraform-test-monitoring
+        name: terraform test, monitoring (pre-push)
+        entry: bash -c 'cd monitoring && terraform init -backend=false -input=false >/dev/null && terraform test'
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        files: ^monitoring/|^config/
+      - id: terraform-test-billing-export
+        name: terraform test, billing-export (pre-push)
+        entry: bash -c 'cd billing-export && terraform init -backend=false -input=false >/dev/null && terraform test'
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        files: ^billing-export/|^config/
       - id: stack-plans
         name: stack plans against mock providers (pre-push)
         entry: scripts/test-stack-plans.sh
