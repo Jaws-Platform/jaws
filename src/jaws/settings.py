@@ -16,8 +16,9 @@ from __future__ import annotations
 import ipaddress
 import os
 import re
+import zoneinfo
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
 from pydantic import (
@@ -26,6 +27,7 @@ from pydantic import (
     Field,
     PrivateAttr,
     ValidationError,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
@@ -498,6 +500,273 @@ class DatabricksSection(_Section):
         return PLACEHOLDER_UUID in (self.account_id.lower(), self.client_id.lower())
 
 
+#: Where the monitoring stack's owner-set secrets live in SSM: the Grafana admin
+#: and each Slack channel's webhook (`jaws monitoring secrets`). Never Terraform's.
+MONITORING_SECRETS_PREFIX = "/jaws/monitoring/"
+WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+#: The monitoring module's alert thresholds (spec 6.8) by name: True for a
+#: warning and critical pair, False for a warning alone. An override replaces
+#: the module's whole pair, so it states both.
+MONITORING_THRESHOLDS = {
+    "cpu_percent": True,
+    "cpu_credits_percent": True,
+    "memory_percent": True,
+    "swap_percent": True,
+    "disk_percent": True,
+    "disk_full_days": True,
+    "inodes_percent": True,
+    "prometheus_size_percent": False,
+    "prometheus_history_days": False,
+    "container_restarts": True,
+    "tls_days": True,
+    "os_release_update_days": False,
+    "normalizer_hours": True,
+    "aws_charge_days": True,
+    "databricks_delivery_hours": True,
+    "cost_sync_hours": True,
+    "anomaly_ratio": True,
+    "untagged_daily_usd": False,
+}
+_ON_HOUR = re.compile(r"^([01][0-9]|2[0-3]):00$")
+_OFF_HOUR = re.compile(r"^(([01][0-9]|2[0-3]):00|24:00)$")
+_MONITORING_AMI = re.compile(r"^al2023-ami-.+-arm64$")
+#: A Graviton (arm64) type, which an arm64 image needs: a `g` after the
+#: generation (t9g, m8gd, c7gn, g5g), never c7i or g6.
+_GRAVITON_TYPE = re.compile(r"^[a-z]+[0-9]+[a-z]*g[a-z]*\.[a-z0-9]+$")
+_S3_BUCKET = r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+_SLACK_CHANNEL = re.compile(r"^[a-z][a-z0-9-]{0,29}$")
+_SSM_NAME = re.compile(r"^/[A-Za-z0-9_.\-/]+$")
+_FQDN = r"^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
+
+_Usd = Annotated[float, Field(gt=0)]
+
+
+class MonitoringSchedule(_Section):
+    """The node's off-hours (spec 6.10): on from `on` to `off` on `days`, in
+    `timezone`, and stopped otherwise. Raw cron is deliberately not accepted."""
+
+    timezone: str
+    days: tuple[Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"], ...] = Field(min_length=1)
+    on: str
+    #: Up to 24:00, the midnight that ends the day.
+    off: str
+
+    @field_validator("timezone")
+    @classmethod
+    def _iana_zone(cls, value: str) -> str:
+        problem = (
+            f"monitoring.schedule.timezone {value!r} is not an IANA time zone, "
+            "such as America/Denver"
+        )
+        try:
+            zoneinfo.ZoneInfo(value)
+        except zoneinfo.ZoneInfoNotFoundError:
+            if not zoneinfo.available_timezones():
+                problem += " (this system has no time zone database to check it against: tzdata)"
+            raise ValueError(problem) from None
+        except ValueError:
+            raise ValueError(problem) from None
+        return value
+
+    @field_validator("days")
+    @classmethod
+    def _unique_days(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        twice = sorted({d for d in value if value.count(d) > 1}, key=WEEKDAYS.index)
+        if twice:
+            raise ValueError(f"monitoring.schedule.days lists {', '.join(twice)} more than once")
+        return value
+
+    @field_validator("on", "off", mode="before")
+    @classmethod
+    def _quoted(cls, value: Any, info: ValidationInfo) -> Any:
+        if isinstance(value, int):
+            raise ValueError(
+                f'monitoring.schedule.{info.field_name} must be quoted, such as "20:00": '
+                f"YAML reads a bare 20:00 as a number of minutes ({value})"
+            )
+        return value
+
+    @field_validator("on")
+    @classmethod
+    def _on_hour(cls, value: str) -> str:
+        if not _ON_HOUR.match(value):
+            raise ValueError(
+                f"monitoring.schedule.on {value!r} must be a whole hour, HH:00, from 00:00 to 23:00"
+            )
+        return value
+
+    @field_validator("off")
+    @classmethod
+    def _off_hour(cls, value: str) -> str:
+        if not _OFF_HOUR.match(value):
+            raise ValueError(
+                f"monitoring.schedule.off {value!r} must be a whole hour, HH:00, or 24:00 "
+                "for the midnight that ends the day"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _one_window_a_day(self) -> MonitoringSchedule:
+        on, off = int(self.on[:2]), int(self.off[:2])
+        if off <= on:
+            raise ValueError(
+                f"monitoring.schedule.off {self.off} is not after monitoring.schedule.on "
+                f"{self.on}: the node runs from on to off within each day, so there are no "
+                "overnight windows (off may be 24:00, the midnight that ends the day)"
+            )
+        if (on, off) == (0, 24):
+            raise ValueError(
+                "monitoring.schedule.on 00:00 and monitoring.schedule.off 24:00 would start and "
+                "stop the node at the same midnight; leave out monitoring.schedule to run all day"
+            )
+        if off - on < 4:
+            raise ValueError(
+                f"monitoring.schedule.off {self.off} is {off - on} hours after "
+                f"monitoring.schedule.on {self.on}; the node runs at least 4 hours a day"
+            )
+        return self
+
+
+class MonitoringBudgets(_Section):
+    """Monthly budgets in USD: the total, by project, and by account (ID or name)."""
+
+    total: _Usd | None = None
+    projects: dict[str, _Usd] = {}
+    accounts: dict[str, _Usd] = {}
+
+
+class MonitoringCost(_Section):
+    """The cost half of the platform: the billing bucket (the foundation's) and
+    the providers whose bills land in it."""
+
+    #: Bucket names are global, so it carries the account ID.
+    bucket: str = Field(pattern=_S3_BUCKET)
+    #: Deny overwrites and deletes under raw/; on once the first deliveries are checked.
+    protect_raw: bool = False
+    #: The organization's AWS bill (the owner's billing-export/ root delivers it).
+    aws: bool = True
+    #: Databricks' billing, exported by a job on the shared workspace.
+    databricks: bool = False
+    budgets: MonitoringBudgets = MonitoringBudgets()
+    #: A day must also be this many USD over its 14-day median to be an anomaly.
+    anomaly_floor_usd: float = Field(default=2, ge=0)
+
+    @model_validator(mode="after")
+    def _a_provider(self) -> MonitoringCost:
+        if not (self.aws or self.databricks):
+            raise ValueError(
+                "monitoring.cost.aws and monitoring.cost.databricks are both false; turn one on, "
+                "or leave out monitoring.cost for a host-only node"
+            )
+        return self
+
+
+class MonitoringSlack(_Section):
+    """Where alerts go: each channel is the SSM parameter holding its Slack
+    incoming-webhook URL, and each route sends an area's alerts to a channel."""
+
+    channels: dict[str, str] = Field(min_length=1)
+    routes: dict[Literal["host", "pipeline", "cost"], str]
+
+    @field_validator("channels")
+    @classmethod
+    def _channels(cls, value: dict[str, str]) -> dict[str, str]:
+        for name, parameter in value.items():
+            if not _SLACK_CHANNEL.match(name):
+                raise ValueError(
+                    f"monitoring.slack.channels.{name}: a channel is named with a lowercase "
+                    "letter, then lowercase letters, digits or - (at most 30)"
+                )
+            if not (parameter.startswith(MONITORING_SECRETS_PREFIX) and _SSM_NAME.match(parameter)):
+                raise ValueError(
+                    f"monitoring.slack.channels.{name} {parameter!r} must be an SSM parameter "
+                    f"under {MONITORING_SECRETS_PREFIX}, such as "
+                    f"{MONITORING_SECRETS_PREFIX}slack/{name}"
+                )
+        return value
+
+    @model_validator(mode="after")
+    def _routes_name_channels(self) -> MonitoringSlack:
+        if "host" not in self.routes:
+            raise ValueError(
+                "monitoring.slack.routes.host is required: the root notification policy "
+                "sends host alerts, and every area without a route, there"
+            )
+        for area, channel in self.routes.items():
+            if channel not in self.channels:
+                raise ValueError(
+                    f"monitoring.slack.routes.{area} names channel {channel!r}, which is not in "
+                    f"monitoring.slack.channels ({', '.join(self.channels)})"
+                )
+        return self
+
+
+class MonitoringThreshold(_Section):
+    warning: float
+    critical: float | None = None
+
+
+class MonitoringSection(_Section):
+    """The monitoring and cost platform (config/monitoring.yaml): the node the
+    monitoring/ stack runs, the foundation's billing bucket, and where alerts go.
+    Each optional part is off while it is left out."""
+
+    instance_type: str = "t9g.medium"
+    #: The pinned Amazon Linux 2023 arm64 image, by name: patching is a PR bumping it.
+    ami: str
+    #: Public HTTPS at this name in the dns zone; None keeps the node private.
+    domain: str | None = Field(default=None, pattern=_FQDN)
+    #: Daily snapshots of the data volume.
+    snapshots: bool = False
+    #: None runs the node all day.
+    schedule: MonitoringSchedule | None = None
+    #: None is a host-only node: no cost data, dashboards or rules.
+    cost: MonitoringCost | None = None
+    #: None notifies nobody: alerts show in Grafana only.
+    slack: MonitoringSlack | None = None
+    #: Overrides of the module's thresholds, by name.
+    thresholds: dict[str, MonitoringThreshold] = {}
+
+    @field_validator("instance_type")
+    @classmethod
+    def _graviton(cls, value: str) -> str:
+        if not _GRAVITON_TYPE.match(value):
+            raise ValueError(
+                f"monitoring.instance_type {value!r} must be a Graviton (arm64) type such as "
+                "t9g.medium: monitoring.ami is an arm64 image"
+            )
+        return value
+
+    @field_validator("ami")
+    @classmethod
+    def _ami(cls, value: str) -> str:
+        if not _MONITORING_AMI.match(value):
+            raise ValueError(
+                f"monitoring.ami {value!r} must be an Amazon Linux 2023 arm64 image name, "
+                "al2023-ami-<release>-kernel-<version>-arm64, not an ID"
+            )
+        return value
+
+    @field_validator("thresholds")
+    @classmethod
+    def _thresholds(cls, value: dict[str, MonitoringThreshold]) -> dict[str, MonitoringThreshold]:
+        for name, threshold in value.items():
+            if name not in MONITORING_THRESHOLDS:
+                raise ValueError(
+                    f"monitoring.thresholds.{name} is not one of the module's thresholds "
+                    f"({', '.join(MONITORING_THRESHOLDS)})"
+                )
+            paired = MONITORING_THRESHOLDS[name]
+            if paired and threshold.critical is None:
+                raise ValueError(
+                    f"monitoring.thresholds.{name} needs both warning and critical: an "
+                    "override replaces the module's pair"
+                )
+            if not paired and threshold.critical is not None:
+                raise ValueError(f"monitoring.thresholds.{name} has a warning only, no critical")
+        return value
+
+
 class ProjectGuardrails(_Section):
     """What one project's task launch role and buckets are approved for.
 
@@ -632,6 +901,8 @@ class Settings(_Section):
     #: `projects` section. `projects` (the property) indexes them by key.
     owners: dict[str, GithubOwner] = Field(default_factory=dict, alias="projects")
     databricks: DatabricksSection | None = None
+    #: The monitoring and cost platform (config/monitoring.yaml); None builds none of it.
+    monitoring: MonitoringSection | None = None
 
     _projects: dict[str, OnboardedProject] = PrivateAttr(default_factory=dict)
     _project_owners: dict[str, str] = PrivateAttr(default_factory=dict)
@@ -704,6 +975,16 @@ class Settings(_Section):
             taken.append((f"project {name!r}", network))
         return self
 
+    @model_validator(mode="after")
+    def _monitoring_domain_in_the_zone(self) -> Settings:
+        domain = self.monitoring.domain if self.monitoring is not None else None
+        if domain is not None and not domain.endswith(f".{self.dns.zone}"):
+            raise ValueError(
+                f"monitoring.domain {domain} is not a name in the dns zone {self.dns.zone} "
+                "(config/sites.yaml), where the stack creates its record"
+            )
+        return self
+
     def run_cost_ceiling(self, project: str) -> float:
         """The project's `max_run_cost_usd` override, else `tasks.max_run_cost_usd`."""
         guardrails = self.projects.get(project)
@@ -724,6 +1005,22 @@ class Settings(_Section):
         if not key.endswith(".tfstate"):
             raise ValueError("key_template must end in .tfstate to add a stack suffix")
         return f"{key.removesuffix('.tfstate')}-{stack}.tfstate"
+
+
+class _ConfigLoader(yaml.SafeLoader):
+    """YAML 1.2's booleans, true and false only. PyYAML follows YAML 1.1, where
+    on, off, yes and no are booleans too, so the schedule's `on:` would be the key
+    True; the foundation's yamldecode and the workflows' yq read config/ as YAML
+    1.2, and the CLI reads it as they do."""
+
+
+_ConfigLoader.yaml_implicit_resolvers = {
+    first: [(tag, regexp) for tag, regexp in resolvers if tag != "tag:yaml.org,2002:bool"]
+    for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+_ConfigLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:bool", re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$"), list("tTfF")
+)
 
 
 def default_config_path() -> Path:
@@ -756,7 +1053,7 @@ def load_document(path: Path) -> dict[str, Any]:
     origin: dict[str, str] = {}
     for file in files:
         try:
-            raw = yaml.safe_load(file.read_text())
+            raw = yaml.load(file.read_text(), Loader=_ConfigLoader)
         except yaml.YAMLError as exc:
             raise ConfigError(f"{file}: not valid YAML: {exc}") from exc
         if raw is None:

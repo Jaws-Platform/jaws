@@ -16,6 +16,7 @@ section defined twice, and a `.yml` file instead of skipping it.
 | [`sites.yaml`](sites.yaml) | `dns`, `sync` | The hosted zone sites live in, and the cache headers every publish sets |
 | [`bots.yaml`](bots.yaml) | `bot`, `tasks` | How a bot instance runs, and how remote tasks run and what any task may ask for |
 | [`databricks.yaml`](databricks.yaml) | `databricks` | The Databricks account, its service principal, the metastore and the compute policies |
+| [`monitoring.yaml`](monitoring.yaml) | `monitoring` | The monitoring node (type, image, name, snapshots, off-hours), the billing bucket and its providers, budgets, and the Slack channels and routes for alerts |
 
 Which file holds a section is organisation only. Workflows and scripts read a
 few sections from their file with `yq` (`aws`, `projects`, `terraform`, `ecr`,

@@ -382,6 +382,11 @@ image bakes it at `/etc/jaws/config`.
 | `sites.yaml` | `dns` (the Route 53 zone), `sync` (the cache headers `publish` sets) |
 | `bots.yaml` | `bot` (the bot runtime: AMIs, availability zones, health check, records prefix, `asset_wait`), `tasks` (remote tasks: Rust toolchain, images, `limits`, `max_run_cost_usd`) |
 | `databricks.yaml` | `databricks` (`enabled`, the account, service principal, metastore, compute policies and `shared_host_url`) |
+| `monitoring.yaml` | `monitoring` (the monitoring node's `instance_type`, `ami`, `domain`, `snapshots` and off-hours `schedule`; `cost`: the billing bucket, its providers, `budgets` and the anomaly floor; `slack`: the channels' webhook parameters and the alert routes; `thresholds` overrides). Platform-owned: no project file can set it |
+
+The CLI reads these files as YAML 1.2 does, as the foundation's `yamldecode`
+and the workflows' `yq` do: only `true` and `false` are booleans, so a key
+such as `on:` stays the string `on`.
 
 ## Tags
 

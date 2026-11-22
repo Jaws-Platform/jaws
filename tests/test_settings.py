@@ -14,8 +14,10 @@ from jaws.settings import (
     load_settings,
     parse_duration,
 )
+from jaws.site import load_site_config
 from tests.conftest import (
     CONFIG_DIR,
+    FIXTURES,
     TEST_OWNER,
     fixture_config,
     project_entry,
@@ -40,6 +42,7 @@ SECTION_FILES = {
     "bot": "bots.yaml",
     "tasks": "bots.yaml",
     "databricks": "databricks.yaml",
+    "monitoring": "monitoring.yaml",
 }
 
 
@@ -81,6 +84,19 @@ def test_a_yml_file_is_refused_rather_than_skipped(tmp_path: Path) -> None:
 def test_an_empty_directory_is_refused(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match=r"no \.yaml files"):
         load_document(tmp_path)
+
+
+def test_the_config_is_read_as_terraform_and_yq_read_it(tmp_path: Path) -> None:
+    """YAML 1.2's booleans, true and false only: PyYAML's YAML 1.1 would read the
+    schedule's `on:` and `off:` keys (and yes, no) as booleans, while the
+    foundation's yamldecode and the workflows' yq read them as strings."""
+    (tmp_path / "a.yaml").write_text(
+        'a:\n  on: "08:00"\n  off: "24:00"\n  yes: no\n  flag: true\n  other: False\n'
+    )
+    assert load_document(tmp_path) == {
+        "a": {"on": "08:00", "off": "24:00", "yes": "no", "flag": True, "other": False}
+    }
+    assert load_document(CONFIG_DIR)["monitoring"]["schedule"]["on"] == "08:00"
 
 
 def test_state_key_template(settings: Settings) -> None:
@@ -788,3 +804,212 @@ def test_an_enabled_section_refuses_placeholders(
     with pytest.raises(ConfigError, match=field) as raised:
         _load_raw(tmp_path, _enabled(**overrides))
     assert "databricks.enabled" in str(raised.value)
+
+
+# -- monitoring ---------------------------------------------------------------------
+
+
+def test_the_monitoring_section_loads() -> None:
+    monitoring = load_settings(CONFIG_DIR, environ={}).monitoring
+    assert monitoring is not None
+    assert monitoring.instance_type == "t9g.medium"
+    assert monitoring.ami == "al2023-ami-2023.12.20261026.1-kernel-6.18-arm64"
+    assert monitoring.domain == "grafana.jwall.engineering"
+    assert monitoring.snapshots is True
+    schedule = monitoring.schedule
+    assert schedule is not None
+    assert schedule.timezone == "America/Denver"
+    assert schedule.days == ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+    assert (schedule.on, schedule.off) == ("08:00", "24:00")
+    cost = monitoring.cost
+    assert cost is not None
+    assert cost.bucket == "jaws-billing-570327089884"
+    assert (cost.protect_raw, cost.aws, cost.databricks) == (False, True, True)
+    assert cost.budgets.total == 100
+    assert (cost.budgets.projects, cost.budgets.accounts) == ({}, {})
+    assert cost.anomaly_floor_usd == 2
+    slack = monitoring.slack
+    assert slack is not None
+    assert slack.channels == {
+        "platform": "/jaws/monitoring/slack/platform",
+        "costs": "/jaws/monitoring/slack/costs",
+    }
+    assert slack.routes == {"host": "platform", "pipeline": "platform", "cost": "costs"}
+    assert monitoring.thresholds == {}
+
+
+def _load_monitoring(tmp_path: Path, edit: Any) -> Settings:
+    """The repository's config with `edit` applied to its raw monitoring section."""
+    raw = repo_config()
+    edit(raw["monitoring"])
+    return _load_raw(tmp_path, raw)
+
+
+def _set(path: str, value: Any) -> Any:
+    """An edit that sets the dotted `path` under monitoring to `value`."""
+
+    def edit(section: dict[str, Any]) -> None:
+        *parents, key = path.split(".")
+        for part in parents:
+            section = section[part]
+        section[key] = value
+
+    return edit
+
+
+def _drop(path: str) -> Any:
+    def edit(section: dict[str, Any]) -> None:
+        *parents, key = path.split(".")
+        for part in parents:
+            section = section[part]
+        del section[key]
+
+    return edit
+
+
+def _both(*edits: Any) -> Any:
+    def edit(section: dict[str, Any]) -> None:
+        for one in edits:
+            one(section)
+
+    return edit
+
+
+@pytest.mark.parametrize(
+    ("edit", "key"),
+    [
+        # The schedule (spec 6.10): whole hours, on before off on one day, at
+        # least 4 hours on, unique weekdays, an IANA time zone.
+        (_set("schedule.on", "08:30"), r"monitoring\.schedule\.on"),
+        (_set("schedule.off", "23:30"), r"monitoring\.schedule\.off"),
+        (_set("schedule.on", "8:00"), r"monitoring\.schedule\.on"),
+        (_set("schedule.on", "24:00"), r"monitoring\.schedule\.on"),
+        (_set("schedule.off", "25:00"), r"monitoring\.schedule\.off"),
+        (_both(_set("schedule.on", "20:00"), _set("schedule.off", "06:00")),
+         r"monitoring\.schedule\.off 06:00 is not after monitoring\.schedule\.on 20:00"),
+        (_both(_set("schedule.on", "08:00"), _set("schedule.off", "11:00")),
+         r"monitoring\.schedule\.off.*at least 4 hours"),
+        (_both(_set("schedule.on", "00:00"), _set("schedule.off", "24:00")),
+         r"monitoring\.schedule\.on 00:00 and monitoring\.schedule\.off 24:00"),
+        (_set("schedule.timezone", "Mars/Olympus_Mons"), r"monitoring\.schedule\.timezone"),
+        (_set("schedule.timezone", "../../etc/passwd"), r"monitoring\.schedule\.timezone"),
+        (_set("schedule.days", []), r"monitoring\.schedule\.days"),
+        (_set("schedule.days", ["mon", "mon"]), r"monitoring\.schedule\.days.*mon"),
+        (_set("schedule.days", ["monday"]), r"monitoring\.schedule\.days"),
+        (_set("schedule.cron", "0 8 * * *"), r"monitoring\.schedule\.cron"),
+        # Slack: every route names a channel, host is routed, channels live in SSM
+        # under /jaws/monitoring/.
+        (_set("slack.routes.cost", "billing"), r"monitoring\.slack\.routes\.cost"),
+        (_drop("slack.routes.host"), r"monitoring\.slack\.routes\.host"),
+        (_set("slack.routes.deploys", "platform"), r"monitoring\.slack\.routes\.deploys"),
+        (_set("slack.channels.platform", "/jaws/databricks/client-secret"),
+         r"monitoring\.slack\.channels\.platform"),
+        (_set("slack.channels.platform", "jaws/monitoring/slack/platform"),
+         r"monitoring\.slack\.channels\.platform"),
+        (_set("slack.channels", {"Platform": "/jaws/monitoring/slack/platform"}),
+         r"monitoring\.slack\.channels\.Platform"),
+        (_set("slack.channels", {}), r"monitoring\.slack\.channels"),
+        # Cost: positive budgets, a floor of at least 0, a bucket name, a provider.
+        (_set("cost.budgets.total", 0), r"monitoring\.cost\.budgets\.total"),
+        (_set("cost.budgets.total", -5), r"monitoring\.cost\.budgets\.total"),
+        (_set("cost.budgets.projects", {"braveheart-trainer": 0}),
+         r"monitoring\.cost\.budgets\.projects\.braveheart-trainer"),
+        (_set("cost.budgets.accounts", {"production": -1}),
+         r"monitoring\.cost\.budgets\.accounts\.production"),
+        (_set("cost.anomaly_floor_usd", -1), r"monitoring\.cost\.anomaly_floor_usd"),
+        (_set("cost.bucket", "Jaws_Billing"), r"monitoring\.cost\.bucket"),
+        (_set("cost.bucket", "jb"), r"monitoring\.cost\.bucket"),
+        (_both(_set("cost.aws", False), _set("cost.databricks", False)),
+         r"monitoring\.cost\.aws.*monitoring\.cost\.databricks"),
+        # The node: a pinned arm64 AL2023 image name, a Graviton type, a name in
+        # the zone.
+        (_set("ami", "ami-0123456789abcdef0"), r"monitoring\.ami"),
+        (_set("ami", "al2023-ami-2023.12.20261026.1-kernel-6.18-x86_64"), r"monitoring\.ami"),
+        (_set("ami", "amzn2-ami-hvm-2.0.20261026-arm64"), r"monitoring\.ami"),
+        (_set("instance_type", "t3.medium"), r"monitoring\.instance_type"),
+        (_set("domain", "grafana.example.com"), r"monitoring\.domain"),
+        # Overrides of the module's thresholds, by name and shape.
+        (_set("thresholds", {"cpu_percnt": {"warning": 50, "critical": 80}}),
+         r"monitoring\.thresholds\.cpu_percnt"),
+        (_set("thresholds", {"cpu_percent": {"warning": 50}}),
+         r"monitoring\.thresholds\.cpu_percent"),
+        (_set("thresholds", {"prometheus_size_percent": {"warning": 80, "critical": 95}}),
+         r"monitoring\.thresholds\.prometheus_size_percent"),
+        # Anything else is a typo.
+        (_set("instance_typo", "t9g.small"), r"monitoring\.instance_typo"),
+        (_set("cost.protect", True), r"monitoring\.cost\.protect"),
+    ],
+    ids=[
+        "half-hour-on", "half-hour-off", "unpadded-on", "on-at-24", "off-past-24", "overnight",
+        "under-4-hours", "whole-day", "unknown-zone", "zone-path", "no-days", "duplicate-day",
+        "unknown-day", "raw-cron", "route-to-missing-channel", "no-host-route",
+        "unknown-area", "channel-outside-prefix", "channel-relative", "channel-name",
+        "no-channels", "zero-budget", "negative-budget", "zero-project-budget",
+        "negative-account-budget", "negative-floor", "bucket-name", "bucket-too-short",
+        "no-provider", "ami-id", "ami-x86", "ami-not-al2023", "not-graviton",
+        "domain-outside-zone", "unknown-threshold", "threshold-missing-critical",
+        "threshold-warning-only", "unknown-key", "unknown-cost-key",
+    ],
+)  # fmt: skip
+def test_bad_monitoring_config_names_its_key(tmp_path: Path, edit: Any, key: str) -> None:
+    with pytest.raises(ConfigError, match=key):
+        _load_monitoring(tmp_path, edit)
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        _drop("schedule"),
+        _drop("slack"),
+        _drop("cost"),
+        _drop("domain"),
+        _drop("slack.routes.cost"),
+        _set("schedule.days", ["mon", "tue", "wed", "thu", "fri"]),
+        _both(_set("schedule.on", "00:00"), _set("schedule.off", "04:00")),
+        _set("schedule.timezone", "UTC"),
+        _set("cost.budgets.projects", {"braveheart-trainer": 40}),
+        _set("cost.budgets.accounts", {"570327089884": 90}),
+        _set("cost.anomaly_floor_usd", 0),
+        _set("thresholds", {"cpu_percent": {"warning": 50, "critical": 80},
+                            "untagged_daily_usd": {"warning": 1}}),
+        _set("instance_type", "m8gd.large"),
+    ],
+    ids=[
+        "always-on", "no-slack", "host-only", "private", "cost-on-host", "weekdays",
+        "midnight-start", "utc", "project-budget", "account-budget", "zero-floor",
+        "thresholds", "other-graviton",
+    ],
+)  # fmt: skip
+def test_good_monitoring_config_loads(tmp_path: Path, edit: Any) -> None:
+    assert _load_monitoring(tmp_path, edit).monitoring is not None
+
+
+def test_monitoring_is_optional(tmp_path: Path) -> None:
+    raw = repo_config()
+    del raw["monitoring"]
+    assert _load_raw(tmp_path, raw).monitoring is None
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    [
+        FIXTURES / "sites" / "guitar-knowledge-base.yaml",
+        FIXTURES / "bots" / "braveheart.yaml",
+        FIXTURES / "bots" / "math-prover.yaml",
+        FIXTURES / "bots" / "databricks-poc.yaml",
+    ],
+    ids=["site", "bot", "research", "databricks"],
+)
+def test_project_files_cannot_set_monitoring(tmp_path: Path, fixture: Path) -> None:
+    """The platform's settings are config/'s alone: neither a project's own file
+    nor its entry in config/projects.yaml can name a monitoring key."""
+    raw = yaml.safe_load(fixture.read_text())
+    raw["monitoring"] = {"schedule": None, "cost": {"budgets": {"total": 1000}}}
+    path = tmp_path / "jaws.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ConfigError, match=r"monitoring: Extra inputs are not permitted"):
+        load_site_config(path)
+    config = repo_config()
+    project_entry(config, "braveheart-trainer")["monitoring"] = {"budgets": {"total": 1000}}
+    with pytest.raises(ConfigError, match=r"braveheart-trainer\.monitoring"):
+        _load_raw(tmp_path, config)
