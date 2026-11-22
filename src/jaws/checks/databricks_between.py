@@ -161,7 +161,7 @@ def workspace_running(ctx: CheckContext) -> Iterable[CheckResult]:
                 f"the workspace was still {label} "
                 f"{deadline.label}: {message or 'no status message'}. "
                 "Re-running apply waits again; raise databricks.readiness_timeout in "
-                "config.yaml if provisioning is just slow",
+                "config/databricks.yaml if provisioning is just slow",
                 status=label,
                 message=message,
             )

@@ -17,7 +17,6 @@ from unittest.mock import MagicMock, patch
 
 import boto3
 import pytest
-import yaml
 from moto import mock_aws
 from typer.testing import CliRunner
 
@@ -34,7 +33,7 @@ from jaws.databricks import DatabricksDeployment, workspace_plan_stale
 from jaws.databricks_names import derived_names
 from jaws.project import Project
 from jaws.site import load_site_config
-from tests.conftest import fixture_settings
+from tests.conftest import fixture_settings, read_config, write_config
 
 from .conftest import FIXTURES
 
@@ -841,10 +840,9 @@ def test_empty_bucket_reports_per_object_errors(logger: logging.Logger) -> None:
 
 
 def _disable(root: Path) -> None:
-    path = root / "config.yaml"
-    config = yaml.safe_load(path.read_text())
+    config = read_config(root)
     config["databricks"]["enabled"] = False
-    path.write_text(yaml.safe_dump(config))
+    write_config(root, config)
 
 
 def test_validate_works_offline_on_both_stacks(

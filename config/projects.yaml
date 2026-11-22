@@ -1,0 +1,173 @@
+# Every project onboarded to jaws: the one place a project is registered.
+# Onboarding a project is one reviewed change to this file. The foundation
+# gives each entry its CI roles (<organization>-<key>-ci-*), its state prefix
+# (project=<key>/) and, by type, its buckets and other roles; CI plans its stack.
+#
+# Projects are grouped by the GitHub account that owns their repository, an
+# organization or a user, under its numeric owner ID:
+#
+#   gh api users/<owner> --jq .id
+#
+# Each project has:
+#
+#   description    what it is, in a line
+#   type           site:       a static site (the site stack)
+#                  bot:        a Lichess bot, released from its repository (the bot stack)
+#                  research:   remote tasks and datasets, no release (the bot stack, no release role)
+#                  databricks: a Databricks workspace (the databricks-* stacks)
+#   repository     the repository's name under its owner
+#   repository_id  its numeric GitHub ID (gh api repos/<owner>/<repo> --jq .id). With
+#                  the owner ID it lets the CI roles trust GitHub's immutable OIDC
+#                  subject form, which every repository here issues.
+#   domain         a site's domain; its CI roles may manage that name and
+#                  *.preview.<domain> in the zone
+#
+# and what it is approved for, reviewed here; a project's own file (jaws.yaml
+# in its repository) cannot widen any of it. foundation/bots.tf reads the lists
+# into the task launch role and the dataset policies, so they are the hard
+# limit on what the project's pull requests can start. The allow-list of
+# instance types is the hard limit on hourly cost, so review a new type's price
+# with it. A `datasets` value is the bucket's approved retention: write_once,
+# expire_prefixes, expire_noncurrent_days, versioning.
+#
+#   instance_types     the instance types its task launch role may start
+#   task_profiles      the task profiles whose instance roles it may pass
+#   datasets           its dataset buckets, <Organization>-<project>-<name>, and their retention
+#   max_run_cost_usd   optional override of tasks.max_run_cost_usd (config/bots.yaml)
+#   databricks         a Databricks project's workspace settings
+
+projects:
+  jwallace145:
+    owner_id: "35950238"
+    projects:
+      main-site:
+        description: The personal site at jwall.engineering, built with Astro
+        type: site
+        repository: site
+        repository_id: "1413965497"
+        domain: jwall.engineering
+      cs-survival-guide:
+        description: A field guide to computer science fundamentals
+        type: site
+        repository: cs-survival-guide
+        repository_id: "1402607832"
+        domain: survival-guide.jwall.engineering
+      guitar-knowledge-base:
+        description: A guitar theory and study knowledge base, built with Zensical
+        type: site
+        repository: guitar-knowledge-base
+        repository_id: "1418340665"
+        domain: guitar.jwall.engineering
+
+  Braveheart-Chess:
+    owner_id: "356866252"
+    projects:
+      braveheart:
+        description: The Braveheart UCI chess engine, measured by SPRT and match tasks
+        type: research
+        repository: braveheart
+        repository_id: "1435162673"
+        # The engine: SPRT and match tasks only. It dropped its bot on
+        # 2026-11-15, when the bot moved to braveheart-bot (docs/research-projects.md,
+        # "A bot project that drops its bot"). Since the split's cutover
+        # (2026-11-18) self-play data is braveheart-selfplay's and training is
+        # braveheart-trainer's; the engine declares no dataset.
+        instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge]
+        task_profiles: [cpu, sprt, match]
+        # max_run_cost_usd: 80 # optional per-project override of tasks.max_run_cost_usd
+      braveheart-bot:
+        description: Braveheart's Lichess bot, playing a pinned release of the engine
+        type: bot
+        repository: braveheart-lichess-bot
+        repository_id: "1459279608"
+        # A container image and a lichess-bot only, running a pinned release of
+        # the engine's repository. No task runner and no datasets, so nothing to
+        # allow here.
+      braveheart-selfplay:
+        description: Braveheart's self-play dataset and the datagen and relabel pipeline that grows it
+        type: research
+        repository: braveheart-selfplay
+        repository_id: "1459456470"
+        instance_types: [c8a.xlarge, c8a.8xlarge, c8a.16xlarge]
+        task_profiles: [cpu, datagen, relabel]
+        datasets:
+          # The positions: every generation and label set. Versioned, with no
+          # expiry, so an overwritten or deleted object can always be recovered.
+          jaws-braveheart-selfplay-positions:
+            prefix: data/
+            versioning: true
+      braveheart-trainer:
+        description: The trainer for Braveheart's NNUE nets, with bullet on GPU instances
+        type: research
+        repository: braveheart-trainer
+        repository_id: "1459456509"
+        # It reads the positions through the selfplay bucket's readers.
+        instance_types: [c8a.xlarge, g6.xlarge, g6.2xlarge, g6e.xlarge]
+        task_profiles: [cpu, gpu]
+        datasets:
+          # Every net trained, kept or not, with its training.json, losses and log.
+          # Versioned, with no expiry, like the positions.
+          jaws-braveheart-trainer-nets:
+            prefix: data/
+            versioning: true
+      braveheart-databricks:
+        description: Braveheart's Databricks workspace, for its NNUE training data
+        type: databricks
+        repository: braveheart-databricks
+        repository_id: "1458504699"
+        # Billed to Braveheart. `vpc_cidr` is allocated here so IP capacity is
+        # central (/16 to /20; no overlap with another project or the bot VPC
+        # 10.0.0.0/16); 10.48.0.0/16 keeps clear of the 10.40-10.41 ranges the
+        # tests use.
+        databricks:
+          compute_policies: [small-interactive, jobs]
+          cost_center: braveheart
+          vpc_cidr: 10.48.0.0/16
+          admins: [jimmy.wallace145@gmail.com]
+
+  Pi-Mathematical-Reasoning:
+    owner_id: "359343898"
+    projects:
+      pi-benchmarks:
+        description: Pi's benchmark files, mirrored in a private dataset bucket
+        type: research
+        repository: pi-benchmarks
+        repository_id: "1466231955"
+        # A dataset and nothing else, so no instance types and no task
+        # profiles. The owner imports each file with admin credentials; nothing
+        # automated writes it. Versioned, with no expiry, like Braveheart's buckets.
+        datasets:
+          jaws-pi-benchmarks-problems:
+            prefix: data/
+            versioning: true
+      pi-prover:
+        description: Pi, local-first mathematical reasoning with proofs checked by Lean 4
+        type: research
+        repository: pi
+        repository_id: "1466017315"
+        # Named pi-prover so its roles cannot match pi-benchmarks'. For now a
+        # dataset alone: the record of every published run, which the owner
+        # uploads with admin credentials. Versioned, with no expiry. Training
+        # adds instance types and task profiles here later.
+        datasets:
+          jaws-pi-prover-artifacts:
+            prefix: data/
+            versioning: true
+
+  Prog-Strength:
+    owner_id: "283382515"
+    projects:
+      prog-strength-archive:
+        description: The cold archive of Prog Strength, retired in November 2026
+        type: research
+        repository: prog-strength-archive
+        repository_id: "1466937166"
+        # Deprecated on 2026-11-21: its final databases, user media, last
+        # Terraform state and secret key names. A dataset and nothing else, so
+        # no instance types and no task profiles. The owner uploads it once
+        # with admin credentials; nothing automated writes it. Versioned, with
+        # no expiry.
+        datasets:
+          jaws-prog-strength-archive-backups:
+            prefix: data/
+            versioning: true

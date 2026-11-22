@@ -55,7 +55,7 @@ components:
         market: on-demand           # G and VT spot quota is 0
         max_hours: 6
         max_vcpus: 4                # this profile's own budget; it never waits on cpu tasks
-        image: deep-learning-gpu    # tasks.images in config.yaml: NVIDIA driver and CUDA
+        image: deep-learning-gpu    # tasks.images in config/bots.yaml: NVIDIA driver and CUDA
         root_volume_gb: 200         # gp3
         whole_cores: false          # G types run two threads per core
         gpu: true                   # wait for nvidia-smi; record GPU, driver and CUDA; SCRATCH_DIR on the NVMe

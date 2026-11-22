@@ -1,6 +1,6 @@
 """The `jaws` command line.
 
-Every command loads config.yaml (baked into the image) and the site file
+Every command loads the tool configuration (config/, baked into the image) and the site file
 (from the working directory), derives the rest, runs its preflight checks and
 then Terraform or S3. Failures map to exit codes: 1 Terraform/AWS, 2
 configuration, 3 preflight.
@@ -171,7 +171,12 @@ class Run:
 def main(
     ctx: typer.Context,
     file: Annotated[Path, typer.Option("--file", "-f", help="Path to the site file.")] = SITE_FILE,
-    config: Annotated[Path | None, typer.Option("--config", help="Path to config.yaml.")] = None,
+    config: Annotated[
+        Path | None,
+        typer.Option(
+            "--config", help="The tool configuration: the config/ directory, or one file."
+        ),
+    ] = None,
     debug: Annotated[bool, typer.Option("--debug", help="Console log at debug level.")] = False,
 ) -> None:
     try:
@@ -233,7 +238,7 @@ def _project_access(run: Run) -> access.Access | None:
         return None
     root = access.infra_root()
     handshakes = access.access_for_project(
-        config, access.load_registry(root / "datasets"), access.project_files_from_env(root)
+        config, access.load_registry(root / "datasets"), access.project_files_from_env(run.settings)
     )
     project = run.project.project
     for edge in handshakes.edges:
@@ -339,7 +344,7 @@ def _with_terraform(
 
 @app.command()
 def validate(ctx: typer.Context) -> None:
-    """Validate config.yaml and the project file, then `terraform validate` offline."""
+    """Validate the tool configuration and the project file, then `terraform validate` offline."""
 
     def body(run: Run) -> None:
         project = run.project
@@ -440,9 +445,9 @@ def _dropped_datasets(project: Project, state: list[str]) -> list[str]:
 
 
 def _still_approved(run: Run, name: str) -> bool:
-    """Whether config.yaml still approves the dataset's bucket for this project.
+    """Whether config/projects.yaml still approves the dataset's bucket for this project.
     Releasing a bucket takes two changes: the project file drops the dataset and
-    a reviewed change to config.yaml drops its approval, so a dataset removed from
+    a reviewed change to config/projects.yaml drops its approval, so a dataset removed from
     a file by mistake is refused instead of quietly left unmanaged."""
     approved = run.settings.projects.get(run.project.project)
     return approved is not None and run.project.dataset_bucket(name) in approved.datasets
@@ -456,7 +461,8 @@ def _dataset_refusal(run: Run, names: list[str]) -> str | None:
     buckets = ", ".join(run.project.dataset_bucket(n) for n in blocked)
     return (
         f"{run.project.project}'s file no longer declares {', '.join(blocked)}, but "
-        f"config.yaml still approves {buckets} for it. Put the dataset back, or remove the "
+        f"config/projects.yaml still approves {buckets} for it. "
+        "Put the dataset back, or remove the "
         "approval from projects."
         f"{run.project.project}.datasets in jaws (a reviewed change); "
         "the next Bot apply then releases the bucket from state and keeps it and its data"
@@ -465,7 +471,7 @@ def _dataset_refusal(run: Run, names: list[str]) -> str | None:
 
 def _release_dropped_datasets(run: Run, terraform: stack.Terraform, state: list[str]) -> None:
     """Before applying: release from state the buckets of datasets the file no longer
-    declares and config.yaml no longer approves, as `destroy` does. The bucket and
+    declares and config/projects.yaml no longer approves, as `destroy` does. The bucket and
     its data are kept; its IAM grants go with this apply."""
     dropped = _dropped_datasets(run.project, state)
     if not dropped:
@@ -978,7 +984,7 @@ def config_env(
 def config_show(ctx: typer.Context) -> None:
     """Print the effective tool configuration as JSON."""
     run: Run = ctx.obj
-    print(json.dumps(run.settings.model_dump(mode="json"), indent=2, sort_keys=True))
+    print(json.dumps(run.settings.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
 
 
 # -- dataset access ------------------------------------------------------------------
@@ -1002,7 +1008,7 @@ def access_render(
 ) -> None:
     """Render data-access/'s variables and a summary from datasets/ and every project's file.
 
-    Reads every Databricks workspace project's file (config.yaml projects with a
+    Reads every Databricks workspace project's file (config/projects.yaml projects with a
     databricks entry) and every onboarded dataset's owner's. One that cannot be
     read, or an offboarding that leaves a half of a handshake, writes nothing.
     """
@@ -1013,7 +1019,9 @@ def access_render(
         base = access.load_registry(base_registry) if base_registry is not None else ()
         workspaces = {name for name, g in run.settings.projects.items() if g.databricks is not None}
         files, unregistered = access.platform_files(
-            registry, workspaces | {d.owner for d in base}, access.project_files_from_env(root)
+            registry,
+            workspaces | {d.owner for d in base},
+            access.project_files_from_env(run.settings),
         )
         access.check_offboarding(base, registry, files)
         handshakes = access.compute_access(registry, files, unregistered)
@@ -1855,7 +1863,7 @@ def _databricks_project(run: Run, command: str = "`databricks doctor`") -> Proje
 def _databricks_section(run: Run) -> DatabricksSection:
     section = run.settings.databricks
     if section is None:
-        raise ConfigError("config.yaml has no databricks section")
+        raise ConfigError("no databricks section is configured (config/databricks.yaml)")
     return section
 
 
@@ -1931,7 +1939,7 @@ def _databricks_deployment(
     if live and not section.enabled:
         raise PreflightError(
             f"{project.project}: the Databricks account is not set up yet "
-            f"(config.yaml databricks.enabled is false); see {databricks.SETUP_RUNBOOK}"
+            f"(config/databricks.yaml databricks.enabled is false); see {databricks.SETUP_RUNBOOK}"
         )
     session: boto3.session.Session | None = None
     if role is not None:

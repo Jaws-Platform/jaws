@@ -246,7 +246,7 @@ class DatasetAccess(_Model):
     read: tuple[str, ...] = ()
     write: tuple[str, ...] = ()
     #: Sub-prefixes written only once per object (never overwritten or deleted).
-    #: Each must sit under a prefix config.yaml lists as `write_once` for the
+    #: Each must sit under a prefix config/projects.yaml lists as `write_once` for the
     #: bucket; `write` may not touch those prefixes.
     write_once: tuple[str, ...] = ()
 
@@ -281,7 +281,7 @@ class TaskProfile(_Model):
     #: so a GPU task never waits behind CPU tasks, nor they behind it.
     max_vcpus: int = Field(default=4, ge=1, le=1024)
     slot_wait_minutes: int = Field(default=30, ge=0, le=120)
-    #: A key of `tasks.images` in config.yaml, the pinned image name; none
+    #: A key of `tasks.images` in config/bots.yaml, the pinned image name; none
     #: uses the bot's pinned Amazon Linux 2023 image, as the cpu profile does.
     image: str | None = Field(default=None, pattern=_KEBAB.pattern)
     root_volume_gb: int = Field(default=40, ge=20, le=200)
@@ -342,7 +342,7 @@ class TaskRunner(_Model):
     on_demand_fallback: bool = True
     spot_wait_minutes: int = Field(default=5, ge=1, le=30)
     #: The schema bound is loose; the real ceiling is `tasks.limits` in
-    #: config.yaml (`guardrails.check`), which sizes the launch role's sessions.
+    #: config/bots.yaml (`guardrails.check`), which sizes the launch role's sessions.
     max_hours: int = Field(default=6, ge=1, le=24)
     #: Running task vCPUs per project (the account's standard spot and
     #: on-demand quotas are 256 each); a launch over it waits for a slot.
@@ -447,13 +447,13 @@ class Dataset(_Model):
     readers: tuple[str, ...] = ()
     #: Days before objects move to Intelligent-Tiering; 0 moves them at once.
     transition_days: int = Field(default=0, ge=0, le=3650)
-    #: Keep prior versions of overwritten or deleted objects. config.yaml must
+    #: Keep prior versions of overwritten or deleted objects. config/projects.yaml must
     #: approve the same value (`projects.<name>.datasets.<bucket>`).
     versioning: bool = False
     #: Days after which noncurrent versions expire; needs `versioning`.
     expire_noncurrent_days: int | None = Field(default=None, ge=1)
     #: Sub-prefixes of `prefix` whose objects expire, by days. Must equal the
-    #: values config.yaml approves for the bucket.
+    #: values config/projects.yaml approves for the bucket.
     expire_prefixes: dict[str, int] = {}
     #: Databricks workspace projects this project agrees may read the dataset,
     #: read-only: its half of each handshake. A workspace reads only while it also
@@ -553,17 +553,18 @@ class DatasetRead(_Model):
 
 class DatabricksWorkspace(_Model):
     """A Databricks workspace. The VPC range, cost center and admins are central
-    (`projects.<name>.databricks` in config.yaml); this names what the project asks for,
+    (`projects.<name>.databricks` in config/projects.yaml); this names what the project asks for,
     including its workspace users."""
 
     kind: Literal["databricks-workspace"]
-    #: Cluster policies, by name, from the `databricks.compute_policies` config.yaml defines;
+    #: Cluster policies, by name, from the `databricks.compute_policies` that
+    #: config/databricks.yaml defines;
     #: `guardrails.check` limits them to the project's approved list.
     compute_policies: tuple[str, ...]
     #: The workspace's deployment name (its URL prefix); derived from the project when left out.
     deployment_name: str | None = Field(default=None, pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")
     #: Workspace users, by email: membership is the team's to change from its own repo.
-    #: Admins stay central (`projects.<name>.databricks.admins` in config.yaml).
+    #: Admins stay central (`projects.<name>.databricks.admins` in config/projects.yaml).
     users: tuple[str, ...] = ()
     #: Onboarded datasets the workspace reads, read-only: its half of each handshake.
     #: A read takes effect only while the dataset's producer lists this project
@@ -571,7 +572,7 @@ class DatabricksWorkspace(_Model):
     reads: tuple[DatasetRead, ...] = ()
     #: A deploy identity: a workspace service principal that GitHub Actions in the
     #: project's repository, in its `prod` environment, signs in as with no secret
-    #: (the repository's IDs come from foundation/databricks.tf). It is a workspace
+    #: (the repository's IDs come from config/projects.yaml). It is a workspace
     #: user in the users group, so it can do nothing a workspace user cannot.
     deployer: bool = False
 

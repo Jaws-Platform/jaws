@@ -1,6 +1,6 @@
 # A sample research project file, for a future consumer (math-prover). It has
 # no container image and no Lichess bot: only a dataset and a task-runner. The
-# project is not registered in config.yaml yet, so tests build its central
+# project is not onboarded in config/projects.yaml yet, so tests build its central
 # entry in the `research` fixture (tests/conftest.py).
 version: 1
 project: math-prover

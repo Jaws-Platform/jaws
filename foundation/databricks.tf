@@ -1,5 +1,5 @@
 # The Databricks account resources this stack owns, and the CI roles of the
-# Databricks workspace projects (config.yaml `databricks`, and
+# Databricks workspace projects (config/databricks.yaml `databricks`, and
 # `projects.<key>.databricks` for each project's guardrails).
 #
 # Account resources, one of each for the whole account:
@@ -7,7 +7,7 @@
 #   the us-east-1 Unity Catalog metastore   every workspace in the region shares it
 #   audit log delivery                      jaws-databricks-audit-logs, audit/
 #
-# They wait for config.yaml `databricks.enabled`. While it is false (the
+# They wait for config/databricks.yaml `databricks.enabled`. While it is false (the
 # owner has not created the service principal yet) they are not planned, so
 # the foundation plan needs no Databricks credential and the databricks
 # provider makes no call. The workflows put the credential in the
@@ -40,12 +40,15 @@ locals {
   databricks_secret_parameter_arn = "arn:aws:ssm:${local.region}:${local.account_id}:parameter/${trimprefix(local.databricks.secret_parameter, "/")}"
   databricks_events_arn_prefix    = "arn:aws:s3:::${local.databricks.audit_bucket}/${trimsuffix(local.databricks.events_prefix, "/")}/"
 
-  # repository_id: gh api repos/<owner>/<repo> --jq .id
-  # owner_id:      gh api repos/<owner>/<repo> --jq .owner.id. A deployer's
-  #                federation subject names both (docs/databricks.md).
-  # One line per entry, as in bots.tf (the workflows read this block).
+  # The Databricks projects (type databricks in config/projects.yaml). A
+  # deployer's federation subject names the repository's ID and its owner's
+  # (docs/databricks.md).
   databricks_projects = {
-    braveheart-databricks = { repository = "Braveheart-Chess/braveheart-databricks", repository_id = "1458504699", owner_id = "356866252" }
+    for key, project in local.registry : key => {
+      repository    = project.repository
+      repository_id = project.repository_id
+      owner_id      = project.owner_id
+    } if project.type == "databricks"
   }
 
   databricks_ci = {
@@ -62,12 +65,12 @@ locals {
   }
 }
 
-# The config.yaml placeholders must be filled in before `enabled` turns the
+# The config/databricks.yaml placeholders must be filled in before `enabled` turns the
 # account resources on: the metastore module would make the @example.com
 # addresses its admins, and the nil UUID is no account or service principal.
 # A failed precondition fails the plan, so nothing is applied. Not planned
 # while disabled (the placeholders are expected then). The CLI's settings
-# validation refuses the same config.yaml.
+# validation refuses the same the tool configuration (config/).
 locals {
   databricks_nil_uuid = "00000000-0000-0000-0000-000000000000"
   databricks_placeholder_admins = [
@@ -82,17 +85,17 @@ resource "terraform_data" "databricks_config_filled_in" {
   lifecycle {
     precondition {
       condition     = lower(local.databricks.account_id) != local.databricks_nil_uuid
-      error_message = "config.yaml databricks.account_id is still the nil UUID placeholder: fill in the Databricks account ID (or set databricks.enabled back to false)."
+      error_message = "config/databricks.yaml databricks.account_id is still the nil UUID placeholder: fill in the Databricks account ID (or set databricks.enabled back to false)."
     }
 
     precondition {
       condition     = lower(local.databricks.client_id) != local.databricks_nil_uuid
-      error_message = "config.yaml databricks.client_id is still the nil UUID placeholder: fill in the service principal's application (client) ID (or set databricks.enabled back to false)."
+      error_message = "config/databricks.yaml databricks.client_id is still the nil UUID placeholder: fill in the service principal's application (client) ID (or set databricks.enabled back to false)."
     }
 
     precondition {
       condition     = length(local.databricks_placeholder_admins) == 0
-      error_message = "config.yaml databricks.metastore_admins still holds the placeholder ${join(", ", local.databricks_placeholder_admins)}: replace it with the owner's real email (an account user) before the foundation makes it a metastore admin."
+      error_message = "config/databricks.yaml databricks.metastore_admins still holds the placeholder ${join(", ", local.databricks_placeholder_admins)}: replace it with the owner's real email (an account user) before the foundation makes it a metastore admin."
     }
   }
 }
@@ -179,7 +182,7 @@ locals {
 
   # Datasets are onboarded through the host, whose URL configures their
   # provider, so an account builds Databricks in two applies: the host first,
-  # then the datasets once config.yaml records the host's URL
+  # then the datasets once config/databricks.yaml records the host's URL
   # (databricks.shared_host_url; null until then).
   databricks_host_recorded = try(local.databricks.shared_host_url, null) != null
 
@@ -275,13 +278,13 @@ module "databricks_dataset" {
   depends_on = [terraform_data.dataset_overlap_check]
 }
 
-# config.yaml names the host's URL for the data-access stack; Databricks picked
+# config/databricks.yaml names the host's URL for the data-access stack; Databricks picked
 # it when this stack created the host. A mismatch is reported, not fatal. So is
 # a URL not recorded yet: the datasets wait for it (above).
 check "shared_host_url" {
   assert {
     condition     = !local.databricks_enabled || try(local.databricks.shared_host_url, null) == try(module.databricks_shared_host[0].workspace_url, null)
-    error_message = "config.yaml databricks.shared_host_url must be the shared host's URL (output databricks_shared_host.workspace_url) for this account: the datasets are onboarded, and the data-access stack binds and grants, only once it is recorded."
+    error_message = "config/databricks.yaml databricks.shared_host_url must be the shared host's URL (output databricks_shared_host.workspace_url) for this account: the datasets are onboarded, and the data-access stack binds and grants, only once it is recorded."
   }
 }
 
@@ -337,9 +340,9 @@ check "databricks_projects_have_guardrails" {
   assert {
     condition = alltrue([
       for key in keys(local.databricks_projects) :
-      try(local.tool_config.projects[key].databricks, null) != null
+      try(local.registry[key].databricks, null) != null
     ])
-    error_message = "Every entry of local.databricks_projects needs a projects.<key>.databricks entry in config.yaml."
+    error_message = "Every Databricks project needs its databricks entry in config/projects.yaml."
   }
 
   assert {

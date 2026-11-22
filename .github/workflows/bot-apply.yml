@@ -10,17 +10,12 @@ on:
   workflow_dispatch:
     inputs:
       project:
-        description: The bot project to apply (foundation/bots.tf).
+        # A free-form name, not a choice, so onboarding a project is one change
+        # to config/projects.yaml: the first step refuses a project that is not
+        # a bot or research project there.
+        description: The bot or research project to apply (config/projects.yaml).
         required: true
-        type: choice
-        options:
-          - braveheart
-          - braveheart-bot
-          - braveheart-selfplay
-          - braveheart-trainer
-          - pi-benchmarks
-          - pi-prover
-          - prog-strength-archive
+        type: string
       destroy:
         description: Destroy the stack instead (the records, dataset and task results buckets and the secret are kept).
         required: false
@@ -60,8 +55,8 @@ jobs:
         env:
           PROJECT: ${{ inputs.project }}
         run: |
-          repository=$(sed -n "s/^ *${PROJECT} *= *{ *repository *= *\"\([^\"]*\)\".*/\1/p" foundation/bots.tf)
-          test -n "$repository" || { echo "::error::$PROJECT is not in foundation/bots.tf"; exit 1; }
+          repository=$(scripts/projects.sh bot research | jq -r --arg p "$PROJECT" '.[] | select(.project == $p) | .repository')
+          test -n "$repository" || { echo "::error::$PROJECT is not a bot or research project in config/projects.yaml"; exit 1; }
           echo "repository=$repository" >> "$GITHUB_OUTPUT"
       - name: Check out the bot's project file (its default branch, or consumer-ref)
         uses: actions/checkout@v7
@@ -81,7 +76,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked
-      - name: Build the apply role ARN from config.yaml
+      - name: Build the apply role ARN from the tool configuration
         id: role
         env:
           PROJECT: ${{ inputs.project }}

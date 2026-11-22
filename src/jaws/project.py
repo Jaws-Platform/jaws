@@ -96,17 +96,19 @@ class Project(BaseModel):
                     )
             for reader in dataset.readers:
                 named = project_reader(reader)
-                if named is not None and named[0] not in settings.projects:
+                reader_project = settings.projects.get(named[0]) if named is not None else None
+                if named is not None and (reader_project is None or reader_project.type == "site"):
                     problems.append(
                         f"dataset {dataset.name}: reader {reader!r} names project "
-                        f"{named[0]!r}, which has no entry under projects in config.yaml"
+                        f"{named[0]!r}, which is not a bot, research or databricks project "
+                        "in config/projects.yaml"
                     )
         runner = config.task_runner
         for name, profile in (runner.profiles if runner else {}).items():
             if profile.image is not None and profile.image not in settings.tasks.images:
                 problems.append(
                     f"task-runner profile {name}: image {profile.image!r} is not pinned in "
-                    "config.yaml tasks.images"
+                    "config/bots.yaml tasks.images"
                 )
         if check_guardrails:
             problems += guardrails.check(config, settings)
@@ -180,7 +182,7 @@ class Project(BaseModel):
     @property
     def databricks_tags(self) -> dict[str, str]:
         """The tags of the workspace and its clusters: the project's own, its cost center
-        (from config.yaml) and the workspace's name."""
+        (from config/projects.yaml) and the workspace's name."""
         self._require("databricks")
         return {
             **self.tags,

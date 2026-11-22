@@ -24,10 +24,12 @@ from .framework import CheckContext, CheckFn, CheckResult, Severity, Stage, chec
 
 _DBX = frozenset({"databricks"})
 SKIP_HINT = (
-    "set databricks.enabled: true in config.yaml after the one-time setup in "
+    "set databricks.enabled: true in config/databricks.yaml after the one-time setup in "
     "docs/databricks.md#one-time-setup"
 )
-_PLACEHOLDER_HINT = "fill in config.yaml databricks.account_id/client_id (not the nil UUID)"
+_PLACEHOLDER_HINT = (
+    "fill in config/databricks.yaml databricks.account_id/client_id (not the nil UUID)"
+)
 #: EC2 "Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances", in vCPUs.
 _STANDARD_VCPU_QUOTA = "L-1216C47A"
 #: The CI roles' databricks/read policy grants servicequotas:GetServiceQuota on this quota
@@ -64,7 +66,7 @@ LIVE_010 = Meta("DBX-LIVE-010", "The deployment name is free", "deployment-name"
 
 def _section(ctx: CheckContext) -> DatabricksSection:
     if ctx.settings.databricks is None:
-        raise ConfigError("config.yaml has no databricks section")
+        raise ConfigError("no databricks section is configured (config/databricks.yaml)")
     return ctx.settings.databricks
 
 
@@ -100,7 +102,7 @@ def _live(
                     "workspace permissions (DBX-BTW-003) and that the workspace is RUNNING"
                     if workspace_level
                     else "the Databricks call failed: check databricks.account_id and "
-                    "databricks.client_id in config.yaml and the service principal's "
+                    "databricks.client_id in config/databricks.yaml and the service principal's "
                     "permissions; DBX-LIVE-002 and the credentials runbook cover them"
                 )
                 yield meta.failed(hint, error=type(exc).__name__)
@@ -150,7 +152,7 @@ def secret_exists(ctx: CheckContext) -> Iterable[CheckResult]:
     except PreflightError as exc:
         yield LIVE_001.failed(
             f"store the service principal's secret as a SecureString at {parameter} (or point "
-            f"databricks.secret_parameter in config.yaml at it): {exc}",
+            f"databricks.secret_parameter in config/databricks.yaml at it): {exc}",
             parameter=parameter,
         )
         return
@@ -170,7 +172,8 @@ def token_issued(ctx: CheckContext) -> Iterable[CheckResult]:
     except Exception as exc:  # the SDK's message may quote credentials; keep the type only
         yield LIVE_002.failed(
             "Databricks refused the credentials: check databricks.account_id and "
-            "databricks.client_id in config.yaml and that the SSM secret is the current one",
+            "databricks.client_id in config/databricks.yaml "
+            "and that the SSM secret is the current one",
             error=type(exc).__name__,
         )
         return
@@ -189,7 +192,7 @@ def is_account_admin(ctx: CheckContext) -> Iterable[CheckResult]:
     if not found:
         yield LIVE_003.failed(
             f"no service principal with application ID {client_id} is in the account: check "
-            "databricks.client_id in config.yaml",
+            "databricks.client_id in config/databricks.yaml",
             client_id=client_id,
         )
         return
@@ -198,7 +201,8 @@ def is_account_admin(ctx: CheckContext) -> Iterable[CheckResult]:
     if "account_admin" not in roles:
         yield LIVE_003.failed(
             f"grant the service principal {client_id} the account admin role directly in the "
-            "account console (databricks.client_id in config.yaml); admin through a group "
+            "account console (databricks.client_id in config/databricks.yaml); "
+            "admin through a group "
             "is not detected",
             client_id=client_id,
         )
@@ -220,13 +224,13 @@ def metastore_present(ctx: CheckContext) -> Iterable[CheckResult]:
             "automatically. With the owner's go-ahead, delete it in the account console "
             "(Catalog > Metastores, unassign workspaces, then delete) and re-run; the "
             f"foundation creates {name}. "
-            "Or set databricks.metastore_name in config.yaml to that name",
+            "Or set databricks.metastore_name in config/databricks.yaml to that name",
             existing=other,
         )
         return
     yield LIVE_004.failed(
         f"the metastore {name} does not exist yet: apply the foundation first "
-        "(databricks.metastore_name in config.yaml)",
+        "(databricks.metastore_name in config/databricks.yaml)",
         metastore=name,
     )
 
@@ -235,7 +239,7 @@ def metastore_present(ctx: CheckContext) -> Iterable[CheckResult]:
 def members_exist(ctx: CheckContext) -> Iterable[CheckResult]:
     approved = ctx.project.databricks_approved
     if approved is None:
-        raise ConfigError(f"add projects.{ctx.project.project}.databricks to config.yaml")
+        raise ConfigError(f"add projects.{ctx.project.project}.databricks to config/projects.yaml")
     users = ctx.project.databricks.users
     emails = [*approved.admins, *users]
     # The foundation makes these the metastore admins once enabled. Settings validation
@@ -244,12 +248,15 @@ def members_exist(ctx: CheckContext) -> Iterable[CheckResult]:
     if admins:
         yield LIVE_005.failed(
             f"replace the placeholder email {', '.join(admins)} in databricks.metastore_admins "
-            "in config.yaml with the owner's real email (an account user), then re-run",
+            "in config/databricks.yaml with the owner's real email (an account user), then re-run",
             placeholders=", ".join(admins),
         )
         return
     for where, group in (
-        (f"projects.{ctx.project.project}.databricks.admins in config.yaml", approved.admins),
+        (
+            f"projects.{ctx.project.project}.databricks.admins in config/projects.yaml",
+            approved.admins,
+        ),
         ("users in the project's jaws.yaml", users),
     ):
         placeholders = [e for e in group if e.lower().endswith("@example.com")]
@@ -267,7 +274,8 @@ def members_exist(ctx: CheckContext) -> Iterable[CheckResult]:
     if missing:
         yield LIVE_005.failed(
             f"add {', '.join(missing)} as account users in the account console, or remove them "
-            f"from projects.{ctx.project.project}.databricks.admins in config.yaml or from "
+            f"from projects.{ctx.project.project}.databricks.admins in config/projects.yaml "
+            "or from "
             "users in the project's jaws.yaml",
             missing=", ".join(missing),
         )
@@ -347,7 +355,8 @@ def node_types_in_zones(ctx: CheckContext) -> Iterable[CheckResult]:
     if gaps:
         yield LIVE_007.failed(
             f"not offered: {', '.join(gaps)}. Remove those node types from node_type_id in the "
-            "policies under databricks.compute_policies in config.yaml, or clusters in that "
+            "policies under databricks.compute_policies in config/databricks.yaml, "
+            "or clusters in that "
             "zone fail to start",
             gaps=", ".join(gaps),
         )
@@ -395,7 +404,7 @@ def vcpu_headroom(ctx: CheckContext) -> Iterable[CheckResult]:
         yield LIVE_008.failed(
             f"the policy {worst_policy} can need {worst} vCPUs but the quota is {int(quota)}: "
             "request an increase for the Running On-Demand Standard instances quota, or lower "
-            f"num_workers in databricks.compute_policies.{worst_policy} in config.yaml "
+            f"num_workers in databricks.compute_policies.{worst_policy} in config/databricks.yaml "
             "(this compares the quota with the policy, not the current usage)",
             **facts,
         )
@@ -414,7 +423,7 @@ def nat_ami_resolves(ctx: CheckContext) -> Iterable[CheckResult]:
     if len(images) != 1:
         yield LIVE_009.failed(
             f"databricks.nat_ami {name!r} matches {len(images)} images, not one: set it to a "
-            "current Amazon Linux 2023 arm64 image name in config.yaml",
+            "current Amazon Linux 2023 arm64 image name in config/databricks.yaml",
             matches=str(len(images)),
         )
         return
@@ -422,7 +431,7 @@ def nat_ami_resolves(ctx: CheckContext) -> Iterable[CheckResult]:
     if architecture != "arm64":
         yield LIVE_009.failed(
             f"databricks.nat_ami {name!r} is {architecture}, not arm64: pick an arm64 image "
-            "in config.yaml",
+            "in config/databricks.yaml",
             architecture=str(architecture),
         )
         return

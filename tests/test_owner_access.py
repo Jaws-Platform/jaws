@@ -14,22 +14,14 @@ import re
 
 import yaml
 
-from tests.conftest import REPO_ROOT
+from tests.conftest import REPO_ROOT, onboarded, repo_config
 
 RESERVED = "owner-access"
-FOUNDATION = REPO_ROOT / "foundation"
-#: One registry entry: `  <key> = { repository = "..." ...`.
-_ENTRY = re.compile(r"^\s+([a-z0-9-]+)\s*=\s*\{\s*repository\s*=", re.MULTILINE)
 
 
 def registered_keys() -> set[str]:
-    keys: set[str] = set()
-    for name in ("projects.tf", "bots.tf", "databricks.tf"):
-        found = set(_ENTRY.findall((FOUNDATION / name).read_text()))
-        assert found, f"no registry entries parsed from foundation/{name}"
-        keys |= found
-    config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
-    return keys | set(config["projects"])
+    """Every project onboarded in config/projects.yaml, the one registry."""
+    return set(onboarded(repo_config()))
 
 
 def test_registries_parse_known_projects() -> None:

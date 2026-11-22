@@ -1,45 +1,21 @@
-# Generated from config.yaml by tests/test_foundation_fixtures.py: do not edit.
-tool:
-  log_level: info
-  log_format: console
-terraform:
-  version: 1.14.7
-  lock_timeout: 120s
-  plan_timeout: 15m
-library:
-  families:
-    Jaws-Platform/jaws-ci/aws: 0.2.0
-    Jaws-Platform/jaws-databricks/aws: 0.1.2
-    Jaws-Platform/jaws-foundation/aws: 0.1.3
-    Jaws-Platform/jaws-lichess-bot/aws: 0.1.4
-    Jaws-Platform/jaws-network/aws: 0.1.2
-    Jaws-Platform/jaws-research/aws: 0.1.2
-    Jaws-Platform/jaws-static-site/aws: 0.1.2
-state:
-  bucket: jaws-terraform-state-570327089884
-  region: us-east-1
-  key_template: project={project}/env={environment}/{project}-{environment}.tfstate
+# Generated from config/ by tests/test_foundation_fixtures.py: do not edit.
 aws:
-  account_id: '570327089884'
-  admin_role_arn: arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_013589f39f92382a
-context:
-  organization: jaws
-  owner: jwallace145
-  managed_by: jaws-relabelled
-dns:
-  zone: jwall.engineering
-  zone_id: Z0644006DW6W2HALU9BI
-ecr:
-  repository: jaws-cli
-  keep_release_images: 20
-  expire_untagged_after_days: 7
-sync:
-  cache_control: public, max-age=3600
-  preview_cache_control: public, max-age=300
-  html_cache_control: public, max-age=0, must-revalidate
-  immutable_cache_control: public, max-age=31536000, immutable
-plan:
-  comment_max_bytes: 60000
+  primary: production
+  accounts:
+    management:
+      type: management
+      account_id: '650503560686'
+      description: AWS Organizations, IAM Identity Center, and owner-access and its
+        state
+    production:
+      type: production
+      account_id: '570327089884'
+      admin_role_arn: arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_013589f39f92382a
+      description: Everything jaws builds
+    development:
+      type: development
+      account_id: '859674017655'
+      description: Console and CLI access for the owner, such as asking for EC2 quotas
 bot:
   health_log_pattern: awaiting challenges
   health_seconds: 90
@@ -64,67 +40,6 @@ tasks:
     max_vcpus: 256
     root_volume_gb: 200
   max_run_cost_usd: 50
-projects:
-  braveheart:
-    instance_types:
-    - c8a.xlarge
-    - c8a.8xlarge
-    - c8a.16xlarge
-    task_profiles:
-    - cpu
-    - sprt
-    - match
-  braveheart-selfplay:
-    instance_types:
-    - c8a.xlarge
-    - c8a.8xlarge
-    - c8a.16xlarge
-    task_profiles:
-    - cpu
-    - datagen
-    - relabel
-    datasets:
-      jaws-braveheart-selfplay-positions:
-        prefix: data/
-        versioning: true
-  braveheart-trainer:
-    instance_types:
-    - c8a.xlarge
-    - g6.xlarge
-    - g6.2xlarge
-    - g6e.xlarge
-    task_profiles:
-    - cpu
-    - gpu
-    datasets:
-      jaws-braveheart-trainer-nets:
-        prefix: data/
-        versioning: true
-  pi-benchmarks:
-    datasets:
-      jaws-pi-benchmarks-problems:
-        prefix: data/
-        versioning: true
-  pi-prover:
-    datasets:
-      jaws-pi-prover-artifacts:
-        prefix: data/
-        versioning: true
-  prog-strength-archive:
-    datasets:
-      jaws-prog-strength-archive-backups:
-        prefix: data/
-        versioning: true
-  braveheart-bot: {}
-  braveheart-databricks:
-    databricks:
-      compute_policies:
-      - small-interactive
-      - jobs
-      cost_center: braveheart
-      vpc_cidr: 10.48.0.0/16
-      admins:
-      - jimmy.wallace145@gmail.com
 databricks:
   enabled: true
   account_id: 64826090-46b0-471f-b2d6-f3e7490b992c
@@ -179,7 +94,166 @@ databricks:
         aws_attributes.availability:
           type: fixed
           value: SPOT_WITH_FALLBACK
-management:
-  account_id: '650503560686'
-development:
-  account_id: '859674017655'
+projects:
+  jwallace145:
+    owner_id: '35950238'
+    projects:
+      main-site:
+        description: The personal site at jwall.engineering, built with Astro
+        type: site
+        repository: site
+        repository_id: '1413965497'
+        domain: jwall.engineering
+      cs-survival-guide:
+        description: A field guide to computer science fundamentals
+        type: site
+        repository: cs-survival-guide
+        repository_id: '1402607832'
+        domain: survival-guide.jwall.engineering
+      guitar-knowledge-base:
+        description: A guitar theory and study knowledge base, built with Zensical
+        type: site
+        repository: guitar-knowledge-base
+        repository_id: '1418340665'
+        domain: guitar.jwall.engineering
+  Braveheart-Chess:
+    owner_id: '356866252'
+    projects:
+      braveheart:
+        description: The Braveheart UCI chess engine, measured by SPRT and match tasks
+        type: research
+        repository: braveheart
+        repository_id: '1435162673'
+        instance_types:
+        - c8a.xlarge
+        - c8a.8xlarge
+        - c8a.16xlarge
+        task_profiles:
+        - cpu
+        - sprt
+        - match
+      braveheart-bot:
+        description: Braveheart's Lichess bot, playing a pinned release of the engine
+        type: bot
+        repository: braveheart-lichess-bot
+        repository_id: '1459279608'
+      braveheart-selfplay:
+        description: Braveheart's self-play dataset and the datagen and relabel pipeline
+          that grows it
+        type: research
+        repository: braveheart-selfplay
+        repository_id: '1459456470'
+        instance_types:
+        - c8a.xlarge
+        - c8a.8xlarge
+        - c8a.16xlarge
+        task_profiles:
+        - cpu
+        - datagen
+        - relabel
+        datasets:
+          jaws-braveheart-selfplay-positions:
+            prefix: data/
+            versioning: true
+      braveheart-trainer:
+        description: The trainer for Braveheart's NNUE nets, with bullet on GPU instances
+        type: research
+        repository: braveheart-trainer
+        repository_id: '1459456509'
+        instance_types:
+        - c8a.xlarge
+        - g6.xlarge
+        - g6.2xlarge
+        - g6e.xlarge
+        task_profiles:
+        - cpu
+        - gpu
+        datasets:
+          jaws-braveheart-trainer-nets:
+            prefix: data/
+            versioning: true
+      braveheart-databricks:
+        description: Braveheart's Databricks workspace, for its NNUE training data
+        type: databricks
+        repository: braveheart-databricks
+        repository_id: '1458504699'
+        databricks:
+          compute_policies:
+          - small-interactive
+          - jobs
+          cost_center: braveheart
+          vpc_cidr: 10.48.0.0/16
+          admins:
+          - jimmy.wallace145@gmail.com
+  Pi-Mathematical-Reasoning:
+    owner_id: '359343898'
+    projects:
+      pi-benchmarks:
+        description: Pi's benchmark files, mirrored in a private dataset bucket
+        type: research
+        repository: pi-benchmarks
+        repository_id: '1466231955'
+        datasets:
+          jaws-pi-benchmarks-problems:
+            prefix: data/
+            versioning: true
+      pi-prover:
+        description: Pi, local-first mathematical reasoning with proofs checked by
+          Lean 4
+        type: research
+        repository: pi
+        repository_id: '1466017315'
+        datasets:
+          jaws-pi-prover-artifacts:
+            prefix: data/
+            versioning: true
+  Prog-Strength:
+    owner_id: '283382515'
+    projects:
+      prog-strength-archive:
+        description: The cold archive of Prog Strength, retired in November 2026
+        type: research
+        repository: prog-strength-archive
+        repository_id: '1466937166'
+        datasets:
+          jaws-prog-strength-archive-backups:
+            prefix: data/
+            versioning: true
+dns:
+  zone: jwall.engineering
+  zone_id: Z0644006DW6W2HALU9BI
+sync:
+  cache_control: public, max-age=3600
+  preview_cache_control: public, max-age=300
+  html_cache_control: public, max-age=0, must-revalidate
+  immutable_cache_control: public, max-age=31536000, immutable
+terraform:
+  version: 1.14.7
+  lock_timeout: 120s
+  plan_timeout: 15m
+library:
+  families:
+    Jaws-Platform/jaws-ci/aws: 0.2.0
+    Jaws-Platform/jaws-databricks/aws: 0.1.2
+    Jaws-Platform/jaws-foundation/aws: 0.1.3
+    Jaws-Platform/jaws-lichess-bot/aws: 0.1.4
+    Jaws-Platform/jaws-network/aws: 0.1.2
+    Jaws-Platform/jaws-research/aws: 0.1.2
+    Jaws-Platform/jaws-static-site/aws: 0.1.2
+state:
+  bucket: jaws-terraform-state-570327089884
+  region: us-east-1
+  key_template: project={project}/env={environment}/{project}-{environment}.tfstate
+tool:
+  log_level: info
+  log_format: console
+context:
+  organization: jaws
+  owner: jwallace145
+  managed_by: jaws-relabelled
+plan:
+  comment_max_bytes: 60000
+ecr:
+  repository: jaws-cli
+  keep_release_images: 20
+  expire_untagged_after_days: 7

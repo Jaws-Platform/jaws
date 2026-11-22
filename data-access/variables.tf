@@ -3,12 +3,12 @@
 # is set by hand.
 
 variable "host_workspace_url" {
-  description = "The shared-objects host's URL (config.yaml databricks.shared_host_url): every onboarded dataset's location is bound and granted through it."
+  description = "The shared-objects host's URL (config/databricks.yaml databricks.shared_host_url): every onboarded dataset's location is bound and granted through it."
   type        = string
 
   validation {
     condition     = can(regex("^https://[a-z0-9.-]+\\.cloud\\.databricks\\.com$", var.host_workspace_url))
-    error_message = "host_workspace_url must be https://<host>.cloud.databricks.com; set config.yaml databricks.shared_host_url and render again."
+    error_message = "host_workspace_url must be https://<host>.cloud.databricks.com; set config/databricks.yaml databricks.shared_host_url and render again."
   }
 }
 

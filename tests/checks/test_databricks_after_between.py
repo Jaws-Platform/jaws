@@ -65,7 +65,7 @@ OUTPUTS = {
     "metastore_id": "ms-1",
 }
 SKIP_HINT = (
-    "set databricks.enabled: true in config.yaml after the one-time setup in "
+    "set databricks.enabled: true in config/databricks.yaml after the one-time setup in "
     "docs/databricks.md#one-time-setup"
 )
 

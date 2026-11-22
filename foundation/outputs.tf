@@ -55,7 +55,7 @@ output "sites_image_repository_url" {
 }
 
 output "bots" {
-  description = "Per-bot repository, CI role ARNs and state key. The workflows derive these ARNs from config.yaml; this output is for reference."
+  description = "Per-bot repository, CI role ARNs and state key. The workflows derive these ARNs from the tool configuration (config/); this output is for reference."
   value = {
     for key, bot in local.bots : key => {
       repository       = bot.repository

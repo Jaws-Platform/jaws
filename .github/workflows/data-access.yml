@@ -69,7 +69,7 @@ jobs:
           enable-cache: true
       - run: uv sync --locked
         working-directory: .
-      - name: Build the plan role ARN from config.yaml
+      - name: Build the plan role ARN from the tool configuration
         id: role
         working-directory: .
         run: |
@@ -79,7 +79,7 @@ jobs:
           state=$(sed -n 's/^databricks=//p' <<<"$resolved")
           echo "databricks=$state" >> "$GITHUB_OUTPUT"
           if [ "$state" != ready ]; then
-            echo "::notice::Databricks is $state: nothing to reconcile (config.yaml databricks.enabled and shared_host_url)"
+            echo "::notice::Databricks is $state: nothing to reconcile (databricks.enabled and shared_host_url in config/databricks.yaml)"
             exit 0
           fi
           account=$(sed -n 's/^account_id=//p' <<<"$resolved")
@@ -114,7 +114,7 @@ jobs:
         id: plan
         if: steps.role.outputs.databricks == 'ready'
         run: |
-          source ../scripts/databricks-credentials.sh ../config.yaml
+          source ../scripts/databricks-credentials.sh ../config
           set +e
           terraform plan -no-color -lock-timeout=60s -out=tfplan -detailed-exitcode > plan.log 2>&1
           code=$?
@@ -177,7 +177,7 @@ jobs:
           enable-cache: true
       - run: uv sync --locked
         working-directory: .
-      - name: Build the apply role ARN from config.yaml
+      - name: Build the apply role ARN from the tool configuration
         id: role
         working-directory: .
         run: |
@@ -187,7 +187,7 @@ jobs:
           state=$(sed -n 's/^databricks=//p' <<<"$resolved")
           echo "databricks=$state" >> "$GITHUB_OUTPUT"
           if [ "$state" != ready ]; then
-            echo "::notice::Databricks is $state: nothing to reconcile (config.yaml databricks.enabled and shared_host_url)"
+            echo "::notice::Databricks is $state: nothing to reconcile (databricks.enabled and shared_host_url in config/databricks.yaml)"
             exit 0
           fi
           account=$(sed -n 's/^account_id=//p' <<<"$resolved")
@@ -222,7 +222,7 @@ jobs:
         id: sweep
         if: steps.role.outputs.databricks == 'ready'
         run: |
-          source ../scripts/databricks-credentials.sh ../config.yaml
+          source ../scripts/databricks-credentials.sh ../config
           ../scripts/data-access-sweep.sh
       - name: Summary (who reads what, what is pending, what waits)
         if: always() && steps.sweep.outcome != 'skipped' && steps.role.outputs.databricks == 'ready'

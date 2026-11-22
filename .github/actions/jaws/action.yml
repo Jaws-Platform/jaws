@@ -50,23 +50,23 @@ runs:
     - uses: aws-actions/amazon-ecr-login@v2
       id: ecr
     # ECR login reaches only the role's own registry: take the image
-    # repository from config.yaml at this action's own commit, and refuse a role
-    # in any other account.
+    # repository and the primary account from the tool configuration (config/)
+    # at this action's own commit, and refuse a role in any other account.
     - name: Resolve the account's image repository
       id: image
       shell: bash
       env:
-        CONFIG: ${{ github.action_path }}/../../../config.yaml
+        CONFIG: ${{ github.action_path }}/../../../config
       run: |
         account=$(aws sts get-caller-identity --query Account --output text)
-        expected=$(yq -r '.aws.account_id' "$CONFIG")
+        expected=$(yq -r '.aws.primary as $p | .aws.accounts[$p].account_id' "$CONFIG/aws.yaml")
         if [[ "$account" != "$expected" ]]; then
-          echo "::error::the role is in account $account, not config.yaml's account $expected"
+          echo "::error::the role is in account $account, not the primary account $expected (config/aws.yaml)"
           exit 1
         fi
-        repository=$(yq -r '.ecr.repository // ""' "$CONFIG")
+        repository=$(yq -r '.ecr.repository // ""' "$CONFIG/tool.yaml")
         if [[ -z "$repository" ]]; then
-          echo "::error::config.yaml names no image repository"
+          echo "::error::config/tool.yaml names no image repository"
           exit 1
         fi
         echo "jaws image repository for account $account: $repository"

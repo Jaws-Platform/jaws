@@ -1,0 +1,43 @@
+# The AWS accounts jaws knows about: the account registry.
+#
+# Every account has a name (free-form; the key below), a type and its ID:
+#
+#   type            management:  AWS Organizations and IAM Identity Center; at most one
+#                   development, staging, production: where workloads can live
+#   account_id      quoted: an account ID is a 12-digit string
+#   admin_role_arn  the owner's Identity Center admin role in the account, by its
+#                   exact ARN, path included. Required for `primary`, where it is
+#                   exempt from the hardened bucket policies (owner-access/,
+#                   docs/owner-access.md#the-break-glass-entry).
+#   description     what the account is for
+#
+# `primary` names the account jaws builds in: its foundation (state bucket,
+# GitHub OIDC trust, CI roles) and every project. Workflows build role ARNs from
+# that account and the project name, through `jaws config env`, so no
+# repository needs an account or role variable. The other accounts are recorded
+# for owner-access, which grants the owner admin access to them; jaws builds
+# nothing there and no run addresses them. Projects choosing their own
+# environments from this registry is #294.
+
+aws:
+  primary: production
+  accounts:
+    management:
+      type: management
+      account_id: "650503560686"
+      # Holds AWS Organizations and IAM Identity Center, and with them
+      # owner-access/ and its state (docs/owner-access.md). Everything jaws
+      # built here moved to the production account and was retired on
+      # 2026-11-21 (README, "History"). The owner signs in to it as jwall-admin.
+      description: AWS Organizations, IAM Identity Center, and owner-access and its state
+    production:
+      type: production
+      account_id: "570327089884"
+      admin_role_arn: arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_013589f39f92382a
+      # The JWall Engineering production account. The owner signs in to it as jaws-prod.
+      description: Everything jaws builds
+    development:
+      type: development
+      account_id: "859674017655"
+      # Nothing is built here yet. The owner signs in to it as jaws-dev.
+      description: Console and CLI access for the owner, such as asking for EC2 quotas

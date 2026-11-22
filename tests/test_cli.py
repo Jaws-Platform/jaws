@@ -14,6 +14,7 @@ from typer.testing import CliRunner
 
 from jaws import cli
 from jaws.stack import PLAN_CHANGES
+from tests.conftest import project_entry, read_config, write_config
 
 runner = CliRunner()
 PLAN_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-guitar-knowledge-base-ci-plan/s"
@@ -737,7 +738,7 @@ def test_bot_build_reads_the_config_next_to_the_project_file(
     """`--file` from another directory: lichess/config.yml is resolved beside the file."""
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
-    shutil.copy(bot_workspace / "config.yaml", elsewhere / "config.yaml")
+    shutil.copytree(bot_workspace / "config", elsewhere / "config")
     monkeypatch.chdir(elsewhere)
     result = runner.invoke(
         cli.app,
@@ -1258,9 +1259,9 @@ DROPPED_DATASET_STATE = (
 
 
 def _approve_nnue(workspace: Path) -> None:
-    config = yaml.safe_load((workspace / "config.yaml").read_text())
-    config["projects"]["math-prover"]["datasets"]["jaws-math-prover-nnue"] = {}
-    (workspace / "config.yaml").write_text(yaml.safe_dump(config))
+    config = read_config(workspace)
+    project_entry(config, "math-prover")["datasets"]["jaws-math-prover-nnue"] = {}
+    write_config(workspace, config)
 
 
 def test_apply_releases_a_dropped_datasets_bucket_and_keeps_its_grants_planned(
@@ -1291,7 +1292,7 @@ def test_apply_refuses_a_dropped_dataset_config_still_approves(
     with mock_aws(), _as_role(RESEARCH_APPLY_ROLE):
         result = runner.invoke(cli.app, ["apply"])
     assert result.exit_code == 3
-    assert "config.yaml still approves jaws-math-prover-nnue" in result.output
+    assert "config/projects.yaml still approves jaws-math-prover-nnue" in result.output
     calls = _calls(fake_terraform)
     assert not any(c.startswith(("plan ", "apply ", TF_RM)) for c in calls)
 

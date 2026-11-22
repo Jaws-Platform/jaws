@@ -1,4 +1,4 @@
-"""Every workflow builds its roles from the tool's reading of config.yaml.
+"""Every workflow builds its roles from the tool's reading of its configuration (config/).
 
 No workflow reads the account or the organization itself: each role step runs
 `jaws config env`, so a role ARN can never name an account the tool does not.

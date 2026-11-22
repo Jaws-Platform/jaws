@@ -1,0 +1,22 @@
+# How the jaws CLI itself runs, names and tags what it builds, reports plans,
+# and ships its own image.
+
+tool:
+  log_level: info # JAWS_LOG_LEVEL overrides, for local debugging
+  log_format: console # json in CI
+
+context:
+  organization: jaws
+  owner: jwallace145
+  # The ManagedBy tag the tool stamps on everything it renders, like Organization
+  # above: the tool's, never the project file's.
+  managed_by: jaws
+
+plan:
+  comment_max_bytes: 60000
+
+# The jaws CLI's own image repository, in the primary account.
+ecr:
+  repository: jaws-cli
+  keep_release_images: 20
+  expire_untagged_after_days: 7

@@ -27,40 +27,32 @@ from jaws.access import (
     project_repositories,
 )
 from jaws.errors import ConfigError
-from tests.conftest import FIXTURES, REPO_ROOT
+from jaws.settings import load_settings
+from tests.conftest import CONFIG_DIR, FIXTURES, REPO_ROOT
 
 PROJECT_FILE = (FIXTURES / "registry" / "braveheart-selfplay.yaml").read_text()
 URL = "https://api.github.com/repos/Braveheart-Chess/braveheart-selfplay/contents/jaws.yaml"
 
 
-def _shell_registry(block: str, file: str) -> dict[str, str]:
-    """The registry block read the way the workflows read it, independently of Python."""
-    awk = f"/^  {block} = {{$/ {{ inside = 1; next }} inside && /^  }}/ {{ exit }} inside"
-    sed = 's/^ *\\([a-z0-9-][a-z0-9-]*\\) *= *{ *repository *= *"\\([^"]*\\)".*/\\1 \\2/p'
-    script = f"awk '{awk}' {file} | sed -n '{sed}'"
-    out = subprocess.run(
-        ["bash", "-c", script], cwd=REPO_ROOT, capture_output=True, text=True, check=True
-    )
-    return dict(line.split(" ") for line in out.stdout.splitlines())
+def _settings() -> Any:
+    return load_settings(CONFIG_DIR, environ={})
 
 
-def test_the_registries_are_read_like_the_workflows_read_them() -> None:
-    repositories = project_repositories(REPO_ROOT)
+def test_the_registry_is_read_like_the_workflows_read_it() -> None:
+    """The workflows list projects with scripts/projects.sh, independently of Python."""
+    repositories = project_repositories(_settings())
     assert repositories["braveheart-selfplay"] == "Braveheart-Chess/braveheart-selfplay"
     assert repositories["braveheart-databricks"] == "Braveheart-Chess/braveheart-databricks"
-    databricks = json.loads(
+    listed = json.loads(
         subprocess.run(
-            ["scripts/databricks-projects.sh"],
+            ["scripts/projects.sh", "bot", "research", "databricks"],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
             check=True,
         ).stdout
     )
-    expected = _shell_registry("bots", "foundation/bots.tf") | {
-        entry["project"]: entry["repository"] for entry in databricks
-    }
-    assert repositories == expected
+    assert repositories == {entry["project"]: entry["repository"] for entry in listed}
 
 
 class FakeOpener:
@@ -155,49 +147,36 @@ def test_the_environment_picks_a_directory_else_github(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("JAWS_PROJECT_FILES_DIR", str(tmp_path))
-    assert isinstance(project_files_from_env(REPO_ROOT), DirectoryProjectFiles)
+    assert isinstance(project_files_from_env(_settings()), DirectoryProjectFiles)
     monkeypatch.delenv("JAWS_PROJECT_FILES_DIR")
     monkeypatch.delenv("GH_TOKEN", raising=False)
     monkeypatch.setenv("GITHUB_TOKEN", "from-github-token")
-    files = project_files_from_env(REPO_ROOT)
+    files = project_files_from_env(_settings())
     assert isinstance(files, GitHubProjectFiles) and files.token == "from-github-token"
     monkeypatch.setenv("GH_TOKEN", "from-gh-token")
-    files = project_files_from_env(REPO_ROOT)
+    files = project_files_from_env(_settings())
     assert isinstance(files, GitHubProjectFiles) and files.token == "from-gh-token"
     assert files.repositories["braveheart-selfplay"] == "Braveheart-Chess/braveheart-selfplay"
 
 
-def test_registry_ids_parse_both_registries() -> None:
-    ids = project_registry_ids(REPO_ROOT)
+def test_registry_ids_come_from_the_onboarding_registry() -> None:
+    settings = _settings()
+    ids = project_registry_ids(settings)
     assert ids["braveheart-databricks"] == RegistryIds(
         "Braveheart-Chess/braveheart-databricks", "1458504699", "356866252"
     )
     assert ids["braveheart-selfplay"] == RegistryIds(
         "Braveheart-Chess/braveheart-selfplay", "1459456470", "356866252"
     )
-    assert {key: i.repository for key, i in ids.items()} == project_repositories(REPO_ROOT)
-
-
-def test_registry_ids_tolerate_a_missing_owner_id(tmp_path: Path) -> None:
-    (tmp_path / "foundation").mkdir()
-    (tmp_path / "foundation" / "bots.tf").write_text("locals {\n  bots = {\n  }\n}\n")
-    (tmp_path / "foundation" / "databricks.tf").write_text(
-        "locals {\n  databricks_projects = {\n"
-        '    a-b = { repository = "o/a-b", repository_id = "12" }\n'
-        "  }\n}\n"
+    assert ids["pi-prover"] == RegistryIds(
+        "Pi-Mathematical-Reasoning/pi", "1466017315", "359343898"
     )
-    assert project_registry_ids(tmp_path) == {"a-b": RegistryIds("o/a-b", "12", None)}
+    assert {key: i.repository for key, i in ids.items()} == project_repositories(settings)
 
 
-def test_registry_ids_ignore_a_comment_after_the_entry(tmp_path: Path) -> None:
-    # Terraform ignores the comment; reading a value out of it would put an ID GitHub
-    # never issues into a deployer's federation subject.
-    (tmp_path / "foundation").mkdir()
-    (tmp_path / "foundation" / "bots.tf").write_text("locals {\n  bots = {\n  }\n}\n")
-    (tmp_path / "foundation" / "databricks.tf").write_text(
-        "locals {\n  databricks_projects = {\n"
-        '    a-b = { repository = "o/a-b", repository_id = "12", owner_id = "34" } '
-        '# was owner_id = "99", repository_id = "77"\n'
-        "  }\n}\n"
-    )
-    assert project_registry_ids(tmp_path) == {"a-b": RegistryIds("o/a-b", "12", "34")}
+def test_a_site_is_not_a_platform_project() -> None:
+    """Sites own and read no datasets, so the platform never reads their files."""
+    settings = _settings()
+    sites = {key for key, p in settings.projects.items() if p.type == "site"}
+    assert sites == {"main-site", "cs-survival-guide", "guitar-knowledge-base"}
+    assert not sites & set(project_registry_ids(settings))

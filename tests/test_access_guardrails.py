@@ -1,4 +1,4 @@
-"""The two halves of a handshake, checked against config.yaml alone.
+"""The two halves of a handshake, checked against the tool configuration alone.
 
 A producer lists Databricks workspace projects under a dataset's `consumers`;
 a consumer lists `<owner>/<name>` ids under its workspace's `reads`. Whether
@@ -19,7 +19,7 @@ from jaws import guardrails
 from jaws.errors import ConfigError
 from jaws.settings import Settings, load_settings
 from jaws.site import SiteConfig, site_config_from_text
-from tests.conftest import FIXTURES
+from tests.conftest import FIXTURES, project_entry, repo_config
 
 
 def _file(project: str, change: Callable[[dict[str, Any]], None] | None = None) -> SiteConfig:
@@ -88,7 +88,8 @@ def test_a_read_must_name_an_approved_dataset(
 ) -> None:
     problems = guardrails.check(_file("braveheart-databricks", _reads(dataset)), settings)
     assert any(
-        f"no project {owner} approves bucket {bucket} in config.yaml" in p for p in problems
+        f"no project {owner} approves bucket {bucket} in config/projects.yaml" in p
+        for p in problems
     ), problems
 
 
@@ -122,7 +123,7 @@ def test_a_read_needs_an_id_and_a_purpose(entry: dict[str, str]) -> None:
 
 
 def _settings_with(tmp_path: Path, change: Callable[[dict[str, Any]], None]) -> Settings:
-    raw: dict[str, Any] = yaml.safe_load((FIXTURES / "config.yaml").read_text())
+    raw: dict[str, Any] = repo_config()
     change(raw)
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(raw))
@@ -131,7 +132,7 @@ def _settings_with(tmp_path: Path, change: Callable[[dict[str, Any]], None]) -> 
 
 def test_a_leftover_databricks_share_is_refused(tmp_path: Path) -> None:
     def share(raw: dict[str, Any]) -> None:
-        approval = raw["projects"]["braveheart-selfplay"]["datasets"][
+        approval = project_entry(raw, "braveheart-selfplay")["datasets"][
             "jaws-braveheart-selfplay-positions"
         ]
         approval["databricks_share"] = {"prefix": "data/", "consumers": ["braveheart-databricks"]}

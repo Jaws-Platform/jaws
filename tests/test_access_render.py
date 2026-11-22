@@ -29,7 +29,7 @@ from jaws.access import (
 from jaws.errors import ConfigError
 from jaws.settings import Settings
 from jaws.site import load_site_config
-from tests.conftest import FIXTURES, fixture_config
+from tests.conftest import FIXTURES, fixture_config, write_config
 from tests.test_cli import runner
 
 HOST = "https://dbc-01234567-89ab.cloud.databricks.com"
@@ -137,12 +137,12 @@ def test_the_summary_lists_edges_and_pending_reasons() -> None:
 
 @pytest.fixture
 def render_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """An infra checkout's datasets/ and config.yaml, and a directory of project files."""
+    """An infra checkout's datasets/ and tool config, and a directory of project files."""
     root = tmp_path / "infra"
     shutil.copytree(FIXTURES / "datasets", root / "datasets")
     config = fixture_config()
     config["databricks"]["shared_host_url"] = HOST
-    (root / "config.yaml").write_text(yaml.safe_dump(config))
+    write_config(root, config)
     files = tmp_path / "project-files"
     files.mkdir()
     for name in ("braveheart-selfplay", "braveheart-databricks", "databricks-poc"):

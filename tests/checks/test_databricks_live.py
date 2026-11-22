@@ -33,12 +33,13 @@ from tests.checks.fakes import (
     user,
     workspace,
 )
+from tests.conftest import with_guardrails
 
 REAL_ID = "11111111-2222-3333-4444-555555555555"
 CLIENT_ID = "66666666-7777-8888-9999-aaaaaaaaaaaa"
 SECRET = "sentinel-secret-value"
 SKIP_HINT = (
-    "set databricks.enabled: true in config.yaml after the one-time setup in "
+    "set databricks.enabled: true in config/databricks.yaml after the one-time setup in "
     "docs/databricks.md#one-time-setup"
 )
 
@@ -152,7 +153,7 @@ def test_live002_fails_on_placeholder_ids(databricks: Project, live: Settings) -
     s = live.model_copy(update={"databricks": section})
     result = _run("DBX-LIVE-002", databricks, s, None, _account())
     assert result.outcome is Outcome.FAIL
-    assert "config.yaml databricks.account_id/client_id" in (result.remediation or "")
+    assert "config/databricks.yaml databricks.account_id/client_id" in (result.remediation or "")
 
 
 def test_live002_fails_when_the_token_is_refused(databricks: Project, live: Settings) -> None:
@@ -216,13 +217,8 @@ def _members(live: Settings, databricks: Project, *emails: str) -> tuple[Project
     guard = live.projects["databricks-poc"]
     assert guard.databricks is not None
     new = guard.databricks.model_copy(update={"admins": emails[:1]})
-    settings = live.model_copy(
-        update={
-            "projects": {
-                **live.projects,
-                "databricks-poc": guard.model_copy(update={"databricks": new}),
-            }
-        }
+    settings = with_guardrails(
+        live, "databricks-poc", guard.model_copy(update={"databricks": new}), validate=False
     )
     component = databricks.databricks.model_copy(update={"users": emails[1:]})
     project = databricks.model_copy(

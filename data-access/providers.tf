@@ -11,7 +11,7 @@ provider "databricks" {
 
 # The shared-objects host's workspace API: the foundation created every
 # onboarded dataset's external location through it, and this stack binds and
-# grants through it. Its URL is config.yaml databricks.shared_host_url, which
+# grants through it. Its URL is config/databricks.yaml databricks.shared_host_url, which
 # `access render` writes into the variables.
 provider "databricks" {
   alias     = "host"

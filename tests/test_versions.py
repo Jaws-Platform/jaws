@@ -11,10 +11,8 @@ import json
 import re
 from pathlib import Path
 
-import yaml
-
 from jaws import __version__
-from tests.conftest import REPO_ROOT
+from tests.conftest import REPO_ROOT, repo_config
 
 ANNOTATION = "# x-release-please-version"
 WORKFLOWS = ("site-plan.yml", "site-preview.yml", "site-deploy.yml")
@@ -93,8 +91,7 @@ _OLD_LIBRARY = "jwallace145/jwall-engineering/aws"
 
 
 def _families() -> dict[str, str]:
-    config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
-    families: dict[str, str] = config["library"]["families"]
+    families: dict[str, str] = repo_config()["library"]["families"]
     return families
 
 
@@ -156,7 +153,7 @@ def test_every_registry_pin_matches_config() -> None:
 
 
 def test_every_configured_family_is_used() -> None:
-    """A family nothing pins is a stale line in config.yaml."""
+    """A family nothing pins is a stale line in config/terraform.yaml."""
     used = {family for family, _, _ in _pins(*_stack_files())}
     assert used == set(_families())
 

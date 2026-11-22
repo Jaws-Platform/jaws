@@ -1,6 +1,6 @@
 # A sample Databricks workspace project file. The only component is a
 # databricks-workspace; the VPC range, cost center and admins come from
-# `projects.databricks-poc.databricks` in config.yaml.
+# `databricks-poc`'s databricks entry in config/projects.yaml.
 version: 1
 project: databricks-poc
 repository: example-org/databricks-poc
@@ -16,5 +16,5 @@ components:
   - kind: databricks-workspace
     compute_policies: [small-interactive, jobs]
     # Workspace users are listed here, so the team controls membership from this repo.
-    # Admins stay central (projects.databricks-poc.databricks.admins in config.yaml).
+    # Admins stay central (databricks.admins of its entry in config/projects.yaml).
     users: [user@example.com]

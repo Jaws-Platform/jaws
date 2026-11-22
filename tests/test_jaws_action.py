@@ -1,9 +1,10 @@
-"""The composite action pulls the CLI image of config.yaml's account.
+"""The composite action pulls the CLI image of the tool configuration's primary account.
 
 ECR login reaches only the role's own registry, so a step checks that the role
-is in config.yaml's account and takes the image repository (`ecr.repository`)
-from config.yaml at the action's own commit. That step's script is run here,
-with a stand-in `aws` and the real `yq`.
+is in the primary account (config/aws.yaml) and takes the image repository
+(`ecr.repository`, config/tool.yaml) from the tool configuration at the
+action's own commit. That step's script is run here, with a stand-in `aws` and
+the real `yq`.
 """
 
 from __future__ import annotations
@@ -16,10 +17,10 @@ from typing import Any
 
 import yaml
 
-from tests.conftest import REPO_ROOT
+from tests.conftest import CONFIG_DIR, REPO_ROOT, repo_config
 
 ACTION_DIR = REPO_ROOT / ".github" / "actions" / "jaws"
-CONFIG = REPO_ROOT / "config.yaml"
+CONFIG = CONFIG_DIR
 ACCOUNT = "570327089884"
 
 
@@ -67,20 +68,23 @@ def _resolve(
 
 
 def _config_without(tmp_path: Path, *path: str) -> Path:
-    raw: dict[str, Any] = yaml.safe_load(CONFIG.read_text())
+    """A config directory with the files the step reads, one key removed."""
+    raw = repo_config()
     node = raw
     for key in path[:-1]:
         node = node[key]
     del node[path[-1]]
-    written = tmp_path / "config.yaml"
-    written.write_text(yaml.safe_dump(raw))
+    written = tmp_path / "config"
+    written.mkdir()
+    (written / "aws.yaml").write_text(yaml.safe_dump({"aws": raw["aws"]}))
+    (written / "tool.yaml").write_text(yaml.safe_dump({"ecr": raw["ecr"]}))
     return written
 
 
 def test_the_step_reads_the_config_at_the_actions_own_commit() -> None:
     env = _step("image")["env"]
-    assert env["CONFIG"] == "${{ github.action_path }}/../../../config.yaml"
-    assert (ACTION_DIR / ".." / ".." / ".." / "config.yaml").resolve() == CONFIG.resolve()
+    assert env["CONFIG"] == "${{ github.action_path }}/../../../config"
+    assert (ACTION_DIR / ".." / ".." / ".." / "config").resolve() == CONFIG.resolve()
 
 
 def test_the_image_comes_from_the_resolved_repository() -> None:
@@ -96,7 +100,7 @@ def test_the_account_pulls_its_repository(tmp_path: Path) -> None:
     assert output.splitlines() == ["repository=jaws-cli"]
 
 
-def test_an_account_config_yaml_does_not_name_stops_the_job(tmp_path: Path) -> None:
+def test_an_account_other_than_the_primary_stops_the_job(tmp_path: Path) -> None:
     result, output = _resolve(tmp_path, "111122223333", CONFIG)
     assert result.returncode != 0
     assert "::error::" in result.stdout
@@ -109,4 +113,12 @@ def test_a_config_without_an_image_repository_stops_the_job(tmp_path: Path) -> N
     result, output = _resolve(tmp_path, ACCOUNT, config)
     assert result.returncode != 0
     assert "::error::" in result.stdout
+    assert output == ""
+
+
+def test_the_step_reads_the_primary_account_not_another_in_the_registry(tmp_path: Path) -> None:
+    """The management account is in the registry too, but jaws builds in the primary one."""
+    result, output = _resolve(tmp_path, "650503560686", CONFIG)
+    assert result.returncode != 0
+    assert "the primary account 570327089884" in result.stdout
     assert output == ""

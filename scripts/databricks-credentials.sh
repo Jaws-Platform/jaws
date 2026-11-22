@@ -2,7 +2,10 @@
 # Sourced, not executed, by the foundation's `terraform plan` and `terraform
 # apply` steps (ci.yml terraform-plan, release-please.yml apply, data-access.yml):
 #
-#   source ../scripts/databricks-credentials.sh ../config.yaml
+#   source ../scripts/databricks-credentials.sh ../config
+#
+# The argument is the tool configuration: the config/ directory (its
+# databricks.yaml is read), or one file holding every section.
 #
 # When databricks.enabled is true it reads the service principal's client
 # secret from SSM (with the AWS role already assumed), masks it, and exports
@@ -11,7 +14,10 @@
 # never writes to the step's environment or output files, so no other step (and
 # no third-party action) sees the secret. While databricks.enabled is false it
 # does nothing.
-_dbx_config=${1:-config.yaml}
+_dbx_config=${1:-config}
+if [ -d "$_dbx_config" ]; then
+  _dbx_config=$_dbx_config/databricks.yaml
+fi
 _dbx_enabled=$(yq -r .databricks.enabled "$_dbx_config") || return 1
 if [ "$_dbx_enabled" != "true" ]; then
   echo "databricks.enabled is $_dbx_enabled in $_dbx_config: no Databricks credential is needed"

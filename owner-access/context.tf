@@ -1,18 +1,25 @@
 # Identity of this stack. It lives in the organization's management account
-# (config.yaml `management`), where AWS Organizations and IAM Identity Center
-# are, and grants the owner admin access there, in production (config.yaml
-# `aws`) and in development (config.yaml `development`).
+# (the account of type management in config/aws.yaml), where AWS Organizations
+# and IAM Identity Center are, and grants the owner admin access there, in the
+# primary account (production) and in the development account.
 #
 # Its names and tags are the ones it was first applied with, stated here rather
-# than read from config.yaml, whose context is the production account's.
+# than read from config/tool.yaml, whose context is the primary account's.
 
 locals {
-  region      = "us-east-1"
-  tool_config = yamldecode(file("${path.module}/../config.yaml"))
-  account_id  = local.tool_config.management.account_id
+  region = "us-east-1"
 
-  production_account_id  = local.tool_config.aws.account_id
-  development_account_id = try(local.tool_config.development.account_id, null)
+  # The tool configuration's files, read as one document (foundation/config.tf).
+  tool_config_dir = "${path.module}/../config"
+  tool_config = merge([
+    for name in sort(fileset(local.tool_config_dir, "*.yaml")) :
+    yamldecode(file("${local.tool_config_dir}/${name}"))
+  ]...)
+  accounts = local.tool_config.aws.accounts
+
+  account_id             = one([for account in values(local.accounts) : account.account_id if account.type == "management"])
+  production_account_id  = local.accounts[local.tool_config.aws.primary].account_id
+  development_account_id = one([for account in values(local.accounts) : account.account_id if account.type == "development"])
 
   context = {
     organization = "jwall-engineering"

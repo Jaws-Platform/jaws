@@ -17,7 +17,7 @@ locals {
 }
 
 # The pinned NAT image, resolved from its readable name (databricks.nat_ami in
-# config.yaml), so a new Amazon Linux release does not replace the NAT.
+# config/databricks.yaml), so a new Amazon Linux release does not replace the NAT.
 # Deprecated images are included so the pin keeps resolving.
 data "aws_ami" "nat" {
   owners             = ["amazon"]
@@ -96,7 +96,7 @@ module "workspace" {
   # Actions in its repository's prod environment signs in as it, with no secret.
   deployer = var.deployer
 
-  # Shared datasets this workspace consumes (config.yaml databricks_share):
+  # Shared datasets this workspace consumes (config/projects.yaml databricks_share):
   # each lets its share role through the S3 endpoint, read-only.
   read_only_datasets = var.read_only_datasets
 }

@@ -1,7 +1,7 @@
 # The private ECR repository that holds the jaws CLI image.
 # Every site's CI roles pull it (ecr/pull); this repo's apply role pushes a
 # tagged image on each release (ecr/push). Name and lifecycle come from
-# config.yaml, the tool's configuration, so the CLI and the repository that
+# config/tool.yaml, the tool's configuration, so the CLI and the repository that
 # holds it agree.
 
 locals {
@@ -31,5 +31,5 @@ check "sites_image_repository_arn_matches" {
   }
 }
 
-# config.yaml names the account the workflows build role ARNs for; a plan
+# config/aws.yaml names the account the workflows build role ARNs for; a plan
 # against any other account is a mistake worth flagging.

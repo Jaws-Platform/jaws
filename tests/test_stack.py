@@ -31,7 +31,7 @@ from jaws.stack import (
     render_backend,
     render_tfvars,
 )
-from tests.conftest import FIXTURES, REPO_ROOT
+from tests.conftest import FIXTURES, REPO_ROOT, offboard, project_entry
 
 #: What each site's infra/ directory produced before the migration, by project.
 #: Step 6's "no changes" plan depends on these staying identical.
@@ -345,7 +345,7 @@ def test_version_mismatch_fails_fast(
 ) -> None:
     monkeypatch.setenv("FAKE_TF_VERSION", "1.9.0")
     terraform = _terraform(guitar, settings, logger)
-    with pytest.raises(RunError, match=r"config\.yaml pins 1\.14\.7"):
+    with pytest.raises(RunError, match=r"config/terraform\.yaml pins 1\.14\.7"):
         terraform.prepare()
 
 
@@ -566,7 +566,7 @@ def test_braveheart_tfvars_are_unchanged(bot: Project, settings: Settings) -> No
     at their defaults. The fixture is a sample, not the live bot's file.
 
     The snapshot was rendered by the code before this change (commit 76187b0). It
-    holds the pinned AMIs and Rust toolchain from config.yaml, so regenerate it when
+    holds the pinned AMIs and Rust toolchain from config/bots.yaml, so regenerate it when
     `bot.amis`, `tasks.images` or `tasks.rust_toolchain` is bumped.
     """
     snapshot = json.loads((FIXTURES / "bots" / "braveheart.tfvars.json").read_text())
@@ -923,7 +923,7 @@ def test_databricks_account_tfvars(databricks: Project, settings: Settings) -> N
         "metastore_name": "jaws-us-east-1",
         "deployment_name": None,  # no prefix configured: Databricks picks the URL
         "admin_user_names": ["jimmy.wallace145@gmail.com"],
-        "user_names": ["user@example.com"],  # the project file's users, not config.yaml
+        "user_names": ["user@example.com"],  # the project file's users, not config/projects.yaml
         "service_principal_application_id": settings.databricks.client_id,
         "account_id": settings.databricks.account_id,
         "read_only_datasets": {},  # databricks-poc consumes no shared dataset
@@ -933,14 +933,15 @@ def test_databricks_account_tfvars(databricks: Project, settings: Settings) -> N
     assert tfvars["tags"]["Workspace"] == "databricks-poc-prod"
 
 
-def _registry(root: Path, entry: str) -> str:
-    """A minimal infra checkout whose Databricks registry holds one entry line."""
-    (root / "foundation").mkdir(parents=True)
-    (root / "foundation" / "bots.tf").write_text("locals {\n  bots = {\n  }\n}\n")
-    (root / "foundation" / "databricks.tf").write_text(
-        f"locals {{\n  databricks_projects = {{\n    {entry}\n  }}\n}}\n"
-    )
-    return str(root)
+def _registered(settings: Settings, owner: str, owner_id: str = "2222") -> Settings:
+    """`settings` with databricks-poc onboarded under `owner`, as repository ID 1111."""
+    raw = settings.model_dump(mode="json", by_alias=True, exclude_defaults=True)
+    entry = project_entry(raw, "databricks-poc")
+    offboard(raw, "databricks-poc")
+    entry.update(repository="databricks-poc", repository_id="1111")
+    group = raw["projects"].setdefault(owner, {"owner_id": owner_id, "projects": {}})
+    group["projects"]["databricks-poc"] = entry
+    return Settings.model_validate(raw)
 
 
 def _databricks_with_deployer(tmp_path: Path, settings: Settings) -> Project:
@@ -952,70 +953,35 @@ def _databricks_with_deployer(tmp_path: Path, settings: Settings) -> Project:
 
 
 def test_databricks_account_tfvars_deployer_comes_from_the_registry(
-    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, settings: Settings
 ) -> None:
-    entry = (
-        'databricks-poc = { repository = "example-org/databricks-poc", '
-        'repository_id = "1111", owner_id = "2222" }'
-    )
-    monkeypatch.setenv("JAWS_INFRA_ROOT", _registry(tmp_path / "infra", entry))
-    project = _databricks_with_deployer(tmp_path, settings)
-    assert _databricks_account_tfvars(project, settings)["deployer"] == {
+    registered = _registered(settings, "example-org")
+    project = _databricks_with_deployer(tmp_path, registered)
+    assert _databricks_account_tfvars(project, registered)["deployer"] == {
         "repository": "example-org/databricks-poc",
         "repository_id": "1111",
         "owner_id": "2222",
     }
 
 
-def test_a_deployer_without_registry_ids_is_refused(
-    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    project = _databricks_with_deployer(tmp_path, settings)
-    no_owner = (
-        'databricks-poc = { repository = "example-org/databricks-poc", repository_id = "1111" }'
-    )
-    monkeypatch.setenv("JAWS_INFRA_ROOT", _registry(tmp_path / "no-owner", no_owner))
-    with pytest.raises(ConfigError, match=r"databricks-poc.*owner_id.*foundation/databricks\.tf"):
-        _databricks_account_tfvars(project, settings)
-    absent = 'other = { repository = "o/other", repository_id = "1", owner_id = "2" }'
-    monkeypatch.setenv("JAWS_INFRA_ROOT", _registry(tmp_path / "absent", absent))
-    with pytest.raises(ConfigError, match=r"databricks-poc.*foundation/databricks\.tf"):
-        _databricks_account_tfvars(project, settings)
-
-
-def test_a_deployer_with_an_empty_or_non_numeric_id_is_refused(
-    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    project = _databricks_with_deployer(tmp_path, settings)
-    for name, ids in {
-        "empty": 'repository_id = "1111", owner_id = ""',
-        "text": 'repository_id = "abc", owner_id = "2222"',
-    }.items():
-        entry = f'databricks-poc = {{ repository = "example-org/databricks-poc", {ids} }}'
-        monkeypatch.setenv("JAWS_INFRA_ROOT", _registry(tmp_path / name, entry))
-        with pytest.raises(ConfigError, match=r"databricks-poc.*foundation/databricks\.tf"):
-            _databricks_account_tfvars(project, settings)
+# A registered project without numeric IDs cannot reach the stack: the loader
+# refuses a repository_id or owner_id that is not digits (tests/test_settings.py).
 
 
 def test_a_deployer_whose_registry_repository_differs_is_refused(
-    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, settings: Settings
 ) -> None:
-    entry = (
-        'databricks-poc = { repository = "someone-else/databricks-poc", '
-        'repository_id = "1111", owner_id = "2222" }'
-    )
-    monkeypatch.setenv("JAWS_INFRA_ROOT", _registry(tmp_path / "infra", entry))
-    project = _databricks_with_deployer(tmp_path, settings)
+    registered = _registered(settings, "someone-else")
+    project = _databricks_with_deployer(tmp_path, registered)
     with pytest.raises(
         ConfigError, match=r"example-org/databricks-poc.*someone-else/databricks-poc"
     ):
-        _databricks_account_tfvars(project, settings)
+        _databricks_account_tfvars(project, registered)
 
 
-def test_without_a_deployer_the_registry_is_not_read(
-    databricks: Project, settings: Settings, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_without_a_deployer_no_registry_ids_are_needed(
+    databricks: Project, settings: Settings
 ) -> None:
-    monkeypatch.setenv("JAWS_INFRA_ROOT", str(tmp_path / "nowhere"))
     assert _databricks_account_tfvars(databricks, settings)["deployer"] is None
 
 

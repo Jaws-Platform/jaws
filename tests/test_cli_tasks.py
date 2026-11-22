@@ -12,6 +12,7 @@ import yaml
 from typer.testing import CliRunner
 
 from jaws import cli, tasks
+from tests.conftest import offboard, project_entry, read_config, write_config
 from tests.test_cli import BOT_PLAN_ROLE, RESEARCH_PLAN_ROLE, _as_role
 
 runner = CliRunner()
@@ -329,17 +330,17 @@ def test_task_terminate_and_sweep_work_on_research(research_fleet: list[str]) ->
 
 
 def _edit_config(workspace: Path, edit: Callable[[dict[str, Any]], None]) -> None:
-    config = yaml.safe_load((workspace / "config.yaml").read_text())
+    config = read_config(workspace)
     edit(config)
-    (workspace / "config.yaml").write_text(yaml.safe_dump(config))
+    write_config(workspace, config)
 
 
 def _remove_the_entry(config: dict[str, Any]) -> None:
-    del config["projects"]["math-prover"]
+    offboard(config, "math-prover")
 
 
 def _narrow_the_types(config: dict[str, Any]) -> None:
-    config["projects"]["math-prover"]["instance_types"] = ["c8a.xlarge"]
+    project_entry(config, "math-prover")["instance_types"] = ["c8a.xlarge"]
 
 
 GUARDRAIL_CHANGES = pytest.mark.parametrize(
@@ -395,7 +396,7 @@ def test_other_commands_still_refuse_a_file_config_no_longer_allows(
     _edit_config(research_workspace, change)
     result = runner.invoke(cli.app, command)
     assert result.exit_code == 2, result.output
-    assert "config.yaml" in result.output
+    assert "config/projects.yaml" in result.output
     assert research_fleet == []
 
 

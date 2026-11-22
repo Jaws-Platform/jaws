@@ -115,7 +115,7 @@ jobs:
     env:
       RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
       TASK_ID: ${{ inputs.task-id || inputs.artifact }}
-      CLI: uv run --no-dev --project .jaws-tool jaws --config .jaws-tool/config.yaml
+      CLI: uv run --no-dev --project .jaws-tool jaws --config .jaws-tool/config
     steps:
       - name: Refuse fork pull requests and other events
         env:
@@ -172,7 +172,7 @@ jobs:
           PROJECT: ${{ inputs.project }}
           PROFILE: ${{ inputs.profile }}
           MAX_HOURS: ${{ inputs.max-hours }}
-          CONFIG: .jaws-tool/config.yaml
+          CONFIG: .jaws-tool/config
         run: |
           resolved=$(uv run --no-dev --project .jaws-tool jaws --config "$CONFIG" config env)
           account=$(sed -n 's/^account_id=//p' <<<"$resolved")
@@ -231,7 +231,7 @@ jobs:
           # exec: on cancel GitHub signals this step's process, which must be the
           # CLI itself (not bash or uv) so its handlers terminate the instance.
           exec .jaws-tool/.venv/bin/jaws \
-            --config .jaws-tool/config.yaml "${options[@]}" \
+            --config .jaws-tool/config "${options[@]}" \
             task run --script "$SCRIPT" --ref "$REF" --out "$OUT" \
             --run-id "$RUN_ID" --task-id "$TASK_ID" "${flags[@]}" -- "${argv[@]}"
       - name: Upload the task's outputs
