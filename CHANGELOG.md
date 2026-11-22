@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.77.1](https://github.com/Jaws-Platform/jaws/compare/v0.77.0...v0.77.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* **owner-access:** tag the stack Project=jaws and Repository=Jaws-Platform/jaws ([#303](https://github.com/Jaws-Platform/jaws/issues/303)) ([e944dc0](https://github.com/Jaws-Platform/jaws/commit/e944dc05925b6542108df073e42ec63f8737df35))
+
 ## [0.77.0](https://github.com/Jaws-Platform/jaws/compare/v0.76.0...v0.77.0) (2026-11-22)
 
 
