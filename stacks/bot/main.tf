@@ -91,7 +91,7 @@ module "network" {
 
 module "records" {
   source  = "Jaws-Platform/jaws-foundation/aws//modules/private-bucket"
-  version = "0.1.3"
+  version = "0.2.0"
   count   = var.records_enabled ? 1 : 0
 
   name = "${local.name}-records"
@@ -142,7 +142,7 @@ module "bot" {
 # back by `task run`. Expired after task_results_days.
 module "task_results" {
   source  = "Jaws-Platform/jaws-foundation/aws//modules/private-bucket"
-  version = "0.1.3"
+  version = "0.2.0"
   count   = var.task_runner_enabled ? 1 : 0
 
   name                           = "${local.name}-tasks"

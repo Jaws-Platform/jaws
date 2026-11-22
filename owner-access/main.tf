@@ -42,7 +42,7 @@ data "aws_organizations_organization" "this" {
 
 module "owner_admin" {
   source  = "Jaws-Platform/jaws-foundation/aws//modules/identity-center-access"
-  version = "0.1.3"
+  version = "0.2.0"
 
   instance_arn      = one(data.aws_ssoadmin_instances.this.arns)
   identity_store_id = one(data.aws_ssoadmin_instances.this.identity_store_ids)
