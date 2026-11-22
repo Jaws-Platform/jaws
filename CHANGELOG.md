@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.0](https://github.com/Jaws-Platform/jaws/compare/v0.75.0...v0.76.0) (2026-11-22)
+
+
+### Features
+
+* **tags:** derive Organization from the project's GitHub owner and stamp ManagedBy JAWS ([#297](https://github.com/Jaws-Platform/jaws/issues/297)) ([f430216](https://github.com/Jaws-Platform/jaws/commit/f430216e2e055c1daf4637563bf8506c6599a503))
+
 ## [0.75.0](https://github.com/Jaws-Platform/jaws/compare/v0.74.4...v0.75.0) (2026-11-22)
 
 
