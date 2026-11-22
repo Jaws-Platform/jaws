@@ -107,6 +107,7 @@ Series: [00-roadmap](2026-11-21-monitoring-00-roadmap.md). Style reference: [pro
 | `disk_full_days` | `node_filesystem_avail_bytes{V} / -(deriv(node_filesystem_avail_bytes{V}[24h]) < 0) / 86400` |
 | `inodes` | `100 * (1 - node_filesystem_files_free{V} / node_filesystem_files{V})` |
 | `prometheus_size` | `100 * (prometheus_tsdb_storage_blocks_bytes + prometheus_tsdb_wal_storage_size_bytes + prometheus_tsdb_head_chunks_storage_size_bytes) / prometheus_tsdb_retention_limit_bytes` |
+| `prometheus_history_days` | `(time() - prometheus_tsdb_lowest_timestamp_seconds) / 86400` |
 | `up` | `up` |
 | `restarts` | `changes(container_start_time_seconds{name=~".+"}[15m])` |
 | `tls_days` | `(probe_ssl_earliest_cert_expiry - time()) / 86400` |
@@ -126,12 +127,14 @@ Panel-only queries are written in the panel table.
 | `disk_percent` | 70 | 90 | higher |
 | `disk_full_days` | 7 | 2 | lower |
 | `inodes_percent` | 70 | 90 | higher |
-| `prometheus_size_percent` | 85 | — | higher |
+| `prometheus_size_percent` | 85 | — | higher (means "at the cap": panel 35's line and the history rule's guard) |
+| `prometheus_history_days` | 90 | — | lower |
 | `container_restarts` | 1 | 3 | higher (whole numbers ≥ 1) |
 | `tls_days` | 14 | 3 | lower |
 | `os_release_update_days` | 7 | — | higher |
 
 - OOM kills, a target down, and Grafana rule-evaluation failures fire on any occurrence. They are not inputs.
+- **The Prometheus cap (owner's decision, 2026-11-22):** warn only when the cap is costing real history. Spec 6.8's "Prometheus size vs its cap, 85 %" would fire for good once the cap is reached, because Prometheus then stays just under it and trims the oldest data. So the rule fires only while Prometheus is above `prometheus_size_percent` of its cap *and* keeps fewer than `prometheus_history_days` days.
 - Every attribute is `optional(object(...), <default>)` in an object variable with `default = {}`, so plan 06 can add its own attributes without breaking callers.
 
 **Slack**
@@ -358,9 +361,10 @@ git add -A modules/monitoring-node && git commit -m "test(monitoring-node): load
 | 32 | Disk | timeseries | Disk used | `q.disk` (`{{mountpoint}}`) | percent | L disk |
 | 33 | Disk | timeseries | Days until full | `q.disk_full_days` (`{{mountpoint}}`) | d | L disk_full_days |
 | 34 | Disk | timeseries | Inodes used | `q.inodes` (`{{mountpoint}}`) | percent | L inodes |
-| 35 | Disk | timeseries | Prometheus size vs its cap | `q.prometheus_size` | percent | L prometheus_size (warning only) |
+| 35 | Disk | timeseries | Prometheus size vs its cap | `q.prometheus_size` | percent | one dashed yellow line, legend `at the cap (85%)` |
 | 36 | Disk | timeseries | Postgres size | `pg_database_size_bytes` (`{{datname}}`) | bytes | |
 | 37 | Disk | timeseries | Disk I/O | `sum(rate(node_disk_read_bytes_total[5m]))` (`read`), `sum(rate(node_disk_written_bytes_total[5m]))` (`written`) | Bps | |
+| 38 | Disk | timeseries | History kept | `q.prometheus_history_days` (`days kept`) | d | L prometheus_history_days (warning only) |
 | 40, 41 | Services | row, text | | | | |
 | 42 | Services | timeseries | Targets up | `q.up` (`{{job}}`) | short | critical line at 1 |
 | 43 | Services | timeseries | Container restarts (15 min) | `q.restarts` (`{{name}}`) | short | L container_restarts |
@@ -459,7 +463,7 @@ git add -A modules/monitoring-node && git commit -m "feat(monitoring-node): add 
 | `disk` | Disk used | `q.disk` | gt | disk.w | disk.c | 5m | 32 | |
 | `disk-full` | Disk full forecast | `q.disk_full_days` | lt | days.w | days.c | 30m | 33 | |
 | `inodes` | Inodes used | `q.inodes` | gt | inodes.w | inodes.c | 5m | 34 | |
-| `prometheus-size` | Prometheus size vs its cap | `q.prometheus_size` | gt | size.w | — | 15m | 35 | |
+| `prometheus-history` | Prometheus cap cutting history | `q.prometheus_history_days`, guarded | lt | history.w | — | 15m | 38 | |
 | `target-down` | Scrape target down | `q.up` | lt | — | 0.5 | 2m | 42 | |
 | `container-restarts` | Container restarts | `q.restarts` | gt | restarts.w − 0.5 | restarts.c − 0.5 | 2m | 43 | |
 | `tls-expiry` | TLS certificate expiry | `q.tls_days` | lt | tls.w | tls.c | 2m | 45 | domain |
@@ -467,7 +471,7 @@ git add -A modules/monitoring-node && git commit -m "feat(monitoring-node): add 
 | `os-release` | Newer AL2023 release available | `q.os_update_days` | gt | os.w | — | 2m | 52 | |
 
 - **Summaries** state the fact, the number and the window: for example `CPU averaged above 85 % over 10 minutes.` and `Scrape target is down: Prometheus can't reach it.`
-- **`prometheus-size`** also says what to do: `raise prometheus_retention.size_gb (and data_volume_gb), or accept that the oldest metrics are dropped`. Once the cap is reached the rule keeps firing. That is the spec's choice, so the owner decides, and the summary says how.
+- **`prometheus-history` is the one guarded rule.** Its A expression is `<q.prometheus_history_days> and on() (<q.prometheus_size> > <prometheus_size_percent>)`. It returns nothing, and so stays OK, until Prometheus is at its cap. Its summary says what to do: `Prometheus is at its size cap and keeps only N days of metrics. Raise prometheus_retention.size_gb (and data_volume_gb) to keep more.`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -476,7 +480,7 @@ In `tests/grafana.tftest.hcl`. Two helpers: `local` lookups through `jsondecode(
 - **`every_rule_mirrors_its_panel`,** run at the defaults and again with `cpu_percent = {50, 80}`, `disk_full_days = {10, 3}` and `container_restarts = {2, 5}`. For every rendered rule:
   - its `__dashboardUid__` is `monitoring-host`;
   - the panel `__panelId__` exists;
-  - for a Prometheus rule, the panel has a target whose `expr` equals the rule's A `expr`;
+  - for a Prometheus rule, the panel has a target whose `expr` equals the rule's A `expr`, minus any ` and on() (…)` guard;
   - the panel has a `vector(<line>)` target for the rule's severity. `<line>` is the threshold parameter, plus 0.5 for `container-restarts`, `oom-kill`, `target-down` (whose line is 1) and `rule-eval-failures`.
 - **`rules_pair_and_carry_area_and_severity`:**
   - every uid is `host-<key>-<severity>`;
@@ -484,6 +488,7 @@ In `tests/grafana.tftest.hcl`. Two helpers: `local` lookups through `jsondecode(
   - `labels == {area = "host", severity = <severity>}`;
   - `condition == "C"`.
 - **`count_rules_fire_on_the_whole_number`:** at the defaults, `host-container-restarts-warning` has parameter `0.5` and `-critical` has `2.5`.
+- **`the_history_rule_waits_for_the_cap`:** at the defaults, `host-prometheus-history-warning` is `lt 90`, and its expr ends with `and on() (<q.prometheus_size> > 85)`. With `prometheus_size_percent = {warning = 95}` and `prometheus_history_days = {warning = 30}`, it is `lt 30` and its guard says `> 95`.
 - **`credit_rules_use_the_types_maximum`:**
   - for `t9g.medium`, `host-cpu-credits-warning` has `lt 144` and `-critical` has `lt 28.8`, with `noDataState == "NoData"`, `execErrState == "Alerting"`, and a reduce step B;
   - for `m7g.medium`, neither is rendered, and both are in `deleteRules`.
@@ -680,6 +685,6 @@ With the owner's permission:
 On the docs branch:
 - tick this plan;
 - mark 05 released in the roadmap;
-- add an "As built in v0.4.0" note to spec 6.7 and 6.8: JSON alerting files, the `deleteRules` catalogue, `disableDeletion: false`, absolute credit thresholds, `for ≥ 2m`, and PSI checked at first run.
+- add an "As built in v0.4.0" note to spec 6.7 and 6.8: JSON alerting files, the `deleteRules` catalogue, `disableDeletion: false`, absolute credit thresholds, `for ≥ 2m`, the Prometheus history rule (the owner's decision), and PSI checked at first run.
 
 Then delete the plan's workspace, and update the memory note.
