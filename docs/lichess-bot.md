@@ -405,7 +405,8 @@ running, and the image repository are billed as before; the schedules cost
 nothing at this volume.
 
 **Each start gets a new public IP.** The instance has no ingress, so nothing
-depends on it.
+depends on it, and the stack has no output of it, so the daily change shows
+in no plan. `jaws bot status` reads the current IP from EC2.
 
 ## Applying and replacing
 
@@ -429,6 +430,14 @@ instance** and ends the game in progress. That includes a library bump that
 changes the on-instance scripts, such as library 0.22.0, which added the
 drain to every bot instance whether or not it has a schedule. Read the plan comment and run the apply
 while the bot is idle. Games already finished are shipped at shutdown.
+
+Being stopped does **not** replace it. A stopped instance has no public IP,
+and the AWS provider reads `associate_public_ip_address` back as `false` from
+that, which would force a replacement on every plan outside the running hours.
+Until lichess-bot library 0.1.3, every plan of a scheduled bot between its
+stop and its next start proposed one, and a Bot apply then would have run it.
+The library now ignores that read-back, so a replacement in a bot plan always
+comes from one of the changes above.
 
 **The image is pinned by name.** `bot.amis` in `config.yaml` holds one
 Amazon Linux 2023 image per architecture, by its Amazon image name, such as

@@ -8,11 +8,6 @@ output "instance_id" {
   value       = try(module.bot[0].instance_id, null)
 }
 
-output "public_ip" {
-  description = "The bot's public IPv4 address (egress only), or null without a bot."
-  value       = try(module.bot[0].public_ip, null)
-}
-
 output "log_group_name" {
   description = "CloudWatch log group of the bot container, or null without a bot."
   value       = try(module.bot[0].log_group_name, null)
