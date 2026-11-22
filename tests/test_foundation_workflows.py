@@ -37,6 +37,12 @@ def _uses(action: str) -> Any:
     return lambda s: str(s.get("uses", "")).startswith(action)
 
 
+def _foundation(step: dict[str, Any]) -> bool:
+    """A step in foundation/, the jobs' default directory (not monitoring/'s)."""
+    directory = (step.get("with") or {}).get("working-directory", step.get("working-directory"))
+    return directory in (None, "foundation")
+
+
 @pytest.mark.parametrize("workflow", ["ci.yml", "release-please.yml"])
 def test_the_account_comes_from_the_tool(workflow: str) -> None:
     job = _jobs(workflow)["account"]
@@ -46,7 +52,7 @@ def test_the_account_comes_from_the_tool(workflow: str) -> None:
     # Two commands, so that a failing `jaws` fails the step instead of writing
     # nothing (a command substitution inside `echo` hides its exit code).
     assert step["run"].splitlines() == [
-        "env=$(uv run jaws config env)",
+        "env=$(uv run jaws config env --monitoring)",
         'echo "$env" >> "$GITHUB_OUTPUT"',
     ]
     assert job["permissions"] == {"contents": "read"}
@@ -58,15 +64,20 @@ def test_the_account_comes_from_the_tool(workflow: str) -> None:
         ("ci.yml", "terraform-plan", "infra-ci-plan"),
         ("release-please.yml", "apply", "infra-ci-apply"),
         ("release-please.yml", "image", "infra-ci-apply"),
+        ("ci.yml", "monitoring-plan", "monitoring-ci-plan"),
+        ("release-please.yml", "apply", "monitoring-ci-apply"),
     ],
 )
 def test_each_job_runs_as_the_accounts_role(workflow: str, job_name: str, role: str) -> None:
     job = _jobs(workflow)[job_name]
     assert "account" in job["needs"] and "strategy" not in job
-    credentials = _step(job, _uses("aws-actions/configure-aws-credentials"))
-    assert credentials["with"]["role-to-assume"] == (
-        f"arn:aws:iam::{ACCOUNT_ID}:role/{NAME_ROOT}-" + role
-    )
+    # The release apply assumes the foundation's role, then the monitoring stack's.
+    roles = [
+        s["with"]["role-to-assume"]
+        for s in job["steps"]
+        if _uses("aws-actions/configure-aws-credentials")(s)
+    ]
+    assert f"arn:aws:iam::{ACCOUNT_ID}:role/{NAME_ROOT}-" + role in roles
 
 
 @pytest.mark.parametrize(
@@ -74,7 +85,7 @@ def test_each_job_runs_as_the_accounts_role(workflow: str, job_name: str, role: 
 )
 def test_the_foundation_uses_the_accounts_state(workflow: str, job_name: str) -> None:
     job = _jobs(workflow)[job_name]
-    init = _step(job, _uses("./.github/actions/terraform-init"))
+    init = _step(job, lambda s: _uses("./.github/actions/terraform-init")(s) and _foundation(s))
     assert init["with"]["args"] == "-backend-config=backend/prod.hcl"
     for step in job["steps"]:
         assert "-var" not in str(step.get("run", "")), "the foundation takes no account variable"
@@ -82,7 +93,7 @@ def test_the_foundation_uses_the_accounts_state(workflow: str, job_name: str) ->
 
 def test_the_release_applies_the_plan_it_made() -> None:
     job = _jobs("release-please.yml")["apply"]
-    apply = _step(job, lambda s: "terraform apply" in str(s.get("run", "")))
+    apply = _step(job, lambda s: "terraform apply" in str(s.get("run", "")) and _foundation(s))
     assert "databricks-credentials.sh ../config" in apply["run"]
     assert apply["run"].rstrip().endswith("tfplan")
 

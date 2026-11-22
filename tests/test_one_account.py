@@ -109,6 +109,20 @@ def test_config_env_says_whether_databricks_is_ready(
     assert result.stdout.splitlines()[-1] == f"databricks={state}"
 
 
+@pytest.mark.parametrize("configured", [True, False])
+def test_config_env_says_whether_monitoring_is_configured(tmp_path: Path, configured: bool) -> None:
+    """The monitoring stack's plan and apply are gated on its section: without it
+    the foundation creates no monitoring roles to assume."""
+    raw = repo_config()
+    if not configured:
+        raw.pop("monitoring")
+    path = _write(tmp_path, raw)
+    result = runner.invoke(cli.app, ["--config", str(path), "config", "env", "--monitoring"])
+    assert result.exit_code == 0, result.output
+    state = "configured" if configured else "absent"
+    assert result.stdout.splitlines()[-1] == f"monitoring={state}"
+
+
 def test_there_is_no_account_option() -> None:
     result = runner.invoke(cli.app, ["--account", "production", "config", "env"])
     assert result.exit_code != 0

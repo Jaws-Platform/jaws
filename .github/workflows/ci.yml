@@ -228,6 +228,77 @@ jobs:
         working-directory: .
         run: shellcheck scripts/data-access-sweep.sh
 
+  monitoring-stack:
+    # The monitoring stack (monitoring/): validated, linted and tested against
+    # mock providers here; planned by monitoring-plan once its plan role exists,
+    # and applied only by the Release apply job.
+    name: Monitoring stack validate, tflint, test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: monitoring
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "~1.14"
+      - name: terraform init (no backend)
+        uses: ./.github/actions/terraform-init
+        with:
+          args: -backend=false
+          working-directory: monitoring
+      - name: terraform validate
+        run: terraform validate -no-color
+      - name: terraform test (mock providers, no credentials)
+        run: terraform test -no-color
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: latest
+      - name: tflint
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # plugin downloads hit the unauthenticated API limit on shared runners
+        run: |
+          tflint --init --config "$GITHUB_WORKSPACE/.tflint.hcl"
+          tflint --config "$GITHUB_WORKSPACE/.tflint.hcl"
+
+  billing-export-stack:
+    # The organization's AWS billing export (billing-export/), the owner's root
+    # in the management account. Validated, linted and tested against a mocked
+    # provider here; never planned or applied by CI, by design: no CI role may
+    # reach the management account or this root's state.
+    name: Billing export validate, tflint, test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: billing-export
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "~1.14"
+      - name: terraform init (no backend)
+        uses: ./.github/actions/terraform-init
+        with:
+          args: -backend=false
+          working-directory: billing-export
+      - name: terraform validate
+        run: terraform validate -no-color
+      - name: terraform test (mock provider, no AWS credentials)
+        run: terraform test -no-color
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: latest
+      - name: tflint
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # plugin downloads hit the unauthenticated API limit on shared runners
+        run: |
+          tflint --init --config "$GITHUB_WORKSPACE/.tflint.hcl"
+          tflint --config "$GITHUB_WORKSPACE/.tflint.hcl"
+
   bot-stack:
     name: Bot stack validate, tflint
     runs-on: ubuntu-latest
@@ -395,6 +466,8 @@ jobs:
     outputs:
       account_id: ${{ steps.env.outputs.account_id }}
       name_root: ${{ steps.env.outputs.name_root }}
+      # configured or absent: config/monitoring.yaml's monitoring section (monitoring-plan's gate).
+      monitoring: ${{ steps.env.outputs.monitoring }}
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
@@ -404,7 +477,7 @@ jobs:
       - name: Read the primary account from the tool configuration
         id: env
         run: |
-          env=$(uv run jaws config env)
+          env=$(uv run jaws config env --monitoring)
           echo "$env" >> "$GITHUB_OUTPUT"
 
   terraform-plan:
@@ -480,6 +553,99 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           header: terraform-plan
           path: foundation/plan-comment.md
+
+  monitoring-plan:
+    name: Monitoring plan
+    runs-on: ubuntu-latest
+    # Plans the monitoring stack (monitoring/) with its own plan role, which the
+    # foundation creates with config/monitoring.yaml's monitoring section: the
+    # first release that has the section creates it, then applies the stack
+    # (release-please.yml). Until the role exists the plan is skipped with a
+    # notice instead of failing. Never applied here, and never for forks.
+    needs: [monitoring-stack, account]
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      needs.account.outputs.monitoring == 'configured'
+    permissions:
+      contents: read
+      id-token: write # assume the stack's plan role through GitHub OIDC
+      pull-requests: write # post and update the plan comment
+    defaults:
+      run:
+        working-directory: monitoring
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "~1.14"
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@v6
+        id: assume
+        continue-on-error: true # the role does not exist until the release that creates it
+        with:
+          role-to-assume: arn:aws:iam::${{ needs.account.outputs.account_id }}:role/${{ needs.account.outputs.name_root }}-monitoring-ci-plan
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: gha-monitoring-plan-pr-${{ github.event.pull_request.number }}
+      - name: Skip the plan until the stack's roles exist
+        if: steps.assume.outcome != 'success'
+        env:
+          ROLE: arn:aws:iam::${{ needs.account.outputs.account_id }}:role/${{ needs.account.outputs.name_root }}-monitoring-ci-plan
+        run: |
+          echo "::notice::could not assume $ROLE; the monitoring plan runs after the release that creates the stack's roles"
+          {
+            echo "## Monitoring plan skipped"
+            echo
+            echo "$ROLE cannot be assumed yet. The foundation apply of the release creates it, and the same release then applies the monitoring stack."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: terraform init
+        if: steps.assume.outcome == 'success'
+        uses: ./.github/actions/terraform-init
+        with:
+          args: -backend-config=backend/prod.hcl
+          working-directory: monitoring
+      - name: terraform plan
+        id: plan
+        if: steps.assume.outcome == 'success'
+        run: |
+          set +e
+          terraform plan -no-color -lock-timeout=60s -out=tfplan -detailed-exitcode > plan.log 2>&1
+          code=$?
+          set -e
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          cat plan.log
+          # 0 = no changes, 2 = changes, anything else = error
+          [ "$code" -eq 0 ] || [ "$code" -eq 2 ]
+      - uses: astral-sh/setup-uv@v7
+        if: always() && steps.assume.outcome == 'success' && steps.plan.outcome != 'skipped'
+        with:
+          enable-cache: true
+      - name: Build plan comment (the infra CLI renders it, so it matches the other plans)
+        if: always() && steps.assume.outcome == 'success' && steps.plan.outcome != 'skipped'
+        working-directory: .
+        env:
+          JAWS_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          uv sync --locked
+          uv run jaws report plan-comment \
+            --exit-code "${{ steps.plan.outputs.exitcode }}" \
+            --plan monitoring/plan.log \
+            --subject "jaws/monitoring" \
+            --out monitoring/plan-comment.md
+      - name: Mint a comment token for the Jaws app
+        id: app-token
+        if: always() && steps.assume.outcome == 'success' && steps.plan.outcome != 'skipped' && vars.JAWS_APP_CLIENT_ID != ''
+        continue-on-error: true # a misconfigured app falls back to github-actions
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.JAWS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.JAWS_APP_PRIVATE_KEY }}
+      - name: Post plan comment (updated on each push)
+        if: always() && steps.assume.outcome == 'success' && steps.plan.outcome != 'skipped'
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          header: monitoring-plan
+          path: monitoring/plan-comment.md
 
   # The bot and research projects onboarded in config/projects.yaml: the
   # matrix of bot-plan, so onboarding a project needs no change here.

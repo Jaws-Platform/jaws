@@ -972,6 +972,14 @@ def config_env(
             "workflow's gate).",
         ),
     ] = False,
+    monitoring: Annotated[
+        bool,
+        typer.Option(
+            "--monitoring",
+            help="Also print `monitoring=configured|absent` (the monitoring stack's plan and "
+            "apply gate: without config/monitoring.yaml's section it has no roles).",
+        ),
+    ] = False,
 ) -> None:
     """Print the account's values as `key=value` lines, for a workflow to append
     to GITHUB_OUTPUT: every workflow builds its role ARNs, state bucket and image
@@ -989,6 +997,8 @@ def config_env(
             lines.append(("databricks", "disabled"))
         else:
             lines.append(("databricks", "ready" if dbx.shared_host_url else "awaiting-host"))
+    if monitoring:
+        lines.append(("monitoring", "absent" if settings.monitoring is None else "configured"))
     for key, value in lines:
         print(f"{key}={value}")
 
