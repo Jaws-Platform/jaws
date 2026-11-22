@@ -35,7 +35,7 @@ run "plans_one_bucket_and_nothing_else" {
   }
 
   assert {
-    condition     = var.tags["Organization"] == "jaws" && var.tags["ManagedBy"] == "jaws" && var.tags["Project"] == "prog-strength-archive" && var.tags["Repository"] == "Prog-Strength/prog-strength-archive"
+    condition     = var.tags["Organization"] == "Prog-Strength" && var.tags["ManagedBy"] == "JAWS" && var.tags["Project"] == "prog-strength-archive" && var.tags["Repository"] == "Prog-Strength/prog-strength-archive"
     error_message = "the stack is stamped with production's organization and the archive's repository"
   }
 }
