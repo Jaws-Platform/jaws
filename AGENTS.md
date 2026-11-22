@@ -5,14 +5,13 @@ This repository is Terraform for the jaws foundation stack (state bucket, GitHub
 ## Rules
 
 - **Never push to `main`.** Every change goes through a pull request on a branch. There are no exceptions after the initial scaffold.
-- **Open PRs with a typed template** and fill in every section:
+- **Commits are a single line**: `type(scope): subject`, at most 100 characters, with a lowercase imperative subject and no trailing period. Types: `feat`, `fix`, `perf`, `revert`, `docs`, `refactor`, `test`, `build`, `ci`, `style`, `chore`; never invent another. Scope: exactly one of `SCOPES` in `commitlint.config.mjs` (the Scopes table in CONTRIBUTING.md); never invent one, and if none fits, ask. The only thing allowed after the header is a blank line and `Co-authored-by: Name <email>` trailers. No body text. Put details in the PR description.
+- **PR titles are valid commit headers**, scope included; squash merges use the title as the commit message.
+- **PR bodies use the template's sections, in order, every one filled in**; write "n/a" rather than deleting one:
 
   ```sh
-  gh pr create --template <feat|fix|docs|chore|refactor|ci>.md
+  gh pr create --title "type(scope): subject" --body-file <file>
   ```
-
-  The PR title MUST be a valid Conventional Commit; squash merges use it as the commit message.
-- **Commits are a single line**: `type(scope)?: subject`, at most 100 characters. Allowed types: `feat`, `fix`, `docs`, `chore`, `refactor`, `ci`, `build`, `perf`, `style`, `test`, `revert`. The only thing allowed after the header is a blank line and `Co-authored-by: Name <email>` trailers. No body text. Put details in the PR description.
 - **Merges are squash or rebase only.** Never create merge commits.
 - **Do not modify or delete existing AWS resources** that this stack does not own.
 - **Never run `terraform apply` yourself.** Applies happen only through the Release Please `apply` job. Local plans are fine with read-only credentials. The same goes for the infra CLI: never run `jaws apply`, `publish`, `release`, `destroy` or `bot push`, `bot deploy`, `bot reconcile` (without `--dry-run`) or `bot secrets set` against real resources, and never run `task run`, `task terminate` or `task sweep` against AWS (`task list` is read-only and fine); its role check refuses non-CI credentials unless `JAWS_SKIP_ROLE_CHECK=1` is set, and you do not set it.
@@ -31,7 +30,7 @@ terraform fmt -recursive
 (cd stacks/databricks-account && terraform init -backend=false && terraform validate)
 (cd stacks/databricks-workspace && terraform init -backend=false && terraform validate)
 tflint --init && tflint --recursive
-npm ci && npm test
+npm ci && npm test && npm run test:commitlint
 uv sync && uv run ruff format --check && uv run ruff check && uv run mypy && uv run pytest
 scripts/test-stack-plans.sh   # plans stacks/bot and the databricks stacks against mock providers; touches no AWS
 ```

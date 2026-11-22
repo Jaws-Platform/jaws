@@ -6,7 +6,7 @@ This repo follows the owner's repository conventions. The short version: one-lin
 
 1. Branch from `main`.
 2. Make the change. Keep Terraform formatted (`terraform fmt`) and run the local checks below.
-3. Open a PR with a typed template (see below). The PR title must be a valid Conventional Commit.
+3. Open a PR from the template (see below) and fill in every section. The PR title must be a valid Conventional Commit.
 4. Review the `Terraform plan` comment CI posts on the PR. It is updated on every push; its alert says whether merging changes, destroys or leaves AWS alone, and the resource table under it lists each action.
 5. Merge with **squash** or **rebase**. Merge commits are disabled and history stays linear.
 
@@ -14,46 +14,50 @@ Direct pushes to `main` are not allowed. The only exception was the initial scaf
 
 ## Commit messages: one line, nothing else
 
-Every commit message is a single line:
+Each commit message is a **single-line** Conventional Commit with a type and a scope:
 
 ```
-type(scope)?: subject
+type(scope): subject
 ```
 
-- At most 100 characters.
-- `type` is one of `feat`, `fix`, `docs`, `chore`, `refactor`, `ci`, `build`, `perf`, `style`, `test`, `revert`.
-- Breaking changes are marked with `!`, for example `feat!: move state key`.
-- The only content allowed after the header is a blank line followed by `Co-authored-by: Name <email>` trailers.
-- No body text. Details belong in the PR description.
+- At most 100 characters, with an imperative, lowercase subject and no trailing period.
+- Types: `feat`, `fix`, `perf`, `revert`, `docs`, `refactor`, `test`, `build`, `ci`, `style`, `chore`: the same set in every repository.
+- The scope is required: exactly one of the scopes below. A change that spans two is two pull requests, or takes the scope it is mostly about.
+- Breaking changes are marked with `!`, for example `feat(config)!: rename a project field`.
+- The **only** content allowed after the header is a blank line followed by `Co-authored-by: Name <email>` trailers, in any letter case. No body text. Details belong in the pull request description.
 
-commitlint enforces this with `@commitlint/config-conventional` plus a local rule, `only-coauthor-trailers` (`tools/commitlint/only-coauthor-trailers.mjs`), which fails on any line after the header that is not blank or a `Co-authored-by` trailer. CI runs it over every commit in the PR range, so a rebase merge never lands a non-conforming commit on `main`.
+commitlint enforces this: `@commitlint/config-conventional` plus three local rules in `tools/commitlint/`. `only-coauthor-trailers` fails on any line after the header that is not blank or a `Co-authored-by` trailer, `single-scope` fails on a list such as `feat(a,b)`, and `subject-lowercase` requires a lowercase subject except in Dependabot's fixed `chore(deps): Bump ...`. The fixtures in `tests/commitlint/` show accepted and rejected messages; CI checks them, and lints the pull request title through the same config. The standard behind it is the [repository conventions](https://github.com/jwallace145/repository-template/blob/main/repository-conventions.md).
+
+### Scopes
+
+Every commit names exactly one of this repository's scopes. They are `SCOPES` in `commitlint.config.mjs`; this table mirrors it, in the same order, and `npm run test:commitlint` fails if they drift. Adding, renaming or removing a scope goes through a pull request like any other change.
+
+| Scope | Covers |
+| --- | --- |
+| `cli` | The `jaws` CLI in `src/jaws/`, its tests and its Docker image |
+| `config` | `config/`: the accounts, the project registry and the central guardrails |
+| `foundation` | The foundation stack in `foundation/` |
+| `sites` | The site stack and the site workflows |
+| `bots` | The bot stack, bot and research projects, and remote tasks |
+| `databricks` | The Databricks account and workspace stacks |
+| `access` | `owner-access/` and `data-access/` |
+| `datasets` | `datasets/`, the onboarded datasets |
+| `workflows` | The reusable workflows and composite actions in `.github/` |
+| `repo` | README, CONTRIBUTING, AGENTS, commitlint, the PR and issue templates, and repository tooling |
+| `deps` | Dependency updates, mostly Dependabot's |
+| `release` | Release Please's release pull requests and its config |
 
 ### Why the PR title matters
 
-Squash merges use the PR title as the commit message on `main`, and Release Please reads those messages to decide the next version and to write `CHANGELOG.md`. A `feat` bumps the minor version, a `fix` bumps the patch, and `!` bumps the major. CI lints the title with the same rules.
+Squash merges use the PR title as the commit message on `main`, and Release Please reads those messages to decide the next version and to write `CHANGELOG.md`. CI lints the title through the same commitlint config as a commit, scope included. Release Please's own pull requests are titled `chore(release): release X.Y.Z`, and Dependabot's `chore(deps): Bump ...`; squash merge Dependabot's, which lands only the title on `main`.
 
-### Dependabot PRs
+## Pull request template
 
-Dependabot cannot write one-line, lowercase commit messages, so its PRs skip the commit message check and the title check. Merge them with **squash** and a lowercase Conventional Commit subject, for example:
+One template, `.github/pull_request_template.md`: Summary, Why, Changes, Verification and a checklist. `gh pr create` and the compare page both start from it. Fill in every section; write "n/a" rather than deleting one. For a fix, Why names the bug, its root cause and how to reproduce it.
 
-```sh
-gh pr merge <n> --squash --subject "ci: bump actions/checkout from 6 to 7"
-```
+## Issues
 
-The CI plan comment still has to show no changes.
-
-Pick the type with the release in mind. Release Please only cuts a release when a commit of a type that appears in `CHANGELOG.md` lands on `main`: `feat`, `fix`, `perf`, `revert` or `docs`. `chore`, `ci`, `build`, `refactor`, `style` and `test` are hidden from the changelog and never release on their own, and a `Release-As` footer cannot help because squash commits carry only the PR title. A bump that should ship, such as a Terraform provider in `foundation/` or anything that goes into the CLI image, is a `fix(deps):`. Bumps that only touch tooling stay `chore` or `ci` and ride along with the next release. If hidden-type bumps have piled up and you want them applied now, merge a PR of a visible type (a `docs:` change is enough) and Release Please will open the release PR for them.
-
-## Pull request templates
-
-Templates live in `.github/PULL_REQUEST_TEMPLATE/`, one per type: `feat.md`, `fix.md`, `docs.md`, `chore.md`, `refactor.md`, `ci.md`. Pick one with
-
-```sh
-gh pr create --template fix.md
-```
-
-or by appending `?template=fix.md` to the compare URL. Every template has Summary, Motivation and context, What changed, How it was verified, and a Checklist. `fix.md` adds Bug, Root cause, and Reproduction. Fill in every section.
-
+Open issues from the forms: **Bug**, **Feature** or **Task**. Blank issues are off.
 ## Local setup
 
 Requirements: Terraform `>= 1.11`, [tflint](https://github.com/terraform-linters/tflint), Node.js `>= 22`, and [pre-commit](https://pre-commit.com).
