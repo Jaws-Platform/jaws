@@ -21,7 +21,13 @@
 locals {
   name            = "${var.tags["Organization"]}-${var.project}"
   network_enabled = var.bot_enabled || var.task_runner_enabled
+
+  # The project's CI roles, which the foundation creates under this name
+  # (foundation/bots.tf), as the workflows build their ARNs.
+  ci_role_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name}-ci"
 }
+
+data "aws_caller_identity" "current" {}
 
 # The pinned image, resolved from its readable name. Names are unique among
 # Amazon-owned images; deprecated images are included so a pin keeps resolving
@@ -89,6 +95,15 @@ module "records" {
   count   = var.records_enabled ? 1 : 0
 
   name = "${local.name}-records"
+
+  # Only the bot writes its records, under the records prefix, and never reads
+  # them back; only the admins read them or change the bucket. The plan role
+  # lists it: its refresh calls HeadBucket, which S3 authorizes as s3:ListBucket.
+  access = {
+    admin_principal_arns = distinct(concat(var.bucket_admin_principal_arns, ["${local.ci_role_arn}-apply"]))
+    writers              = var.bot_enabled && var.records_prefix != null ? { (var.records_prefix) = [module.bot[0].role_arn] } : {}
+    listers              = ["${local.ci_role_arn}-plan"]
+  }
 }
 
 module "bot" {
