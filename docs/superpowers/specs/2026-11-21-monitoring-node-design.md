@@ -674,6 +674,21 @@ Rules that depend on data from AWS (credits, status) use
 AL2023 kernel exposes them. Otherwise the panel is hidden and there is no
 rule.
 
+**As built in v0.4.0 (plan 05):**
+
+- **Where it lives:** a provider-free module, `monitoring-node/grafana/`, renders every Grafana file. Alerting files are JSON.
+- **Removal:** data sources `prune`, and the dashboard provider has `disableDeletion: false`, so removed items leave Grafana. An empty `plugins/` file stops the error Grafana logged at every start.
+- **Rules:**
+  - 14 host rules (23 counting warning and critical separately). Rules that stop applying are deleted through `deleteRules`.
+  - Every rule waits at least `2m`; rule-evaluation failures wait `12m`, longer than their 10-minute window.
+  - Credit thresholds are absolute: percent × the type's maximum. T9g is taken as equal to T4g until plan 09.
+  - The AMI-bump reminder repeats daily.
+- **The Prometheus cap (the owner's decision, 2026-11-22):** it warns only while Prometheus is above 85 % of its cap *and* keeps fewer than 90 days (`prometheus_history_days`), instead of "size vs cap 85 %". `size_gb` must be at least 1.
+- **Slack:** `slack = { channels, routes }`, and `routes.host` is required. Without Slack, the policy tree is reset.
+- **The validator:** it also rejects every rule shape Grafana 13.3 exits on.
+- **Testing:** a smoke test runs the pinned Grafana on the rendered files, in CI too.
+- **Checked at plan 09's first run:** pressure (PSI) metrics (12.8), and that the container-restart count ignores reconcile recreations.
+
 ### 6.9 The watchdog (outside the node)
 
 Without this, a dead node would never report its own death. It is on

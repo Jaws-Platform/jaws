@@ -208,7 +208,7 @@ Panel-only queries are written in the panel table.
 - **Validated in `$MOD/variables.tf`:** `extra_dashboards` keys match `^[A-Za-z0-9 _-]+/[a-z0-9-]+\.json$`, and `extra_alert_rules` keys match `^[a-z0-9-]+$`.
 - **CI:** check how the `discover` job in `.github/workflows/ci.yml` lists modules. If it picks up `grafana/`, that directory must pass `scripts/check-module.sh` on its own (it has no README, so terraform-docs is skipped).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/grafana.tftest.hcl` has no providers. Every run sets `module { source = "./grafana" }` and `region = "us-east-1"`, `instance_id = "i-0123456789abcdef0"`, `instance_type = "t9g.medium"`, `domain = null`. The fixture extra dashboard is `{"uid": "extra-smoke", "title": "Extra", "panels": [{"id": 1, "type": "timeseries", "title": "Up", "targets": [{"expr": "up", "refId": "A", "datasource": {"type": "prometheus", "uid": "prometheus"}}]}]}`. The fixture extra rule is one group (`orgId 1`, `name extra`, `folder Extra`, `interval 1m`) with one Prometheus rule, uid `extra-up-critical`, linked to `extra-smoke` panel 1, labels `area: host`, `severity: critical`.
 
@@ -232,21 +232,21 @@ In `tests/monitoring_node.tftest.hcl`:
 - **`the_bundle_carries_grafanas_files`:** every key of `module.grafana.files` is in `local.bundle.files` with the same content, and `grafana/dashboards/.keep` is gone.
 - Point `grafana_uses_postgres_and_provisioned_sources` at the module's files; its assertions are unchanged.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `cd $MOD && terraform init -backend=false >/dev/null && terraform test -filter=tests/grafana.tftest.hcl`
 Expected: FAIL with `Unreadable module directory` for `./grafana`.
 
-- [ ] **Step 3: Implement `$GRAF` and the wiring**
+- [x] **Step 3: Implement `$GRAF` and the wiring**
 
 Move the data sources and the dashboard provider into `$GRAF/main.tf` unchanged, adding only `prune = true`. `disableDeletion` stays `true` until Task 2, which shows why it can't. Build `local.problems` in `validate.tf` from flattened `(file, group, rule)` tuples, and each check as a for-expression that yields problem strings.
 
-- [ ] **Step 4: Run every test**
+- [x] **Step 4: Run every test**
 
 Run: `cd $MOD && terraform fmt -recursive && terraform test`
 Expected: PASS, the 20 earlier runs and the new ones.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A modules/monitoring-node && git commit -m "feat(monitoring-node): render grafana provisioning in its own module and validate every rule" -m "Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -287,23 +287,23 @@ git add -A modules/monitoring-node && git commit -m "feat(monitoring-node): rend
 5. **Phase 2.** Render again with `instance_type = "m7g.medium"`, `domain = "grafana.example.com"`, no extra dashboard, `slack = null`, and an extra rules file that holds only `deleteRules: [{orgId: 1, uid: extra-up-critical}]`. Replace the release, start a new Grafana container on the same volume, and compare again. Removed dashboards, rules and policies must be gone.
 6. A `trap` removes the containers, the volume and the scratch directory, whatever happened.
 
-- [ ] **Step 1: Write the test and run it to see it fail**
+- [x] **Step 1: Write the test and run it to see it fail**
 
 Run: `cd $MOD && bash tests/test-grafana-provisioning.sh`
 Expected: FAIL in phase 2: dashboard `extra-smoke` is still listed, because `disableDeletion: true` keeps a dashboard whose file is gone.
 
 If phase 2 passes with `disableDeletion: true`, the test isn't exercising deletion the way the docs describe. Ledger a ruling, then make the change in Step 2 on the documented semantics anyway.
 
-- [ ] **Step 2: Set `disableDeletion = false` in `$GRAF/main.tf`, and assert it in `tests/grafana.tftest.hcl`, run `dashboards_follow_their_files`**
+- [x] **Step 2: Set `disableDeletion = false` in `$GRAF/main.tf`, and assert it in `tests/grafana.tftest.hcl`, run `dashboards_follow_their_files`**
 
 The run asserts `providers[0].disableDeletion == false`, `allowUiUpdates == false` and `foldersFromFilesStructure == true`.
 
-- [ ] **Step 3: Run the test and the suite**
+- [x] **Step 3: Run the test and the suite**
 
 Run: `cd $MOD && bash tests/test-grafana-provisioning.sh && terraform test`
 Expected: `grafana smoke: OK` for both phases; terraform PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A modules/monitoring-node && git commit -m "test(monitoring-node): load the rendered provisioning into a real grafana" -m "Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -385,7 +385,7 @@ git add -A modules/monitoring-node && git commit -m "test(monitoring-node): load
 - Panel 25 is the spec's "hidden if the kernel lacks PSI": it shows `Not exposed by this kernel` instead. Spec 12.8 is verified at plan 09's first run.
 - Panel 43 counts Docker's own restarts of a container. A reconcile that *recreates* a container starts a new series, so it doesn't count. Plan 09's first run confirms this against a real config change.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 **Where the defaults live.** The defaults live once, in `$MOD`'s `thresholds` variable. `tests/grafana.tftest.hcl` gets a file-level `variables { thresholds = { … } }` block that copies the Global Constraints table, and runs override it with `merge(var.thresholds, { … })`. `tests/monitoring_node.tftest.hcl` gets `the_default_thresholds_are_the_specs`, which asserts every resolved `var.thresholds` value against that table, so the two copies can't drift.
 
@@ -411,21 +411,21 @@ In `tests/monitoring_node.tftest.hcl`:
 - `rejects_lower_is_worse_thresholds_in_the_wrong_order` (`tls_days = {warning = 3, critical = 14}`);
 - `rejects_a_fractional_restart_count`.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `cd $MOD && terraform test -filter=tests/grafana.tftest.hcl`
 Expected: FAIL. `thresholds` isn't declared yet, and `files["grafana/dashboards/Monitoring/host.json"]` doesn't exist.
 
-- [ ] **Step 3: Implement `queries.tf` and `dashboard-host.tf`**
+- [x] **Step 3: Implement `queries.tf` and `dashboard-host.tf`**
 
 Build the panels from typed spec lists, `local.stat_specs`, `local.series_specs`, `local.text_specs` and `local.row_specs`. Each list has one for-expression that produces Grafana panel objects. Concatenate them, and order by id. The dashed-line targets and overrides come from one helper local, keyed by threshold name. Add conditional panels with filtered for-expressions, never a conditional between object shapes.
 
-- [ ] **Step 4: Run the tests, the smoke test and the suite**
+- [x] **Step 4: Run the tests, the smoke test and the suite**
 
 Run: `cd $MOD && terraform test && bash tests/test-grafana-provisioning.sh`
 Expected: PASS; `grafana smoke: OK`, with `monitoring-host` listed in folder `Monitoring` and `promtool` reporting every query valid.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A modules/monitoring-node && git commit -m "feat(monitoring-node): add the host health dashboard" -m "Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -473,7 +473,7 @@ git add -A modules/monitoring-node && git commit -m "feat(monitoring-node): add 
 - **Summaries** state the fact, the number and the window: for example `CPU averaged above 85 % over 10 minutes.` and `Scrape target is down: Prometheus can't reach it.`
 - **`prometheus-history` is the one guarded rule.** Its A expression is `<q.prometheus_history_days> and on() (<q.prometheus_size> > <prometheus_size_percent>)`. It returns nothing, and so stays OK, until Prometheus is at its cap. Its summary says what to do: `Prometheus is at its size cap and keeps only N days of metrics. Raise prometheus_retention.size_gb (and data_volume_gb) to keep more.`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/grafana.tftest.hcl`. Two helpers: `local` lookups through `jsondecode(output files)`, and a for-expression over every rule.
 
@@ -498,16 +498,16 @@ In `tests/grafana.tftest.hcl`. Two helpers: `local` lookups through `jsondecode(
   - the catalogue has 23 uids: 14 keys, 9 of them with both severities.
 - **`every_rule_waits_at_least_two_minutes`:** every `for` ends in `m`, and its number is at least 2.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `cd $MOD && terraform test -filter=tests/grafana.tftest.hcl`
 Expected: FAIL, `Invalid index` on `files["grafana/provisioning/alerting/rules-host.json"]`.
 
-- [ ] **Step 3: Implement `rules-host.tf`**
+- [x] **Step 3: Implement `rules-host.tf`**
 
 Expand each spec into its severities with a for-expression over `[{severity = "warning", value = s.warning}, {severity = "critical", value = s.critical}]`, filtered on non-null values and the spec's feature. Prometheus rules and CloudWatch rules are built by separate for-expressions, because their `data` shapes differ.
 
-- [ ] **Step 4: Run the tests, the smoke test and the suite**
+- [x] **Step 4: Run the tests, the smoke test and the suite**
 
 Run: `cd $MOD && terraform test && bash tests/test-grafana-provisioning.sh`
 Expected: PASS. The smoke test passes both phases:
@@ -515,7 +515,7 @@ Expected: PASS. The smoke test passes both phases:
 - in phase 2, the API lists 21 host rules again, with the two TLS rules in and the two credit rules out, and the extra rule is gone;
 - `promtool` reports every query valid.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A modules/monitoring-node && git commit -m "feat(monitoring-node): add the host alert rules in warning and critical pairs" -m "Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -544,7 +544,7 @@ git add -A modules/monitoring-node && git commit -m "feat(monitoring-node): add 
   - `local.secret_parameter_names` gains `values(local.slack_channels)`;
   - Grafana's `environment` gains `{ for env in keys(local.slack_secrets) : env => "$${${env}:?}" }`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/grafana.tftest.hcl`:
 - **`each_channel_is_a_contact_point_and_each_area_a_route`,** with `slack = { channels = { platform = "/acme/monitoring/slack/platform", costs = "/acme/monitoring/slack/costs" }, routes = { host = "platform", pipeline = "platform", cost = "costs" } }`:
@@ -572,14 +572,14 @@ In `tests/monitoring_node.tftest.hcl` (same `slack`):
   - `rejects_a_bad_channel_name` (`Platform_1`);
   - `rejects_a_relative_parameter`.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `cd $MOD && terraform test`
 Expected: FAIL, `An argument named "slack" is not expected here`.
 
-- [ ] **Step 3: Implement `notifications.tf` and the wiring, and give phase 1 of the smoke test its `slack`**
+- [x] **Step 3: Implement `notifications.tf` and the wiring, and give phase 1 of the smoke test its `slack`**
 
-- [ ] **Step 4: Run the tests, the smoke test and the suite**
+- [x] **Step 4: Run the tests, the smoke test and the suite**
 
 Run: `cd $MOD && terraform test && bash tests/test-grafana-provisioning.sh`
 Expected:
@@ -588,7 +588,7 @@ Expected:
 - in phase 2, the root receiver is no longer a `slack-*` contact point;
 - no provisioning errors are logged.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A modules/monitoring-node && git commit -m "feat(monitoring-node): route alerts to slack channels by area" -m "Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -611,7 +611,7 @@ git add -A modules/monitoring-node && git commit -m "feat(monitoring-node): rout
 
 This was plan 04's deferred minor. The `os-release` rule now depends on it, so it's in scope.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test-release-check.sh` puts fake `dnf` and `rpm` on `PATH` (`rpm` prints `2023.12.20261026`) and runs the script against a scratch directory. Cases:
 1. `dnf` prints `WARNING: A newer release of "Amazon Linux" is available.` and exits 100. Then `os_release.prom` has `monitoring_os_release_update_available 1` and a non-zero `since`.
@@ -620,17 +620,17 @@ This was plan 04's deferred minor. The `os-release` rule now depends on it, so i
 4. `dnf` prints nothing and exits 0. Then `available 0`, `since 0`, and no state file.
 5. Every run leaves `monitoring_os_release_info{release="2023.12.20261026"} 1`.
 
-- [ ] **Step 2: Run it to see it fail**
+- [x] **Step 2: Run it to see it fail**
 
 Run: `cd $MOD && bash tests/test-release-check.sh`
 Expected: FAIL in case 1. Under `pipefail`, the `dnf` exit status 100 makes the `if` false, so the file says `available 0`.
 
-- [ ] **Step 3: Implement, then run it and shellcheck**
+- [x] **Step 3: Implement, then run it and shellcheck**
 
 Run: `cd $MOD && bash tests/test-release-check.sh && shellcheck files/*.sh tests/*.sh`
 Expected: `release check: OK`; shellcheck prints nothing.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A modules/monitoring-node && git commit -m "fix(monitoring-node): report a newer al2023 release whatever dnf exits with" -m "Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -643,7 +643,7 @@ git add -A modules/monitoring-node && git commit -m "fix(monitoring-node): repor
 **Files:**
 - Modify: `$MOD/README.md`, `$MOD/examples/basic/main.tf`, `$REPO/README.md` (only if it describes the module's features)
 
-- [ ] **Step 1: Write the docs**
+- [x] **Step 1: Write the docs**
 
 The README covers:
 - **What the node watches:** the dashboard's rows, and a table of every rule with its default thresholds and `for`.
@@ -658,20 +658,20 @@ The README covers:
 
 The example adds `slack` with the `acme` parameters.
 
-- [ ] **Step 2: Run the whole suite**
+- [x] **Step 2: Run the whole suite**
 
 Run: `cd $REPO && scripts/check.sh`
 Expected: `All checks passed.`, including both `tests/test-*.sh` scripts.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add -A && git commit -m "docs(monitoring-node): document host monitoring, slack routing and the hooks" -m "Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 4: Final whole-branch review and fix pass** (executing-plans)
+- [x] **Step 4: Final whole-branch review and fix pass** (executing-plans)
 
-- [ ] **Step 5: Ask the owner, then publish**
+- [x] **Step 5: Ask the owner, then publish**
 
 With the owner's permission:
 1. push `feat/host-monitoring`;
@@ -680,7 +680,7 @@ With the owner's permission:
 4. merge the `chore(main): release 0.4.0` PR;
 5. confirm `v0.4.0` on the registry.
 
-- [ ] **Step 6: Record it**
+- [x] **Step 6: Record it**
 
 On the docs branch:
 - tick this plan;
