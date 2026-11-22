@@ -1,0 +1,39 @@
+# The monitoring and cost platform (docs/superpowers/specs/2026-11-21-monitoring-node-design.md):
+# the monitoring node the monitoring/ stack runs, the billing bucket the
+# foundation creates, and where alerts go. Platform-owned: no project file can
+# set any of it. Every key but ami is optional; leave a part out to turn it off
+# (no schedule: on 24/7; no cost: a host-only node; no slack: alerts in Grafana
+# only; no domain: private, through Session Manager). Without this section,
+# jaws builds none of the platform.
+#
+#   schedule   whole hours, on before off on the same day (off may be 24:00, the
+#              midnight that ends it), at least 4 hours on, an IANA time zone
+#   cost       the billing bucket and its providers, budgets in USD a month
+#   slack      each channel is the SSM parameter holding its incoming-webhook URL,
+#              under /jaws/monitoring/ (`jaws monitoring secrets set slack/<channel>`);
+#              routes send an area (host, pipeline, cost) to a channel, and host is required
+
+monitoring:
+  instance_type: t9g.medium
+  ami: al2023-ami-2023.12.20261026.1-kernel-6.18-arm64   # pinned image name; patching is a PR that bumps it
+  domain: grafana.jwall.engineering                       # in the dns zone (config/sites.yaml)
+  snapshots: true
+  schedule:                                               # off while the owner sleeps; omit for 24/7
+    timezone: America/Denver
+    days: [mon, tue, wed, thu, fri, sat, sun]
+    on: "08:00"
+    off: "24:00"                                          # midnight; off 00:00-08:00 MT
+  cost:
+    bucket: jaws-billing-570327089884                     # bucket names are global; the account makes it ours
+    protect_raw: false                                    # true once the first deliveries are checked (spec 10)
+    aws: true
+    databricks: true
+    budgets:
+      total: 100
+    anomaly_floor_usd: 2
+  slack:
+    channels:
+      platform: /jaws/monitoring/slack/platform
+      costs: /jaws/monitoring/slack/costs
+    routes: { host: platform, pipeline: platform, cost: costs }
+  # thresholds: overrides of the module's defaults (spec 6.8), by name

@@ -110,6 +110,8 @@ def _stack_files() -> list[Path]:
         *(REPO_ROOT / "stacks").glob("*/*.tf"),
         *(REPO_ROOT / "owner-access").glob("*.tf"),
         *(REPO_ROOT / "data-access").glob("*.tf"),
+        *(REPO_ROOT / "monitoring").glob("*.tf"),
+        *(REPO_ROOT / "billing-export").glob("*.tf"),
     ]
 
 

@@ -7,14 +7,20 @@ locals {
   zone_name = "jwall.engineering"
 
   # Certificate authorities allowed to issue for the zone and its subdomains.
-  # ACM needs these four Amazon entries. Every site is served by CloudFront
-  # with an ACM certificate, so no other issuer is allowed.
-  caa_issuers = [
-    "amazon.com",
-    "amazontrust.com",
-    "awstrust.com",
-    "amazonaws.com",
-  ]
+  # ACM needs the four Amazon entries: every site is served by CloudFront with
+  # an ACM certificate. The monitoring node's Caddy gets its certificate for
+  # monitoring.domain (config/monitoring.yaml) from Let's Encrypt, which honours
+  # this apex record (RFC 8659 climbs to it), so letsencrypt.org is allowed
+  # while that domain is configured. No other issuer is allowed.
+  caa_issuers = concat(
+    [
+      "amazon.com",
+      "amazontrust.com",
+      "awstrust.com",
+      "amazonaws.com",
+    ],
+    try(local.monitoring.domain, null) == null ? [] : ["letsencrypt.org"],
+  )
 
   # TXT records that belong to the zone owner, not to a project. The GitHub
   # Pages challenge keeps jwall.engineering verified for the jwallace145

@@ -12,7 +12,7 @@
 #                                                                                 (compute/* for container/* on research; no container/schedule)
 #   jaws-<key>-ci-release  trusted for the bot repo's v* tags only   container/release (none on research)
 #   jaws-<key>-ci-task     trusted for the bot repo's pull_request   task/launch, for every task profile
-#                                       and main only (never forks)
+#                                       and main only (never forks)      (+ task/records with the billing bucket)
 #
 # The bot's infrastructure is planned and applied from this repository (the
 # consumer keeps no Terraform and no infra workflow): a bot stack apply can
@@ -85,7 +85,7 @@ locals {
 module "bot_ci_plan" {
   for_each = local.bots
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
-  version  = "0.2.0"
+  version  = "0.4.0"
 
   project                    = each.key
   name_root                  = local.context.name_root
@@ -110,7 +110,7 @@ module "bot_ci_plan" {
 module "bot_ci_apply" {
   for_each = local.bots
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
-  version  = "0.2.0"
+  version  = "0.4.0"
 
   project                    = each.key
   name_root                  = local.context.name_root
@@ -136,7 +136,7 @@ module "bot_ci_apply" {
 module "bot_ci_release" {
   for_each = { for key, bot in local.bots : key => bot if !contains(local.research_projects, key) }
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-release-role"
-  version  = "0.2.0"
+  version  = "0.4.0"
 
   project           = each.key
   name_root         = local.context.name_root
@@ -155,7 +155,7 @@ module "bot_ci_release" {
 module "bot_ci_task" {
   for_each = local.bot_task_types
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-task-role"
-  version  = "0.2.0"
+  version  = "0.4.0"
 
   project           = each.key
   name_root         = local.context.name_root
@@ -164,9 +164,14 @@ module "bot_ci_task" {
   repository_id     = local.bots[each.key].repository_id
   oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
 
-  policies = ["task/launch"]
+  # task/records with the billing bucket (monitoring.tf): the run records.
+  policies = concat(["task/launch"], contains(keys(local.task_records), each.key) ? ["task/records"] : [])
 
   policy_inputs = {
-    task = { instance_types = each.value, profiles = local.bot_task_profiles[each.key] }
+    task = {
+      instance_types = each.value
+      profiles       = local.bot_task_profiles[each.key]
+      records        = lookup(local.task_records, each.key, null)
+    }
   }
 }

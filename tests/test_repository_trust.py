@@ -2,8 +2,8 @@
 
 GitHub's OIDC subject contains the repository's name, so a rename changes the
 subject of every token this repository's workflows present. The roles those
-workflows assume (the foundation's, data-access's, and each project's plan and
-apply role) therefore take `repository_aliases`; the roles a consumer's
+workflows assume (the foundation's, data-access's, the monitoring stack's, and
+each project's plan and apply role) therefore take `repository_aliases`; the roles a consumer's
 workflows assume (release, task, the sites' roles) trust another repository
 and must not.
 
@@ -29,6 +29,8 @@ TOOL_ROLES = {
     "infra_ci_apply",
     "data_access_ci_plan",
     "data_access_ci_apply",
+    "monitoring_ci_plan",
+    "monitoring_ci_apply",
     "bot_ci_plan",
     "bot_ci_apply",
     "databricks_ci_plan",

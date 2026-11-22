@@ -16,6 +16,8 @@ The foundation stack for every [jwall.engineering](https://jwall.engineering) si
 - the `jaws` CLI that every site repository's CI runs to plan, preview, apply and publish, its image in a private ECR repository, and the reusable workflows that run it
 - the owner's admin access: an IAM Identity Center user with the AdministratorAccess permission set, in its own stack that only the owner applies ([guide](docs/owner-access.md))
 - bot and research projects: for each one onboarded in `config/projects.yaml`, CI roles (a research project has no release role), and the bot stack (`stacks/bot`) that runs a repository's GitHub releases as a permanent Lichess bot ([guide](docs/lichess-bot.md))
+- the monitoring and cost platform: the billing bucket every bill lands in, and the monitoring stack (`monitoring/`), a node serving Grafana at `grafana.jwall.engineering` with cost and host dashboards and Slack alerts, applied by the release after the foundation ([guide](docs/monitoring.md))
+- the organization's AWS billing export, in its own root (`billing-export/`) in the management account, applied only by the owner ([guide](docs/billing-export.md))
 
 Everything is in `us-east-1`, managed with Terraform `>= 1.11` and the AWS provider `~> 6.0`. The shared building blocks are consumed from the public Terraform Registry, see [Shared modules](#shared-modules-from-the-terraform-registry). Releases are cut and applied by [Release Please](#releases-and-applies). Contribution rules are in [CONTRIBUTING.md](CONTRIBUTING.md); the rules for coding agents are in [AGENTS.md](AGENTS.md).
 
@@ -61,12 +63,13 @@ this repository publishes. The design is in
 | `bot start`, `bot stop [--wait]` | `ci-release` | Start the stopped instance and wait for the bot; or drain it (the game in progress finishes, then the instance powers off). For a bot with running hours ([docs/lichess-bot.md](docs/lichess-bot.md#running-hours)), or any bot |
 | `bot logs [--since D] [--follow]` | `ci-plan` | The container's CloudWatch logs |
 | `bot secrets set\|check NAME` | the owner's shell | Write (no echo) or check a SecureString secret |
-| `task run --script P --ref SHA [--profile NAME] [--instance-type T] [--market spot\|on-demand] [--max-hours N] [--out DIR] -- ARGS...` | `ci-task` | Bot and research projects with a `task-runner`: refuse a worst-case cost over the ceiling, then run one script on a fresh instance (spot under a price cap by default, on demand only as a launch fallback), stream it, copy its outputs, always terminate; exits with the script's code, or 75 on a spot interruption |
+| `task run --script P --ref SHA [--profile NAME] [--instance-type T] [--market spot\|on-demand] [--max-hours N] [--campaign SLUG] [--out DIR] -- ARGS...` | `ci-task` | Bot and research projects with a `task-runner`: refuse a worst-case cost over the ceiling, then run one script on a fresh instance (spot under a price cap by default, on demand only as a launch fallback), stream it, copy its outputs, always terminate; exits with the script's code, or 75 on a spot interruption. With `monitoring.cost` configured, it writes the run's `started` and `finished` records to the billing bucket (a failed write is only a warning); `--campaign` tags the instance and volume `Campaign` |
 | `task list` | `ci-plan` or `ci-task` | The project's running task instances (read-only) |
-| `task terminate (--instance ID \| --run-id ID [--task-id ID] \| --all)`, `task sweep [--dry-run]` | `ci-task` | Terminate task instances; sweep those past their lifetime (by hand: there is no scheduled sweeper) |
+| `task terminate (--instance ID \| --run-id ID [--task-id ID] \| --all)`, `task sweep [--dry-run]` | `ci-task` | Terminate task instances; sweep those past their lifetime (by hand: there is no scheduled sweeper), writing a `swept` record for each |
 | `cost report [--project NAME [--by workflow\|profile]] [--months N]` | the owner's shell | Monthly spend from Cost Explorer: one project by component (task spend split by workflow or profile), or every project plus the untagged spend by service ([docs/costs.md](docs/costs.md)) |
 | `databricks doctor [--stage config\|live\|between\|after]` | `ci-plan` or `ci-apply` | Databricks projects: run the read-only checks against the live project and print the table ([docs/databricks.md](docs/databricks.md#doctor)) |
 | `databricks credentials set\|check` | the owner's shell | Write (no echo) or check the Databricks service principal's client secret in SSM |
+| `monitoring secrets set NAME`, `monitoring secrets check` | the owner's shell | Write (no echo) one of the monitoring stack's SecureStrings under `/jaws/monitoring/` (`grafana-admin-user`, `grafana-admin-password`, `slack/<channel>`), or list the missing ones ([docs/monitoring.md](docs/monitoring.md#secrets)) |
 | Databricks projects: `validate`, `plan`, `apply`, `destroy --yes`, `outputs` | none, `ci-plan`, `ci-apply`, `ci-apply`, `ci-plan` | Run across the account and workspace stacks: config and live checks, a deferred or stale workspace plan, apply with a readiness wait and after checks, destroy that empties the catalog bucket first, both stacks' outputs merged |
 
 Every command checks that the credentials are the role it expects, that the
@@ -293,17 +296,18 @@ stops the same way (`foundation/config.tf`).
 
 ## Shared modules from the Terraform Registry
 
-This stack is a consumer of the seven Jaws module families, published to the public Terraform Registry from `Jaws-Platform/terraform-aws-jaws-<family>`. Each is open source under MIT, versioned with semver on its own, and released with the same Release Please flow as this repo. Consuming them here, the same way any third party would, is deliberate: Jaws eats its own dog food, so the modules are exercised in production before anyone else depends on them.
+This stack is a consumer of the eight Jaws module families, published to the public Terraform Registry from `Jaws-Platform/terraform-aws-jaws-<family>`. Each is open source under MIT, versioned with semver on its own, and released with the same Release Please flow as this repo. Consuming them here, the same way any third party would, is deliberate: Jaws eats its own dog food, so the modules are exercised in production before anyone else depends on them.
 
 | Family | Modules used here | Where |
 | --- | --- | --- |
-| [`Jaws-Platform/jaws-foundation/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-foundation/aws) | `context` (the tag set applied through `default_tags`), `tfstate-bucket` (the shared state bucket), `service-linked-role`, `private-bucket` (bot records and task results), `identity-center-access` (the owner's access) | `foundation/`, `stacks/bot/`, `owner-access/` |
+| [`Jaws-Platform/jaws-foundation/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-foundation/aws) | `context` (the tag set applied through `default_tags`), `tfstate-bucket` (the shared state bucket), `service-linked-role`, `private-bucket` (bot records and task results), `identity-center-access` (the owner's access) | `foundation/`, `stacks/bot/`, `owner-access/`, `monitoring/`, `billing-export/` |
 | [`Jaws-Platform/jaws-ci/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-ci/aws) | `ci-plan-role`, `ci-preview-role`, `ci-apply-role`, `ci-release-role` and `ci-task-role`, each with policies from the `ci-policies` catalog | `foundation/` |
 | [`Jaws-Platform/jaws-static-site/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-static-site/aws) | The root module (the site stack), `site-bucket` (one S3 bucket per site, `jaws-<project>`), `hosted-zone` (the `jwall.engineering` zone, its CAA record and the GitHub Pages verification TXT record) | `stacks/site/`, `foundation/` |
 | [`Jaws-Platform/jaws-lichess-bot/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-lichess-bot/aws) | `container-instance` (the bot), `ecr-repository` (bot images, and the private repository for the `jaws` CLI image) | `stacks/bot/`, `foundation/ecr.tf` |
 | [`Jaws-Platform/jaws-research/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-research/aws) | `task-runner` (one per task profile), `dataset-bucket` | `stacks/bot/` |
-| [`Jaws-Platform/jaws-network/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-network/aws) | `vpc`, `nat-instance` | `stacks/bot/`, `stacks/databricks-account/` |
-| [`Jaws-Platform/jaws-databricks/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-databricks/aws) | The eleven `databricks-*` modules: the account baseline and shared datasets, each project's workspace, catalog and compute policies, and who may read each dataset | `foundation/databricks.tf`, `stacks/databricks-account/`, `stacks/databricks-workspace/`, `data-access/` |
+| [`Jaws-Platform/jaws-network/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-network/aws) | `vpc`, `nat-instance` | `stacks/bot/`, `stacks/databricks-account/`, `monitoring/` |
+| [`Jaws-Platform/jaws-databricks/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-databricks/aws) | The twelve `databricks-*` modules: the account baseline and shared datasets, each project's workspace, catalog and compute policies, who may read each dataset, and the billing export job | `foundation/databricks.tf`, `foundation/monitoring.tf`, `stacks/databricks-account/`, `stacks/databricks-workspace/`, `data-access/` |
+| [`Jaws-Platform/jaws-monitoring/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-monitoring/aws) | The root module (the billing normalizer and the monitoring node: the monitoring stack), `billing-bucket` (the billing bucket), `aws-billing-export` (the organization's FOCUS export) | `monitoring/`, `foundation/monitoring.tf`, `billing-export/` |
 
 Until Jaws 0.66 these were one library, [`jwallace145/jaws/aws`](https://registry.terraform.io/modules/jwallace145/jaws/aws), which is deprecated at its last version, 0.29.0. Version 0.1.0 of each family holds the same module code, so the move changed no resource.
 
@@ -321,7 +325,7 @@ module "site_bucket" {
 }
 ```
 
-Versions are pinned exactly, not with `~>`, because Terraform records provider versions in `.terraform.lock.hcl` but not module versions; an exact pin is the only way two applies of the same commit resolve the same code. Every pin of a family (in `foundation/`, the stacks under `stacks/`, `owner-access/` and `data-access/`) is always bumped together, and so is that family's entry under `library.families` in `config/terraform.yaml`.
+Versions are pinned exactly, not with `~>`, because Terraform records provider versions in `.terraform.lock.hcl` but not module versions; an exact pin is the only way two applies of the same commit resolve the same code. Every pin of a family (in `foundation/`, the stacks under `stacks/`, `owner-access/`, `data-access/`, `monitoring/` and `billing-export/`) is always bumped together, and so is that family's entry under `library.families` in `config/terraform.yaml`.
 
 **Upgrading.** When a family publishes a release, Dependabot's Terraform ecosystem opens a `chore(deps)` PR bumping its pins. The CI plan comment on that PR shows exactly what the new version changes in AWS. Read the family's changelog entry (`CHANGELOG.md` in `Jaws-Platform/terraform-aws-jaws-<family>`), check the plan, merge, and the change applies with the next release of this repo. While a family is on `0.x`, a breaking change bumps the minor version and is marked `!` in its changelog.
 
@@ -352,6 +356,8 @@ files](#the-tool-configuration-config)).
 | `docs/lichess-bot.md`, `docs/consumer-note.md` | The bot projects guide and the note a bot repository links to |
 | `docs/remote-tasks.md`, `docs/datasets.md`, `docs/research-projects.md`, `docs/costs.md` | Task instances, dataset buckets, research projects, and cost reports |
 | `docs/databricks.md` | Databricks workspace projects: setup, checks, apply and destroy, layout, costs, known gaps and the runbook |
+| `docs/monitoring.md`, `docs/billing-export.md` | The monitoring stack: configuration, applies, the owner's setup, Grafana, the schedule, alerts, recovery, new providers and channels, costs; the organization's billing export |
+| `monitoring.tf` | The billing bucket, the Databricks billing job and the monitoring stack's CI roles, with `config/monitoring.yaml`'s `monitoring` section |
 | `stacks/databricks-account/`, `stacks/databricks-workspace/`, `foundation/databricks.tf` | The two stacks of a Databricks project; the metastore, audit log delivery and each Databricks project's roles (type `databricks` in `config/projects.yaml`) |
 | `Dockerfile` | The CLI image: a pinned Terraform, the stack with modules and providers vendored, `config/` (at `/etc/jaws/config`) |
 | `.github/actions/terraform-init` | `terraform init` with a retry for the registry's lag after a library release |
@@ -363,6 +369,8 @@ files](#the-tool-configuration-config)).
 | `owner-access/` (root) | The owner's admin access through IAM Identity Center: a separate stack, applied only by the owner, never by CI ([docs/owner-access.md](docs/owner-access.md)) |
 | `datasets/` (root) | Onboarded datasets, one `<owner>/<name>.yaml` each ([datasets/README.md](datasets/README.md)) |
 | `data-access/` (root) | The reconcile: binds and grants each agreed dataset handshake, applied by the **Data access** workflow ([guide](docs/databricks.md#datasets-and-access)) |
+| `monitoring/` (root) | The monitoring stack: the billing normalizer, the monitoring node and its watchdog, in a VPC of its own; planned on pull requests and applied by the release after the foundation ([docs/monitoring.md](docs/monitoring.md)) |
+| `billing-export/` (root) | The organization's FOCUS billing export, in the management account: applied only by the owner, never by CI ([docs/billing-export.md](docs/billing-export.md)) |
 
 ### The tool configuration: `config/`
 
@@ -382,6 +390,13 @@ image bakes it at `/etc/jaws/config`.
 | `sites.yaml` | `dns` (the Route 53 zone), `sync` (the cache headers `publish` sets) |
 | `bots.yaml` | `bot` (the bot runtime: AMIs, availability zones, health check, records prefix, `asset_wait`), `tasks` (remote tasks: Rust toolchain, images, `limits`, `max_run_cost_usd`) |
 | `databricks.yaml` | `databricks` (`enabled`, the account, service principal, metastore, compute policies and `shared_host_url`) |
+| `monitoring.yaml` | `monitoring` (the monitoring node's `instance_type`, `ami`, `domain`, `snapshots` and off-hours `schedule`; `cost`: the billing bucket, its providers, `budgets` and the anomaly floor; `slack`: the channels' webhook parameters and the alert routes; `thresholds` overrides). Platform-owned: no project file can set it |
+
+The CLI reads these files as YAML 1.2 does, as the workflows' `yq` does: only
+`true` and `false` are booleans, so a key such as `on:` stays the string `on`.
+Terraform's `yamldecode` follows YAML 1.1 there and reads a bare `on:` and
+`off:` as the keys `"true"` and `"false"`, so `monitoring/` reads the
+schedule's `on` and `off` under either name.
 
 ## Tags
 
@@ -538,7 +553,7 @@ bucket, readable by the plan role and writable by the apply role:
 | `jaws-<key>-ci-plan` | `pull_request` on this repository | `tfstate/read`, `container/read`, `task/read`, and `dataset/read` with datasets |
 | `jaws-<key>-ci-apply` | `environment:prod` on this repository | `tfstate/write`, `container/read`, `container/manage`, `task/read`, `task/manage`, `container/schedule` (a research project gets `compute/*` and no `container/schedule`), and `dataset/read`, `dataset/manage` with datasets |
 | `jaws-<key>-ci-release` | the bot repository's `v*` tags | `container/release` (which also lets `bot start` start the instance) |
-| `jaws-<key>-ci-task` | the bot repository's `pull_request` and `main` (never forks) | `task/launch`: launch from the project's task template, run commands on and terminate its `Purpose=ci-task` instances |
+| `jaws-<key>-ci-task` | the bot repository's `pull_request` and `main` (never forks) | `task/launch`: launch from the project's task template, run commands on and terminate its `Purpose=ci-task` instances; with `monitoring.cost`, `task/records`: put the task-run records under `raw/provider=jaws/source=task-runs/project=<key>/` in the billing bucket, nothing else there |
 
 The bot's infrastructure is planned and applied here; the bot repository
 holds only the project file and a release workflow, and its release role can
@@ -551,6 +566,8 @@ token. `terraform output bots` lists the role ARNs.
 | --- | --- | --- |
 | `jaws-infra-ci-plan` | `pull_request` | `tfstate/read` (this stack's state key, write of its `.tflock` only), `foundation/read` |
 | `jaws-infra-ci-apply` | `environment:prod` | `tfstate/write`, `foundation/read`, `foundation/manage`: everything needed to manage this stack, see below; `ecr/push` for the infra CLI image |
+| `jaws-monitoring-ci-plan` | `pull_request` | `tfstate/read` (the monitoring stack's state key), `monitoring/read`, `compute/read` |
+| `jaws-monitoring-ci-apply` | `environment:prod` | `tfstate/write`, `monitoring/read`, `monitoring/node`, `monitoring/config`, `monitoring/functions`, `monitoring/backup` (the `jaws-monitoring` stack, its Grafana record and nothing else in the zone), `compute/read`, `compute/manage` (its VPC) |
 
 ### Why the apply role is scoped the way it is
 
@@ -619,12 +636,13 @@ state in a local file and then migrates it into the bucket.
 - `Stack plans against mock providers`: `scripts/test-stack-plans.sh` plans `stacks/bot` and both Databricks stacks with tfvars the CLI renders for the cases in `tests/stack_plans/<stack>/`; no AWS or Databricks
 - `Bot plan (<project>)`: for each bot and research project in `config/projects.yaml` (the `Bot projects` job lists them with `scripts/projects.sh bot research`), assumes the project's plan role and posts its plan as a sticky comment. Until the release that creates the project's roles, it skips with a notice instead of failing.
 - `Databricks plan (<project>)`: for each Databricks project in `config/projects.yaml` (`scripts/projects.sh databricks`), while `databricks.enabled` in `config/databricks.yaml` is true, plans both stacks with the project's plan role and posts one sticky comment (the workspace plan is deferred until the workspace exists, and marked stale if the account plan replaces it).
+- `Monitoring stack validate, tflint, test` (`monitoring/`, against mock providers) and `Monitoring plan`: with `config/monitoring.yaml`'s `monitoring` section, plans the monitoring stack with `jaws-monitoring-ci-plan` and posts its sticky comment; until the release that creates that role, it skips with a notice ([guide](docs/monitoring.md#how-it-is-applied)).
 
 Every `terraform init` goes through `.github/actions/terraform-init`, which retries the registry's few-minute lag after a library release.
 
 **Releases, applies and the image** (`.github/workflows/release-please.yml`, on push to `main`):
 
-Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`; then the `image` job, also in `prod`, builds the CLI image and pushes it to the account's repository as `<repository>:<tag>` (`ecr.repository` in `config/tool.yaml`, `jaws-cli`). Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
+Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`, then, with the `monitoring` section, applies `monitoring/` with `jaws-monitoring-ci-apply`; then the `image` job, also in `prod`, builds the CLI image and pushes it to the account's repository as `<repository>:<tag>` (`ecr.repository` in `config/tool.yaml`, `jaws-cli`). Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
 
 No role ARN is a secret, and this repository needs none as a variable. The foundation's plan and apply jobs build their role (`<name_root>-infra-ci-plan` / `-ci-apply`) from the account and name root `jaws config env` reads from the tool configuration (the primary account in `config/aws.yaml`, `context.name_root` in `config/tool.yaml`), and keep their state through `backend/prod.hcl`. Bot role ARNs need no variable either: the workflows build them the same way, with the bot's name.
 
@@ -679,6 +697,7 @@ Not automated; these need the owner's credentials or the GitHub UI.
 - For projects with `dataset` components (listed under `datasets` in the project's entry in `config/projects.yaml`), after the release that grants `dataset/*` to their roles: run the **Bot apply** workflow; it creates the buckets ([docs/datasets.md](docs/datasets.md)). A versioned bucket needs the foundation apply that grants `s3:PutBucketVersioning` first.
 - For a new research project, follow the onboarding order in [docs/research-projects.md](docs/research-projects.md#onboarding-a-research-project).
 - For Databricks workspace projects, follow [One-time setup](docs/databricks.md#one-time-setup): the service principal, the IDs and emails in `config/databricks.yaml`, `databricks credentials set`, deleting a pre-existing us-east-1 metastore (only with the owner's go-ahead), then `databricks.enabled: true` there.
+- For the monitoring stack, follow [First-time setup](docs/monitoring.md#first-time-setup): before its first release, the Slack webhooks, `jaws monitoring secrets set` for the Grafana admin and each channel, and the `Campaign` and `Workspace` cost allocation tags; after it, apply `billing-export/` ([docs/billing-export.md](docs/billing-export.md)) and set `monitoring.cost.protect_raw: true` once the first deliveries are checked.
 
 ## License
 

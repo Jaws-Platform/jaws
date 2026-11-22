@@ -2,7 +2,7 @@
 
 `pre-commit install` installs three hook types: pre-commit (format, validate,
 lint), commit-msg (commitlint) and pre-push (the slow checks: mypy, pytest, the
-three roots' `terraform test` and the stacks' mock plans, each only for the
+roots' `terraform test` and the stacks' mock plans, each only for the
 parts the push changes). CI stays the authoritative check, and runs them all.
 """
 
@@ -41,6 +41,8 @@ def test_the_slow_checks_run_before_a_push() -> None:
         "terraform-test-foundation": "cd foundation",
         "terraform-test-data-access": "cd data-access",
         "terraform-test-owner-access": "cd owner-access",
+        "terraform-test-monitoring": "cd monitoring",
+        "terraform-test-billing-export": "cd billing-export",
         "stack-plans": "scripts/test-stack-plans.sh",
     }
     for hook_id, command in expected.items():

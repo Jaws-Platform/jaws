@@ -297,3 +297,209 @@ run "rejects_an_admin_role_of_another_account" {
 
   expect_failures = [data.aws_caller_identity.current]
 }
+
+# --------------------------------------------------- the monitoring platform
+# config/monitoring.yaml: the billing bucket, the Databricks billing job, and
+# the monitoring stack's roles and state (monitoring.tf). The stack itself is
+# monitoring/'s; the AWS export is the owner's billing-export/.
+
+run "the_billing_bucket_takes_the_organizations_export" {
+  command = plan
+
+  assert {
+    condition     = length(module.billing_bucket) == 1 && module.billing_bucket[0].arn == "arn:aws:s3:::jaws-billing-570327089884"
+    error_message = "the billing bucket is monitoring.cost.bucket, jaws-billing-570327089884"
+  }
+
+  assert {
+    condition     = jsonencode(local.billing_bucket.aws_export_source_account_ids) == jsonencode(["650503560686"])
+    error_message = "only the management account's exports (config/aws.yaml, type management) may deliver: the payer's export covers every account"
+  }
+
+  assert {
+    condition     = local.billing_bucket.protect_raw == false
+    error_message = "protect_raw is monitoring.cost.protect_raw: off until the first deliveries are checked"
+  }
+}
+
+run "databricks_billing_is_exported_from_the_shared_host" {
+  command = plan
+
+  assert {
+    condition     = length(module.databricks_billing_export) == 1
+    error_message = "with monitoring.cost.databricks and Databricks enabled and recorded, the foundation runs the billing job on the shared host"
+  }
+
+  assert {
+    condition     = module.databricks_billing_export[0].role_arn == "arn:aws:iam::570327089884:role/jaws-databricks-billing-export" && module.databricks_billing_export[0].prefix == "raw/provider=databricks/source=system-tables"
+    error_message = "the job writes as jaws-databricks-billing-export, under the Databricks source prefix the normalizer reads"
+  }
+}
+
+run "the_monitoring_roles_get_the_monitoring_and_compute_leaves" {
+  command = plan
+
+  assert {
+    condition     = module.monitoring_ci_plan[0].role_name == "jaws-monitoring-ci-plan" && module.monitoring_ci_apply[0].role_name == "jaws-monitoring-ci-apply"
+    error_message = "the stack's roles are jaws-monitoring-ci-plan and jaws-monitoring-ci-apply, for the jaws-monitoring stack"
+  }
+
+  assert {
+    condition     = toset(keys(module.monitoring_ci_plan[0].policy_arns)) == toset(["tfstate/read", "monitoring/read", "compute/read"])
+    error_message = "the plan role reads its state, the stack (monitoring/read) and its VPC (compute/read), nothing more"
+  }
+
+  assert {
+    condition = toset(keys(module.monitoring_ci_apply[0].policy_arns)) == toset([
+      "tfstate/write", "monitoring/read", "monitoring/node", "monitoring/config", "monitoring/functions", "monitoring/backup",
+      "compute/read", "compute/manage",
+    ])
+    error_message = "the apply role holds every monitoring/* leaf, and compute/* for the stack's own VPC (spec 6.5)"
+  }
+
+  # IAM's default quota: 10 managed policies attached to a role.
+  assert {
+    condition     = length(module.monitoring_ci_apply[0].policy_arns) <= 10 && length(module.monitoring_ci_plan[0].policy_arns) <= 10
+    error_message = "a role may attach at most 10 managed policies (IAM's default quota)"
+  }
+}
+
+run "the_monitoring_roles_may_change_only_the_grafana_record" {
+  command = plan
+
+  override_module {
+    target = module.zone
+    outputs = {
+      zone_id = "Z0644006DW6W2HALU9BI"
+      arn     = "arn:aws:route53:::hostedzone/Z0644006DW6W2HALU9BI"
+    }
+  }
+
+  assert {
+    condition     = local.monitoring_ci.monitoring == { zone_id = "Z0644006DW6W2HALU9BI", domain = "grafana.jwall.engineering" }
+    error_message = "the roles' record is monitoring.domain in the foundation's zone, given together as the catalog requires"
+  }
+}
+
+# The node's Caddy gets its certificate for monitoring.domain from Let's
+# Encrypt, which honours the zone's apex CAA record (RFC 8659 climbs to it).
+run "lets_encrypt_may_issue_the_monitoring_nodes_certificate" {
+  command = plan
+
+  assert {
+    condition     = jsonencode(local.caa_issuers) == jsonencode(["amazon.com", "amazontrust.com", "awstrust.com", "amazonaws.com", "letsencrypt.org"])
+    error_message = "with monitoring.domain the zone's CAA allows ACM's four Amazon issuers and letsencrypt.org, nothing else"
+  }
+}
+
+run "the_monitoring_stack_reaches_its_state" {
+  command = plan
+
+  override_module {
+    target = module.monitoring_ci_plan
+    outputs = {
+      role_arn = "arn:aws:iam::570327089884:role/jaws-monitoring-ci-plan"
+    }
+  }
+
+  override_module {
+    target = module.monitoring_ci_apply
+    outputs = {
+      role_arn = "arn:aws:iam::570327089884:role/jaws-monitoring-ci-apply"
+    }
+  }
+
+  assert {
+    condition = jsonencode(try(local.state_prefix_access["project=monitoring/env=prod/monitoring-prod.tfstate"], null)) == jsonencode({
+      read  = ["arn:aws:iam::570327089884:role/jaws-monitoring-ci-plan"]
+      write = ["arn:aws:iam::570327089884:role/jaws-monitoring-ci-apply"]
+    })
+    error_message = "the state bucket policy lists monitoring/'s key (monitoring/backend/prod.hcl), readable by its plan role and writable by its apply role"
+  }
+
+  assert {
+    condition     = !anytrue([for key in keys(local.state_prefix_access) : strcontains(key, "billing-export")])
+    error_message = "no state prefix names billing-export/, the owner's root"
+  }
+}
+
+run "nothing_of_the_platform_without_its_section" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/no-monitoring.yaml"
+  }
+
+  assert {
+    condition     = length(module.billing_bucket) == 0 && length(module.databricks_billing_export) == 0
+    error_message = "without config/monitoring.yaml's monitoring section there is no billing bucket and no billing job"
+  }
+
+  assert {
+    condition     = length(module.monitoring_ci_plan) == 0 && length(module.monitoring_ci_apply) == 0
+    error_message = "without the section there are no monitoring roles"
+  }
+
+  assert {
+    condition     = !anytrue([for key in keys(local.state_prefix_access) : startswith(key, "project=monitoring/")])
+    error_message = "without the section no state prefix is the monitoring stack's"
+  }
+
+  assert {
+    condition     = jsonencode(local.caa_issuers) == jsonencode(["amazon.com", "amazontrust.com", "awstrust.com", "amazonaws.com"])
+    error_message = "without the section (no node, no monitoring.domain) the zone's CAA allows only ACM's four Amazon issuers"
+  }
+}
+
+run "databricks_billing_waits_for_the_host" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/awaiting-host.yaml"
+  }
+
+  expect_failures = [check.shared_host_url]
+
+  assert {
+    condition     = length(module.databricks_billing_export) == 0 && length(module.billing_bucket) == 1
+    error_message = "the billing job is created through the shared host, so it waits for its URL as the datasets do; the bucket does not"
+  }
+}
+
+# `task run` and `task sweep` write each run's records to the billing bucket
+# (jaws.run_records), with the project's task role: task/records lets it put
+# objects under its own project's prefix and nothing else in the bucket.
+run "each_task_role_writes_only_its_own_run_records" {
+  command = plan
+
+  assert {
+    condition     = length(module.bot_ci_task) > 0 && alltrue([for key, role in module.bot_ci_task : toset(keys(role.policy_arns)) == toset(["task/launch", "task/records"])])
+    error_message = "every task role launches its tasks and writes their records, nothing more"
+  }
+
+  assert {
+    condition     = toset(keys(local.task_records)) == toset(keys(module.bot_ci_task))
+    error_message = "every task role has its records prefix"
+  }
+
+  assert {
+    condition = local.task_records["braveheart-trainer"] == {
+      bucket = "jaws-billing-570327089884"
+      prefix = "raw/provider=jaws/source=task-runs/project=braveheart-trainer"
+    }
+    error_message = "a project's task role writes only under raw/provider=jaws/source=task-runs/project=<project>/ in the billing bucket"
+  }
+}
+
+run "no_task_records_without_the_billing_bucket" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/no-monitoring.yaml"
+  }
+
+  assert {
+    condition     = length(local.task_records) == 0 && alltrue([for key, role in module.bot_ci_task : toset(keys(role.policy_arns)) == toset(["task/launch"])])
+    error_message = "without the billing bucket the task roles only launch"
+  }
+}

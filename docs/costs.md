@@ -6,6 +6,24 @@ Cost Explorer already aggregates the bill by tag, so there is no Cost and
 Usage Report to parse and nothing to deploy: the command is read-only and
 runs from the owner's shell.
 
+It stays the ad hoc tool: a quick answer from a terminal, with nothing running.
+For history, daily trends, budgets, Databricks and alerts, the monitoring
+stack's dashboards in Grafana, at
+[grafana.jwall.engineering](https://grafana.jwall.engineering), are the place
+to look ([docs/monitoring.md](monitoring.md#dashboards-and-alerts)). They read
+the organization's FOCUS export ([docs/billing-export.md](billing-export.md))
+and Databricks' billing tables, not Cost Explorer:
+
+| Dashboard | Shows |
+|---|---|
+| **Cost · Overview** | Every provider and account over 90 days: month to date, the forecast against the budget, the trend, where the money goes, movers, untagged spend |
+| **Cost · Project** | One project by component, service and environment, against its budget |
+| **Cost · Databricks** | Spend and DBUs by product, workspace and SKU, and each workspace's all-in cost |
+| **Cost · Tasks** | Task runs and campaigns: one row per run with its cost, by workflow and profile |
+
+The same data posts to Slack when spend does something unexpected: a budget
+forecast or month to date over budget, a daily anomaly, new untagged spend.
+
 ```sh
 jaws cost report --project braveheart   # one project, by component
 jaws cost report --project braveheart --by profile  # task spend by profile, not workflow
@@ -68,8 +86,9 @@ $0.01; a report makes one (`--project`) or two.
 A tag only appears in Cost Explorer once it is activated as a cost
 allocation tag (Billing → Cost allocation tags), and then only for spend
 after activation, unless a backfill is requested (up to 12 months back,
-one a day). The tags the reports use, all active since 2026-10-30 with a
-backfill from 2025-11-01:
+one a day). For the organization, tags are activated in the management
+account, the payer. The tags the reports and the dashboards use, active since
+2026-10-30 with a backfill from 2025-11-01 unless marked:
 
 | Tag | Used for |
 |---|---|
@@ -77,6 +96,8 @@ backfill from 2025-11-01:
 | `Component` | the project report's rows |
 | `Workflow` | task spend by workflow (`--by workflow`, the default) |
 | `Profile` | task spend by profile (`--by profile`) |
-| `Purpose`, `Lifecycle`, `RunId`, `TaskId` | active for Cost Explorer and later reports (per-run cost) |
+| `Purpose`, `Lifecycle`, `RunId`, `TaskId` | active for Cost Explorer; `RunId` and `TaskId` join each task run to its cost on **Cost · Tasks** |
+| `Campaign` | **not active yet: activate before use.** A task run's campaign (`task run --campaign`, [run records](remote-tasks.md#run-records)), which groups **Cost · Tasks** |
+| `Workspace` | **not active yet: activate before use.** A Databricks workspace's AWS resources, which **Cost · Databricks** adds to its all-in cost |
 
 A new tag a component adds must be activated by the owner before it shows.
