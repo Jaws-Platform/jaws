@@ -1,7 +1,7 @@
-"""Check a project file against the central `projects` section of config.yaml.
+"""Check a project file against the central `projects` section of config/projects.yaml.
 
 A consumer's file asks for instance types, profiles, limits and dataset
-retention; `config.yaml` (reviewed in this repository) says what that project
+retention; `config/projects.yaml` (reviewed in this repository) says what that project
 is approved for. The file cannot widen any of it. A violation is a problem
 string; `Project.from_config` raises them all as one `ConfigError`.
 """
@@ -32,9 +32,9 @@ def check(config: SiteConfig, settings: Settings) -> list[str]:
     approved = settings.projects.get(project)
     if approved is None:
         return [
-            f"project {project!r} has no entry under projects in config.yaml; add its "
-            "instance types, task profiles and datasets there (reviewed in "
-            "jaws)"
+            f"project {project!r} is not onboarded: add it to config/projects.yaml under "
+            "its GitHub owner, with its type, repository and the instance types, task "
+            "profiles and datasets it is approved for (reviewed in jaws)"
         ]
     problems: list[str] = []
     problems += _databricks_problems(config, approved)
@@ -46,7 +46,7 @@ def check(config: SiteConfig, settings: Settings) -> list[str]:
             if name not in approved.task_profiles:
                 problems.append(
                     f"task-runner profile {name!r} is not in projects.{project}.task_profiles "
-                    "in config.yaml"
+                    "in config/projects.yaml"
                 )
             problems += _profile_problems(name, profile, approved, limits, project)
     problems += _dataset_problems(config, approved, settings.context.organization)
@@ -55,7 +55,7 @@ def check(config: SiteConfig, settings: Settings) -> list[str]:
 
 
 def _access_problems(config: SiteConfig, settings: Settings) -> list[str]:
-    """The project's halves of handshakes, checked against config.yaml.
+    """The project's halves of handshakes, checked against config/projects.yaml.
 
     Whether the other side agrees, and whether the dataset is onboarded, is
     access.compute_access's question: that needs the other project's file.
@@ -74,7 +74,7 @@ def _access_problems(config: SiteConfig, settings: Settings) -> list[str]:
                     problems.append(
                         f"dataset {component.name}: consumer {consumer!r} is not a Databricks "
                         f"workspace project (it needs a projects.{consumer}.databricks entry in "
-                        "config.yaml)"
+                        "config/projects.yaml)"
                     )
         elif isinstance(component, DatabricksWorkspace):
             seen: set[str] = set()
@@ -92,7 +92,7 @@ def _access_problems(config: SiteConfig, settings: Settings) -> list[str]:
                 if approved is None or bucket not in approved.datasets:
                     problems.append(
                         f"reads {read.dataset}: no project {owner} approves bucket {bucket} in "
-                        "config.yaml"
+                        "config/projects.yaml"
                     )
     return problems
 
@@ -111,7 +111,8 @@ def _databricks_problems(config: SiteConfig, approved: ProjectGuardrails) -> lis
     if approved.databricks is None:
         problems.append(
             f"project {project!r} has a databricks-workspace but no "
-            f"projects.{project}.databricks entry in config.yaml; add its cost center, VPC "
+            f"projects.{project}.databricks entry in config/projects.yaml; "
+            "add its cost center, VPC "
             "range, admins and compute policies there (reviewed in jaws)"
         )
         return problems
@@ -121,14 +122,15 @@ def _databricks_problems(config: SiteConfig, approved: ProjectGuardrails) -> lis
             if email in admins:
                 problems.append(
                     f"{email} is listed in users but is a workspace admin; admins are set "
-                    f"centrally in projects.{project}.databricks.admins in config.yaml, so "
+                    f"centrally in projects.{project}.databricks.admins in config/projects.yaml, "
+                    "so "
                     "remove it from users"
                 )
         for policy in workspace.compute_policies:
             if policy not in approved.databricks.compute_policies:
                 problems.append(
                     f"compute policy {policy!r} is not in "
-                    f"projects.{project}.databricks.compute_policies in config.yaml"
+                    f"projects.{project}.databricks.compute_policies in config/projects.yaml"
                 )
     return problems
 
@@ -145,9 +147,10 @@ def _profile_problems(
         if instance_type not in approved.instance_types:
             problems.append(
                 f"task-runner profile {name}: instance type {instance_type!r} is not in "
-                f"projects.{project}.instance_types in config.yaml; add it there, or if it "
+                f"projects.{project}.instance_types in config/projects.yaml; "
+                "add it there, or if it "
                 "is already listed, bump the tool pin (the consumer's pin decides which "
-                "config.yaml applies)"
+                "the tool configuration applies)"
             )
     for field in ("max_hours", "max_vcpus", "root_volume_gb"):
         value: int = getattr(profile, field)
@@ -155,7 +158,7 @@ def _profile_problems(
         if value > ceiling:
             problems.append(
                 f"task-runner profile {name}: {field} {value} is above tasks.limits.{field} "
-                f"({ceiling}) in config.yaml"
+                f"({ceiling}) in config/bots.yaml"
             )
     return problems
 
@@ -174,7 +177,7 @@ def _dataset_problems(
         if retention is None:
             problems.append(
                 f"dataset {dataset.name}: bucket {bucket!r} is not in "
-                f"projects.{config.project}.datasets in config.yaml"
+                f"projects.{config.project}.datasets in config/projects.yaml"
             )
             continue
         protected_by_name[dataset.name] = retention.write_once
@@ -191,13 +194,13 @@ def _dataset_problems(
                     if _overlap(prefix, guarded):
                         problems.append(
                             f"{who}: write {prefix!r} overlaps write_once {guarded!r} in "
-                            "config.yaml; use write_once for protected prefixes"
+                            "config/projects.yaml; use write_once for protected prefixes"
                         )
             for prefix in access.write_once:
                 if not any(prefix.startswith(guarded) for guarded in protected):
                     problems.append(
                         f"{who}: write_once {prefix!r} is not under a write_once prefix "
-                        "approved in config.yaml"
+                        "approved in config/projects.yaml"
                     )
                 if not any(prefix.startswith(granted) for granted in access.read):
                     problems.append(
@@ -214,27 +217,27 @@ def _retention_problems(dataset: Dataset, retention: DatasetRetention, bucket: s
     if retention.prefix is not None and dataset.prefix != retention.prefix:
         problems.append(
             f"{where}: prefix {dataset.prefix!r} must equal the {retention.prefix!r} approved "
-            "in config.yaml, which its write_once and expire_prefixes are relative to"
+            "in config/projects.yaml, which its write_once and expire_prefixes are relative to"
         )
     if dataset.expire_prefixes != retention.expire_prefixes:
         problems.append(
             f"{where}: expire_prefixes {dataset.expire_prefixes} must equal the "
-            f"{retention.expire_prefixes} approved in config.yaml"
+            f"{retention.expire_prefixes} approved in config/projects.yaml"
         )
     if dataset.expire_noncurrent_days != retention.expire_noncurrent_days:
         problems.append(
             f"{where}: expire_noncurrent_days {dataset.expire_noncurrent_days} must equal "
-            f"the {retention.expire_noncurrent_days} approved in config.yaml"
+            f"the {retention.expire_noncurrent_days} approved in config/projects.yaml"
         )
     if dataset.versioning != retention.versioning:
         problems.append(
             f"{where}: versioning {dataset.versioning} must equal the "
-            f"{retention.versioning} approved in config.yaml"
+            f"{retention.versioning} approved in config/projects.yaml"
         )
     if retention.write_once and "task-runner" in dataset.writers:
         problems.append(
             f"{where}: writers: [task-runner] grants PutObject on the whole prefix, which "
-            f"config.yaml protects with write_once {list(retention.write_once)}; use "
+            f"config/projects.yaml protects with write_once {list(retention.write_once)}; use "
             "write_once in the profiles' dataset access instead"
         )
     for expiring in retention.expire_prefixes:
@@ -242,7 +245,7 @@ def _retention_problems(dataset: Dataset, retention: DatasetRetention, bucket: s
             if _overlap(expiring, guarded):
                 problems.append(
                     f"{where}: expire_prefixes {expiring!r} overlaps write_once {guarded!r} "
-                    "in config.yaml"
+                    "in config/projects.yaml"
                 )
     return problems + _expiry_rule_problems(where, retention.expire_prefixes)
 
@@ -253,12 +256,14 @@ def _expiry_rule_problems(where: str, expire_prefixes: Mapping[str, int]) -> lis
     for one, other in combinations(sorted(expire_prefixes), 2):
         if _overlap(one, other):
             problems.append(
-                f"{where}: expire_prefixes {one!r} and {other!r} overlap in config.yaml; S3 "
+                f"{where}: expire_prefixes {one!r} and {other!r} overlap in "
+                "config/projects.yaml; S3 "
                 "would apply the shorter expiry to the nested prefix too"
             )
         elif _rule_id(one) == _rule_id(other):
             problems.append(
-                f"{where}: expire_prefixes {one!r} and {other!r} in config.yaml both give the "
+                f"{where}: expire_prefixes {one!r} and {other!r} "
+                "in config/projects.yaml both give the "
                 f"lifecycle rule id {_rule_id(one)!r}"
             )
     return problems

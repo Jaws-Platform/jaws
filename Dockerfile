@@ -1,9 +1,9 @@
 # jaws (Jaws): the CLI, a pinned Terraform, the site and bot stacks
-# with their modules and providers vendored, and config.yaml. Only the S3 backend touches
+# with their modules and providers vendored, and the tool configuration (config/). Only the S3 backend touches
 # the network at run time.
 #
-# Build: docker build --build-arg TERRAFORM_VERSION=<terraform.version from config.yaml> .
-# The CLI refuses to run if the Terraform inside differs from config.yaml.
+# Build: docker build --build-arg TERRAFORM_VERSION=<terraform.version from config/terraform.yaml> .
+# The CLI refuses to run if the Terraform inside differs from config/terraform.yaml.
 
 ARG PYTHON_VERSION=3.13
 ARG UV_VERSION=0.11.15
@@ -88,7 +88,7 @@ COPY --from=build /opt/jaws/venv /opt/jaws/venv
 COPY --from=build /usr/local/bin/terraform /usr/local/bin/terraform
 COPY --from=build /opt/jaws/stacks /opt/jaws/stacks
 COPY --from=build /opt/jaws/plugins /opt/jaws/plugins
-COPY config.yaml /etc/jaws/config.yaml
+COPY config /etc/jaws/config
 ENV PATH="/opt/jaws/venv/bin:${PATH}" \
     TF_IN_AUTOMATION=1 \
     TF_INPUT=0 \

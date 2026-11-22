@@ -1,6 +1,6 @@
 """The foundation is planned on every pull request and applied on every release.
 
-An `account` job reads the account from config.yaml (`jaws config env`), and
+An `account` job reads the primary account from config/aws.yaml (`jaws config env`), and
 the plan, apply and image jobs take their role, state and image repository from
 its outputs, so the three can never name different accounts.
 """
@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from jaws.settings import load_settings
-from tests.conftest import REPO_ROOT
+from tests.conftest import CONFIG_DIR, REPO_ROOT
 
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 ACCOUNT_ID = "${{ needs.account.outputs.account_id }}"
@@ -83,7 +83,7 @@ def test_the_foundation_uses_the_accounts_state(workflow: str, job_name: str) ->
 def test_the_release_applies_the_plan_it_made() -> None:
     job = _jobs("release-please.yml")["apply"]
     apply = _step(job, lambda s: "terraform apply" in str(s.get("run", "")))
-    assert "databricks-credentials.sh ../config.yaml" in apply["run"]
+    assert "databricks-credentials.sh ../config" in apply["run"]
     assert apply["run"].rstrip().endswith("tfplan")
 
 
@@ -121,8 +121,8 @@ def test_the_tools_own_workflows_take_no_role_from_a_repository_variable(name: s
 
 
 def test_the_backend_file_names_the_accounts_state_bucket() -> None:
-    """`-backend-config=backend/prod.hcl` must point at the bucket config.yaml names."""
-    settings = load_settings(REPO_ROOT / "config.yaml", environ={})
+    """`-backend-config=backend/prod.hcl` must point at the bucket config/terraform.yaml names."""
+    settings = load_settings(CONFIG_DIR, environ={})
     backend = (REPO_ROOT / "foundation" / "backend" / "prod.hcl").read_text()
     values = dict(
         (key.strip(), value.strip().strip('"'))

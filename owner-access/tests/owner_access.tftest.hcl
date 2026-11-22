@@ -159,7 +159,7 @@ run "owner_gets_administrator_access_for_one_hour" {
 
   assert {
     condition     = module.owner_admin.user_name == "jwallace145"
-    error_message = "the Identity Center user name must be context.owner from config.yaml"
+    error_message = "the Identity Center user name must be context.owner from config/tool.yaml"
   }
 }
 
@@ -184,7 +184,7 @@ run "outputs_render_the_cli_profile" {
 }
 
 # Everything jaws builds is in the production account, so the owner needs the
-# same admin access there. The development account is in config.yaml too:
+# same admin access there. The development account is in config/aws.yaml too:
 # nothing is built there yet, but the owner can sign in to it (quota requests,
 # the console).
 run "the_owner_has_the_same_access_in_production_and_development" {

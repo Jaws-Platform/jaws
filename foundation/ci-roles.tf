@@ -109,7 +109,7 @@ module "infra_ci_apply" {
 #
 # The stack only binds and grants in Databricks, through the service principal
 # whose secret databricks/read reads; neither role has any other AWS
-# permission, and only its own state key. The key follows config.yaml
+# permission, and only its own state key. The key follows config/terraform.yaml
 # state.key_template, as every stack's does.
 locals {
   data_access_ci = {

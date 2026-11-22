@@ -1,6 +1,6 @@
 # The account stack jaws renders for one Databricks project.
 # Every value comes from the project's jaws.yaml or from
-# config.yaml (projects.<project>.databricks and the databricks section); the
+# config/projects.yaml (projects.<project>.databricks and the databricks section); the
 # CLI writes them to terraform.tfvars.json. The service principal's secret is
 # not a variable: it reaches the provider through the environment.
 
@@ -35,7 +35,7 @@ variable "repository" {
 }
 
 variable "tags" {
-  description = "Tags of every AWS resource (through `default_tags`) and of the workspace's clusters: the project file's tags plus CostCenter (config.yaml) and Workspace."
+  description = "Tags of every AWS resource (through `default_tags`) and of the workspace's clusters: the project file's tags plus CostCenter (config/projects.yaml) and Workspace."
   type        = map(string)
 
   validation {
@@ -62,7 +62,7 @@ variable "tags" {
 }
 
 variable "vpc_cidr" {
-  description = "IPv4 CIDR of the project's VPC (projects.<project>.databricks.vpc_cidr in config.yaml). The private subnets are its 9th and 10th sixteenths, so its prefix is /16 to /22 (Databricks needs /17 to /26 subnets)."
+  description = "IPv4 CIDR of the project's VPC (projects.<project>.databricks.vpc_cidr in config/projects.yaml). The private subnets are its 9th and 10th sixteenths, so its prefix is /16 to /22 (Databricks needs /17 to /26 subnets)."
   type        = string
 
   validation {
@@ -72,7 +72,7 @@ variable "vpc_cidr" {
 }
 
 variable "nat_ami_name" {
-  description = "Name of the Amazon-owned arm64 image the NAT instance is pinned to (databricks.nat_ami in config.yaml). Changing it replaces the NAT."
+  description = "Name of the Amazon-owned arm64 image the NAT instance is pinned to (databricks.nat_ami in config/databricks.yaml). Changing it replaces the NAT."
   type        = string
 
   validation {
@@ -82,7 +82,7 @@ variable "nat_ami_name" {
 }
 
 variable "metastore_name" {
-  description = "Name of the region's Unity Catalog metastore the workspace is assigned to (databricks.metastore_name in config.yaml)."
+  description = "Name of the region's Unity Catalog metastore the workspace is assigned to (databricks.metastore_name in config/databricks.yaml)."
   type        = string
 
   validation {
@@ -92,7 +92,7 @@ variable "metastore_name" {
 }
 
 variable "deployment_name" {
-  description = "First label of the workspace URL, or null to let Databricks pick it (databricks.deployment_name_prefix in config.yaml is null). Changing it replaces the workspace."
+  description = "First label of the workspace URL, or null to let Databricks pick it (databricks.deployment_name_prefix in config/databricks.yaml is null). Changing it replaces the workspace."
   type        = string
   default     = null
 }
@@ -109,17 +109,17 @@ variable "user_names" {
 }
 
 variable "service_principal_application_id" {
-  description = "Application (client) ID of the automation service principal (databricks.client_id in config.yaml); it joins the admin group so the workspace stack can manage the workspace."
+  description = "Application (client) ID of the automation service principal (databricks.client_id in config/databricks.yaml); it joins the admin group so the workspace stack can manage the workspace."
   type        = string
 }
 
 variable "account_id" {
-  description = "Databricks account ID (databricks.account_id in config.yaml), also the cross-account role's external ID. The provider reads the same ID from DATABRICKS_ACCOUNT_ID."
+  description = "Databricks account ID (databricks.account_id in config/databricks.yaml), also the cross-account role's external ID. The provider reads the same ID from DATABRICKS_ACCOUNT_ID."
   type        = string
 }
 
 variable "read_only_datasets" {
-  description = "Shared datasets the workspace consumes, by share name: bucket, prefix and the share role the foundation registers them with (config.yaml `projects.<producer>.datasets.<bucket>.databricks_share` listing this project). Passed to the workspace module's S3 endpoint policy."
+  description = "Shared datasets the workspace consumes, by share name: bucket, prefix and the share role the foundation registers them with (config/projects.yaml `projects.<producer>.datasets.<bucket>.databricks_share` listing this project). Passed to the workspace module's S3 endpoint policy."
   type = map(object({
     bucket   = string
     prefix   = string

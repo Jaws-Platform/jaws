@@ -1,4 +1,6 @@
-"""The foundation's bot registry and the bot project files agree."""
+"""The bot and research projects of the onboarding registry (config/projects.yaml),
+the foundation that serves them, the workflows that plan and apply them, and their
+project files agree."""
 
 from __future__ import annotations
 
@@ -12,16 +14,12 @@ from typing import Any
 import pytest
 
 from jaws.site import load_site_config
-from tests.conftest import FIXTURES, REPO_ROOT
+from tests.conftest import FIXTURES, REPO_ROOT, onboarded, repo_config
 
 BOTS_TF = REPO_ROOT / "foundation" / "bots.tf"
+PROJECTS_YAML = REPO_ROOT / "config" / "projects.yaml"
 #: Each registered project's file, as its repository commits it.
 REGISTRY_FILES = FIXTURES / "registry"
-_ENTRY = re.compile(
-    r'^\s+([a-z0-9-]+)\s*=\s*\{\s*repository\s*=\s*"([^"]+)",\s*repository_id\s*=\s*"(\d+)"'
-    r'(?:,\s*owner_id\s*=\s*"(\d+)")?\s*\}',
-    re.MULTILINE,
-)
 #: The Braveheart-Chess organisation: gh api orgs/Braveheart-Chess --jq .id
 BRAVEHEART_CHESS = "356866252"
 
@@ -29,13 +27,27 @@ BRAVEHEART_CHESS = "356866252"
 #: Projects registered after the management account was retired (v0.70.0): they
 #: have only ever had a stack in production, so nothing is approved under the
 #: management account's name for them.
+def _onboarded(*types: str) -> dict[str, dict[str, Any]]:
+    """The registry's projects of `types`, each with its `owner` and `owner_id`."""
+    return {
+        key: {**project, "owner": owner, "owner_id": group["owner_id"]}
+        for owner, group in repo_config()["projects"].items()
+        for key, project in group["projects"].items()
+        if project["type"] in types
+    }
+
+
 def registry() -> dict[str, tuple[str, str]]:
-    return {m[0]: (m[1], m[2]) for m in _ENTRY.findall(BOTS_TF.read_text())}
+    """The bot and research projects: each one's repository and repository ID."""
+    return {
+        key: (f"{p['owner']}/{p['repository']}", p["repository_id"])
+        for key, p in _onboarded("bot", "research").items()
+    }
 
 
 def owners() -> dict[str, str]:
-    """Each registered project's `owner_id`, "" when it has none (this account's)."""
-    return {m[0]: m[3] for m in _ENTRY.findall(BOTS_TF.read_text())}
+    """Each bot and research project's `owner_id`: its GitHub owner's."""
+    return {key: p["owner_id"] for key, p in _onboarded("bot", "research").items()}
 
 
 def project_file(project: str) -> dict[str, Any]:
@@ -65,7 +77,7 @@ def test_registry_lists_braveheart() -> None:
         "prog-strength-archive": ("Prog-Strength/prog-strength-archive", "1466937166"),
     }
     # The engine's project was `rusty-chess` until 2026-11-15; the old name is gone.
-    assert "rusty-chess" not in BOTS_TF.read_text()
+    assert "rusty-chess" not in PROJECTS_YAML.read_text()
 
 
 #: The longest project key whose apply role's container/manage policy fits IAM's
@@ -101,21 +113,19 @@ def test_the_long_research_keys_are_research_projects() -> None:
     assert long_keys <= _research_projects()
 
 
-def test_a_repository_outside_this_account_names_its_owner() -> None:
-    """The release and task roles trust `repo:<owner>@<owner_id>/...`: a repository
-    in an organisation is refused unless its entry carries the organisation's ID."""
+def test_every_repository_is_trusted_with_its_owners_id() -> None:
+    """The release and task roles trust `repo:<owner>@<owner_id>/...`: each project's
+    owner ID is its GitHub owner's, stated once for the owner in config/projects.yaml."""
     assert owners()["braveheart"] == BRAVEHEART_CHESS
-    for project, (repository, _) in registry().items():
-        outside = not repository.startswith("jwallace145/")
-        assert bool(owners()[project]) == outside, project
-    text = BOTS_TF.read_text()
+    assert repo_config()["projects"]["Braveheart-Chess"]["owner_id"] == BRAVEHEART_CHESS
+    assert all(re.fullmatch(r"[0-9]+", owner_id) for owner_id in owners().values())
     release, task = _module("bot_ci_release"), _module("bot_ci_task")
-    assert "owner_id          = try(each.value.owner_id, local.github_owner_id)" in release
-    assert "owner_id          = try(local.bots[each.key].owner_id, local.github_owner_id)" in task
+    assert "owner_id          = each.value.owner_id" in release
+    assert "owner_id          = local.bots[each.key].owner_id" in task
     # The plan and apply roles are assumed from this repository, whoever owns the bot's.
     for name in ("bot_ci_plan", "bot_ci_apply"):
         assert re.search(r"^  owner_id += local\.github\.owner_id$", _module(name), re.M), name
-    assert text.count("owner_id =") == len(registry())
+    assert "github_owner_id" not in BOTS_TF.read_text()
 
 
 def test_bot_apply_reads_the_project_file_from_a_ref_and_refuses_another_project() -> None:
@@ -168,13 +178,68 @@ def _yaml(path: str) -> dict[Any, Any]:
     return data
 
 
-def test_workflow_matrices_list_every_bot() -> None:
+def _listed(*types: str) -> list[dict[str, str]]:
+    import json
+
+    out = subprocess.run(
+        ["scripts/projects.sh", *types], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+    )
+    listed: list[dict[str, str]] = json.loads(out.stdout)
+    return listed
+
+
+def test_the_workflows_take_every_bot_from_the_registry() -> None:
+    """Onboarding a bot or research project is one change to config/projects.yaml:
+    the plan matrix and the apply lookup both read it through scripts/projects.sh."""
+    assert {e["project"]: e["repository"] for e in _listed("bot", "research")} == {
+        k: r for k, (r, _) in registry().items()
+    }
     ci: dict[Any, Any] = _yaml(".github/workflows/ci.yml")
-    plan_projects = {i["project"] for i in ci["jobs"]["bot-plan"]["strategy"]["matrix"]["include"]}
+    lister = ci["jobs"]["bot-projects"]
+    assert "scripts/projects.sh bot research" in lister["steps"][-1]["run"]
+    plan = ci["jobs"]["bot-plan"]
+    assert plan["needs"] == ["terraform-static", "bot-projects"]
+    assert plan["strategy"]["matrix"] == {
+        "include": "${{ fromJSON(needs.bot-projects.outputs.projects) }}"
+    }
     apply: dict[Any, Any] = _yaml(".github/workflows/bot-apply.yml")
-    # PyYAML reads the bare `on:` key as True.
-    options = set(apply[True]["workflow_dispatch"]["inputs"]["project"]["options"])
-    assert plan_projects == set(registry()) == options
+    # PyYAML reads the bare `on:` key as True. A string, not a choice: no list to keep.
+    assert apply[True]["workflow_dispatch"]["inputs"]["project"]["type"] == "string"
+    lookup = next(s for s in apply["jobs"]["apply"]["steps"] if s.get("id") == "bot")
+    assert "scripts/projects.sh bot research" in lookup["run"]
+
+
+@pytest.mark.parametrize(
+    ("project", "repository"),
+    [
+        ("braveheart-bot", "Braveheart-Chess/braveheart-lichess-bot"),
+        ("main-site", None),
+        ("nope", None),
+    ],
+    ids=["a-bot", "a-site", "unknown"],
+)
+def test_bot_apply_looks_up_only_bot_and_research_projects(
+    tmp_path: Path, project: str, repository: str | None
+) -> None:
+    apply: dict[Any, Any] = _yaml(".github/workflows/bot-apply.yml")
+    lookup = next(s for s in apply["jobs"]["apply"]["steps"] if s.get("id") == "bot")
+    output = tmp_path / "out"
+    result = subprocess.run(
+        ["bash", "-e", "-c", lookup["run"]],
+        cwd=REPO_ROOT,
+        env={**os.environ, "PROJECT": project, "GITHUB_OUTPUT": str(output)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if repository is None:
+        assert result.returncode != 0
+        assert (
+            f"{project} is not a bot or research project in config/projects.yaml" in result.stdout
+        )
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert output.read_text().splitlines() == [f"repository={repository}"]
 
 
 def test_bot_plan_and_apply_use_the_bots_roles() -> None:
@@ -191,7 +256,7 @@ def test_container_release_runs_this_commit_and_pins_nothing() -> None:
     assert "@v0." not in text and "x-release-please-version" not in text
     assert 'bot reconcile "${version_args[@]}"' in text
     assert 'version_args=(--version "$VERSION")' in text
-    assert "--config .jaws-tool/config.yaml" in text
+    assert "--config .jaws-tool/config " in text
     release: dict[Any, Any] = _yaml(".github/workflows/container-release.yml")
     assert release["permissions"] == {}
     job = release["jobs"]["release"]
@@ -209,7 +274,7 @@ WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 
 
 def test_no_workflow_needs_account_or_role_variables() -> None:
-    """Role ARNs are derived from config.yaml's account and the project name."""
+    """Role ARNs are derived from the primary account (config/aws.yaml) and the project name."""
     for path in WORKFLOWS_DIR.glob("*.yml"):
         text = path.read_text()
         assert "vars.AWS_ACCOUNT_ID" not in text, path.name
@@ -226,7 +291,8 @@ def test_container_release_role_is_optional() -> None:
 def test_bot_plan_runs_without_a_variable_and_skips_until_roles_exist() -> None:
     ci: dict[Any, Any] = _yaml(".github/workflows/ci.yml")
     job = ci["jobs"]["bot-plan"]
-    assert "if" not in job, "no repository variable gates the job any more"
+    # No repository variable gates the job; it waits only for a non-empty registry.
+    assert job["if"] == "needs.bot-projects.outputs.projects != '[]'"
     steps = {s.get("id"): s for s in job["steps"] if "id" in s}
     assert steps["assume"]["continue-on-error"] is True
     # The steps that run the CLI (not the one that only reads the project file's name).
@@ -279,11 +345,9 @@ def _policies(block: str) -> list[str]:
 
 
 def _projects() -> dict[str, Any]:
-    """The reviewed guardrails: config.yaml's `projects`, as foundation decodes it."""
-    import yaml
-
-    projects: dict[str, Any] = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())["projects"]
-    return projects
+    """Every onboarded project by key, with its reviewed guardrails (config/projects.yaml),
+    as the foundation decodes it (local.registry)."""
+    return onboarded(repo_config())
 
 
 def _task_types() -> dict[str, list[str]]:
@@ -384,26 +448,43 @@ def test_bot_plan_and_apply_carry_the_dataset_policies() -> None:
 
 def test_foundation_reads_lists_from_config() -> None:
     text = BOTS_TF.read_text()
-    assert not re.search(r"\b(?:c8a|g6e?|p[345])\.\w+", text), "instance types live in config.yaml"
+    assert not re.search(r"\b(?:c8a|g6e?|p[345])\.\w+", text), (
+        "instance types live in config/projects.yaml"
+    )
     for name in ("bot_task_types", "bot_task_profiles", "bot_datasets"):
         match = re.search(rf"^\s+{name}\s*=\s*(.*)$", text, re.MULTILINE)
         assert match, name
         # bot_datasets is the per-account selection of bot_dataset_names, which reads config.
-        source = (
-            "local.bot_dataset_names" if name == "bot_datasets" else "local.tool_config.projects"
-        )
+        source = "local.bot_dataset_names" if name == "bot_datasets" else "local.registry"
         assert source in match.group(1), name
-    assert re.search(r"bot_dataset_names = \{\s*for k, p in local\.tool_config\.projects", text)
-    # A project with only a `databricks` entry is a workspace project, not a bot.
-    bots = {k for k, p in _projects().items() if set(p) - {"databricks"}}
-    assert bots <= set(registry())
+    assert re.search(r"bot_dataset_names = \{\s*for k, p in local\.registry", text)
+    # Only bot and research projects are approved for tasks or datasets.
+    approved = {
+        k
+        for k, p in _projects().items()
+        if set(p) & {"instance_types", "task_profiles", "datasets"}
+    }
+    assert approved <= set(registry())
     assert set(_task_profiles()) == set(_task_types())
 
 
+def test_the_foundation_takes_its_bots_from_the_registry() -> None:
+    text = BOTS_TF.read_text()
+    assert re.search(
+        r"bots = \{\s*for key, project in local\.registry : key => \{.*?\} "
+        r'if contains\(\["bot", "research"\], project\.type\)',
+        text,
+        re.S,
+    )
+    assert (
+        "research_projects = toset([for key, project in local.registry : "
+        'key if project.type == "research"])'
+    ) in text
+
+
 def _research_projects() -> set[str]:
-    match = re.search(r"^\s+research_projects\s*=\s*toset\(\[(.*)\]\)$", BOTS_TF.read_text(), re.M)
-    assert match, "research_projects is not a one-line toset([...])"
-    return set(re.findall(r'"([^"]+)"', match.group(1)))
+    """The research projects (type research in config/projects.yaml)."""
+    return set(_onboarded("research"))
 
 
 def test_research_projects_are_registered() -> None:
@@ -467,23 +548,18 @@ def test_outputs_do_not_reach_for_a_research_projects_release_role() -> None:
     assert "bot_ci_release" not in state
 
 
-# --- Databricks workspace projects (foundation/databricks.tf) ---------------
+# --- Databricks workspace projects (type databricks; foundation/databricks.tf) ---
 
 DATABRICKS_TF = REPO_ROOT / "foundation" / "databricks.tf"
 CI_ROLES_TF = REPO_ROOT / "foundation" / "ci-roles.tf"
 
 
-def _databricks_block() -> str:
-    """The body of `databricks_projects = { ... }` in foundation/databricks.tf."""
-    match = re.search(
-        r"^  databricks_projects = \{\n(.*?)^  \}", DATABRICKS_TF.read_text(), re.M | re.S
-    )
-    assert match, "databricks.tf has no multi-line databricks_projects = { ... } local"
-    return match.group(1)
-
-
 def databricks_registry() -> dict[str, tuple[str, str]]:
-    return {m[0]: (m[1], m[2]) for m in _ENTRY.findall(_databricks_block())}
+    """The Databricks projects: each one's repository and repository ID."""
+    return {
+        key: (f"{p['owner']}/{p['repository']}", p["repository_id"])
+        for key, p in _onboarded("databricks").items()
+    }
 
 
 def _squashed(text: str) -> str:
@@ -507,11 +583,17 @@ def test_the_registered_databricks_projects() -> None:
 def test_every_databricks_project_has_numeric_repository_and_owner_ids() -> None:
     # owner_id: gh api repos/<owner>/<repo> --jq .owner.id. A deployer's
     # federation subject names both: repo:<owner>@<owner_id>/<name>@<repository_id>.
-    entries = re.findall(r"^ *([a-z0-9-]+) *= *\{([^}]*)\}", _databricks_block(), re.M)
-    fields = {key: dict(re.findall(r'([a-z_]+) *= *"([^"]*)"', body)) for key, body in entries}
-    assert {key: (f.get("repository_id"), f.get("owner_id")) for key, f in fields.items()} == {
+    assert {
+        k: (p["repository_id"], p["owner_id"]) for k, p in _onboarded("databricks").items()
+    } == {
         "braveheart-databricks": ("1458504699", "356866252"),
     }
+    assert re.search(
+        r"databricks_projects = \{\s*for key, project in local\.registry : key => \{.*?\} "
+        r'if project\.type == "databricks"',
+        DATABRICKS_TF.read_text(),
+        re.S,
+    )
 
 
 def test_databricks_projects_are_not_bots_and_have_guardrails() -> None:
@@ -521,7 +603,7 @@ def test_databricks_projects_are_not_bots_and_have_guardrails() -> None:
         assert key not in registry()
     text = DATABRICKS_TF.read_text()
     assert 'check "databricks_projects_have_guardrails"' in text
-    assert "local.tool_config.projects[key].databricks" in text
+    assert "local.registry[key].databricks" in text
 
 
 def test_databricks_projects_get_plan_and_apply_roles_with_databricks_policies() -> None:
@@ -627,10 +709,7 @@ def test_the_shared_host_waits_for_the_metastore_module() -> None:
 
 
 def yaml_config() -> dict[str, Any]:
-    import yaml
-
-    data: dict[str, Any] = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
-    return data
+    return repo_config()
 
 
 def test_databricks_provider_authenticates_from_the_environment_only() -> None:

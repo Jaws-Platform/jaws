@@ -22,6 +22,7 @@ from jaws.settings import (
     ProjectGuardrails,
     Settings,
 )
+from tests.conftest import with_guardrails
 
 
 @pytest.fixture(autouse=True)
@@ -48,13 +49,8 @@ def _approved(settings: Settings, **changes: Any) -> Settings:
     guard = settings.projects["databricks-poc"]
     assert guard.databricks is not None
     new = guard.databricks.model_copy(update=changes)
-    return settings.model_copy(
-        update={
-            "projects": {
-                **settings.projects,
-                "databricks-poc": guard.model_copy(update={"databricks": new}),
-            }
-        }
+    return with_guardrails(
+        settings, "databricks-poc", guard.model_copy(update={"databricks": new}), validate=False
     )
 
 
@@ -133,11 +129,7 @@ def test_cfg002_fails_on_another_project(databricks: Project, settings: Settings
         vpc_cidr="10.40.16.0/20",
         admins=("a@example.com",),
     )
-    s = settings.model_copy(
-        update={
-            "projects": {**settings.projects, "team-a": ProjectGuardrails(databricks=other)},
-        }
-    )
+    s = with_guardrails(settings, "team-a", ProjectGuardrails(databricks=other), validate=False)
     result = _run("DBX-CFG-002", databricks, s)
     assert result.outcome is Outcome.FAIL
     assert "team-a" in result.facts["overlaps"]

@@ -12,7 +12,7 @@
 # a project of datasets alone has no VPC.
 #
 # Changing the instance's inputs replaces the instance and ends the game in
-# progress: its image (pinned in config.yaml, bot.amis), its type, or its user
+# progress: its image (pinned in config/bots.yaml, bot.amis), its type, or its user
 # data (a library bump can change that). Read the plan comment and apply bot
 # stacks by hand while the bot is idle.
 #
@@ -45,7 +45,7 @@ data "aws_ami" "pinned" {
 }
 
 # The pinned image of each task profile that names one (tasks.images in
-# config.yaml), resolved like the bot's.
+# config/bots.yaml), resolved like the bot's.
 data "aws_ami" "task_profile" {
   for_each = { for p in var.task_profiles : p.name => p if p.ami_name != null }
 

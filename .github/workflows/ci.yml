@@ -354,9 +354,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - name: Read the Terraform version from config.yaml
+      - name: Read the Terraform version from config/terraform.yaml
         id: config
-        run: echo "terraform_version=$(yq -r .terraform.version config.yaml)" >> "$GITHUB_OUTPUT"
+        run: echo "terraform_version=$(yq -r .terraform.version config/terraform.yaml)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v4
       - uses: docker/build-push-action@v7
         with:
@@ -375,7 +375,7 @@ jobs:
             -v "$RUNNER_TEMP/site:/work" \
             jaws:ci --file guitar-knowledge-base.yaml validate
           test -s "$RUNNER_TEMP/site/.jaws/jaws.log"
-      - name: Smoke test (the image's Terraform matches config.yaml)
+      - name: Smoke test (the image's Terraform matches config/terraform.yaml)
         run: docker run --rm --network none --entrypoint terraform jaws:ci version
       - name: Smoke test (the pruned botocore still serves the clients the tool uses)
         run: |
@@ -398,7 +398,7 @@ jobs:
             exit 1
           fi
 
-  # The account the foundation is planned for, read from config.yaml.
+  # The account the foundation is planned for: the primary account of the registry (config/aws.yaml).
   account:
     name: Account
     runs-on: ubuntu-latest
@@ -413,7 +413,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked
-      - name: Read the account from config.yaml
+      - name: Read the primary account from the tool configuration
         id: env
         run: |
           env=$(uv run jaws config env)
@@ -452,7 +452,7 @@ jobs:
       - name: terraform plan
         id: plan
         run: |
-          source ../scripts/databricks-credentials.sh ../config.yaml
+          source ../scripts/databricks-credentials.sh ../config
           set +e
           terraform plan -no-color -lock-timeout=60s -out=tfplan -detailed-exitcode > plan.log 2>&1
           code=$?
@@ -493,13 +493,35 @@ jobs:
           header: terraform-plan
           path: foundation/plan-comment.md
 
+  # The bot and research projects onboarded in config/projects.yaml: the
+  # matrix of bot-plan, so onboarding a project needs no change here.
+  bot-projects:
+    name: Bot projects
+    runs-on: ubuntu-latest
+    # Never for forks, like bot-plan: the plan roles trust this repository's
+    # pull requests, and GitHub issues fork runs no OIDC token anyway.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+    outputs:
+      projects: ${{ steps.list.outputs.projects }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: List the bot and research projects (config/projects.yaml)
+        id: list
+        run: |
+          # Assigned first, so a failing command fails the step (bash -e).
+          projects=$(scripts/projects.sh bot research)
+          echo "projects=$projects" >> "$GITHUB_OUTPUT"
+
   bot-plan:
     name: Bot plan (${{ matrix.project }})
     runs-on: ubuntu-latest
     # The bot's CI roles are created by the foundation apply that follows the
     # PR registering the bot. Until they exist, the role cannot be assumed and
     # the plan is skipped with a notice instead of failing.
-    needs: [terraform-static]
+    needs: [terraform-static, bot-projects]
+    if: needs.bot-projects.outputs.projects != '[]'
     permissions:
       contents: read
       id-token: write # assume the bot's plan role through GitHub OIDC
@@ -507,16 +529,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [braveheart, braveheart-bot, braveheart-selfplay, braveheart-trainer, pi-benchmarks, pi-prover, prog-strength-archive]
-        # One entry per bot in foundation/bots.tf (a test keeps them in sync).
-        include:
-          - { project: braveheart, repository: Braveheart-Chess/braveheart }
-          - { project: braveheart-bot, repository: Braveheart-Chess/braveheart-lichess-bot }
-          - { project: braveheart-selfplay, repository: Braveheart-Chess/braveheart-selfplay }
-          - { project: braveheart-trainer, repository: Braveheart-Chess/braveheart-trainer }
-          - { project: pi-benchmarks, repository: Pi-Mathematical-Reasoning/pi-benchmarks }
-          - { project: pi-prover, repository: Pi-Mathematical-Reasoning/pi }
-          - { project: prog-strength-archive, repository: Prog-Strength/prog-strength-archive }
+        # One entry per bot or research project: {project, repository, type}.
+        include: ${{ fromJSON(needs.bot-projects.outputs.projects) }}
     steps:
       - uses: actions/checkout@v7
       - name: Check out the bot's project file (its default branch)
@@ -536,7 +550,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked
-      - name: Build the plan role ARN from config.yaml
+      - name: Build the plan role ARN from the tool configuration
         id: role
         env:
           PROJECT: ${{ matrix.project }}
@@ -633,20 +647,20 @@ jobs:
       projects: ${{ steps.list.outputs.projects }}
     steps:
       - uses: actions/checkout@v7
-      - name: List the Databricks projects (foundation/databricks.tf)
+      - name: List the Databricks projects (config/projects.yaml)
         id: list
         run: |
           # Assigned first, so a failing command fails the step (bash -e).
-          enabled=$(yq -r '.databricks.enabled' config.yaml)
-          projects=$(scripts/databricks-projects.sh)
+          enabled=$(yq -r '.databricks.enabled' config/databricks.yaml)
+          projects=$(scripts/projects.sh databricks)
           echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
           echo "projects=$projects" >> "$GITHUB_OUTPUT"
 
   databricks-plan:
     name: Databricks plan (${{ matrix.project }})
     runs-on: ubuntu-latest
-    # Plans both stacks of each Databricks project in foundation/databricks.tf.
-    # Skipped while there are none or config.yaml databricks.enabled is false,
+    # Plans both stacks of each Databricks project onboarded in config/projects.yaml.
+    # Skipped while there are none or databricks.enabled (config/databricks.yaml) is false,
     # and never for forks. A project's CI roles are created by the foundation
     # apply that follows the PR registering it; until they exist, the plan is
     # skipped with a notice instead of failing.
@@ -681,7 +695,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked
-      - name: Build the plan role ARN from config.yaml
+      - name: Build the plan role ARN from the tool configuration
         id: role
         env:
           PROJECT: ${{ matrix.project }}

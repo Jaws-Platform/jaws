@@ -1,7 +1,7 @@
 # The workspace stack jaws renders for one Databricks
 # project. workspace_url, workspace_id, admin_group_name, users_group_name and
 # metastore_id are the account stack's outputs; the rest comes from the
-# project's jaws.yaml and config.yaml. The service
+# project's jaws.yaml and the tool configuration (config/). The service
 # principal's secret is not a variable: it reaches the provider through the
 # environment.
 
@@ -89,7 +89,7 @@ variable "metastore_id" {
 }
 
 variable "compute_policies" {
-  description = "The project's compute policies (projects.<project>.databricks.compute_policies), defined centrally under databricks.compute_policies in config.yaml, by policy name."
+  description = "The project's compute policies (projects.<project>.databricks.compute_policies), defined centrally under databricks.compute_policies in config/projects.yaml, by policy name."
   type = map(object({
     description = string
     definition  = string

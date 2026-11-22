@@ -23,10 +23,10 @@ components:
     writers: [task-runner]                     # optional: who may add objects
     # readers: [braveheart-trainer/task-gpu]   # optional: <project>/<role> or a role ARN
     # transition_days: 0                       # optional: days before Intelligent-Tiering
-    # versioning: true                         # optional; config.yaml must approve it
-    # expire_noncurrent_days: 90               # optional; needs versioning; config.yaml must approve it
-    # expire_prefixes: { tmp/: 30 }            # optional; sub-prefix -> days; config.yaml must approve it
-    # consumers: [braveheart-databricks]       # optional: Databricks workspaces that may read it; config.yaml must approve it
+    # versioning: true                         # optional; config/projects.yaml must approve it
+    # expire_noncurrent_days: 90               # optional; needs versioning; config/projects.yaml must approve it
+    # expire_prefixes: { tmp/: 30 }            # optional; sub-prefix -> days; config/projects.yaml must approve it
+    # consumers: [braveheart-databricks]       # optional: Databricks workspaces that may read it, each a databricks project in config/projects.yaml
 ```
 
 | Field | Meaning |
@@ -35,7 +35,7 @@ components:
 | `bucket` | Where the project's workflows read and write: `<Organization>-<project>-<name>` in the account they run in. It is written out so they can read it with `yq` without installing the tool. The tool always uses the addressed account's derivation and accepts either account's name here, so one file renders in both while the project moves ([below](#moving-a-dataset-project-to-production)); any other name is refused. |
 | `prefix` | Path segments ending in `/` with no leading `/`, for example `data/`. Writers and readers are granted this prefix only. |
 | `writers` | Components whose roles may add objects under the prefix. Only `task-runner`, the task instances, is accepted today, and it needs a `task-runner` component. The default is none. |
-| `readers` | Roles granted read access under the prefix through the bucket policy: a role ARN, or `<project>/<role>` for another project's role in whichever account the run addresses (`braveheart-trainer/task-gpu` is `<Organization>-braveheart-trainer-task-gpu`). A `<project>/<role>` reader must name a project in `config.yaml`, and is named only once that project has a stack in the account, since a bucket policy cannot name a role that does not exist yet: apply again after the reader's project is first applied there. The default is none; the account's administrators can always read. |
+| `readers` | Roles granted read access under the prefix through the bucket policy: a role ARN, or `<project>/<role>` for another project's role in whichever account the run addresses (`braveheart-trainer/task-gpu` is `<Organization>-braveheart-trainer-task-gpu`). A `<project>/<role>` reader must name a project in `config/projects.yaml`, and is named only once that project has a stack in the account, since a bucket policy cannot name a role that does not exist yet: apply again after the reader's project is first applied there. The default is none; the account's administrators can always read. |
 | `transition_days` | Days before objects move to S3 Intelligent-Tiering. The default is 0, which means at the next daily lifecycle run. |
 | `versioning` | Keep prior versions of overwritten or deleted objects. The default is `false`. |
 | `expire_noncurrent_days` | Days before noncurrent versions expire. Needs `versioning: true`. |
@@ -43,11 +43,11 @@ components:
 | `expire_prefixes` | Sub-prefixes of `prefix` whose current objects expire, in days, such as `{tmp/: 30}`. |
 
 `versioning`, `expire_noncurrent_days` and `expire_prefixes` must equal what
-`config.yaml` approves for the bucket under `projects.<name>.datasets`
-(the default is no versioning and no expiry), and so must the prefix that
-`write_once` and `expire_prefixes` are relative to. A file that differs is a
-configuration error. Retention is a reviewed change to this tool; see
-[research projects](research-projects.md#retention-is-approved-in-configyaml).
+the project's entry in `config/projects.yaml` approves for the bucket under
+`datasets` (the default is no versioning and no expiry), and so must the
+prefix that `write_once` and `expire_prefixes` are relative to. A file that
+differs is a configuration error. Retention is a reviewed change to this tool;
+see [research projects](research-projects.md#retention-is-approved-in-configprojectsyaml).
 
 A project can declare several datasets, each with its own bucket.
 
@@ -63,13 +63,15 @@ module, in the bot stack.
   file never deletes data: see [Giving a dataset up](#giving-a-dataset-up).
 - **Write-once, by convention or by IAM.** With plain `writers` or `write`
   grants, a new run gets a new partition and never overwrites, but nothing
-  stops `PutObject` replacing a key. Prefixes that `config.yaml` lists under
-  `write_once` are enforced: see [Write-once prefixes](#write-once-prefixes).
-- **Versioning is off unless the project turns it on** (and `config.yaml`
-  approves it). Off, an accidental re-upload is only stored once. Braveheart's
-  `jaws-braveheart-selfplay-positions` and `jaws-braveheart-trainer-nets` have
-  it on with no expiry: the data can't be regenerated cheaply, and an overwrite
-  or a delete stays recoverable. When it is on:
+  stops `PutObject` replacing a key. Prefixes that `config/projects.yaml` lists
+  under `write_once` are enforced: see
+  [Write-once prefixes](#write-once-prefixes).
+- **Versioning is off unless the project turns it on** (and
+  `config/projects.yaml` approves it). Off, an accidental re-upload is only
+  stored once. Braveheart's `jaws-braveheart-selfplay-positions` and
+  `jaws-braveheart-trainer-nets` have it on with no expiry: the data can't be
+  regenerated cheaply, and an overwrite or a delete stays recoverable. When it
+  is on:
   - S3 advises waiting 15 minutes after enabling versioning before writing.
   - `expire_prefixes` only adds delete markers on a versioned bucket; the data
     stays, and is billed, until `expire_noncurrent_days` expires the
@@ -96,16 +98,17 @@ two changes, so a dataset removed from a file by mistake is refused rather than
 left unmanaged:
 
 1. **The project file drops the dataset** (and every profile's grant on it).
-2. **`config.yaml` drops its approval** under `projects.<name>.datasets`, a
-   reviewed change in this repository, released before the project's next apply.
+2. **`config/projects.yaml` drops its approval** from the project's
+   `datasets`, a reviewed change in this repository, released before the
+   project's next apply.
 
-While the file has dropped it but `config.yaml` still approves it, `plan` and
-`apply` refuse and say which to change. Once both are gone, the plan comment
-reports the pending release, and the next **Bot apply** releases the bucket's
-resources (the bucket, its policy and its configuration) from Terraform state
-before applying, as `destroy` does, then removes the dataset's grants from the
-task roles. The bucket is no longer managed here; the owner deletes it when its
-data has a home.
+While the file has dropped it but `config/projects.yaml` still approves it,
+`plan` and `apply` refuse and say which to change. Once both are gone, the plan
+comment reports the pending release, and the next **Bot apply** releases the
+bucket's resources (the bucket, its policy and its configuration) from
+Terraform state before applying, as `destroy` does, then removes the dataset's
+grants from the task roles. The bucket is no longer managed here; the owner
+deletes it when its data has a home.
 
 ## Who can do what
 
@@ -128,7 +131,7 @@ closes that gap (below).
 ### Write-once prefixes
 
 A profile's `datasets` grant can name `write_once` sub-prefixes, which
-`config.yaml` must also list for the bucket:
+`config/projects.yaml` must also list for the bucket:
 
 ```yaml
 datasets:
@@ -251,9 +254,12 @@ position. So 100 million positions are about 1.8 GB, and a billion about
 ## Adding a dataset
 
 1. Add the component to the project's `jaws.yaml`.
-2. Add the bucket under `projects.<name>.datasets` in `config.yaml`, with its
-   approved retention (`{}` for none), and release. `foundation/bots.tf` reads
-   the bucket names from it and gives the project's plan and apply roles
-   `dataset/read` and `dataset/manage` for the bucket.
+2. Add the bucket under `datasets` in the project's entry in
+   `config/projects.yaml`, with its approved retention (`{}` for none), and
+   release. A project not yet onboarded gets its entry first, under its GitHub
+   owner with its type, repository and `repository_id`
+   ([research projects](research-projects.md#onboarding-a-research-project)).
+   `foundation/bots.tf` reads the bucket names from it and gives the project's
+   plan and apply roles `dataset/read` and `dataset/manage` for the bucket.
 3. Run **Bot apply** for the project. It creates the bucket and the
    writers' policies.

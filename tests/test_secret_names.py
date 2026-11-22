@@ -23,9 +23,9 @@ from jaws.project import Project
 from jaws.settings import Settings, load_settings
 from jaws.site import SiteConfig, load_site_config
 from jaws.stack import render_tfvars
-from tests.conftest import FIXTURES
+from tests.conftest import CONFIG_DIR, FIXTURES
 
-CONFIG = FIXTURES / "config.yaml"
+CONFIG = CONFIG_DIR
 BOT = FIXTURES / "registry" / "braveheart-bot.yaml"
 PRODUCTION_ADMIN = (
     "arn:aws:sts::570327089884:assumed-role/"

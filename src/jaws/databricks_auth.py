@@ -1,7 +1,7 @@
 """The Databricks service principal's credentials and the SDK clients built from them.
 
 One service principal (OAuth machine-to-machine) manages every workspace: its
-client ID and the account ID are in config.yaml, its client secret only in SSM.
+client ID and the account ID are in config/databricks.yaml, its client secret only in SSM.
 The secret goes to Terraform through the child process's environment and to the
 SDK clients in memory; it is never written to a file, logged, or put in an
 exception message.
@@ -30,7 +30,7 @@ _AUTH_TYPE = "oauth-m2m"
 
 def _section(settings: Settings) -> DatabricksSection:
     if settings.databricks is None:
-        raise ConfigError("config.yaml has no databricks section")
+        raise ConfigError("no databricks section is configured (config/databricks.yaml)")
     return settings.databricks
 
 

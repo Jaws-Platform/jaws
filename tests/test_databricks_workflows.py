@@ -12,11 +12,11 @@ from typing import Any
 import pytest
 import yaml
 
-from tests.conftest import REPO_ROOT
+from tests.conftest import REPO_ROOT, repo_config
 
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 CREDENTIALS_SCRIPT = REPO_ROOT / "scripts" / "databricks-credentials.sh"
-PROJECTS_SCRIPT = REPO_ROOT / "scripts" / "databricks-projects.sh"
+PROJECTS_SCRIPT = REPO_ROOT / "scripts" / "projects.sh"
 SENTINEL = "dbx-SENTINEL-secret-0123"
 
 needs_yq = pytest.mark.skipif(
@@ -42,12 +42,18 @@ def _index(steps: list[dict[str, Any]], predicate: Any) -> int:
 # --- the credential script --------------------------------------------------
 
 
+def _write_databricks(root: Path, *, enabled: bool) -> None:
+    """root/config/databricks.yaml: the section the script reads, enabled or not."""
+    databricks = repo_config()["databricks"]
+    databricks["enabled"] = enabled
+    (root / "config").mkdir(exist_ok=True)
+    (root / "config" / "databricks.yaml").write_text(yaml.safe_dump({"databricks": databricks}))
+
+
 def _run_credentials(tmp_path: Path, *, enabled: bool) -> tuple[str, Path, Path]:
     """Source the script in a step-like shell (`bash -e`) with a fake `aws` that returns
     SENTINEL, then print the environment the step's terraform would see."""
-    config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
-    config["databricks"]["enabled"] = enabled
-    (tmp_path / "config.yaml").write_text(yaml.safe_dump(config))
+    _write_databricks(tmp_path, enabled=enabled)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     calls = tmp_path / "aws-calls"
@@ -57,7 +63,7 @@ def _run_credentials(tmp_path: Path, *, enabled: bool) -> tuple[str, Path, Path]
     github_env = tmp_path / "github-env"
     github_env.touch()
     result = subprocess.run(
-        ["bash", "-e", "-c", f'source "{CREDENTIALS_SCRIPT}" config.yaml\necho ---\nenv'],
+        ["bash", "-e", "-c", f'source "{CREDENTIALS_SCRIPT}" config\necho ---\nenv'],
         cwd=tmp_path,
         env={
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
@@ -88,7 +94,7 @@ def test_the_secret_is_masked_before_it_is_used_and_stays_in_the_step(tmp_path: 
     assert lines[0] == f"::add-mask::{SENTINEL}"
     assert SENTINEL not in "\n".join(lines[1:])
     assert f"DATABRICKS_CLIENT_SECRET={SENTINEL}" in environment.splitlines()
-    databricks = _yaml(REPO_ROOT / "config.yaml")["databricks"]
+    databricks = repo_config()["databricks"]
     assert f"DATABRICKS_ACCOUNT_ID={databricks['account_id']}" in environment
     assert f"DATABRICKS_CLIENT_ID={databricks['client_id']}" in environment
     assert "_dbx_" not in environment  # its own variables are unset
@@ -109,15 +115,13 @@ def test_the_secret_script_does_nothing_while_disabled(tmp_path: Path) -> None:
 
 @needs_yq
 def test_a_multiline_secret_fails_the_step_without_printing_it(tmp_path: Path) -> None:
-    config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
-    config["databricks"]["enabled"] = True
-    (tmp_path / "config.yaml").write_text(yaml.safe_dump(config))
+    _write_databricks(tmp_path, enabled=True)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "aws").write_text(f"#!/usr/bin/env bash\nprintf '{SENTINEL}\\nline2\\n'\n")
     (bin_dir / "aws").chmod(0o755)
     result = subprocess.run(
-        ["bash", "-e", "-c", f'source "{CREDENTIALS_SCRIPT}" config.yaml\necho reached'],
+        ["bash", "-e", "-c", f'source "{CREDENTIALS_SCRIPT}" config\necho reached'],
         cwd=tmp_path,
         env={"PATH": f"{bin_dir}:{os.environ['PATH']}"},
         capture_output=True,
@@ -129,7 +133,7 @@ def test_a_multiline_secret_fails_the_step_without_printing_it(tmp_path: Path) -
     assert SENTINEL not in result.stdout + result.stderr
 
 
-_SOURCE = "source ../scripts/databricks-credentials.sh ../config.yaml"
+_SOURCE = "source ../scripts/databricks-credentials.sh ../config"
 
 
 @pytest.mark.parametrize(
@@ -174,36 +178,50 @@ def test_no_workflow_exports_a_databricks_secret() -> None:
 # --- the project registry ----------------------------------------------------
 
 
-def _projects(path: Path | None = None) -> subprocess.CompletedProcess[str]:
-    args = [str(PROJECTS_SCRIPT)] + ([str(path)] if path else [])
+def _projects(*types: str, config: Path | None = None) -> subprocess.CompletedProcess[str]:
+    args = [str(PROJECTS_SCRIPT)] + (["--config", str(config)] if config else []) + list(types)
     return subprocess.run(args, cwd=REPO_ROOT, capture_output=True, text=True, check=False)
 
 
 @needs_yq
-def test_the_registry_script_reads_databricks_tf(tmp_path: Path) -> None:
-    assert json.loads(_projects().stdout) == [
+def test_the_registry_script_lists_the_projects_of_a_type(tmp_path: Path) -> None:
+    assert json.loads(_projects("databricks").stdout) == [
         {
             "project": "braveheart-databricks",
             "repository": "Braveheart-Chess/braveheart-databricks",
+            "type": "databricks",
         },
     ]
-    text = (REPO_ROOT / "foundation" / "databricks.tf").read_text()
-    entry = (
-        "  databricks_projects = {\n"
-        '    other          = { repository = "jwallace145/other", repository_id = "2" }\n'
+    projects = repo_config()["projects"]
+    projects["Another-Org"] = {
+        "owner_id": "2",
+        "projects": {
+            "other": {
+                "description": "Another workspace",
+                "type": "databricks",
+                "repository": "other-repo",
+                "repository_id": "3",
+            }
+        },
+    }
+    filled = tmp_path / "projects.yaml"
+    filled.write_text(yaml.safe_dump({"projects": projects}, sort_keys=False))
+    assert [
+        (e["project"], e["repository"])
+        for e in json.loads(_projects("databricks", config=filled).stdout)
+    ] == [
+        ("braveheart-databricks", "Braveheart-Chess/braveheart-databricks"),
+        ("other", "Another-Org/other-repo"),
+    ]
+    # The directory form reads its projects.yaml.
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "projects.yaml").write_text(filled.read_text())
+    assert (
+        _projects("databricks", config=tmp_path / "config").stdout
+        == _projects("databricks", config=filled).stdout
     )
-    filled = tmp_path / "databricks.tf"
-    filled.write_text(text.replace("  databricks_projects = {\n", entry))
-    assert json.loads(_projects(filled).stdout) == [
-        {"project": "other", "repository": "jwallace145/other"},
-        {
-            "project": "braveheart-databricks",
-            "repository": "Braveheart-Chess/braveheart-databricks",
-        },
-    ]
-    missing = tmp_path / "missing.tf"
-    missing.write_text("locals {}\n")
-    assert _projects(missing).returncode != 0
+    assert _projects("pipeline").returncode == 2
+    assert _projects().returncode == 2
 
 
 @needs_yq
@@ -216,11 +234,9 @@ def test_the_setup_job_outputs_the_enabled_flag_and_the_registry(
     step = steps[_index(steps, lambda s: s.get("id") == "list")]
     root = tmp_path / "repo"
     shutil.copytree(REPO_ROOT / "scripts", root / "scripts")
-    (root / "foundation").mkdir()
-    shutil.copy(REPO_ROOT / "foundation" / "databricks.tf", root / "foundation")
-    config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
-    config["databricks"]["enabled"] = enabled
-    (root / "config.yaml").write_text(yaml.safe_dump(config))
+    _write_databricks(root, enabled=enabled)
+    projects = {"projects": repo_config()["projects"]}
+    (root / "config" / "projects.yaml").write_text(yaml.safe_dump(projects, sort_keys=False))
     output = tmp_path / "out"
     subprocess.run(
         ["bash", "-e", "-c", step["run"]],
@@ -228,13 +244,7 @@ def test_the_setup_job_outputs_the_enabled_flag_and_the_registry(
         env={**os.environ, "GITHUB_OUTPUT": str(output)},
         check=True,
     )
-    registry = subprocess.run(
-        ["scripts/databricks-projects.sh"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
+    registry = _projects("databricks").stdout.strip()
     assert output.read_text().splitlines() == [
         f"enabled={str(enabled).lower()}",
         f"projects={registry}",
@@ -306,7 +316,7 @@ def test_databricks_apply_is_a_manual_prod_run() -> None:
 def test_databricks_apply_runs_the_projects_file_with_its_apply_role() -> None:
     steps = _steps("databricks-apply.yml", "apply")
     lookup = steps[_index(steps, lambda s: s.get("id") == "project")]
-    assert "scripts/databricks-projects.sh" in lookup["run"]
+    assert "scripts/projects.sh databricks" in lookup["run"]
     checkout = steps[_index(steps, lambda s: s.get("with", {}).get("path") == ".consumer")]
     assert checkout["with"]["repository"] == "${{ steps.project.outputs.repository }}"
     role = steps[_index(steps, lambda s: s.get("id") == "role")]
@@ -335,4 +345,4 @@ def test_databricks_apply_refuses_an_unregistered_project(tmp_path: Path) -> Non
         check=False,
     )
     assert result.returncode != 0
-    assert "not-a-project is not in foundation/databricks.tf" in result.stdout
+    assert "not-a-project is not a databricks project in config/projects.yaml" in result.stdout

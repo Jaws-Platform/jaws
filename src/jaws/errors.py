@@ -12,7 +12,7 @@ class SitesError(Exception):
 
 
 class ConfigError(SitesError):
-    """config.yaml or the site file is invalid."""
+    """The tool configuration (config/) or the site file is invalid."""
 
     exit_code = 2
 

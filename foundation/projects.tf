@@ -1,24 +1,25 @@
-# The single registry of jaws sites. Adding a site means adding a
-# line here; each entry gets an S3 bucket (jaws-<key>) and three
-# CI roles (jaws-<key>-ci-{plan,preview,apply}) scoped to its
-# repository, bucket, state prefix and DNS names.
+# The jaws sites: the projects of type site in config/projects.yaml, where a
+# site is onboarded. Each gets an S3 bucket (jaws-<key>) and three CI roles
+# (jaws-<key>-ci-{plan,preview,apply}) scoped to its repository, bucket, state
+# prefix and DNS names.
 #
 # Modules come from the Jaws-Platform/jaws-*/aws registry modules (one family
 # per component), pinned to an exact version in every block (module versions
 # are not recorded in .terraform.lock.hcl, so a range would not be
 # reproducible). Dependabot opens bump PRs; keep every pin of a family
-# identical, and equal to library.families in config.yaml.
+# identical, and equal to library.families in config/terraform.yaml.
 
 locals {
-  # repository_id is the numeric GitHub ID (gh api repos/<owner>/<repo> --jq .id).
-  # Together with github_owner_id it lets the CI roles trust GitHub's immutable
+  # The sites (type site in config/projects.yaml). repository_id is the numeric
+  # GitHub ID; with its owner's ID it lets the CI roles trust GitHub's immutable
   # OIDC subject form, which every repository here issues.
-  github_owner_id = "35950238"
-
   projects = {
-    main-site             = { repository = "jwallace145/site", repository_id = "1413965497", domain = "jwall.engineering" }
-    cs-survival-guide     = { repository = "jwallace145/cs-survival-guide", repository_id = "1402607832", domain = "survival-guide.jwall.engineering" }
-    guitar-knowledge-base = { repository = "jwallace145/guitar-knowledge-base", repository_id = "1418340665", domain = "guitar.jwall.engineering" }
+    for key, project in local.registry : key => {
+      repository    = project.repository
+      repository_id = project.repository_id
+      owner_id      = project.owner_id
+      domain        = project.domain
+    } if project.type == "site"
   }
 
   # Record names each project's CI roles may manage in the zone: the site
@@ -87,7 +88,7 @@ module "site_ci_plan" {
   project           = each.key
   name_root         = local.context.organization
   repository        = each.value.repository
-  owner_id          = local.github_owner_id
+  owner_id          = each.value.owner_id
   repository_id     = each.value.repository_id
   oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
 
@@ -108,7 +109,7 @@ module "site_ci_preview" {
   project           = each.key
   name_root         = local.context.organization
   repository        = each.value.repository
-  owner_id          = local.github_owner_id
+  owner_id          = each.value.owner_id
   repository_id     = each.value.repository_id
   oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
 
@@ -128,7 +129,7 @@ module "site_ci_apply" {
   project           = each.key
   name_root         = local.context.organization
   repository        = each.value.repository
-  owner_id          = local.github_owner_id
+  owner_id          = each.value.owner_id
   repository_id     = each.value.repository_id
   oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
   environment       = "prod"

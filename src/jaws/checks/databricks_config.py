@@ -1,6 +1,6 @@
 """Databricks `config` checks: offline, run during `validate` and in `doctor`.
 
-Each failure names the config.yaml field (or project-file field) to change.
+Each failure names the field of the tool configuration (config/) or of the project file to change.
 Registered at import; `checks.load_builtin_checks()` imports this module.
 """
 
@@ -47,7 +47,7 @@ CFG_005 = Meta(
 
 def _section(ctx: CheckContext) -> DatabricksSection:
     if ctx.settings.databricks is None:
-        raise ConfigError("config.yaml has no databricks section")
+        raise ConfigError("no databricks section is configured (config/databricks.yaml)")
     return ctx.settings.databricks
 
 
@@ -55,7 +55,7 @@ def _vpc(ctx: CheckContext) -> tuple[str, ipaddress.IPv4Network]:
     field = _CIDR_FIELD.format(p=ctx.project.project)
     approved = ctx.project.databricks_approved
     if approved is None:
-        raise ConfigError(f"add {field} to config.yaml")
+        raise ConfigError(f"add {field} to config/projects.yaml")
     return field, ipaddress.IPv4Network(approved.vpc_cidr)
 
 
@@ -89,7 +89,7 @@ def private_subnets(ctx: CheckContext) -> Iterable[CheckResult]:
     facts = {"private": ", ".join(map(str, private)), "public": ", ".join(map(str, public))}
     if problems:
         yield CFG_001.failed(
-            f"change {field} in config.yaml to a /16 to /20 range: " + "; ".join(problems),
+            f"change {field} in config/projects.yaml to a /16 to /20 range: " + "; ".join(problems),
             problem="; ".join(problems),
             **facts,
         )
@@ -111,7 +111,7 @@ def vpc_overlap(ctx: CheckContext) -> Iterable[CheckResult]:
     clashes = [f"{label} ({net})" for label, net in others if vpc.overlaps(net)]
     if clashes:
         yield CFG_002.failed(
-            f"change {field} in config.yaml ({vpc}); it overlaps {', '.join(clashes)}",
+            f"change {field} in config/projects.yaml ({vpc}); it overlaps {', '.join(clashes)}",
             overlaps=", ".join(clashes),
         )
         return
@@ -167,7 +167,9 @@ def compute_policies(ctx: CheckContext) -> Iterable[CheckResult]:
         for issue in _policy_problems(policy.definition):
             problems.append(f"databricks.compute_policies.{name}: {issue}")
     if problems:
-        yield CFG_003.failed("in config.yaml, " + "; ".join(problems), problems="; ".join(problems))
+        yield CFG_003.failed(
+            "in config/databricks.yaml, " + "; ".join(problems), problems="; ".join(problems)
+        )
         return
     yield CFG_003.passed(policies=", ".join(ctx.project.databricks.compute_policies))
 
@@ -196,7 +198,7 @@ def derived_name_limits(ctx: CheckContext) -> Iterable[CheckResult]:
             "shorten the project name (the file's `project`)"
             if too_long
             else "set a shorter deployment_name on the databricks-workspace component or "
-            "databricks.deployment_name_prefix in config.yaml"
+            "databricks.deployment_name_prefix in config/databricks.yaml"
         )
         yield CFG_004.failed(
             f"{hint}: " + "; ".join(problems),

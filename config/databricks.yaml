@@ -1,0 +1,47 @@
+# Databricks workspaces (projects of type databricks in config/projects.yaml,
+# each with a `databricks` entry there). The account stack uses a service
+# principal whose client secret lives in SSM at `secret_parameter` (never in
+# this file). Reviewed here; a project's own file cannot widen the compute
+# policies or pick its own network range.
+
+databricks:
+  # The account and the infra service principal (its application/client ID; the
+  # secret is in SSM). `enabled: false` would leave the foundation's Databricks
+  # resources and the `live` checks alone (docs/databricks.md).
+  enabled: true
+  account_id: 64826090-46b0-471f-b2d6-f3e7490b992c
+  client_id: 59a6c509-4d02-4622-b907-d42da61b2119
+  secret_parameter: /jaws/databricks/client-secret
+  metastore_name: jaws-us-east-1
+  # The service principal is always added too (by client_id), so list people only.
+  metastore_admins: [jimmy.wallace145@gmail.com]
+  # Pinned Amazon Linux 2023 arm64 image for the NAT instance, by its Amazon image name.
+  nat_ami: al2023-ami-2023.12.20261026.1-kernel-6.18-arm64
+  # Set to the prefix Databricks configured for this account to get <prefix>-<project>
+  # workspace URLs; null lets Databricks pick the URL.
+  deployment_name_prefix: null
+  audit_bucket: jaws-databricks-audit-logs
+  events_prefix: events/
+  readiness_timeout: 20m # how long apply waits for a new workspace to be RUNNING
+  # The shared-objects host's URL (jaws-shared), which Databricks picked when the
+  # foundation created it: the data-access stack binds and grants onboarded
+  # datasets through it. The foundation checks it still matches its own output
+  # (databricks_shared_host.workspace_url).
+  shared_host_url: https://dbc-287077d7-e617.cloud.databricks.com
+  # Cluster policy definitions, by kebab-case name. A project lists the names it gets.
+  compute_policies:
+    small-interactive:
+      description: Small interactive clusters on cheap Graviton spot nodes
+      definition:
+        num_workers: {type: range, maxValue: 2}
+        autotermination_minutes: {type: fixed, value: 30, hidden: false}
+        node_type_id: {type: allowlist, values: [m7g.large, m7g.xlarge]}
+        aws_attributes.availability: {type: fixed, value: SPOT_WITH_FALLBACK}
+    jobs:
+      description: Job clusters, up to four workers
+      definition:
+        cluster_type: {type: fixed, value: job}
+        num_workers: {type: range, maxValue: 4}
+        autotermination_minutes: {type: fixed, value: 30, hidden: true}
+        node_type_id: {type: allowlist, values: [m7g.large, m7g.xlarge]}
+        aws_attributes.availability: {type: fixed, value: SPOT_WITH_FALLBACK}

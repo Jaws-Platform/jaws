@@ -21,6 +21,7 @@ from jaws.checks.framework import (
     Severity,
     Stage,
 )
+from tests.conftest import read_config, write_config
 
 runner = CliRunner()
 SENTINEL = "dapi-SENTINEL-s3cr3t-value"
@@ -266,12 +267,10 @@ def test_doctor_with_real_checks_skips_while_disabled(
     databricks_workspace: Path, fake_terraform: Path
 ) -> None:
     """The built-in live/between/after checks wait for `enabled: true`; no secret is needed."""
-    import yaml
 
-    path = databricks_workspace / "config.yaml"
-    config = yaml.safe_load(path.read_text())
+    config = read_config(databricks_workspace)
     config["databricks"]["enabled"] = False
-    path.write_text(yaml.safe_dump(config))
+    write_config(databricks_workspace, config)
     with mock_aws(), _as_role(PLAN_ROLE):
         result = runner.invoke(
             cli.app, ["databricks", "doctor", "--stage", "live", "--stage", "between"]

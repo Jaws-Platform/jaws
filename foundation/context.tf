@@ -5,7 +5,8 @@
 locals {
   region = "us-east-1"
 
-  # From config.yaml (read in ecr.tf), the tool's single source for the account.
+  # The primary account of the registry (config/aws.yaml, read in config.tf), the
+  # tool's single source for the account.
   account_id = local.account.aws.account_id
 
   context = {

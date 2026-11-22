@@ -17,8 +17,10 @@ from jaws.project import Project
 from jaws.settings import (
     DatabricksProject,
     DatasetRetention,
+    OnboardedProject,
     ProjectGuardrails,
     Settings,
+    load_document,
     load_settings,
 )
 from jaws.site import Site, load_site_config
@@ -26,6 +28,70 @@ from jaws.site import Site, load_site_config
 FIXTURES = Path(__file__).parent / "fixtures"
 SITE_FIXTURES = sorted((FIXTURES / "sites").glob("*.yaml"))
 REPO_ROOT = Path(__file__).resolve().parent.parent
+#: The tool configuration, which the suite's baseline starts from.
+CONFIG_DIR = REPO_ROOT / "config"
+#: The GitHub owner the suite onboards its sample projects under.
+TEST_OWNER = "Test-Fixtures"
+
+
+def repo_config() -> dict[str, Any]:
+    """The repository's tool configuration (config/) as one raw mapping."""
+    return load_document(CONFIG_DIR)
+
+
+def project_entry(config: dict[str, Any], key: str) -> dict[str, Any]:
+    """A raw config's entry for project `key`, whichever owner it is under."""
+    for group in config["projects"].values():
+        if key in group["projects"]:
+            entry: dict[str, Any] = group["projects"][key]
+            return entry
+    raise KeyError(f"project {key!r} is not onboarded")
+
+
+def onboarded(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """A raw config's projects by key."""
+    return {k: p for g in config["projects"].values() for k, p in g["projects"].items()}
+
+
+def onboard(
+    config: dict[str, Any],
+    key: str,
+    guardrails: ProjectGuardrails | None = None,
+    *,
+    type: str | None = None,
+    owner: str = TEST_OWNER,
+) -> dict[str, Any]:
+    """Onboard `key` in a raw config with `guardrails`, or set an onboarded
+    project's guardrails (keeping who it is). Returns the raw entry."""
+    approved = guardrails.model_dump(mode="json", exclude_defaults=True) if guardrails else {}
+    try:
+        entry = project_entry(config, key)
+    except KeyError:
+        group = config["projects"].setdefault(owner, {"owner_id": "100000", "projects": {}})
+        entry = group["projects"].setdefault(key, {})
+        entry.update(
+            description=f"The suite's {key} sample",
+            type=type or ("databricks" if approved.get("databricks") else "research"),
+            repository=key,
+            repository_id="1",
+        )
+    else:
+        for field in ProjectGuardrails.model_fields:
+            entry.pop(field, None)
+        if type is not None:
+            entry["type"] = type
+    entry.update(approved)
+    return entry
+
+
+def offboard(config: dict[str, Any], key: str) -> None:
+    """Remove project `key` from a raw config (and its owner, once empty)."""
+    for owner, group in list(config["projects"].items()):
+        if group["projects"].pop(key, None) is not None:
+            if not group["projects"]:
+                del config["projects"][owner]
+            return
+    raise KeyError(f"project {key!r} is not onboarded")
 
 
 #: The central entry the math-prover sample would have once it is onboarded.
@@ -46,7 +112,7 @@ MATH_PROVER_GUARDRAILS = ProjectGuardrails(
 
 #: The central entry the braveheart sample (fixtures/bots/braveheart.yaml) needs: the
 #: engine as it was before the split, the suite's full-featured project (GPU,
-#: datagen and relabel profiles, a dataset). Stated here, not read from config.yaml,
+#: datagen and relabel profiles, a dataset). Stated here, not read from config/,
 #: whose entry for the real engine shrank at the split's cutover.
 BRAVEHEART_GUARDRAILS = ProjectGuardrails(
     instance_types=(
@@ -63,7 +129,7 @@ BRAVEHEART_GUARDRAILS = ProjectGuardrails(
 
 
 #: The central entry of the databricks-poc sample (fixtures/bots/databricks-poc.yaml),
-#: the suite's Databricks workspace project. Stated here, not read from config.yaml,
+#: the suite's Databricks workspace project. Stated here, not read from config/,
 #: which dropped the real project when it was retired (2026-11-19).
 DATABRICKS_POC_GUARDRAILS = ProjectGuardrails(
     databricks=DatabricksProject(
@@ -75,16 +141,14 @@ DATABRICKS_POC_GUARDRAILS = ProjectGuardrails(
 )
 
 
-def fixture_config(path: Path = FIXTURES / "config.yaml") -> dict[str, Any]:
-    """config.yaml's fixture copy as the suite's baseline, with the central entries
-    of the braveheart and databricks-poc samples and Databricks enabled. The raw
-    mapping a test writes out as a config.yaml."""
-    config: dict[str, Any] = yaml.safe_load(path.read_text())
-    config["projects"]["braveheart"] = BRAVEHEART_GUARDRAILS.model_dump(mode="json")
+def fixture_config(path: Path = CONFIG_DIR) -> dict[str, Any]:
+    """The tool configuration as the suite's baseline, with the central entries of the
+    braveheart and databricks-poc samples and Databricks enabled. The raw mapping a
+    test writes out as one config file (the loader reads one file like the directory)."""
+    config = load_document(path)
+    onboard(config, "braveheart", BRAVEHEART_GUARDRAILS)
     config["databricks"]["enabled"] = True
-    config["projects"]["databricks-poc"] = DATABRICKS_POC_GUARDRAILS.model_dump(
-        mode="json", exclude_defaults=True
-    )
+    onboard(config, "databricks-poc", DATABRICKS_POC_GUARDRAILS, type="databricks")
     return config
 
 
@@ -106,9 +170,68 @@ def fixture_settings(path: Path | None = None, **kwargs: object) -> Settings:
     return load_settings(path or baseline_config_path(), **kwargs)  # type: ignore[arg-type]
 
 
-def with_guardrails(settings: Settings, project: str, guardrails: ProjectGuardrails) -> Settings:
-    """`settings` with `guardrails` as the central entry for `project`."""
-    return settings.model_copy(update={"projects": {**settings.projects, project: guardrails}})
+def with_guardrails(
+    settings: Settings, project: str, guardrails: ProjectGuardrails, *, validate: bool = True
+) -> Settings:
+    """`settings` with `guardrails` as the central entry for `project` (onboarding it
+    if it is not). `validate=False` swaps the entry in without validating the result,
+    for a check's test that needs a state the loader refuses."""
+    if not validate:
+        base = settings.projects.get(project)
+        onboarding = (
+            {
+                f: getattr(base, f)
+                for f in OnboardedProject.model_fields
+                if f not in ProjectGuardrails.model_fields
+            }
+            if base is not None
+            else {
+                "description": f"The suite's {project} sample",
+                "repository": project,
+                "repository_id": "1",
+                "type": "databricks" if guardrails.databricks else "research",
+            }
+        )
+        approved = {f: getattr(guardrails, f) for f in ProjectGuardrails.model_fields}
+        entry = OnboardedProject.model_construct(**onboarding, **approved)
+        copy = settings.model_copy()
+        copy._projects = {**settings.projects, project: entry}
+        return copy
+    raw = settings.model_dump(mode="json", by_alias=True, exclude_defaults=True)
+    onboard(raw, project, guardrails)
+    return Settings.model_validate(raw)
+
+
+def replace_projects(
+    settings: Settings, projects: dict[str, ProjectGuardrails], **sections: object
+) -> Settings:
+    """`settings` with exactly `projects` onboarded (each as `onboard` would) and
+    any top-level `sections` replaced, such as `databricks=None`."""
+    raw = settings.model_dump(mode="json", by_alias=True, exclude_defaults=True)
+    raw["projects"] = {}
+    for key, guardrails in projects.items():
+        onboard(raw, key, guardrails)
+    for name, value in sections.items():
+        raw[name] = value
+    return Settings.model_validate(raw)
+
+
+def workspace_config(root: Path) -> Path:
+    """A workspace's tool configuration: one file in ./config, where the CLI looks."""
+    return root / "config" / "config.yaml"
+
+
+def write_config(root: Path, config: dict[str, Any], *, sort_keys: bool = True) -> Path:
+    """Write a raw config as a workspace's tool configuration."""
+    path = workspace_config(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(config, sort_keys=sort_keys))
+    return path
+
+
+def read_config(root: Path) -> dict[str, Any]:
+    """A workspace's tool configuration as a raw mapping."""
+    return load_document(workspace_config(root))
 
 
 @pytest.fixture(autouse=True)
@@ -214,11 +337,11 @@ def dist(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def bot_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """A working directory holding the braveheart bot file, its lichess config and config.yaml."""
+    """A working directory with the braveheart bot file, its lichess config and the tool config."""
     root = tmp_path / "bot-workspace"
     (root / "lichess").mkdir(parents=True)
     shutil.copy(FIXTURES / "bots" / "braveheart.yaml", root / "jaws.yaml")
-    (root / "config.yaml").write_text(yaml.safe_dump(fixture_config(), sort_keys=False))
+    write_config(root, fixture_config(), sort_keys=False)
     (root / "lichess" / "config.yml").write_text(
         "token: LICHESS_TOKEN_PLACEHOLDER\nurl: https://lichess.org/\n"
         "engine:\n  dir: ./engines/\n  name: braveheart\n  protocol: uci\n"
@@ -231,13 +354,13 @@ def bot_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[P
 
 @pytest.fixture
 def research_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """A working directory holding the math-prover file and a config.yaml approving it."""
+    """A working directory holding the math-prover file and a tool config approving it."""
     root = tmp_path / "research-workspace"
     root.mkdir()
     shutil.copy(FIXTURES / "bots" / "math-prover.yaml", root / "jaws.yaml")
     config = fixture_config()
-    config["projects"]["math-prover"] = MATH_PROVER_GUARDRAILS.model_dump(mode="json")
-    (root / "config.yaml").write_text(yaml.safe_dump(config))
+    onboard(config, "math-prover", MATH_PROVER_GUARDRAILS, type="research")
+    write_config(root, config)
     monkeypatch.chdir(root)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     yield root
@@ -245,12 +368,11 @@ def research_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Itera
 
 @pytest.fixture
 def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """A working directory holding the guitar site file and config.yaml."""
+    """A working directory holding the guitar site file and the tool config."""
     root = tmp_path / "workspace"
     root.mkdir()
     shutil.copy(FIXTURES / "sites" / "guitar-knowledge-base.yaml", root / "jaws.yaml")
-    config = fixture_config()
-    (root / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
+    write_config(root, fixture_config(), sort_keys=False)
     monkeypatch.chdir(root)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     yield root
@@ -258,7 +380,7 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]
 
 @pytest.fixture
 def databricks_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """A working directory with the databricks-poc file and a config.yaml enabling the account."""
+    """A working directory with the databricks-poc file and a tool config enabling the account."""
     root = tmp_path / "databricks-workspace"
     root.mkdir()
     shutil.copy(FIXTURES / "bots" / "databricks-poc.yaml", root / "jaws.yaml")
@@ -268,7 +390,7 @@ def databricks_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Ite
     config["databricks"]["client_id"] = "22222222-2222-2222-2222-222222222222"
     # Enabled settings refuse the placeholder metastore admin (as the foundation plan does).
     config["databricks"]["metastore_admins"] = ["owner@jwall-engineering.test"]
-    (root / "config.yaml").write_text(yaml.safe_dump(config))
+    write_config(root, config)
     monkeypatch.chdir(root)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     yield root

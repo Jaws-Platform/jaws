@@ -55,10 +55,12 @@ they throttle under sustained load, which is noise in a benchmark. Types with
 more than one thread per core are refused at launch (exit 2): a timed game
 needs a whole core. Then, in this repository:
 
-- add the project's `instance_types` and `task_profiles` under `projects` in
-  `config.yaml`, and register the project in `foundation/bots.tf` (the
-  project file is cross-checked against `config.yaml` at load, and a test
-  checks the foundation's lists come from it);
+- add the project's `instance_types` and `task_profiles` to its entry in
+  `config/projects.yaml`, onboarding it there first if it is new (its
+  description, type, repository and `repository_id`, under its GitHub owner;
+  [research projects](research-projects.md#onboarding-a-research-project));
+  the project file is cross-checked against the entry at load, and a test
+  checks the foundation's lists come from it;
 - release, which applies the foundation and creates the
   `<org>-<project>-ci-task` launch role;
 - run **Bot apply** for the project. It creates the launch template, its
@@ -129,7 +131,7 @@ whose run and task ID are already running.
 
 Pin the tool release and let Dependabot bump it. The bot repository sets no
 variables or secrets. The workflow builds the role ARN from this tool's
-`config.yaml` and `project`.
+configuration (`config/`) and `project`.
 
 ## Writing a task script
 
@@ -146,7 +148,7 @@ variables or secrets. The workflow builds the role ARN from this tool's
   [Scratch on the instance store](#scratch-on-the-instance-store).
 - **Toolchain.** `HOME=/root`, and `PATH` includes `/root/.cargo/bin`, so
   `cargo` and `rustc` are the pinned toolchain (`tasks.rust_toolchain` in
-  this repository's `config.yaml`), unless the profile sets `rust: false`:
+  this repository's `config/bots.yaml`), unless the profile sets `rust: false`:
   then neither is installed. `git`, `gcc`, `gcc-c++`, `make`, `tar`,
   `curl` and the AWS CLI are installed. The script installs anything else
   itself.
@@ -217,7 +219,7 @@ security group, the network and the results bucket.
         market: on-demand           # spot | on-demand
         max_hours: 6                # 1-6
         max_vcpus: 4                # this profile's own running-vCPU budget
-        image: deep-learning-gpu    # a key of tasks.images in config.yaml
+        image: deep-learning-gpu    # a key of tasks.images in config/bots.yaml
         root_volume_gb: 200         # 20-200, gp3
         whole_cores: false          # GPU types run two threads per core
         gpu: true                   # wait for the driver; record GPU, driver, CUDA
@@ -253,10 +255,10 @@ jobs:
 **Turning a profile on.**
 
 1. In this repository, add its types to `instance_types` and its name to
-   `task_profiles` under the project in `config.yaml`, then release. The
-   foundation apply lets the launch role use the new profile. (`foundation/bots.tf`
-   reads both lists from `config.yaml`; the project file is checked against
-   them at load.)
+   `task_profiles` in the project's entry in `config/projects.yaml`, then
+   release. The foundation apply lets the launch role use the new profile.
+   (`foundation/bots.tf` reads both lists from `config/projects.yaml`; the
+   project file is checked against them at load.)
 2. In the consumer, merge the profile into the project file on its default
    branch. Leave the workflows as they are for now.
 3. Run **Bot apply** for the project. It reads the project file from the
@@ -354,7 +356,7 @@ guards](#lifecycle-and-leak-guards) for the standard quotas.
 
 **The image.** GPU tasks run on the AWS *Deep Learning Base OSS Nvidia
 Driver GPU AMI (Amazon Linux 2023)*, which has the NVIDIA driver and the CUDA
-toolkit installed. `tasks.images` in `config.yaml` pins it by its
+toolkit installed. `tasks.images` in `config/bots.yaml` pins it by its
 Amazon-owned image name, and the bot stack resolves the name to its ID: the
 2026-10-27 build is `ami-0f964da32f9793d2b`. An upgrade is a change of the
 pin, then **Bot apply**; nothing changes implicitly. Setup adds what the cpu
@@ -643,7 +645,7 @@ about $0.35.
 - **Setup failed (exit 1, "instance setup failed").** The job log shows the
   end of `/var/log/task-runner-setup.log`. A rustup or dnf download failed;
   re-run.
-- **Rotating the toolchain.** Set `tasks.rust_toolchain` in `config.yaml` to
+- **Rotating the toolchain.** Set `tasks.rust_toolchain` in `config/bots.yaml` to
   the new version, release, then run **Bot apply**. The launch template's new
   default version installs it on the next task.
 - **Destroying the project.** `destroy` refuses while task instances run. It

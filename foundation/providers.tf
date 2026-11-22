@@ -12,7 +12,7 @@ provider "aws" {
 # (databricks.tf). Credentials come from the environment only
 # (DATABRICKS_ACCOUNT_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET, set
 # by scripts/databricks-credentials.sh), never from variables, so the
-# secret is in no plan or state. While config.yaml databricks.enabled is false
+# secret is in no plan or state. While config/databricks.yaml databricks.enabled is false
 # nothing uses this provider and it makes no call.
 provider "databricks" {
   alias     = "account"

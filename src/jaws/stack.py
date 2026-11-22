@@ -22,7 +22,7 @@ from logging import Logger
 from pathlib import Path
 from typing import Any, Final
 
-from .access import Access, infra_root, project_registry_ids
+from .access import Access, project_registry_ids
 from .components import Dataset, TaskRunner, project_reader
 from .errors import ConfigError, RunError
 from .project import Project
@@ -89,7 +89,7 @@ def render_tfvars(
     """The stack's input variables. Pure, so it can be tested.
 
     A bot or research project needs `settings` (health check, records prefix,
-    zones and the ECR lifecycle come from config.yaml). A Databricks project
+    zones and the ECR lifecycle come from the tool configuration). A Databricks project
     needs `settings` and `stack` (`account` or `workspace`); the workspace stack
     also needs the account stack's outputs. Other kinds ignore both. `access`
     is the project's handshakes (access.access_for_project): a dataset an edge
@@ -311,7 +311,7 @@ def deployment_name(project: str, prefix: str | None, requested: str | None = No
 
     Databricks accepts a deployment name only once it has configured a prefix for
     the account, and the URL is then `<prefix>-<name>`. Without a prefix in
-    config.yaml this is None. With one, the name is the project file's
+    config/databricks.yaml this is None. With one, the name is the project file's
     `deployment_name`, else the project. Passed explicitly because the provider
     does not compute it, so a null would drift. Changing it replaces the workspace.
     """
@@ -335,7 +335,10 @@ def deployment_name(project: str, prefix: str | None, requested: str | None = No
 
 def _databricks_section(project: Project, settings: Settings) -> DatabricksSection:
     if settings.databricks is None:
-        raise ConfigError(f"{project.project} is a databricks project but config.yaml has none")
+        raise ConfigError(
+            f"{project.project} is a databricks project but no databricks section is "
+            "configured (config/databricks.yaml)"
+        )
     return settings.databricks
 
 
@@ -367,17 +370,17 @@ def _databricks_account_tfvars(
         "service_principal_application_id": section.client_id,
         "account_id": section.account_id,
         "read_only_datasets": _read_only_datasets(project, settings, access),
-        "deployer": _deployer(project),
+        "deployer": _deployer(project, settings),
     }
 
 
-def _deployer(project: Project) -> dict[str, str] | None:
+def _deployer(project: Project, settings: Settings) -> dict[str, str] | None:
     """The deployer's repository and GitHub IDs, from the project registry, when the
     project file asks for one: its federation subject is built from them."""
     if not project.databricks.deployer:
         return None
-    registry = "foundation/databricks.tf"
-    entry = project_registry_ids(infra_root()).get(project.project)
+    registry = "config/projects.yaml"
+    entry = project_registry_ids(settings).get(project.project)
     if entry is None:
         raise ConfigError(
             f"{project.project}: a deployer needs {project.project} registered in {registry}"
@@ -421,7 +424,7 @@ def _databricks_workspace_tfvars(
         if name not in section.compute_policies:
             raise ConfigError(
                 f"{project.project}: compute policy {name!r} is not defined under "
-                "databricks.compute_policies in config.yaml"
+                "databricks.compute_policies in config/databricks.yaml"
             )
         policy = section.compute_policies[name]
         # The module takes the definition as a JSON string; sorted keys keep the plan stable.
@@ -555,7 +558,7 @@ class Terraform:
     # -- working directory ----------------------------------------------------
 
     def check_version(self) -> str:
-        """Fail fast unless the terraform on PATH is the version config.yaml pins."""
+        """Fail fast unless the terraform on PATH is the version config/terraform.yaml pins."""
         try:
             completed = subprocess.run(
                 [self.binary, "version", "-json"],
@@ -572,7 +575,7 @@ class Terraform:
         expected = self.settings.terraform.version
         if actual != expected:
             raise RunError(
-                f"terraform {actual} is on PATH but config.yaml pins {expected}; "
+                f"terraform {actual} is on PATH but config/terraform.yaml pins {expected}; "
                 "the image and its configuration disagree"
             )
         self.logger.debug("terraform %s", actual)

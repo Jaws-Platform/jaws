@@ -45,7 +45,7 @@ on:
         type: string
         default: ""
       release-role-arn:
-        description: Override the release role. Default, derived from this tool's config.yaml and `project`, `arn:aws:iam::<account>:role/<organization>-<project>-ci-release`.
+        description: Override the release role. Default, derived from this tool's configuration (config/) and `project`, `arn:aws:iam::<account>:role/<organization>-<project>-ci-release`.
         required: false
         type: string
         default: ""
@@ -104,7 +104,7 @@ jobs:
         env:
           OVERRIDE: ${{ inputs.release-role-arn }}
           PROJECT: ${{ inputs.project }}
-          CONFIG: .jaws-tool/config.yaml
+          CONFIG: .jaws-tool/config
         run: |
           if [ -n "$OVERRIDE" ]; then
             arn="$OVERRIDE"
@@ -137,7 +137,7 @@ jobs:
           if [ "$track" = "pinned" ] && [ -z "$VERSION_INPUT" ]; then version_args=(); fi
           # shellcheck disable=SC2086
           uv run --no-dev --project .jaws-tool jaws \
-            --config .jaws-tool/config.yaml $debug_flag \
+            --config .jaws-tool/config $debug_flag \
             bot reconcile "${version_args[@]}"
       - name: Upload the run log and artifacts
         if: always()

@@ -1,4 +1,4 @@
-"""Project files are checked against the central `projects` section of config.yaml."""
+"""Project files are checked against the central `projects` section (config/projects.yaml)."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from jaws.settings import (
     TaskLimits,
 )
 from jaws.site import SiteConfig, load_site_config
-from tests.conftest import FIXTURES, with_guardrails
+from tests.conftest import FIXTURES, replace_projects, with_guardrails
 
 BOT_FILE = FIXTURES / "bots" / "braveheart.yaml"
 BUCKET = "jaws-braveheart-nnue"
@@ -67,20 +67,20 @@ def test_the_braveheart_fixture_is_within_its_guardrails(settings: Settings) -> 
 
 
 def test_project_without_an_entry_is_refused(settings: Settings) -> None:
-    bare = settings.model_copy(update={"projects": {}})
+    bare = replace_projects(settings, {})
     (problem,) = _problems(_raw(), bare)
-    assert "braveheart" in problem and "config.yaml" in problem
+    assert "braveheart" in problem and "config/projects.yaml" in problem
 
 
 def test_a_missing_entry_fails_at_load(settings: Settings) -> None:
-    bare = settings.model_copy(update={"projects": {}})
-    with pytest.raises(ConfigError, match=r"config\.yaml"):
+    bare = replace_projects(settings, {})
+    with pytest.raises(ConfigError, match=r"config/projects\.yaml"):
         Project.from_config(load_site_config(BOT_FILE), bare)
 
 
 def test_a_violation_fails_at_load(settings: Settings) -> None:
     narrow = with_guardrails(settings, "braveheart", ProjectGuardrails())
-    with pytest.raises(ConfigError, match=r"c8a\.xlarge.*config\.yaml"):
+    with pytest.raises(ConfigError, match=r"c8a\.xlarge.*config/projects\.yaml"):
         Project.from_config(load_site_config(BOT_FILE), narrow)
 
 
@@ -101,7 +101,7 @@ def _assert_unlisted_type(problems: list[str], itype: str) -> None:
     hits = [p for p in problems if itype in p]
     assert hits, problems
     for hit in hits:
-        assert "config.yaml" in hit and "bump the tool pin" in hit
+        assert "config/projects.yaml" in hit and "bump the tool pin" in hit
 
 
 def test_cpu_instance_type_outside_the_list_is_refused(settings: Settings) -> None:
@@ -132,7 +132,7 @@ def test_an_unlisted_profile_name_is_refused(settings: Settings) -> None:
     raw = _raw()
     _runner(raw)["profiles"]["sneaky"] = copy.deepcopy(_runner(raw)["profiles"]["match"])
     (problem,) = _problems(raw, settings)
-    assert "sneaky" in problem and "task_profiles" in problem and "config.yaml" in problem
+    assert "sneaky" in problem and "task_profiles" in problem and "config/projects.yaml" in problem
 
 
 def test_the_cpu_profile_must_be_listed_too(settings: Settings) -> None:
@@ -145,7 +145,7 @@ def test_the_cpu_profile_must_be_listed_too(settings: Settings) -> None:
 def test_an_unlisted_dataset_bucket_is_refused(settings: Settings) -> None:
     entry = settings.projects["braveheart"].model_copy(update={"datasets": {}})
     (problem,) = _problems(_raw(), with_guardrails(settings, "braveheart", entry))
-    assert BUCKET in problem and "config.yaml" in problem
+    assert BUCKET in problem and "config/projects.yaml" in problem
 
 
 @pytest.mark.parametrize(
@@ -213,7 +213,7 @@ def test_expire_prefixes_must_equal_the_central_ones(settings: Settings) -> None
     raw = _raw()
     _component(raw, "dataset")["expire_prefixes"] = {"tmp/": 7}
     (problem,) = _problems(raw, settings)  # central has none
-    assert "expire_prefixes" in problem and "config.yaml" in problem and BUCKET in problem
+    assert "expire_prefixes" in problem and "config/projects.yaml" in problem and BUCKET in problem
     approved = _central(settings, expire_prefixes={"tmp/": 7})
     assert _problems(raw, approved) == []
     assert _problems(raw, _central(settings, expire_prefixes={"tmp/": 8})) != []
@@ -229,7 +229,7 @@ def test_expire_noncurrent_days_must_equal_the_central_value(settings: Settings)
     dataset = _component(raw, "dataset")
     dataset.update(versioning=True, expire_noncurrent_days=30)
     (problem,) = _problems(raw, _central(settings, versioning=True))
-    assert "expire_noncurrent_days" in problem and "config.yaml" in problem
+    assert "expire_noncurrent_days" in problem and "config/projects.yaml" in problem
     assert _problems(raw, _central(settings, versioning=True, expire_noncurrent_days=30)) == []
     assert _problems(raw, _central(settings, versioning=True, expire_noncurrent_days=31)) != []
 
@@ -238,12 +238,12 @@ def test_versioning_cannot_be_turned_on_by_the_file(settings: Settings) -> None:
     raw = _raw()
     _component(raw, "dataset")["versioning"] = True
     (problem,) = _problems(raw, settings)  # central default is off
-    assert "versioning" in problem and "config.yaml" in problem
+    assert "versioning" in problem and "config/projects.yaml" in problem
 
 
 def test_versioning_cannot_be_turned_off_by_the_file(settings: Settings) -> None:
     (problem,) = _problems(_raw(), _central(settings, versioning=True))
-    assert "versioning" in problem and "config.yaml" in problem
+    assert "versioning" in problem and "config/projects.yaml" in problem
 
 
 def test_versioning_matching_central_passes(settings: Settings) -> None:
@@ -337,7 +337,7 @@ def test_write_once_outside_the_central_list_is_refused(settings: Settings) -> N
     access = {"read": ["other/"], "write_once": ["other/"]}
     _runner(raw)["profiles"]["datagen"]["datasets"]["nnue"] = access
     (problem,) = _problems(raw, _protect(settings, "runs/"))
-    assert "other/" in problem and "write_once" in problem and "config.yaml" in problem
+    assert "other/" in problem and "write_once" in problem and "config/projects.yaml" in problem
     (problem,) = _problems(raw, settings)  # no central protection at all
     assert "other/" in problem
 
@@ -402,7 +402,7 @@ def test_expiry_beside_a_protected_prefix_passes(settings: Settings) -> None:
     assert _problems(raw, central) == []
 
 
-# Component rules that need no config.yaml
+# Component rules that need no tool configuration
 
 
 def test_expire_noncurrent_days_needs_versioning() -> None:
@@ -511,7 +511,7 @@ def test_a_deeper_prefix_cannot_dodge_write_once(settings: Settings) -> None:
     _runner(raw)["profiles"]["datagen"]["datasets"]["nnue"] = {"write": ["x/"]}
     (problem,) = _problems(raw, _protect(settings, "runs/"))
     assert "prefix" in problem and "data/runs/" in problem and "data/" in problem
-    assert "config.yaml" in problem
+    assert "config/projects.yaml" in problem
 
 
 def test_a_deeper_prefix_cannot_move_expiry(settings: Settings) -> None:
@@ -521,7 +521,7 @@ def test_a_deeper_prefix_cannot_move_expiry(settings: Settings) -> None:
     dataset["prefix"] = "data/runs/"
     dataset["expire_prefixes"] = {"tmp/": 1}
     (problem,) = _problems(raw, _central(settings, expire_prefixes={"tmp/": 1}))
-    assert "prefix" in problem and "config.yaml" in problem
+    assert "prefix" in problem and "config/projects.yaml" in problem
 
 
 def test_the_approved_prefix_passes(settings: Settings) -> None:

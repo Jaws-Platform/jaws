@@ -1,6 +1,6 @@
-# The foundation of the account config.yaml describes. The default runs plan
-# config.yaml as written; the others plan fixtures (tests/fixtures/*.yaml, kept
-# equal to config.yaml plus a few values by tests/test_foundation_fixtures.py).
+# The foundation of the account the tool configuration (config/) describes. The default runs plan
+# the tool configuration (config/) as written; the others plan fixtures (tests/fixtures/*.yaml, kept
+# equal to the tool configuration (config/) plus a few values by tests/test_foundation_fixtures.py).
 # Mock providers: nothing is called.
 
 mock_provider "aws" {
@@ -230,12 +230,12 @@ run "takes_its_managed_by_from_the_configuration" {
 
   # context.managed_by is a value no code spells.
   variables {
-    config_file = "tests/fixtures/relabelled.yaml"
+    config_path = "tests/fixtures/relabelled.yaml"
   }
 
   assert {
     condition     = module.context.tags["ManagedBy"] == "jaws-relabelled" && module.context.tags["Organization"] == "jaws"
-    error_message = "the ManagedBy tag is config.yaml's context.managed_by, as the CLI stamps it on every stack it renders"
+    error_message = "the ManagedBy tag is config/tool.yaml's context.managed_by, as the CLI stamps it on every stack it renders"
   }
 }
 
@@ -243,7 +243,7 @@ run "an_account_without_task_runners_has_no_spot_role" {
   command = plan
 
   variables {
-    config_file = "tests/fixtures/no-task-runners.yaml"
+    config_path = "tests/fixtures/no-task-runners.yaml"
   }
 
   assert {
@@ -252,14 +252,14 @@ run "an_account_without_task_runners_has_no_spot_role" {
   }
 }
 
-# The host is created by the first apply, and config.yaml names its URL only
+# The host is created by the first apply, and the tool configuration (config/) names its URL only
 # afterwards: until then the check says so on every plan, and no dataset is
 # onboarded, because their provider is configured from that URL.
 run "databricks_starts_with_the_host" {
   command = plan
 
   variables {
-    config_file = "tests/fixtures/awaiting-host.yaml"
+    config_path = "tests/fixtures/awaiting-host.yaml"
   }
 
   expect_failures = [check.shared_host_url]
@@ -287,7 +287,7 @@ run "rejects_an_admin_role_of_another_account" {
   command = plan
 
   variables {
-    config_file = "tests/fixtures/foreign-admin.yaml"
+    config_path = "tests/fixtures/foreign-admin.yaml"
   }
 
   expect_failures = [data.aws_caller_identity.current]

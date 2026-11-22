@@ -24,9 +24,9 @@ Contents: [setup](#one-time-setup), [onboarding a project](#onboarding-a-project
 ## One-time setup
 
 The owner does these once, before anything is enabled. Until
-`databricks.enabled: true` in `config.yaml`, the foundation creates no
-Databricks resource and every `live`, `between` and `after` check SKIPs with a
-pointer back here.
+`databricks.enabled: true` in `config/databricks.yaml`, the foundation creates
+no Databricks resource and every `live`, `between` and `after` check SKIPs
+with a pointer back here.
 
 1. **Confirm the account.** It must be a full Databricks-on-AWS account on the
    Premium plan or above, with the account console at
@@ -36,18 +36,18 @@ pointer back here.
    service principal for Terraform and the CLI, give it the **account admin**
    role directly (admin through a group is not detected by `DBX-LIVE-003`),
    and create an OAuth secret for it.
-3. **Fill in `config.yaml`** under `databricks`: replace the nil-UUID
-   placeholders for `account_id` and `client_id` with the account ID and the
-   service principal's application (client) ID. Neither is a secret. Replace
-   the `owner@example.com` placeholders with real emails in
-   `databricks.metastore_admins` and in each project's
-   `projects.<name>.databricks.admins`. Workspace users are not listed here: the
-   project lists them in its own file (see [The project file](#the-project-file)).
-   Every admin and user must also exist as an account user in the console
-   (`DBX-LIVE-005`). Once
+3. **Fill in `config/databricks.yaml`** under `databricks`: replace the
+   nil-UUID placeholders for `account_id` and `client_id` with the account ID
+   and the service principal's application (client) ID. Neither is a secret.
+   Replace the `owner@example.com` placeholders with real emails in
+   `databricks.metastore_admins` and in each Databricks project's
+   `databricks.admins` in `config/projects.yaml`. Workspace users are not
+   listed here: the project lists them in its own file (see [The project
+   file](#the-project-file)). Every admin and user must also exist as an
+   account user in the console (`DBX-LIVE-005`). Once
    `databricks.enabled` is true, a nil-UUID ID or an `@example.com` metastore
-   admin left in config.yaml stops the CLI from loading it and fails the
-   foundation plan, so fill them in before flipping it.
+   admin left in `config/databricks.yaml` stops the CLI from loading it and
+   fails the foundation plan, so fill them in before flipping it.
 4. **Store the secret.** From a checkout of this repository, in the owner's
    shell with AWS credentials:
 
@@ -60,7 +60,8 @@ pointer back here.
    kinds). The sample `tests/fixtures/bots/databricks-poc.yaml` works before
    any project repository exists; a project's own `jaws.yaml`
    works too. The secret is account-wide, so the project only tells the CLI
-   which `config.yaml` section and region to use.
+   which configuration section (`databricks`, in `config/databricks.yaml`)
+   and region to use.
    `set` prompts without echo and writes a SecureString at
    `/jaws/databricks/client-secret` (`databricks.secret_parameter`).
    `check` exits 0 if it exists and decrypts and 3 if not; it never prints the
@@ -83,7 +84,7 @@ pointer back here.
    secret and the event log. It also adds
    `terraform_data.databricks_config_filled_in[0]`, the placeholder guard: its
    preconditions fail the plan if a nil-UUID ID or an `@example.com`
-   metastore admin is still in config.yaml.
+   metastore admin is still in `config/databricks.yaml`.
 7. **Deployment-name prefix (optional).** `databricks.deployment_name_prefix`
    is `null`, so Databricks picks each workspace URL. Databricks only accepts
    a deployment name once it has configured a prefix for the account. If it
@@ -97,22 +98,29 @@ pointer back here.
 
 In this order:
 
-1. In `config.yaml`, add `projects.<name>.databricks` with `compute_policies`
-   (a subset of `databricks.compute_policies`), `cost_center`, a `vpc_cidr`
-   (a /16 to /20, no overlap with another project or the bot VPC `10.0.0.0/16`),
-   and `admins` (at least one email). Workspace users go in the project's own
-   file, not here.
-2. In `foundation/databricks.tf`, add the project to `local.databricks_projects`
-   with its repository, repository ID and owner ID
-   (`gh api repos/<owner>/<repo> --jq '.id, .owner.id'`). The release that applies it creates
-   the project's `jaws-<name>-ci-plan` and `-ci-apply` roles
-   (`compute/*` and `databricks/*` policies; no release or task role). A
-   Databricks project must not also be a site or a bot.
-3. Commit `jaws.yaml` in the project repository (below).
-4. Open a pull request here. The `Databricks plan` job posts one comment for
-   both stacks.
-5. After the owner reads it, run the **Databricks apply** workflow with the
-   project name (`workflow_dispatch`, in the `prod` environment).
+1. In `config/projects.yaml`, add the project's entry under its repository's
+   GitHub owner (a new owner gets its group and `owner_id`,
+   `gh api users/<owner> --jq .id`): a `description`, `type: databricks`, the
+   `repository` and its `repository_id`
+   (`gh api repos/<owner>/<repo> --jq .id`), and its `databricks` entry with
+   `compute_policies` (a subset of `databricks.compute_policies` in
+   `config/databricks.yaml`), `cost_center`, a `vpc_cidr` (a /16 to /20, no
+   overlap with another project or the bot VPC `10.0.0.0/16`), and `admins`
+   (at least one email). Workspace users go in the project's own file, not
+   here. Only a `databricks` project has a `databricks` entry, and its type
+   makes it neither a site nor a bot.
+2. Commit `jaws.yaml` in the project repository (below).
+3. Open a pull request here. Nothing else changes: the `Databricks plan` job
+   takes its projects from `config/projects.yaml`
+   (`scripts/projects.sh databricks`) and posts one comment for both stacks;
+   until the release that creates the project's roles, it skips with a
+   warning.
+4. Merge and release. The foundation apply creates the project's
+   `jaws-<name>-ci-plan` and `-ci-apply` roles (`foundation/databricks.tf`;
+   `compute/*` and `databricks/*` policies; no release or task role).
+5. After the owner reads the plan, run the **Databricks apply** workflow with
+   the project name (`workflow_dispatch`, in the `prod` environment). It
+   refuses a name that is not a Databricks project in `config/projects.yaml`.
 
 The project name must be at most 21 characters:
 `<organization>-<project>-databricks-cross-account` must fit IAM's 64
@@ -141,8 +149,9 @@ components:
 ```
 
 The file names only what the project asks for. The network range, cost center
-and workspace admins are central (`projects.<name>.databricks` in `config.yaml`); a
-project cannot widen a compute policy, add a node type or pick its own range.
+and workspace admins are central (the project's `databricks` entry in
+`config/projects.yaml`); a project cannot widen a compute policy, add a node
+type or pick its own range.
 `compute_policies` must be kebab-case, must not repeat, and must be a subset
 of the project's approved list. The CLI adds `ManagedBy`, `CostCenter` and
 `Workspace` to the tags itself. The state is `project=<name>/env=prod/` in the
@@ -158,12 +167,12 @@ workflows read the project file from the repository's default branch on every
 run, so a change takes effect on the next plan/apply after it is merged. Each
 user must already be an account user in the console (`DBX-LIVE-005` checks).
 
-Workspace **admins** stay central, in `projects.<name>.databricks.admins` in
-`config.yaml`, because an admin can change cluster policies, entitlements and
-grants, which is exactly what the central guardrails bound. Listing an admin's
-email under `users` is refused (admins are set centrally in `config.yaml`), and
-a `users` key under `projects.<name>.databricks` in `config.yaml` no longer
-loads: move it to the project file.
+Workspace **admins** stay central, in the project's `databricks.admins` in
+`config/projects.yaml`, because an admin can change cluster policies,
+entitlements and grants, which is exactly what the central guardrails bound.
+Listing an admin's email under `users` is refused (admins are set centrally in
+`config/projects.yaml`), and a `users` key under the project's `databricks`
+entry there no longer loads: move it to the project file.
 
 ### The deployer
 
@@ -176,8 +185,9 @@ account stack, with a federation policy that trusts:
 - audience the Databricks account ID;
 - subject exactly `repo:<owner>@<owner_id>/<name>@<repository_id>:environment:prod`,
   the immutable form GitHub issues for repositories created or moved since
-  2026-07-15. The IDs come from `local.databricks_projects`; a project that asks
-  for a deployer without both fails its render.
+  2026-07-15. The IDs come from the project's entry in `config/projects.yaml`
+  (`repository_id`, and its owner's `owner_id`); a project that asks for a
+  deployer without both fails its render.
 
 It is `USER` on the workspace and a member of `<project>-workspace-users`, never
 an admin, so it can deploy and run the project's bundle and read exactly what
@@ -347,7 +357,8 @@ checks SKIP.
 
 A dataset bucket (another project's `dataset` component) can be read,
 read-only, by any number of Databricks workspace projects. Three parties each
-own one piece, and nothing in `config.yaml` names a consumer:
+own one piece, and nothing in the tool configuration (`config/`) names a
+consumer:
 
 1. **Onboarding, by the platform.** One file in this repository,
    `datasets/<owner>/<name>.yaml` ([datasets/README.md](../datasets/README.md)),
@@ -456,16 +467,16 @@ hold. Either side ends it alone by removing its half.
   the consumer`, `the consumer does not read the dataset`, `the dataset is not
   onboarded`, `the producer is not a registered project`), and the sweep's
   summary lists them all.
-- **Checks.** Offline, against `config.yaml`: a consumer must be a Databricks
-  workspace project other than the producer, and a read must name a dataset
-  bucket its owner has approved, once, and not the project's own. The registry
-  refuses misplaced files, keys other than `description` and `prefix`, an
-  `<owner>-<name>` over 40 characters, and two ids with one platform name. A
-  registry file naming a dataset its owner does not declare, or a prefix
-  outside the component's, fails the render. The foundation's plan refuses a
-  registry URL equal to, inside or containing any location already in the
-  metastore; two registry datasets cannot overlap, since each has its own
-  bucket.
+- **Checks.** Offline, against `config/projects.yaml`: a consumer must be a
+  Databricks workspace project other than the producer, and a read must name a
+  dataset bucket its owner has approved, once, and not the project's own. The
+  registry refuses misplaced files, keys other than `description` and
+  `prefix`, an `<owner>-<name>` over 40 characters, and two ids with one
+  platform name. A registry file naming a dataset its owner does not declare,
+  or a prefix outside the component's, fails the render. The foundation's plan
+  refuses a registry URL equal to, inside or containing any location already
+  in the metastore; two registry datasets cannot overlap, since each has its
+  own bucket.
 - **Offboarding needs zero edges, and never deletes data.** Remove both halves,
   let a sweep revoke the edge, then delete the registry file. A pull request
   that deletes a file still named by `consumers` or `reads` fails its **Data
@@ -494,8 +505,9 @@ onboarded datasets' provider is configured from the host's URL:
    foundation creates the metastore, the audit log delivery and the host, and
    onboards nothing. Its plan reports the missing URL as a check warning, and
    the **Data access** workflow has nothing to reconcile.
-2. Once `config.yaml` records the host's URL (output
-   `databricks_shared_host.workspace_url`), the next apply creates the producer
+2. Once `databricks.shared_host_url` in `config/databricks.yaml` records the
+   host's URL (output `databricks_shared_host.workspace_url`), the next apply
+   creates the producer
    catalogs' storage, the catalogs and each onboarded dataset, and the sweeps
    start. A dataset's share role is named as a reader of its bucket only from
    then on (the producer's **Bot apply**).
@@ -541,7 +553,8 @@ continues.
 
 Every AWS resource carries `Organization`, `Project`, `Environment`,
 `Repository`, `ManagedBy` and `Owner` through `default_tags`, plus
-`CostCenter` (from `config.yaml`) and `Workspace` (`<project>-prod`). The
+`CostCenter` (the project's `databricks.cost_center` in `config/projects.yaml`)
+and `Workspace` (`<project>-prod`). The
 workspace and its clusters carry the same keys: the workspace's `custom_tags`
 use them, and each compute policy pins them as fixed `custom_tags`, so cluster
 instances and `system.billing.usage` records can be traced to a project.
@@ -555,8 +568,9 @@ keys Databricks reserves (`Vendor`, `Creator`, `ClusterName`, `ClusterId`,
 ## Central compute policies
 
 Policies are defined once, centrally, under `databricks.compute_policies` in
-`config.yaml`, each as a Databricks policy `definition`. A project lists the
-names it gets in its approved `compute_policies`, and only those are installed
+`config/databricks.yaml`, each as a Databricks policy `definition`. A project
+lists the names it gets in its approved `compute_policies` (its `databricks`
+entry in `config/projects.yaml`), and only those are installed
 in its workspace, with `CAN_USE` for `<project>-workspace-users`. Users get no
 unrestricted cluster creation.
 
@@ -638,16 +652,16 @@ artifact's `checks.json`) points at the heading below for each failure.
 `DBX-CFG-001`, `DBX-CFG-002`. The private subnets (`cidrsubnet(vpc, 4, 8)` and
 `cidrsubnet(vpc, 4, 9)`) must be between /17 and /26 and not overlap the
 public subnets, and the VPC range must overlap no other Databricks project
-and not the bot VPC. Change `projects.<name>.databricks.vpc_cidr` in
-`config.yaml` to a free /16 to /20 range.
+and not the bot VPC. Change the project's `databricks.vpc_cidr` in
+`config/projects.yaml` to a free /16 to /20 range.
 
 ### Compute policies
 
 `DBX-CFG-003`, `DBX-AFT-003`. CFG-003: a listed policy is not defined, lacks
 `autotermination_minutes`, sets `custom_tags.*`, or has no `node_type_id`
 allowlist or a default outside it: fix it under `databricks.compute_policies`
-in `config.yaml`. AFT-003: a policy is missing from the workspace or lacks
-the project's fixed tags; re-run `apply`, which reinstalls it.
+in `config/databricks.yaml`. AFT-003: a policy is missing from the workspace
+or lacks the project's fixed tags; re-run `apply`, which reinstalls it.
 
 ### Resource names
 
@@ -668,10 +682,10 @@ file as the message says. See [Tags on every resource](#tags-on-every-resource).
 `databricks.secret_parameter` or the role cannot read it; run
 `databricks credentials set` as the owner. LIVE-002: Databricks refused the
 OAuth token, or `account_id`/`client_id` are still the nil UUID; check both in
-`config.yaml` and that the SSM secret is the current one (the failure shows
-only the exception type, never its text). DOC-002: `doctor` could not load the
-secret, so it skipped the live, between and after stages; fix as LIVE-001, then
-`databricks credentials check`.
+`config/databricks.yaml` and that the SSM secret is the current one (the
+failure shows only the exception type, never its text). DOC-002: `doctor`
+could not load the secret, so it skipped the live, between and after stages;
+fix as LIVE-001, then `databricks credentials check`.
 
 ### Account admin
 
@@ -689,15 +703,15 @@ foundation first (it creates the metastore once `databricks.enabled` is true).
 
 ### Workspace members
 
-`DBX-LIVE-005`. A member email in `projects.<name>.databricks.admins`
-(`config.yaml`) or in `users` of the project's `databricks-workspace`
+`DBX-LIVE-005`. A member email in the project's `databricks.admins`
+(`config/projects.yaml`) or in `users` of the project's `databricks-workspace`
 component is a placeholder (`@example.com`) or is not an account user. Replace
 it with a real email, or add the user in the account console. A placeholder in
 `databricks.metastore_admins` (or a nil-UUID `account_id`/`client_id`) is
 refused earlier, before anything uses it: with `databricks.enabled: true`,
-config.yaml does not load, and the foundation plan fails on a precondition
-naming the field, so the foundation never makes a placeholder the metastore
-admin.
+the tool configuration does not load, and the foundation plan fails on a
+precondition naming the field, so the foundation never makes a placeholder the
+metastore admin.
 
 ### Bucket names
 
@@ -872,7 +886,8 @@ import the existing assignment into the account stack's state:
 
 1. In the owner's shell, with admin AWS credentials (the `jwall-admin`
    profile, [owner access](owner-access.md)), export
-   `DATABRICKS_ACCOUNT_ID` and `DATABRICKS_CLIENT_ID` (from `config.yaml`) and
+   `DATABRICKS_ACCOUNT_ID` and `DATABRICKS_CLIENT_ID` (from
+   `config/databricks.yaml`) and
    `DATABRICKS_CLIENT_SECRET` (from `/jaws/databricks/client-secret`).
 2. In the project's repository, run
    `JAWS_KEEP_WORKDIR=1 JAWS_SKIP_ROLE_CHECK=1 jaws --file jaws.yaml apply`.

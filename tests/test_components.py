@@ -10,9 +10,9 @@ import yaml
 
 from jaws.errors import ConfigError
 from jaws.project import Project
-from jaws.settings import Settings
+from jaws.settings import ProjectGuardrails, Settings
 from jaws.site import load_site_config
-from tests.conftest import FIXTURES
+from tests.conftest import FIXTURES, onboard
 
 BOT_FILE = FIXTURES / "bots" / "braveheart.yaml"
 
@@ -700,25 +700,22 @@ def test_two_databricks_workspaces_fail(tmp_path: Path, settings: Settings) -> N
 def test_policy_outside_guardrails_rejected(tmp_path: Path, settings: Settings) -> None:
     raw: dict[str, Any] = yaml.safe_load(DATABRICKS_FILE.read_text())
     raw["components"][0]["compute_policies"] = ["small-interactive", "gpu-everything"]
-    with pytest.raises(ConfigError, match=r"gpu-everything.*config\.yaml"):
+    with pytest.raises(ConfigError, match=r"gpu-everything.*config/projects\.yaml"):
         _load(tmp_path, raw, settings)
 
 
 def test_databricks_project_without_guardrail_entry_rejected(
     tmp_path: Path, settings: Settings
 ) -> None:
-    bare = settings.model_copy(
-        update={
-            "projects": {
-                **settings.projects,
-                "databricks-poc": settings.projects["databricks-poc"].model_copy(
-                    update={"databricks": None}
-                ),
-            }
-        }
-    )
+    # A databricks-type entry needs its databricks entry, so the case left is a
+    # project onboarded as another type whose own file declares a workspace.
+    raw_settings = settings.model_dump(mode="json", by_alias=True, exclude_defaults=True)
+    onboard(raw_settings, "databricks-poc", ProjectGuardrails(), type="research")
+    bare = Settings.model_validate(raw_settings)
     raw: dict[str, Any] = yaml.safe_load(DATABRICKS_FILE.read_text())
-    with pytest.raises(ConfigError, match=r"projects\.databricks-poc\.databricks.*config\.yaml"):
+    with pytest.raises(
+        ConfigError, match=r"projects\.databricks-poc\.databricks.*config/projects\.yaml"
+    ):
         _load(tmp_path, raw, bare)
 
 
@@ -797,7 +794,7 @@ def test_a_workspace_user_who_is_also_an_admin_is_refused(
     guard = settings.projects["databricks-poc"].databricks
     assert guard is not None
     admin = guard.admins[0].upper()  # the overlap check ignores case
-    with pytest.raises(ConfigError, match=r"admins are set centrally.*config\.yaml"):
+    with pytest.raises(ConfigError, match=r"admins are set centrally.*config/projects\.yaml"):
         _load(tmp_path, _workspace_raw(users=[admin]), settings)
 
 

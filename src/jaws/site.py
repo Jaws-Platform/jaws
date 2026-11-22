@@ -84,7 +84,7 @@ class SiteConfig(_Model):
     A file describes a site (`domain` and `site`), a bot project (`components`:
     one container image and one Lichess bot, and optionally datasets and a task
     runner) or a research project (`components`: only datasets and a task
-    runner). Rules that need config.yaml (the DNS zone, the organisation) live
+    runner). Rules that need the tool configuration (the DNS zone, the organisation) live
     in `Site.from_config` and `Project.from_config`, so that this model can be
     checked without it.
     """
@@ -265,13 +265,13 @@ def _format_validation_error(exc: ValidationError) -> str:
 
 
 def account_tags(tags: Mapping[str, str], organization: str, managed_by: str) -> dict[str, str]:
-    """`tags` with the two config.yaml decides (`context.organization` and
+    """`tags` with the two config/tool.yaml decides (`context.organization` and
     `context.managed_by`), whatever the file states."""
     return {**tags, "Organization": organization, "ManagedBy": managed_by}
 
 
 def organization_problems(tags: Mapping[str, str], settings: Settings) -> list[str]:
-    """A stated Organization must be config.yaml's `context.organization`, which is
+    """A stated Organization must be config/tool.yaml's `context.organization`, which is
     also what is stamped at render (`account_tags`)."""
     stated = tags.get("Organization")
     organization = settings.context.organization
@@ -281,7 +281,7 @@ def organization_problems(tags: Mapping[str, str], settings: Settings) -> list[s
 
 
 class Site(_Model):
-    """A validated site plus everything derived from it and config.yaml."""
+    """A validated site plus everything derived from it and the tool configuration."""
 
     config: SiteConfig
     organization: str

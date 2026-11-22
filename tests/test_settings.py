@@ -10,23 +10,77 @@ from jaws.errors import ConfigError
 from jaws.settings import (
     ProjectGuardrails,
     Settings,
+    load_document,
     load_settings,
     parse_duration,
 )
-from tests.conftest import FIXTURES, REPO_ROOT, fixture_config
+from tests.conftest import (
+    CONFIG_DIR,
+    TEST_OWNER,
+    fixture_config,
+    project_entry,
+    repo_config,
+    with_guardrails,
+)
+
+#: Which file of config/ holds each section. Workflows and scripts read some
+#: sections from their file with yq, so a section moves only with its readers.
+SECTION_FILES = {
+    "aws": "aws.yaml",
+    "projects": "projects.yaml",
+    "terraform": "terraform.yaml",
+    "library": "terraform.yaml",
+    "state": "terraform.yaml",
+    "tool": "tool.yaml",
+    "context": "tool.yaml",
+    "plan": "tool.yaml",
+    "ecr": "tool.yaml",
+    "dns": "sites.yaml",
+    "sync": "sites.yaml",
+    "bot": "bots.yaml",
+    "tasks": "bots.yaml",
+    "databricks": "databricks.yaml",
+}
 
 
 def test_repository_config_loads() -> None:
-    settings = load_settings(REPO_ROOT / "config.yaml", environ={})
+    settings = load_settings(CONFIG_DIR, environ={})
     assert settings.ecr.repository == "jaws-cli"
     assert settings.state.bucket == "jaws-terraform-state-570327089884"
     assert settings.dns.zone == "jwall.engineering"
 
 
-def test_fixture_matches_repository_config() -> None:
-    assert (FIXTURES / "config.yaml").read_text() == (REPO_ROOT / "config.yaml").read_text(), (
-        "tests/fixtures/config.yaml must be a copy of config.yaml"
-    )
+def test_every_section_is_in_its_file() -> None:
+    found = {
+        section: path.name
+        for path in sorted(CONFIG_DIR.glob("*.yaml"))
+        for section in yaml.safe_load(path.read_text())
+    }
+    assert found == SECTION_FILES
+
+
+def test_one_file_reads_like_the_directory(tmp_path: Path) -> None:
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(repo_config()))
+    assert load_settings(path, environ={}) == load_settings(CONFIG_DIR, environ={})
+
+
+def test_a_section_in_two_files_is_refused(tmp_path: Path) -> None:
+    (tmp_path / "a.yaml").write_text(yaml.safe_dump({"plan": {"comment_max_bytes": 60000}}))
+    (tmp_path / "b.yaml").write_text(yaml.safe_dump({"plan": {"comment_max_bytes": 1024}}))
+    with pytest.raises(ConfigError, match=r"b\.yaml: section 'plan' is already in a\.yaml"):
+        load_document(tmp_path)
+
+
+def test_a_yml_file_is_refused_rather_than_skipped(tmp_path: Path) -> None:
+    (tmp_path / "plan.yml").write_text(yaml.safe_dump({"plan": {"comment_max_bytes": 1024}}))
+    with pytest.raises(ConfigError, match=r"plan\.yml: config files end in \.yaml"):
+        load_document(tmp_path)
+
+
+def test_an_empty_directory_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match=r"no \.yaml files"):
+        load_document(tmp_path)
 
 
 def test_state_key_template(settings: Settings) -> None:
@@ -73,7 +127,7 @@ def test_bad_duration_is_a_config_error(tmp_path: Path) -> None:
 
 def test_env_overrides_only_logging(tmp_path: Path) -> None:
     settings = load_settings(
-        FIXTURES / "config.yaml",
+        CONFIG_DIR,
         environ={"JAWS_LOG_LEVEL": "debug", "JAWS_LOG_FORMAT": "json", "JAWS_STATE_BUCKET": "evil"},
     )
     assert settings.tool.log_level == "debug"
@@ -96,7 +150,7 @@ def test_bot_section_defaults(settings: Settings) -> None:
 
 
 def test_bot_health_seconds_bounds(tmp_path: Path) -> None:
-    raw = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
+    raw = repo_config()
     raw["bot"]["health_seconds"] = 5
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(raw))
@@ -106,39 +160,130 @@ def test_bot_health_seconds_bounds(tmp_path: Path) -> None:
 
 def test_aws_account_is_configured(settings: Settings) -> None:
     """The one place the account ID lives: workflows build role ARNs from it."""
+    assert settings.aws.primary == "production"
     assert settings.aws.account_id == "570327089884"
+    assert settings.aws.admin_role_arn is not None
+    assert settings.aws.admin_role_arn.startswith("arn:aws:iam::570327089884:role/aws-reserved/")
 
 
-def test_the_development_account_is_recorded(settings: Settings) -> None:
-    """The organization's third account: jaws knows it, and builds nothing in it."""
-    assert settings.development is not None
-    assert settings.development.account_id == "859674017655"
+def test_the_registry_records_every_account_by_type(settings: Settings) -> None:
+    """jaws builds in the primary account and only records the others."""
+    by_type = {t: {n: a.account_id for n, a in settings.aws.of_type(t).items()} for t in
+               ("management", "development", "staging", "production")}  # fmt: skip
+    assert by_type == {
+        "management": {"management": "650503560686"},
+        "development": {"development": "859674017655"},
+        "staging": {},
+        "production": {"production": "570327089884"},
+    }
+    assert all(a.description for a in settings.aws.accounts.values())
 
 
-def test_a_development_account_id_must_be_twelve_digits(tmp_path: Path) -> None:
-    path = _write(tmp_path, {"development.account_id": "85967401765"})
-    with pytest.raises(ConfigError, match=r"development\.account_id"):
-        load_settings(path, environ={})
-
-
-@pytest.mark.parametrize("other", ["570327089884", "570327089884"])
-def test_the_development_account_is_neither_other_account(tmp_path: Path, other: str) -> None:
-    path = _write(tmp_path, {"development.account_id": other})
-    with pytest.raises(ConfigError, match=r"development\.account_id"):
-        load_settings(path, environ={})
-
-
-def test_aws_account_must_be_twelve_digits(tmp_path: Path) -> None:
-    raw = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
-    raw["aws"]["account_id"] = "65050356068"
+def _load_aws(tmp_path: Path, aws: dict[str, Any]) -> Settings:
+    raw = repo_config()
+    raw["aws"] = aws
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(raw))
-    with pytest.raises(ConfigError, match="account_id"):
+    return load_settings(path, environ={})
+
+
+def _registry() -> dict[str, Any]:
+    aws: dict[str, Any] = repo_config()["aws"]
+    return aws
+
+
+def test_an_account_id_must_be_twelve_digits(tmp_path: Path) -> None:
+    aws = _registry()
+    aws["accounts"]["development"]["account_id"] = "85967401765"
+    with pytest.raises(ConfigError, match=r"accounts\.development\.account_id"):
+        _load_aws(tmp_path, aws)
+
+
+def test_two_accounts_cannot_share_an_id(tmp_path: Path) -> None:
+    aws = _registry()
+    aws["accounts"]["development"]["account_id"] = "570327089884"
+    with pytest.raises(
+        ConfigError,
+        match=r"accounts (development and production|production and development) are both "
+        r"570327089884",
+    ):
+        _load_aws(tmp_path, aws)
+
+
+def test_the_primary_account_must_be_in_the_registry(tmp_path: Path) -> None:
+    aws = _registry()
+    aws["primary"] = "prod"
+    with pytest.raises(ConfigError, match="primary 'prod' is not in accounts"):
+        _load_aws(tmp_path, aws)
+
+
+def test_jaws_never_builds_in_the_management_account(tmp_path: Path) -> None:
+    aws = _registry()
+    aws["primary"] = "management"
+    with pytest.raises(ConfigError, match="primary 'management' is the management account"):
+        _load_aws(tmp_path, aws)
+
+
+def test_an_organization_has_one_management_account(tmp_path: Path) -> None:
+    aws = _registry()
+    aws["accounts"]["development"]["type"] = "management"
+    with pytest.raises(ConfigError, match="all of type management"):
+        _load_aws(tmp_path, aws)
+
+
+def test_an_account_type_is_one_of_the_known_types(tmp_path: Path) -> None:
+    aws = _registry()
+    aws["accounts"]["development"]["type"] = "sandbox"
+    with pytest.raises(ConfigError, match=r"accounts\.development\.type"):
+        _load_aws(tmp_path, aws)
+
+
+def test_the_admin_role_must_be_in_its_account(tmp_path: Path) -> None:
+    aws = _registry()
+    role = aws["accounts"]["production"]["admin_role_arn"]
+    aws["accounts"]["production"]["admin_role_arn"] = role.replace("570327089884", "650503560686")
+    with pytest.raises(ConfigError, match="is not a role in account 570327089884"):
+        _load_aws(tmp_path, aws)
+
+
+def test_accounts_may_have_any_names(tmp_path: Path) -> None:
+    """Someone else's registry: their own names, a staging account, no management."""
+    settings = _load_aws(
+        tmp_path,
+        {
+            "primary": "prod",
+            "accounts": {
+                "dev": {"type": "development", "account_id": "111111111111"},
+                "stg": {"type": "staging", "account_id": "222222222222"},
+                "prod": {"type": "production", "account_id": "333333333333"},
+            },
+        },
+    )
+    assert settings.aws.account_id == "333333333333"
+    assert settings.aws.admin_role_arn is None
+    assert list(settings.aws.of_type("staging")) == ["stg"]
+    assert settings.aws.of_type("management") == {}
+
+
+@pytest.mark.parametrize("legacy", ["management", "development", "production"])
+def test_the_old_account_sections_point_at_the_registry(tmp_path: Path, legacy: str) -> None:
+    raw = repo_config()
+    raw[legacy] = {"account_id": "650503560686"}
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(
+        ConfigError, match=rf"{legacy}: the accounts are the registry in aws\.accounts"
+    ):
         load_settings(path, environ={})
+
+
+def test_the_old_aws_account_id_points_at_the_registry(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match=r"aws\.account_id: the accounts are the registry"):
+        _load_aws(tmp_path, {"account_id": "570327089884"})
 
 
 def test_bot_amis_are_validated(tmp_path: Path) -> None:
-    raw = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
+    raw = repo_config()
     raw["bot"]["amis"] = {"x86_64": "ami-04b938437b69a2c9c"}  # an ID, not a name
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(raw))
@@ -147,7 +292,7 @@ def test_bot_amis_are_validated(tmp_path: Path) -> None:
 
 
 def test_bot_amis_only_name_known_architectures(tmp_path: Path) -> None:
-    raw = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
+    raw = repo_config()
     raw["bot"]["amis"] = {"riscv64": "ami-0123456789abcdef0"}
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(raw))
@@ -156,7 +301,7 @@ def test_bot_amis_only_name_known_architectures(tmp_path: Path) -> None:
 
 
 def test_bot_ami_name_must_match_its_architecture(tmp_path: Path) -> None:
-    raw = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
+    raw = repo_config()
     raw["bot"]["amis"] = {"x86_64": "al2023-ami-2023.9.20251027.0-kernel-6.1-arm64"}
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(raw))
@@ -218,20 +363,133 @@ def test_braveheart_guardrails_match_the_previous_lists(settings: Settings) -> N
 def test_run_cost_ceiling_defaults_and_overrides(settings: Settings) -> None:
     assert settings.run_cost_ceiling("braveheart") == 50
     assert settings.run_cost_ceiling("not-registered") == 50
-    raised = settings.model_copy(
-        update={"projects": {"big": ProjectGuardrails(max_run_cost_usd=80)}}
-    )
+    raised = with_guardrails(settings, "big", ProjectGuardrails(max_run_cost_usd=80))
     assert raised.run_cost_ceiling("big") == 80
     assert raised.run_cost_ceiling("braveheart") == 50
 
 
+def _entry(guardrails: object, **onboarding: object) -> dict[str, object]:
+    """A raw research project entry with `guardrails` (a mapping)."""
+    entry: dict[str, object] = {
+        "description": "A sample",
+        "type": "research",
+        "repository": "sample",
+        "repository_id": "1",
+    }
+    entry.update(guardrails)  # type: ignore[call-overload]
+    entry.update(onboarding)
+    return entry
+
+
 def _with_projects(tmp_path: Path, projects: dict[str, object]) -> Path:
-    raw = yaml.safe_load((FIXTURES / "config.yaml").read_text())
-    raw["projects"] = projects
+    """The repository's config with only `projects` (key -> raw entry, or the guardrails
+    of a research project) onboarded, under the suite's owner."""
+    raw = repo_config()
+    raw["projects"] = {
+        TEST_OWNER: {
+            "owner_id": "100000",
+            "projects": {
+                k: v if isinstance(v, dict) and "type" in v else _entry(v)
+                for k, v in projects.items()
+            },
+        }
+    }
     del raw["databricks"]  # its projects are replaced here, and it needs one
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(raw))
     return path
+
+
+def test_the_registry_onboards_every_project_once(settings: Settings) -> None:
+    real = load_settings(CONFIG_DIR, environ={})
+    by_type = {t: sorted(k for k, p in real.projects.items() if p.type == t)
+               for t in ("site", "bot", "research", "databricks")}  # fmt: skip
+    assert by_type == {
+        "site": ["cs-survival-guide", "guitar-knowledge-base", "main-site"],
+        "bot": ["braveheart-bot"],
+        "research": [
+            "braveheart",
+            "braveheart-selfplay",
+            "braveheart-trainer",
+            "pi-benchmarks",
+            "pi-prover",
+            "prog-strength-archive",
+        ],
+        "databricks": ["braveheart-databricks"],
+    }
+    assert all(p.description for p in real.projects.values())
+    assert real.repository("pi-prover") == "Pi-Mathematical-Reasoning/pi"
+    assert real.repository("main-site") == "jwallace145/site"
+    assert real.owners["Braveheart-Chess"].owner_id == "356866252"
+
+
+@pytest.mark.parametrize(
+    ("entry", "message"),
+    [
+        (_entry({}, type="site"), "a site needs its domain"),
+        (
+            _entry({"task_profiles": ["cpu"]}, type="site", domain="x.example.com"),
+            "drop task_profiles",
+        ),
+        (_entry({}, domain="x.example.com"), "only a site has a domain"),
+        (_entry({}, type="databricks"), "needs its databricks entry"),
+        (_entry({}, type="pipeline"), r"\.type"),
+        (_entry({}, repository_id="R_123"), "repository_id"),
+        (_entry({}, description=""), "description"),
+    ],
+    ids=[
+        "site-domain",
+        "site-tasks",
+        "domain-not-site",
+        "databricks-entry",
+        "type",
+        "id",
+        "description",
+    ],
+)
+def test_an_entry_fits_its_type(tmp_path: Path, entry: dict[str, object], message: str) -> None:
+    with pytest.raises(ConfigError, match=message):
+        load_settings(_with_projects(tmp_path, {"p": entry}), environ={})
+
+
+def test_a_project_key_is_unique_across_owners(tmp_path: Path) -> None:
+    raw = repo_config()
+    raw["projects"]["Another-Org"] = {
+        "owner_id": "200000",
+        "projects": {"pi-prover": project_entry(raw, "pi-prover")},
+    }
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(
+        ConfigError,
+        match=r"'pi-prover' is onboarded under both (Another-Org|Pi-Mathematical-Reasoning) and",
+    ):
+        load_settings(path, environ={})
+
+
+@pytest.mark.parametrize(
+    ("owner", "group", "message"),
+    [
+        (
+            "Bad Owner",
+            {"owner_id": "1", "projects": {"p": _entry({})}},
+            "not a GitHub organization",
+        ),
+        ("Good-Owner", {"owner_id": "one", "projects": {"p": _entry({})}}, "owner_id"),
+        ("Good-Owner", {"owner_id": "1", "projects": {}}, "projects"),
+        ("Good-Owner", {"owner_id": "1", "projects": {"Bad_Key": _entry({})}}, "kebab-case"),
+    ],
+    ids=["owner-name", "owner-id", "no-projects", "project-key"],
+)
+def test_an_owner_is_a_github_account_with_projects(
+    tmp_path: Path, owner: str, group: dict[str, object], message: str
+) -> None:
+    raw = repo_config()
+    raw["projects"][owner] = group
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ConfigError, match=message):
+        load_settings(path, environ={})
 
 
 @pytest.mark.parametrize(
@@ -247,7 +505,7 @@ def test_unknown_guardrail_key_is_refused(tmp_path: Path, projects: dict[str, ob
 
 
 def test_unknown_limit_key_is_refused(tmp_path: Path) -> None:
-    raw = yaml.safe_load((FIXTURES / "config.yaml").read_text())
+    raw = repo_config()
     raw["tasks"]["limits"]["max_gpus"] = 1
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(raw))
@@ -336,10 +594,9 @@ def _load_raw(tmp_path: Path, raw: dict[str, Any]) -> Settings:
 
 
 def _second_project(raw: dict[str, Any], name: str, cidr: str) -> None:
-    projects = raw["projects"]
-    entry = yaml.safe_load(yaml.safe_dump(projects["databricks-poc"]))
+    entry = yaml.safe_load(yaml.safe_dump(project_entry(raw, "databricks-poc")))
     entry["databricks"]["vpc_cidr"] = cidr
-    projects[name] = entry
+    raw["projects"][TEST_OWNER]["projects"][name] = entry
 
 
 def test_databricks_section_parses(settings: Settings) -> None:
@@ -372,7 +629,7 @@ def test_databricks_section_parses(settings: Settings) -> None:
 
 def test_users_in_config_yaml_are_refused_with_the_migration_message(tmp_path: Path) -> None:
     raw = _databricks_raw()
-    raw["projects"]["databricks-poc"]["databricks"]["users"] = ["a@corp.test"]
+    project_entry(raw, "databricks-poc")["databricks"]["users"] = ["a@corp.test"]
     with pytest.raises(ConfigError, match=r"own jaws\.yaml.*databricks-workspace"):
         _load_raw(tmp_path, raw)
 
@@ -404,7 +661,7 @@ def test_policy_name_must_be_kebab(tmp_path: Path) -> None:
     raw = _databricks_raw()
     policies = raw["databricks"]["compute_policies"]
     policies["Small_Interactive"] = policies.pop("small-interactive")
-    raw["projects"]["databricks-poc"]["databricks"]["compute_policies"] = [
+    project_entry(raw, "databricks-poc")["databricks"]["compute_policies"] = [
         "Small_Interactive",
         "jobs",
     ]
@@ -421,7 +678,7 @@ def test_policy_must_set_autotermination(tmp_path: Path) -> None:
 
 def test_project_policy_must_exist_centrally(tmp_path: Path) -> None:
     raw = _databricks_raw()
-    raw["projects"]["databricks-poc"]["databricks"]["compute_policies"] = ["ghost-policy"]
+    project_entry(raw, "databricks-poc")["databricks"]["compute_policies"] = ["ghost-policy"]
     with pytest.raises(ConfigError, match="ghost-policy"):
         _load_raw(tmp_path, raw)
 
@@ -449,7 +706,7 @@ def test_disjoint_vpc_cidrs_accepted(tmp_path: Path) -> None:
 
 def test_vpc_cidr_overlapping_bot_vpc_rejected(tmp_path: Path) -> None:
     raw = _databricks_raw()
-    raw["projects"]["databricks-poc"]["databricks"]["vpc_cidr"] = "10.0.0.0/20"
+    project_entry(raw, "databricks-poc")["databricks"]["vpc_cidr"] = "10.0.0.0/20"
     with pytest.raises(ConfigError, match=r"10\.0\.0\.0/16"):
         _load_raw(tmp_path, raw)
 
@@ -457,7 +714,7 @@ def test_vpc_cidr_overlapping_bot_vpc_rejected(tmp_path: Path) -> None:
 @pytest.mark.parametrize("cidr", ["10.40.0.0/15", "10.40.0.0/21", "10.40.0.1/16", "nonsense"])
 def test_vpc_cidr_must_be_a_16_to_20_network(tmp_path: Path, cidr: str) -> None:
     raw = _databricks_raw()
-    raw["projects"]["databricks-poc"]["databricks"]["vpc_cidr"] = cidr
+    project_entry(raw, "databricks-poc")["databricks"]["vpc_cidr"] = cidr
     with pytest.raises(ConfigError, match="vpc_cidr"):
         _load_raw(tmp_path, raw)
 
@@ -479,7 +736,7 @@ def test_project_databricks_requires_section(tmp_path: Path) -> None:
 
 def test_member_emails_must_look_like_emails(tmp_path: Path) -> None:
     raw = _databricks_raw()
-    raw["projects"]["databricks-poc"]["databricks"]["admins"] = ["not-an-email"]
+    project_entry(raw, "databricks-poc")["databricks"]["admins"] = ["not-an-email"]
     with pytest.raises(ConfigError, match="not-an-email"):
         _load_raw(tmp_path, raw)
 

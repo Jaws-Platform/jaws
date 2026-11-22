@@ -1,6 +1,6 @@
 # The site stack jaws renders for one site. Every value
 # comes from the site repository's jaws.yaml or from
-# config.yaml; the CLI writes them to terraform.tfvars.json.
+# the tool configuration (config/); the CLI writes them to terraform.tfvars.json.
 
 variable "project" {
   description = "Project name in kebab-case. The site bucket is `<organization>-<project>`, for example `jaws-<project>`."
@@ -45,7 +45,7 @@ variable "enable_preview" {
 }
 
 variable "zone_id" {
-  description = "Route 53 hosted zone ID the records live in (`dns.zone_id` in config.yaml)."
+  description = "Route 53 hosted zone ID the records live in (`dns.zone_id` in config/sites.yaml)."
   type        = string
 
   validation {

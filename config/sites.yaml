@@ -1,0 +1,12 @@
+# Static sites (projects of type site in config/projects.yaml): the hosted zone
+# their names live in, and the cache headers every publish sets.
+
+dns:
+  zone: jwall.engineering
+  zone_id: Z0644006DW6W2HALU9BI
+
+sync:
+  cache_control: public, max-age=3600 # assets without a content hash
+  preview_cache_control: public, max-age=300
+  html_cache_control: public, max-age=0, must-revalidate # pages: always fresh after a publish
+  immutable_cache_control: public, max-age=31536000, immutable # site.immutable_paths

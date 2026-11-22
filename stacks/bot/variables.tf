@@ -1,7 +1,7 @@
 # The bot stack jaws renders for one bot project: the
 # image repository, a VPC, the records bucket and the bot instance. Every
 # value comes from the project's jaws.yaml (components)
-# or from config.yaml; the CLI writes them to terraform.tfvars.json.
+# or from the tool configuration (config/); the CLI writes them to terraform.tfvars.json.
 #
 # A research project renders bot_enabled false and leaves the bot's variables
 # at these defaults, which nothing reads while the bot's modules are gated off.
@@ -95,7 +95,7 @@ variable "records_enabled" {
 }
 
 variable "records_prefix" {
-  description = "Key prefix of the game records in the bucket (bot.records_prefix in config.yaml)."
+  description = "Key prefix of the game records in the bucket (bot.records_prefix in config/bots.yaml)."
   type        = string
   default     = null
 }
@@ -123,36 +123,36 @@ variable "log_retention_days" {
 }
 
 variable "health_log_pattern" {
-  description = "Line a new container must log to count as healthy (bot.health_log_pattern in config.yaml)."
+  description = "Line a new container must log to count as healthy (bot.health_log_pattern in config/bots.yaml)."
   type        = string
   default     = null
 }
 
 variable "health_seconds" {
-  description = "Seconds a new container has to become healthy (bot.health_seconds in config.yaml)."
+  description = "Seconds a new container has to become healthy (bot.health_seconds in config/bots.yaml)."
   type        = number
   default     = null
 }
 
 variable "availability_zones" {
-  description = "Availability zones of the VPC's public subnets; the bot runs in the first (bot.availability_zones in config.yaml)."
+  description = "Availability zones of the VPC's public subnets; the bot runs in the first (bot.availability_zones in config/bots.yaml)."
   type        = list(string)
 }
 
 variable "keep_release_images" {
-  description = "Release images kept in the repository (ecr.keep_release_images in config.yaml)."
+  description = "Release images kept in the repository (ecr.keep_release_images in config/tool.yaml)."
   type        = number
   default     = null
 }
 
 variable "expire_untagged_after_days" {
-  description = "Days after which untagged images expire (ecr.expire_untagged_after_days in config.yaml)."
+  description = "Days after which untagged images expire (ecr.expire_untagged_after_days in config/tool.yaml)."
   type        = number
   default     = null
 }
 
 variable "ami_name" {
-  description = "Name of the Amazon-owned image the bot instance is pinned to (bot.amis.<architecture> in config.yaml), e.g. al2023-ami-2023.9.20251027.0-kernel-6.1-x86_64. Changing it replaces the instance; null follows the latest Amazon Linux 2023 image."
+  description = "Name of the Amazon-owned image the bot instance is pinned to (bot.amis.<architecture> in config/bots.yaml), e.g. al2023-ami-2023.9.20251027.0-kernel-6.1-x86_64. Changing it replaces the instance; null follows the latest Amazon Linux 2023 image."
   type        = string
   default     = null
 }
@@ -188,12 +188,12 @@ variable "task_rust" {
 }
 
 variable "task_rust_toolchain" {
-  description = "Rust toolchain task instances install, unless their `rust` is false (tasks.rust_toolchain in config.yaml)."
+  description = "Rust toolchain task instances install, unless their `rust` is false (tasks.rust_toolchain in config/bots.yaml)."
   type        = string
 }
 
 variable "task_profiles" {
-  description = "The task-runner's profiles beyond `cpu` (task-runner.profiles): each gets its own launch template and instance role, `<Organization>-<project>-task-<name>`, sharing the cpu profile's log group, security group and results bucket. `ami_name` is the pinned image name (tasks.images in config.yaml), null for the bot's image; `rust` installs the Rust toolchain; `datasets` grants the profile's instances read, write and add-only (`write_once`) sub-prefixes of datasets."
+  description = "The task-runner's profiles beyond `cpu` (task-runner.profiles): each gets its own launch template and instance role, `<Organization>-<project>-task-<name>`, sharing the cpu profile's log group, security group and results bucket. `ami_name` is the pinned image name (tasks.images in config/bots.yaml), null for the bot's image; `rust` installs the Rust toolchain; `datasets` grants the profile's instances read, write and add-only (`write_once`) sub-prefixes of datasets."
   type = list(object({
     name                  = string
     default_instance_type = string
@@ -228,7 +228,7 @@ variable "task_profiles" {
 }
 
 variable "datasets" {
-  description = "The project's dataset components: kept-forever, append-only buckets named `<Organization>-<project>-<name>`. `writers` lists the components whose roles may add objects under `prefix` (`task-runner`: the task instances); `readers` lists role ARNs that may read under it. `versioning`, `expire_noncurrent_days` and `expire_prefixes` are the retention config.yaml approves."
+  description = "The project's dataset components: kept-forever, append-only buckets named `<Organization>-<project>-<name>`. `writers` lists the components whose roles may add objects under `prefix` (`task-runner`: the task instances); `readers` lists role ARNs that may read under it. `versioning`, `expire_noncurrent_days` and `expire_prefixes` are the retention the tool configuration (config/) approves."
   type = list(object({
     name                   = string
     bucket                 = string

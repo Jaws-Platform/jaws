@@ -1,8 +1,14 @@
-"""The tool configuration: config.yaml, loaded once and passed to every command.
+"""The tool configuration: the `config/` directory, loaded once and passed to every command.
 
 It describes how the tool runs (Terraform version, module family pins, state bucket,
-organisation constants, ECR, sync headers), as opposed to what one site is,
-which lives in each site repository's jaws.yaml.
+organisation constants, ECR, sync headers), the accounts it knows, and every project
+onboarded to it, as opposed to what one project is, which lives in each project
+repository's jaws.yaml.
+
+The directory's YAML files are read as one document: each file holds some of its
+top-level sections, and a section may be in only one file. Which file holds a section
+is organisation only (config/README.md lists them); one file holding every section is
+read the same way.
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    PrivateAttr,
     ValidationError,
     field_validator,
     model_validator,
@@ -27,8 +34,8 @@ from .components import check_prefixes
 from .errors import ConfigError
 
 ENV_CONFIG_PATH = "JAWS_CONFIG"
-IMAGE_CONFIG_PATH = Path("/etc/jaws/config.yaml")
-LOCAL_CONFIG_PATH = Path("config.yaml")
+IMAGE_CONFIG_PATH = Path("/etc/jaws/config")
+LOCAL_CONFIG_PATH = Path("config")
 
 _DURATION = re.compile(r"^(\d+)([smh])$")
 _DURATION_UNITS = {"s": 1, "m": 60, "h": 3600}
@@ -110,14 +117,95 @@ class StateSection(_Section):
         return value
 
 
-class AwsSection(_Section):
+#: What an account in the registry is for. A management account holds AWS
+#: Organizations and IAM Identity Center; the others can hold workloads.
+ACCOUNT_TYPES = ("management", "development", "staging", "production")
+_ACCOUNT_NAME = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
+
+class Account(_Section):
+    """One account in the registry (`aws.accounts.<name>`)."""
+
+    type: Literal["management", "development", "staging", "production"]
     account_id: str = Field(pattern=r"^\d{12}$")
     #: The owner's Identity Center admin role in the account: the break-glass
-    #: principal of the hardened bucket policies.
+    #: principal of the hardened bucket policies, for the primary account.
     admin_role_arn: str | None = Field(
         default=None,
         pattern=r"^arn:aws:iam::\d{12}:role/aws-reserved/sso\.amazonaws\.com/AWSReservedSSO_[A-Za-z0-9_-]+$",
     )
+    description: str | None = None
+
+    @model_validator(mode="after")
+    def _admin_role_is_in_the_account(self) -> Account:
+        if self.admin_role_arn and not self.admin_role_arn.startswith(
+            f"arn:aws:iam::{self.account_id}:role/"
+        ):
+            raise ValueError(
+                f"admin_role_arn {self.admin_role_arn} is not a role in account {self.account_id}"
+            )
+        return self
+
+
+class AwsSection(_Section):
+    """The account registry (config/aws.yaml): every account jaws knows about,
+    and `primary`, the one it builds in."""
+
+    primary: str
+    accounts: dict[str, Account] = Field(min_length=1)
+
+    @field_validator("accounts")
+    @classmethod
+    def _accounts_are_named_and_distinct(cls, value: dict[str, Account]) -> dict[str, Account]:
+        seen: dict[str, str] = {}
+        for name, account in value.items():
+            if not _ACCOUNT_NAME.match(name):
+                raise ValueError(f"account name {name!r} must be lowercase kebab-case")
+            if account.account_id in seen:
+                raise ValueError(
+                    f"accounts {seen[account.account_id]} and {name} are both "
+                    f"{account.account_id}: every account in the registry is distinct"
+                )
+            seen[account.account_id] = name
+        management = [n for n, a in value.items() if a.type == "management"]
+        if len(management) > 1:
+            raise ValueError(
+                f"accounts {', '.join(management)} are all of type management; "
+                "an organization has one management account"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _primary_is_a_workload_account(self) -> AwsSection:
+        if self.primary not in self.accounts:
+            raise ValueError(
+                f"primary {self.primary!r} is not in accounts ({', '.join(self.accounts)})"
+            )
+        if self.primary_account.type == "management":
+            raise ValueError(
+                f"primary {self.primary!r} is the management account; jaws builds in a "
+                "development, staging or production account"
+            )
+        return self
+
+    @property
+    def primary_account(self) -> Account:
+        """The account jaws builds in: its foundation and every project."""
+        return self.accounts[self.primary]
+
+    @property
+    def account_id(self) -> str:
+        """The primary account's ID."""
+        return self.primary_account.account_id
+
+    @property
+    def admin_role_arn(self) -> str | None:
+        """The owner's admin role in the primary account."""
+        return self.primary_account.admin_role_arn
+
+    def of_type(self, account_type: str) -> dict[str, Account]:
+        """The registry's accounts of one type, by name, in file order."""
+        return {n: a for n, a in self.accounts.items() if a.type == account_type}
 
 
 class ContextSection(_Section):
@@ -284,7 +372,8 @@ class DatabricksProject(_Section):
     def _users_moved(cls, data: Any) -> Any:
         if isinstance(data, dict) and "users" in data:
             raise ValueError(
-                "`users` no longer lives in config.yaml: list the workspace users in the "
+                "`users` no longer lives in the tool configuration: "
+                "list the workspace users in the "
                 "project's own jaws.yaml, under the databricks-workspace "
                 "component (users: [name@example.com]); only admins are set here"
             )
@@ -417,6 +506,75 @@ class ProjectGuardrails(_Section):
     databricks: DatabricksProject | None = None
 
 
+#: What a project is, which decides the stack and roles the foundation gives it:
+#: a static site, a released Lichess bot, a research project (remote tasks and
+#: datasets, never released; the bot stack without a release role), or a
+#: Databricks workspace.
+PROJECT_TYPES = ("site", "bot", "research", "databricks")
+_PROJECT_KEY = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+_GITHUB_OWNER = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$")
+
+
+class OnboardedProject(ProjectGuardrails):
+    """One project in config/projects.yaml: who it is, and what it is approved for
+    (the guardrails it inherits)."""
+
+    description: str = Field(min_length=1)
+    type: Literal["site", "bot", "research", "databricks"]
+    #: The repository's name under its owner (`projects.<owner>`).
+    repository: str = Field(pattern=r"^[A-Za-z0-9._-]+$")
+    #: Its numeric GitHub ID, which the CI roles' OIDC trust names.
+    repository_id: str = Field(pattern=r"^\d+$")
+    #: A site's domain.
+    domain: str | None = Field(
+        default=None, pattern=r"^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
+    )
+
+    @model_validator(mode="after")
+    def _fields_fit_the_type(self) -> OnboardedProject:
+        if self.type == "site":
+            if self.domain is None:
+                raise ValueError("a site needs its domain")
+            approved = [
+                name
+                for name in ("instance_types", "task_profiles", "datasets", "max_run_cost_usd")
+                if getattr(self, name)
+            ]
+            if approved:
+                raise ValueError(
+                    f"a site runs no tasks and has no datasets: drop {', '.join(approved)}"
+                )
+        elif self.domain is not None:
+            raise ValueError(f"only a site has a domain, and this is a {self.type} project")
+        if (self.databricks is None) == (self.type == "databricks"):
+            raise ValueError(
+                "a databricks project needs its databricks entry"
+                if self.type == "databricks"
+                else "only a databricks project has a databricks entry, and this is a "
+                f"{self.type} project"
+            )
+        return self
+
+
+class GithubOwner(_Section):
+    """A GitHub organization or user (`projects.<owner>`) and the projects whose
+    repositories it owns."""
+
+    #: The owner's numeric GitHub ID (`gh api users/<owner> --jq .id`).
+    owner_id: str = Field(pattern=r"^\d+$")
+    projects: dict[str, OnboardedProject] = Field(min_length=1)
+
+    @field_validator("projects")
+    @classmethod
+    def _keys_are_kebab_case(
+        cls, value: dict[str, OnboardedProject]
+    ) -> dict[str, OnboardedProject]:
+        for key in value:
+            if not _PROJECT_KEY.match(key):
+                raise ValueError(f"project key {key!r} must be lowercase kebab-case")
+        return value
+
+
 class TasksSection(_Section):
     """How `task run` sets up and follows task instances (component `task-runner`)."""
 
@@ -449,26 +607,8 @@ class PlanSection(_Section):
     comment_max_bytes: int = Field(ge=1024, le=65000)
 
 
-class ManagementSection(_Section):
-    """The organization's management account (the `management:` section): AWS
-    Organizations and IAM Identity Center, where owner-access lives. jaws builds
-    nothing there and no run addresses it; everything it built there moved to
-    the production account and was retired on 2026-11-21."""
-
-    account_id: str = Field(pattern=r"^\d{12}$")
-
-
-class DevelopmentSection(_Section):
-    """The organization's development account (the `development:` section). jaws
-    records it and builds nothing in it: no foundation, no state bucket, and no
-    run addresses it. The owner signs in to it through owner-access, as the
-    jaws-dev profile."""
-
-    account_id: str = Field(pattern=r"^\d{12}$")
-
-
 class Settings(_Section):
-    """The whole of config.yaml."""
+    """The whole tool configuration (every file of config/)."""
 
     tool: ToolSection = ToolSection()
     terraform: TerraformSection
@@ -482,26 +622,41 @@ class Settings(_Section):
     plan: PlanSection
     bot: BotSection
     tasks: TasksSection
-    projects: dict[str, ProjectGuardrails] = {}
+    #: Every onboarded project, grouped by the GitHub owner of its repository: the
+    #: `projects` section. `projects` (the property) indexes them by key.
+    owners: dict[str, GithubOwner] = Field(default_factory=dict, alias="projects")
     databricks: DatabricksSection | None = None
-    management: ManagementSection | None = None
-    development: DevelopmentSection | None = None
+
+    _projects: dict[str, OnboardedProject] = PrivateAttr(default_factory=dict)
+    _project_owners: dict[str, str] = PrivateAttr(default_factory=dict)
 
     @model_validator(mode="after")
-    def _accounts_are_distinct(self) -> Settings:
-        accounts = [("aws", self.aws.account_id)]
-        for name, section in (("management", self.management), ("development", self.development)):
-            if section is not None:
-                accounts.append((name, section.account_id))
-        seen: dict[str, str] = {}
-        for name, account_id in accounts:
-            if account_id in seen:
-                raise ValueError(
-                    f"{name}.account_id {account_id} is also {seen[account_id]}.account_id: "
-                    "the production, management and development accounts are distinct"
-                )
-            seen[account_id] = name
+    def _index_projects(self) -> Settings:
+        projects: dict[str, OnboardedProject] = {}
+        owners: dict[str, str] = {}
+        for owner, group in self.owners.items():
+            if not _GITHUB_OWNER.match(owner):
+                raise ValueError(f"projects: {owner!r} is not a GitHub organization or user name")
+            for key, project in group.projects.items():
+                if key in projects:
+                    raise ValueError(
+                        f"project {key!r} is onboarded under both {owners[key]} and {owner}: "
+                        "a project key is unique across owners"
+                    )
+                projects[key] = project
+                owners[key] = owner
+        self._projects = projects
+        self._project_owners = owners
         return self
+
+    @property
+    def projects(self) -> dict[str, OnboardedProject]:
+        """Every onboarded project by its key, whichever owner it is under."""
+        return self._projects
+
+    def repository(self, project: str) -> str:
+        """An onboarded project's repository, as `<owner>/<name>`."""
+        return f"{self._project_owners[project]}/{self._projects[project].repository}"
 
     @model_validator(mode="after")
     def _databricks_consistency(self) -> Settings:
@@ -510,7 +665,7 @@ class Settings(_Section):
             if projects:
                 raise ValueError(
                     f"projects {', '.join(sorted(projects))} have a databricks entry "
-                    "but config.yaml has no databricks section"
+                    "but no databricks section is configured (config/databricks.yaml)"
                 )
             return self
         central = self.databricks.compute_policies
@@ -562,16 +717,55 @@ class Settings(_Section):
 
 
 def default_config_path() -> Path:
-    """JAWS_CONFIG, else the path baked into the image, else ./config.yaml."""
+    """JAWS_CONFIG, else the directory baked into the image, else ./config."""
     if ENV_CONFIG_PATH in os.environ:
         return Path(os.environ[ENV_CONFIG_PATH])
-    if IMAGE_CONFIG_PATH.is_file():
+    if IMAGE_CONFIG_PATH.is_dir():
         return IMAGE_CONFIG_PATH
     return LOCAL_CONFIG_PATH
 
 
+def load_document(path: Path) -> dict[str, Any]:
+    """The tool configuration as one mapping of its top-level sections.
+
+    `path` is the config directory, whose `*.yaml` files are merged (each section
+    in one file only), or a single file holding every section.
+    """
+    if path.is_dir():
+        files = sorted(path.glob("*.yaml"))
+        strays = sorted(p.name for p in path.glob("*.yml"))
+        if strays:
+            raise ConfigError(f"{path}: {', '.join(strays)}: config files end in .yaml")
+        if not files:
+            raise ConfigError(f"{path}: no .yaml files in the tool configuration directory")
+    elif path.is_file():
+        files = [path]
+    else:
+        raise ConfigError(f"tool configuration not found at {path}")
+    document: dict[str, Any] = {}
+    origin: dict[str, str] = {}
+    for file in files:
+        try:
+            raw = yaml.safe_load(file.read_text())
+        except yaml.YAMLError as exc:
+            raise ConfigError(f"{file}: not valid YAML: {exc}") from exc
+        if raw is None:
+            continue
+        if not isinstance(raw, dict):
+            raise ConfigError(f"{file}: expected a mapping at the top level")
+        for section, value in raw.items():
+            if section in document:
+                raise ConfigError(
+                    f"{file}: section {section!r} is already in {origin[section]}; "
+                    "each section lives in one file"
+                )
+            document[section] = value
+            origin[section] = file.name
+    return document
+
+
 def load_settings(path: Path | None = None, environ: dict[str, str] | None = None) -> Settings:
-    """Load config.yaml and apply the JAWS_* overrides.
+    """Load the tool configuration (`load_document`) and apply the JAWS_* overrides.
 
     Only `JAWS_LOG_LEVEL` and `JAWS_LOG_FORMAT` may be overridden: they are the
     knobs a person debugging locally needs, and nothing else about how the
@@ -579,14 +773,7 @@ def load_settings(path: Path | None = None, environ: dict[str, str] | None = Non
     """
     env = os.environ if environ is None else environ
     path = path or default_config_path()
-    try:
-        raw = yaml.safe_load(path.read_text())
-    except FileNotFoundError as exc:
-        raise ConfigError(f"tool configuration not found at {path}") from exc
-    except yaml.YAMLError as exc:
-        raise ConfigError(f"{path}: not valid YAML: {exc}") from exc
-    if not isinstance(raw, dict):
-        raise ConfigError(f"{path}: expected a mapping at the top level")
+    raw = load_document(path)
 
     tool = dict(raw.get("tool") or {})
     if "JAWS_LOG_LEVEL" in env:
@@ -595,10 +782,17 @@ def load_settings(path: Path | None = None, environ: dict[str, str] | None = Non
         tool["log_format"] = env["JAWS_LOG_FORMAT"]
     raw["tool"] = tool
 
-    if "production" in raw:
+    for legacy in ("production", "management", "development"):
+        if legacy in raw:
+            raise ConfigError(
+                f"{path}: {legacy}: the accounts are the registry in aws.accounts "
+                "(config/aws.yaml), each with its type; aws.primary names the one jaws builds in"
+            )
+    aws = raw.get("aws")
+    if isinstance(aws, dict) and "account_id" in aws:
         raise ConfigError(
-            f"{path}: production: jaws has one account since the management account was "
-            'retired; its values are the top-level sections (README, "History")'
+            f"{path}: aws.account_id: the accounts are the registry in aws.accounts "
+            "(config/aws.yaml); aws.primary names the one jaws builds in"
         )
     try:
         return Settings.model_validate(raw)

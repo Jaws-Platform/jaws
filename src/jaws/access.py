@@ -46,19 +46,13 @@ REGISTRY_README = "README.md"
 ONBOARDED_VOLUME = "files"
 #: A directory of `<project>.yaml` read instead of GitHub (tests, local runs).
 ENV_PROJECT_FILES_DIR = "JAWS_PROJECT_FILES_DIR"
-#: The registries of projects and their repositories, one line per entry, as
-#: the workflows read them (bot-apply.yml, scripts/databricks-projects.sh).
-PROJECT_REGISTRIES = (
-    ("foundation/bots.tf", "bots"),
-    ("foundation/databricks.tf", "databricks_projects"),
-)
+#: The onboarded projects whose files the platform reads: the ones that can own,
+#: read or share a dataset (config/projects.yaml), as the workflows list them
+#: (bot-apply.yml, databricks-apply.yml, scripts/projects.sh).
+REGISTERED_TYPES = ("bot", "research", "databricks")
 GITHUB_API = "https://api.github.com"
 #: Seconds before a GitHub request gives up. No retries: a failed sweep runs again.
 FETCH_TIMEOUT = 20
-_REGISTRY_ENTRY = re.compile(r'^ *([a-z0-9-]+) *= *\{ *repository *= *"([^"]*)"')
-_REGISTRY_FIELD = re.compile(r'([a-z_]+) *= *"([^"]*)"')
-#: An entry's object, between its braces: a comment after it is not read.
-_REGISTRY_BODY = re.compile(r"\{([^}]*)\}")
 
 _KEBAB = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _FIELDS = ("description", "prefix")
@@ -131,7 +125,7 @@ class OnboardedDataset:
 
 
 def infra_root() -> Path:
-    """The infra checkout: JAWS_INFRA_ROOT, else the directory of config.yaml."""
+    """The infra checkout: JAWS_INFRA_ROOT, else the directory holding the tool configuration."""
     if ENV_INFRA_ROOT in os.environ:
         return Path(os.environ[ENV_INFRA_ROOT])
     return default_config_path().parent
@@ -212,50 +206,30 @@ def _check_keys(datasets: list[OnboardedDataset]) -> None:
 
 @dataclass(frozen=True)
 class RegistryIds:
-    """A registered project's repository and GitHub's immutable IDs for it, as the
-    registry records them (`gh api repos/<owner>/<repo> --jq '.id, .owner.id'`)."""
+    """A registered project's repository and GitHub's immutable IDs for it, as
+    config/projects.yaml records them (`gh api repos/<owner>/<repo> --jq '.id, .owner.id'`)."""
 
     repository: str
     repository_id: str | None
     owner_id: str | None
 
 
-def project_registry_ids(infra_root: Path) -> dict[str, RegistryIds]:
+def project_registry_ids(settings: Settings) -> dict[str, RegistryIds]:
     """Every registered project's repository and IDs: a deployer's federation subject
     is built from them."""
-    ids: dict[str, RegistryIds] = {}
-    for key, repository, line in _registry_entries(infra_root):
-        body = _REGISTRY_BODY.search(line)
-        fields = dict(_REGISTRY_FIELD.findall(body.group(1) if body else ""))
-        ids[key] = RegistryIds(repository, fields.get("repository_id"), fields.get("owner_id"))
-    return ids
+    return {
+        key: RegistryIds(
+            settings.repository(key), project.repository_id, settings.owners[owner].owner_id
+        )
+        for owner, group in settings.owners.items()
+        for key, project in group.projects.items()
+        if project.type in REGISTERED_TYPES
+    }
 
 
-def project_repositories(infra_root: Path) -> dict[str, str]:
-    """Every registered project and its repository, from foundation/bots.tf and databricks.tf."""
-    return {key: repository for key, repository, _ in _registry_entries(infra_root)}
-
-
-def _registry_entries(infra_root: Path) -> list[tuple[str, str, str]]:
-    """Each registry entry's key, repository and line, read the way the workflows read them."""
-    entries: list[tuple[str, str, str]] = []
-    for rel, block in PROJECT_REGISTRIES:
-        path = infra_root / rel
-        try:
-            lines = path.read_text().splitlines()
-        except FileNotFoundError as exc:
-            raise ConfigError(f"{path}: the project registry is missing") from exc
-        try:
-            start = lines.index(f"  {block} = {{")
-        except ValueError as exc:
-            raise ConfigError(f"{path}: no multi-line `{block} = {{ ... }}` block") from exc
-        for line in lines[start + 1 :]:
-            if line.startswith("  }"):
-                break
-            match = _REGISTRY_ENTRY.match(line)
-            if match:
-                entries.append((match.group(1), match.group(2), line))
-    return entries
+def project_repositories(settings: Settings) -> dict[str, str]:
+    """Every registered project and its repository, `<owner>/<name>`."""
+    return {key: ids.repository for key, ids in project_registry_ids(settings).items()}
 
 
 class ProjectFiles(Protocol):
@@ -302,8 +276,8 @@ class GitHubProjectFiles:
         repository = self.repositories.get(project)
         if repository is None:
             raise ConfigError(
-                f"{project}: not a registered project (foundation/bots.tf or "
-                "foundation/databricks.tf), so its file cannot be read"
+                f"{project}: not a bot, research or databricks project in "
+                "config/projects.yaml, so its file cannot be read"
             )
         url = f"{GITHUB_API}/repos/{repository}/contents/{SITE_FILE.name}"
         try:
@@ -334,12 +308,12 @@ class GitHubProjectFiles:
         return project in self.repositories
 
 
-def project_files_from_env(infra_root: Path) -> ProjectFiles:
+def project_files_from_env(settings: Settings) -> ProjectFiles:
     """JAWS_PROJECT_FILES_DIR when set, else GitHub, with GH_TOKEN or GITHUB_TOKEN if present."""
     if ENV_PROJECT_FILES_DIR in os.environ:
         return DirectoryProjectFiles(Path(os.environ[ENV_PROJECT_FILES_DIR]))
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or None
-    return GitHubProjectFiles(project_repositories(infra_root), token)
+    return GitHubProjectFiles(project_repositories(settings), token)
 
 
 # -- handshakes -------------------------------------------------------------------
@@ -590,7 +564,8 @@ def data_access_tfvars(
     databricks = settings.databricks
     if databricks is None or databricks.shared_host_url is None:
         raise ConfigError(
-            "config.yaml databricks.shared_host_url is not set: the data-access stack binds "
+            "config/databricks.yaml databricks.shared_host_url is not set: "
+            "the data-access stack binds "
             "and grants through the shared host (the foundation's databricks_shared_host output)"
         )
     organization = settings.context.organization

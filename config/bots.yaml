@@ -1,0 +1,38 @@
+# Bot and research projects (types bot and research in config/projects.yaml):
+# how a bot instance runs, and how remote tasks run and what any task may ask for.
+
+bot:
+  # Bot projects (components: container-image + lichess-bot). The container
+  # must log this within health_seconds after a deploy, or it is rolled back.
+  health_log_pattern: awaiting challenges
+  health_seconds: 90
+  asset_wait: 30m # a release's Linux asset is attached after the release is published
+  records_prefix: records/ # game records: <prefix>pgn|meta/schema=1/engine=<tag>/date=<day>/
+  # Every zone that offers c8a (1e does not): spot tasks try each for capacity.
+  # Append only: subnets are numbered by position, and the bot is in the first.
+  availability_zones: [us-east-1a, us-east-1b, us-east-1c, us-east-1d, us-east-1f]
+  # Pinned Amazon Linux 2023 image per architecture, by its Amazon image name.
+  # The bot instance changes OS only when this changes (a PR whose bot plan shows
+  # the replacement; Bot apply while the bot is idle). Name of the latest image:
+  # aws ec2 describe-images --image-ids "$(aws ssm get-parameter --name
+  #   /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+  #   --query Parameter.Value --output text)" --query 'Images[0].Name' --output text
+  amis:
+    x86_64: al2023-ami-2023.12.20261026.1-kernel-6.18-x86_64 # ami-04b938437b69a2c9c in us-east-1
+
+tasks:
+  # Remote CI tasks (component task-runner, `task run`). The toolchain every
+  # task instance installs; the current stable is the [pkg.rust] version in
+  # https://static.rust-lang.org/dist/channel-rust-stable.toml
+  rust_toolchain: 1.99.1
+  poll_seconds: 5 # how often `task run` polls a task's output and status
+  # Pinned images of task profiles (a profile's `image`), by Amazon-owned image
+  # name; the bot stack resolves each to its ID. Upgrade by changing the pin.
+  images:
+    # NVIDIA driver and CUDA toolkit installed; ami-0f964da32f9793d2b (2026-10-28).
+    deep-learning-gpu: Deep Learning Base OSS Nvidia Driver GPU AMI (Amazon Linux 2023) 20261027
+  limits: # what any project file may ask for
+    max_hours: 6 # GitHub stops a job at six hours; the launch role allows seven
+    max_vcpus: 256
+    root_volume_gb: 200 # the task-runner module's own upper bound is 200
+  max_run_cost_usd: 50 # worst-case cost of one task; above it, the launch is refused
