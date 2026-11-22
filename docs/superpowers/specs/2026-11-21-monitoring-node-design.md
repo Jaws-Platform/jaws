@@ -581,6 +581,26 @@ date, forecast, budget status and anomalies.
   - Staleness clocks start at the node's first `cost-sync` run until data arrives.
 - **Left for 06b:** the daily rollups, the forecast and the budgets.
 
+**As built in v0.6.0 (plan 06b):**
+
+- **The model:** views in the `cost` database, rebuilt by `cost-sync` every run (no stored rollups).
+  - `cost.lines` stores each row's UTC `day`, indexed, and `long_period`: a charge for more than a day, dated to its period's start (a monthly fee, a support plan, often tax).
+  - Every view reads only its window, through stable functions (`cost.today()`, `cost.last_complete()`, `cost.month_start()`, `cost.next_month()`) that Postgres pushes down to the index.
+  - Schema version 2: upgrading rebuilds the database and reloads every twin once.
+- **The forecast** differs from the definition above. It is the month's long-period charges and complete days, plus, for every day not complete yet, what that day has so far or the last 7 complete days' average, whichever is more. It is never below the month to date.
+- **Anomalies** judge each of the last three days with data, so a provider that reports a day late (Databricks) is judged when its day lands. Each judged day is an alert with `day` as a label. Long-period charges are left out.
+- **New untagged spend:** an account and service whose first untagged day in 16 is the newest or the day before, with its spend since. A charge that starts late in a day still counts its next whole day, and a steady charge alerts once.
+- **The cost alerts** (folder Cost, every 5 minutes) post once, then weekly, to the `cost` route or `host`'s:
+  - the month-end forecast over a budget;
+  - month to date over a budget;
+  - the daily anomaly, at 2× and 4×;
+  - new untagged spend.
+- **Cost · Overview:**
+  - Its forecast tile is a share of the total budget.
+  - With no total budget, the forecast shows nowhere: a deferred minor.
+- **The reconciler** starts `cost-sync` right after a new release is up, so new views exist before the cost rules query them.
+- **Not yet:** budget lines on the by-project bars, and a "never tagged" label (06c can add both). Future tax isn't forecast.
+
 ### 6.7 Dashboards
 
 All dashboards are provisioned and read-only in the UI. They follow the

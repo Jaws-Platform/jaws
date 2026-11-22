@@ -1,6 +1,6 @@
 # Cost Model, Cost Alerts and the Overview Implementation Plan (06b)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Turn the cost rows on the node into the numbers the owner watches, and release it as 0.6.0 of `terraform-aws-jaws-monitoring`:
 - **the cost model in SQL:** daily spend, month to date, the forecast, budgets, anomalies and new untagged spend;
@@ -126,7 +126,7 @@ Series: [00-roadmap](2026-11-21-monitoring-00-roadmap.md).
 - `config.json` gains `"budgets": {"total": n|null, "projects": {…}, "accounts": {…}}`.
 - An absent `budgets` key means no budgets, so a 0.5.0 bundle still works.
 
-- [ ] **Step 1: Write the failing cases**
+- [x] **Step 1: Write the failing cases**
 
 `cost_model_rows.sql` inserts straight into `cost.lines` (key `test/model`, provider `aws`, account `570327089884` named `production`), at fixed dates in UTC:
 - **Project `alpha`:** $10 on each of 2026-10-01 … 2026-11-18, then $50 on 2026-11-21.
@@ -155,21 +155,21 @@ The cases run their checks in a `psql` session that first does `SET cost.now = '
 - **`steady_untagged_spend_is_new_only_once`:** `cost.untagged_new` for 2026-11-21 lists S3 with `prior_spend = 0`, and VPC with `prior_spend > 0`. Tax isn't untagged.
 - **`budgets_are_rewritten_every_run`:** remove `gamma` from `config.json` and run `cost-sync` again. `cost.budgets` no longer has it.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `cd $MOD && bash tests/test-cost-sync-postgres.sh`
 Expected: FAIL in `complete_days_are_48_hours_old` (`relation "cost.daily" does not exist`).
 
-- [ ] **Step 3: Implement the function, the table, the views and the budget rewrite**
+- [x] **Step 3: Implement the function, the table, the views and the budget rewrite**
 
 The 14 days before a day, and a month's days, come from `generate_series`, so a day with no rows counts as 0. `percentile_cont(0.5)` gives the median.
 
-- [ ] **Step 4: Run them**
+- [x] **Step 4: Run them**
 
 Run: `cd $MOD && bash tests/test-cost-sync-postgres.sh && python3 -m unittest discover -s files -p 'test_*.py'`
 Expected: `cost sync (postgres): OK`; unit tests OK (also under Python 3.9.6).
 
-- [ ] **Step 5: Commit** `feat(monitoring-node): model spend, the forecast, budgets, anomalies and untagged spend in the cost database`
+- [x] **Step 5: Commit** `feat(monitoring-node): model spend, the forecast, budgets, anomalies and untagged spend in the cost database`
 
 ---
 
@@ -177,13 +177,13 @@ Expected: `cost sync (postgres): OK`; unit tests OK (also under Python 3.9.6).
 
 **Files:** `$MOD/variables.tf` (`cost.budgets`, `cost.anomaly_floor_usd`, the two `thresholds`), `$MOD/grafana.tf` (`config.json`, and passing `anomaly_floor_usd` to `$GRAF`), `$GRAF/variables.tf`; tests in `$MOD/tests/monitoring_node.tftest.hcl` and the `thresholds` copy in `tests/grafana.tftest.hcl` and the smoke test.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - **`with_budgets_cost_sync_gets_them`:** with `budgets = {total = 100, projects = {alpha = 50}}`, `jsondecode(config.json).budgets == {total = 100, projects = {alpha = 50}, accounts = {}}`.
   - **`the_default_thresholds_are_the_specs`:** gains `anomaly_ratio {2, 4}` and `untagged_daily_usd {0.5}`.
   - **`rejects_a_zero_budget`, `rejects_a_negative_anomaly_floor`, `rejects_an_anomaly_ratio_of_one`:** each with its `expect_failures`.
-- [ ] **Step 2: Run them to see them fail** (`terraform test`). Expected: FAIL; the attributes don't exist.
-- [ ] **Step 3: Implement, then run** `cd $MOD && terraform test`. Expected: PASS.
-- [ ] **Step 4: Commit** `feat(monitoring-node): take budgets, the anomaly floor and the cost thresholds as inputs`
+- [x] **Step 2: Run them to see them fail** (`terraform test`). Expected: FAIL; the attributes don't exist.
+- [x] **Step 3: Implement, then run** `cd $MOD && terraform test`. Expected: PASS.
+- [x] **Step 4: Commit** `feat(monitoring-node): take budgets, the anomaly floor and the cost thresholds as inputs`
 
 ---
 
@@ -196,7 +196,7 @@ Expected: `cost sync (postgres): OK`; unit tests OK (also under Python 3.9.6).
 
 **Interfaces:** the cost rule table. Folder `Cost` is also the Overview's folder, so the smoke test's one-folder-per-title check covers it.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `grafana.tftest.hcl`:
 - **`cost_rules_run_sql_on_the_cost_database`:** with `cost`, every `cost-*` rule's A step has `datasourceUid == "cost"`, `model.format == "table"` and a `rawSql`. The anomaly SQL contains `excess > 2` at the default floor, and `excess > 5` with `anomaly_floor_usd = 5`.
@@ -212,12 +212,12 @@ Smoke phase 1, after Grafana is healthy:
   - `anomaly` for `alpha`, at both severities;
   - `untagged-new` for the S3 row.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `cd $MOD && terraform test && bash tests/test-grafana-provisioning.sh`
 Expected: FAIL, with `Invalid index` on `rules-cost.json`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 The Postgres data step is:
 
@@ -231,12 +231,12 @@ The threshold step C reads A.
 
 **Fallback (12.7):** if `/api/v1/eval` shows Grafana refusing table results, switch the rules to time-series form. That means a `time` column of `cost.now()` and `metric` built from the labels. Record a ruling.
 
-- [ ] **Step 4: Run them, and the suite**
+- [x] **Step 4: Run them, and the suite**
 
 Run: `cd $REPO && scripts/check-module.sh modules/monitoring-node`
 Expected: PASS; `grafana smoke: OK`, with the eval checks named.
 
-- [ ] **Step 5: Commit** `feat(monitoring-node): alert on budgets, daily anomalies and new untagged spend`
+- [x] **Step 5: Commit** `feat(monitoring-node): alert on budgets, daily anomalies and new untagged spend`
 
 ---
 
@@ -251,7 +251,7 @@ Expected: PASS; `grafana smoke: OK`, with the eval checks named.
 - SQL panels use the Cost data source, with `format: table` or `time_series`, and Grafana's `$__timeFilter(…)` and variable syntax. The dashboard JSON isn't environment-expanded, and the validator's `$` rule applies only to alerting files.
 - The house-style builders from `dashboard-host.tf` are reused where the panel types match. Otherwise, write the panel objects directly.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - **`the_overview_follows_the_house_style`:**
     - uid `cost-overview`, folder `Cost` (path `Cost/overview.json`);
     - the last 90 days, 30s refresh, `editable` false;
@@ -261,16 +261,16 @@ Expected: PASS; `grafana smoke: OK`, with the eval checks named.
   - **`every_cost_panel_reads_the_cost_database`:** every target's datasource uid is `cost`, and every `rawSql` names a `cost.` object.
   - **`the_overview_needs_cost`:** without `cost`, there is no `Cost/overview.json`.
   - **`the_budget_and_anomaly_panels_state_their_numbers`:** panel 32's description contains `100`, and panel 42's contains `2` and `4`.
-- [ ] **Step 2: Run them to see them fail.** Expected: `Invalid index` on `Cost/overview.json`.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `cd $REPO && scripts/check-module.sh modules/monitoring-node`. Expected: PASS; the smoke test lists `cost-overview` in folder `Cost`, and no second `Cost` folder.
-- [ ] **Step 5: Commit** `feat(monitoring-node): add the cost overview dashboard`
+- [x] **Step 2: Run them to see them fail.** Expected: `Invalid index` on `Cost/overview.json`.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `cd $REPO && scripts/check-module.sh modules/monitoring-node`. Expected: PASS; the smoke test lists `cost-overview` in folder `Cost`, and no second `Cost` folder.
+- [x] **Step 5: Commit** `feat(monitoring-node): add the cost overview dashboard`
 
 ---
 
 ### Task 5: Docs and the 0.6.0 release
 
-- [ ] **Step 1: Write the docs.** The README covers:
+- [x] **Step 1: Write the docs.** The README covers:
   - the budgets and the anomaly floor;
   - the cost rules table;
   - the model's views, for ad hoc SQL;
@@ -278,16 +278,16 @@ Expected: PASS; `grafana smoke: OK`, with the eval checks named.
   - what the Overview shows.
   
   The example adds a `budgets` block.
-- [ ] **Step 2: Run** `cd $REPO && scripts/check.sh`. Expected: `All checks passed.`
-- [ ] **Step 3: Commit** `docs(monitoring-node): document the cost model, the cost alerts and the overview`
-- [ ] **Step 4:** The final whole-branch review and fix pass.
-- [ ] **Step 5:** Ask the owner, then publish:
+- [x] **Step 2: Run** `cd $REPO && scripts/check.sh`. Expected: `All checks passed.`
+- [x] **Step 3: Commit** `docs(monitoring-node): document the cost model, the cost alerts and the overview`
+- [x] **Step 4:** The final whole-branch review and fix pass.
+- [x] **Step 5:** Ask the owner, then publish:
   1. push;
   2. open the PR, `feat: model the cost data, alert on it and add the cost overview`;
   3. squash-merge once CI is green;
   4. merge the 0.6.0 release PR;
   5. check the registry.
-- [ ] **Step 6: Record it:**
+- [x] **Step 6: Record it:**
   - tick the plan;
   - mark 06b released, and add 06c to the roadmap;
   - add an "As built in v0.6.0" note to spec 6.6–6.8;
