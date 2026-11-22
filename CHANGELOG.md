@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.75.0](https://github.com/Jaws-Platform/jaws/compare/v0.74.4...v0.75.0) (2026-11-22)
+
+
+### Features
+
+* **bot:** harden the records bucket to the bot, its CI roles and the admins ([#296](https://github.com/Jaws-Platform/jaws/issues/296)) ([7400d62](https://github.com/Jaws-Platform/jaws/commit/7400d622787c62d80392175b105e242fbb528d2b))
+
 ## [0.74.4](https://github.com/Jaws-Platform/jaws/compare/v0.74.3...v0.74.4) (2026-11-22)
 
 
