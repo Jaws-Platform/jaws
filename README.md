@@ -547,7 +547,7 @@ bucket, readable by the plan role and writable by the apply role:
 | `jaws-<key>-ci-plan` | `pull_request` on this repository | `tfstate/read`, `container/read`, `task/read`, and `dataset/read` with datasets |
 | `jaws-<key>-ci-apply` | `environment:prod` on this repository | `tfstate/write`, `container/read`, `container/manage`, `task/read`, `task/manage`, `container/schedule` (a research project gets `compute/*` and no `container/schedule`), and `dataset/read`, `dataset/manage` with datasets |
 | `jaws-<key>-ci-release` | the bot repository's `v*` tags | `container/release` (which also lets `bot start` start the instance) |
-| `jaws-<key>-ci-task` | the bot repository's `pull_request` and `main` (never forks) | `task/launch`: launch from the project's task template, run commands on and terminate its `Purpose=ci-task` instances |
+| `jaws-<key>-ci-task` | the bot repository's `pull_request` and `main` (never forks) | `task/launch`: launch from the project's task template, run commands on and terminate its `Purpose=ci-task` instances; with `monitoring.cost`, `task/records`: put the task-run records under `raw/provider=jaws/source=task-runs/project=<key>/` in the billing bucket, nothing else there |
 
 The bot's infrastructure is planned and applied here; the bot repository
 holds only the project file and a release workflow, and its release role can
@@ -560,6 +560,8 @@ token. `terraform output bots` lists the role ARNs.
 | --- | --- | --- |
 | `jaws-infra-ci-plan` | `pull_request` | `tfstate/read` (this stack's state key, write of its `.tflock` only), `foundation/read` |
 | `jaws-infra-ci-apply` | `environment:prod` | `tfstate/write`, `foundation/read`, `foundation/manage`: everything needed to manage this stack, see below; `ecr/push` for the infra CLI image |
+| `jaws-monitoring-ci-plan` | `pull_request` | `tfstate/read` (the monitoring stack's state key), `monitoring/read`, `compute/read` |
+| `jaws-monitoring-ci-apply` | `environment:prod` | `tfstate/write`, `monitoring/read`, `monitoring/node`, `monitoring/config`, `monitoring/functions`, `monitoring/backup` (the `jaws-monitoring` stack, its Grafana record and nothing else in the zone), `compute/read`, `compute/manage` (its VPC) |
 
 ### Why the apply role is scoped the way it is
 

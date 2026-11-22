@@ -291,7 +291,7 @@ check "shared_host_url" {
 module "databricks_ci_plan" {
   for_each = local.databricks_projects
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
-  version  = "0.3.0"
+  version  = "0.4.0"
 
   project                    = each.key
   name_root                  = local.context.name_root
@@ -313,7 +313,7 @@ module "databricks_ci_plan" {
 module "databricks_ci_apply" {
   for_each = local.databricks_projects
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
-  version  = "0.3.0"
+  version  = "0.4.0"
 
   project                    = each.key
   name_root                  = local.context.name_root

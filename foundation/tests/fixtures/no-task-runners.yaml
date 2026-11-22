@@ -242,7 +242,7 @@ terraform:
   plan_timeout: 15m
 library:
   families:
-    Jaws-Platform/jaws-ci/aws: 0.3.0
+    Jaws-Platform/jaws-ci/aws: 0.4.0
     Jaws-Platform/jaws-databricks/aws: 0.2.0
     Jaws-Platform/jaws-foundation/aws: 0.2.0
     Jaws-Platform/jaws-lichess-bot/aws: 0.1.4

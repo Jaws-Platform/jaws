@@ -11,7 +11,7 @@ library:
   # Each family has one version: every pin of it in this repository (sites,
   # bots, Databricks, the foundation, the monitoring stack) moves with the entry here.
   families:
-    Jaws-Platform/jaws-ci/aws: 0.3.0
+    Jaws-Platform/jaws-ci/aws: 0.4.0
     Jaws-Platform/jaws-databricks/aws: 0.2.0
     Jaws-Platform/jaws-foundation/aws: 0.2.0
     Jaws-Platform/jaws-lichess-bot/aws: 0.1.4

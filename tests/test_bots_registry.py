@@ -368,7 +368,12 @@ def test_task_role_is_the_launch_role_for_the_bot_repository() -> None:
     assert "repository        = local.bots[each.key].repository" in block
     assert "repository_id     = local.bots[each.key].repository_id" in block
     assert _policies(block) == ["task/launch"]
-    assert "instance_types = each.value, profiles = local.bot_task_profiles[each.key]" in block
+    assert "instance_types = each.value" in block
+    assert "profiles       = local.bot_task_profiles[each.key]" in block
+    # With the billing bucket, the run records under the project's own prefix
+    # (foundation/monitoring.tf local.task_records).
+    assert 'contains(keys(local.task_records), each.key) ? ["task/records"] : []' in block
+    assert "records        = lookup(local.task_records, each.key, null)" in block
     # No subjects override: the module's default trusts pull_request and main only.
     assert "subjects" not in block
 

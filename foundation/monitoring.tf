@@ -9,6 +9,8 @@
 #                              management account's exports may deliver into it
 #   Databricks billing job     jaws-databricks-billing-export on the shared host,
 #                              with monitoring.cost.databricks
+#   task run records           each project's task role (bots.tf) may put its own
+#                              records under raw/provider=jaws/source=task-runs/
 #   jaws-monitoring-ci-plan    trusted for pull_request      tfstate/read, monitoring/read, compute/read
 #   jaws-monitoring-ci-apply   trusted for environment:prod  tfstate/write, monitoring/read, monitoring/node,
 #                                                            monitoring/config, monitoring/functions,
@@ -34,6 +36,16 @@ locals {
     aws_export_source_account_ids = try(local.monitoring_cost.aws, true) ? [local.management_account_id] : []
     # Off until the first deliveries are checked (jaws.settings.MonitoringCost).
     protect_raw = try(local.monitoring_cost.protect_raw, false)
+  }
+
+  # Each task role's run records (jaws.run_records): `task run` and `task sweep`
+  # write them with the project's task role, which task/records lets put objects
+  # under its own project's prefix, and nothing else in the bucket (bots.tf).
+  task_records = local.billing_bucket == null ? {} : {
+    for key in keys(local.bot_task_types) : key => {
+      bucket = local.billing_bucket.name
+      prefix = "raw/provider=jaws/source=task-runs/project=${key}"
+    }
   }
 
   # Through the shared host, so it waits for its URL as the datasets do.
@@ -91,7 +103,7 @@ module "databricks_billing_export" {
 module "monitoring_ci_plan" {
   count   = local.monitoring == null ? 0 : 1
   source  = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
-  version = "0.3.0"
+  version = "0.4.0"
 
   project                    = local.monitoring_ci.project
   name_root                  = local.context.name_root
@@ -113,7 +125,7 @@ module "monitoring_ci_plan" {
 module "monitoring_ci_apply" {
   count   = local.monitoring == null ? 0 : 1
   source  = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
-  version = "0.3.0"
+  version = "0.4.0"
 
   project                    = local.monitoring_ci.project
   name_root                  = local.context.name_root

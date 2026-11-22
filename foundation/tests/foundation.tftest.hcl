@@ -449,3 +449,41 @@ run "databricks_billing_waits_for_the_host" {
     error_message = "the billing job is created through the shared host, so it waits for its URL as the datasets do; the bucket does not"
   }
 }
+
+# `task run` and `task sweep` write each run's records to the billing bucket
+# (jaws.run_records), with the project's task role: task/records lets it put
+# objects under its own project's prefix and nothing else in the bucket.
+run "each_task_role_writes_only_its_own_run_records" {
+  command = plan
+
+  assert {
+    condition     = length(module.bot_ci_task) > 0 && alltrue([for key, role in module.bot_ci_task : toset(keys(role.policy_arns)) == toset(["task/launch", "task/records"])])
+    error_message = "every task role launches its tasks and writes their records, nothing more"
+  }
+
+  assert {
+    condition     = toset(keys(local.task_records)) == toset(keys(module.bot_ci_task))
+    error_message = "every task role has its records prefix"
+  }
+
+  assert {
+    condition = local.task_records["braveheart-trainer"] == {
+      bucket = "jaws-billing-570327089884"
+      prefix = "raw/provider=jaws/source=task-runs/project=braveheart-trainer"
+    }
+    error_message = "a project's task role writes only under raw/provider=jaws/source=task-runs/project=<project>/ in the billing bucket"
+  }
+}
+
+run "no_task_records_without_the_billing_bucket" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/no-monitoring.yaml"
+  }
+
+  assert {
+    condition     = length(local.task_records) == 0 && alltrue([for key, role in module.bot_ci_task : toset(keys(role.policy_arns)) == toset(["task/launch"])])
+    error_message = "without the billing bucket the task roles only launch"
+  }
+}
