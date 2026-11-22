@@ -169,7 +169,7 @@ Series: [00-roadmap](2026-11-21-monitoring-00-roadmap.md).
 - **Produces:** `write_twin(rows: Sequence[Mapping], schema: pa.Schema) -> bytes`, which returns gzip bytes in the `csv-twin-1` format, with columns in `schema` order.
 - **In `run.py`:** each rebuilt output `put`s `…/data.csv.gz` (content type `application/gzip`) with the same metadata as its Parquet, and after it. An unchanged output writes neither.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `test_twin.py`:
 - **`test_nulls_and_empty_strings_differ`:** a row with `None` and `""` gives `,` and `,""` in the decoded CSV.
@@ -186,21 +186,21 @@ Series: [00-roadmap](2026-11-21-monitoring-00-roadmap.md).
 - **`test_each_rebuilt_output_has_its_twin`:** after a run over the existing fakes, every `data.parquet` has a `data.csv.gz` with the same metadata, and their rows match.
 - **`test_an_unchanged_output_rewrites_neither`:** a second run with no new deliveries `put`s nothing under `normalized/` except `_runs/`.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `cd $NORM && uv run --no-project --python 3.13 --with-requirements files/requirements-test.txt python -m unittest discover -s files -p 'test_*.py'`
 Expected: FAIL with `ModuleNotFoundError: No module named 'normalizer.twin'`.
 
-- [ ] **Step 3: Implement `twin.py` and the twin in `run.py`, and bump `MAPPER_VERSION`**
+- [x] **Step 3: Implement `twin.py` and the twin in `run.py`, and bump `MAPPER_VERSION`**
 
 Use `csv.writer(…, quoting=csv.QUOTE_NOTNULL, lineterminator="\n")` into a `gzip.GzipFile(mtime=0)`, so the bytes are reproducible.
 
-- [ ] **Step 4: Run the suite**
+- [x] **Step 4: Run the suite**
 
 Run: `cd $REPO && scripts/check-module.sh modules/billing-normalizer`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `feat(billing-normalizer): write a csv twin of every output for the monitoring node`
 
@@ -225,7 +225,7 @@ Expected: PASS.
 
 The integration test runs a real Postgres from the pinned image, with `MONITORING_PSQL="docker exec -i <container> psql -U monitoring -v ON_ERROR_STOP=1"`, the fake `aws` first on `PATH`, and the `$NORM` contract fixtures gzipped into a scratch bucket. It is a bash script with a Python helper for the assertions, and every check is a named case:
 
-- [ ] **Step 1: Write the failing integration test**
+- [x] **Step 1: Write the failing integration test**
 
 - **`first_sync_loads_every_output`:**
   - `cost.lines` has the fixture's rows;
@@ -247,21 +247,21 @@ The integration test runs a real Postgres from the pinned image, with `MONITORIN
   - `INSERT INTO cost.lines` is denied.
 - **`a_schema_version_change_rebuilds`:** set `cost.meta.schema_version` to `0`. The next run reloads every output.
 
-- [ ] **Step 2: Run it to see it fail**
+- [x] **Step 2: Run it to see it fail**
 
 Run: `cd $MOD && bash tests/test-cost-sync-postgres.sh`
 Expected: FAIL, because `files/monitoring-cost-sync.py` doesn't exist.
 
-- [ ] **Step 3: Implement `monitoring-cost-sync.py`**
+- [x] **Step 3: Implement `monitoring-cost-sync.py`**
 
 One `psql` stream per transaction (stdin, `-v ON_ERROR_STOP=1`), with the `COPY … FROM STDIN` data inline, ended by `\.`. Metrics are written to `.cost_sync.prom.tmp`, then renamed.
 
-- [ ] **Step 4: Run it**
+- [x] **Step 4: Run it**
 
 Run: `cd $MOD && bash tests/test-cost-sync-postgres.sh && shellcheck tests/test-cost-sync-postgres.sh`
 Expected: `cost sync (postgres): OK`; shellcheck prints nothing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `feat(monitoring-node): load the normalized cost data into postgres on the node`
 
@@ -275,7 +275,7 @@ Expected: `cost sync (postgres): OK`; shellcheck prints nothing.
 
 **Interfaces:** Task 2's. The fake `psql` records each stream it receives, and can fail any stream containing a given marker.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 - **`test_without_cost_config_it_removes_its_metrics_and_exits_0`.**
 - **`test_a_bad_output_keeps_its_rows_and_the_rest_load`:** one twin is corrupt gzip, another has the header name `bad-name`. Both are reported (exit 1, `success 0`), no stream is sent for either, the other outputs' streams are sent, and their `cost.loads` upserts are in them.
@@ -287,12 +287,12 @@ Expected: `cost sync (postgres): OK`; shellcheck prints nothing.
 
 Each test also runs under Python 3.9: `uv run -q --no-project --python 3.9 python -m unittest …`.
 
-- [ ] **Step 2: Run them to see them fail, then fix the script until they pass**
+- [x] **Step 2: Run them to see them fail, then fix the script until they pass**
 
 Run: `cd $MOD && python3 -m unittest discover -s files -p 'test_*.py'`
 Expected: first the named failures; then `OK` under 3.13 and 3.9, with `bash tests/test-cost-sync-postgres.sh` still OK.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 `fix(monitoring-node): keep cost-sync's last good data and say so when a load fails`
 
@@ -314,7 +314,7 @@ Expected: first the named failures; then `OK` under 3.13 and 3.9, with `bash tes
   - `run_join_tags` is non-empty.
 - **`$GRAF`** gets `cost = object({ providers = set(string) })`, or null.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `monitoring_node.tftest.hcl`, with `cost = { bucket = "acme-billing" }`:
 - **`with_cost_the_node_reads_only_normalized_data`:** there is an `ReadNormalizedCost` statement whose GetObject resource is `arn:aws:s3:::acme-billing/normalized/*`, and whose ListBucket has the `s3:prefix` condition `normalized/*`. Without `cost`, there is no such statement.
@@ -336,19 +336,19 @@ Smoke phase 1:
 
 Phase 2 has no `cost`, and the data source is gone.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `cd $MOD && terraform test && bash tests/test-grafana-provisioning.sh`
 Expected: FAIL (`cost` not declared, the data source missing).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
-- [ ] **Step 4: Run them**
+- [x] **Step 4: Run them**
 
 Run: `cd $REPO && scripts/check-module.sh modules/monitoring-node`
 Expected: PASS, with `grafana smoke: OK` and the data source healthy.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `feat(monitoring-node): run cost-sync on the node and let grafana read the cost database`
 
@@ -363,7 +363,7 @@ Expected: PASS, with `grafana smoke: OK` and the data source healthy.
 
 **Interfaces:** The pipeline rule table and the Pipeline row in Global Constraints. The `every_rule_mirrors_its_panel` and `every_rule_waits_at_least_two_minutes` runs now cover every module rules file.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `grafana.tftest.hcl`, with `cost = { providers = ["aws", "databricks"] }` unless stated:
 - **`the_pipeline_row_shows_with_cost`:** panels 60–68 exist, and row 60 is followed by text panel 61. Without `cost`, none exist.
@@ -379,21 +379,21 @@ Expected: PASS, with `grafana smoke: OK` and the data source healthy.
 - **`the_default_thresholds_are_the_specs`:** gains the four attributes.
 - **`rejects_pipeline_thresholds_in_the_wrong_order`.**
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `cd $MOD && terraform test`
 Expected: FAIL, with `Invalid index` on `rules-pipeline.json`, among others.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `rules-pipeline.tf` mirrors `rules-host.tf`: specs, instances, `needed`, and a file with `deleteRules`. Refactor only what both files use, the common rule fields and the threshold step, into `rules-common.tf`.
 
-- [ ] **Step 4: Run them, the smoke test and the suite**
+- [x] **Step 4: Run them, the smoke test and the suite**
 
 Run: `cd $REPO && scripts/check.sh`
 Expected: `All checks passed.`. The smoke test's phase 1 lists the 21 host rules, the 11 pipeline rules and the 2 extras. Phase 2, without `cost`, lists the 21 host rules.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `feat(monitoring-node): watch the cost pipeline on the host dashboard and alert on it`
 
@@ -401,12 +401,12 @@ Expected: `All checks passed.`. The smoke test's phase 1 lists the 21 host rules
 
 ### Task 6: Docs and the 0.5.0 release
 
-- [ ] **Step 1: Write the docs**
+- [x] **Step 1: Write the docs**
   - **`$MOD/README.md`:** the `cost` input; what `cost-sync` does and when; its metrics; the `cost` database and its tables and views (for 06b and for ad hoc SQL through a Session Manager shell); the pipeline rules; and that the node reads only `normalized/`.
   - **`$NORM/README.md`:** the twin and its format.
   - **The example** adds `cost`.
-- [ ] **Step 2:** Run `cd $REPO && scripts/check.sh`. Expected: `All checks passed.`
-- [ ] **Step 3:** Commit `docs(monitoring-node): document cost-sync, the cost database and the pipeline alerts`.
-- [ ] **Step 4:** The final whole-branch review and fix pass (executing-plans).
-- [ ] **Step 5:** Ask the owner, then publish: push, open the PR (`feat: load the cost data onto the monitoring node and watch its pipeline`), squash-merge once CI is green, merge the 0.5.0 release PR, and check the registry.
-- [ ] **Step 6:** Record it: tick this plan; in the roadmap, split 06 into 06a (released) and 06b; add an "As built in v0.5.0" note to spec 6.6. Then delete the plan's workspace and update the memory note.
+- [x] **Step 2:** Run `cd $REPO && scripts/check.sh`. Expected: `All checks passed.`
+- [x] **Step 3:** Commit `docs(monitoring-node): document cost-sync, the cost database and the pipeline alerts`.
+- [x] **Step 4:** The final whole-branch review and fix pass (executing-plans).
+- [x] **Step 5:** Ask the owner, then publish: push, open the PR (`feat: load the cost data onto the monitoring node and watch its pipeline`), squash-merge once CI is green, merge the 0.5.0 release PR, and check the registry.
+- [x] **Step 6:** Record it: tick this plan; in the roadmap, split 06 into 06a (released) and 06b; add an "As built in v0.5.0" note to spec 6.6. Then delete the plan's workspace and update the memory note.

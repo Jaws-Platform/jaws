@@ -563,6 +563,24 @@ date, forecast, budget status and anomalies.
 - **"Complete day"** means at least 48 hours old. Newer days are labelled
   partial.
 
+**As built in v0.5.0 (plan 06a):**
+
+- **The twin:** the normalizer writes a gzip CSV twin, `data.csv.gz` (`csv-twin-1`), beside each `data.parquet`.
+  - It is streamed, and written before its Parquet.
+  - `MAPPER_VERSION` is 2.
+- **`cost-sync`:** a stdlib Python 3.9 host script, the system Python by the owner's choice.
+  - It ships in the config bundle, because user data's 16 KB couldn't hold it; user data has only its units.
+  - It runs at boot and every 30 minutes.
+  - It loads each changed twin in one transaction through `psql` in the Postgres container.
+  - It lists `_runs/latest.json` before fetching it, because S3 answers 403 for a missing key under the prefix-limited role.
+- **The database:** `cost.lines`, `cost.run_events`, `cost.task_runs`, `cost.task_run_costs`, `cost.loads` and `cost.normalizer_runs`.
+  - Grafana reads it as `cost_reader` through the Cost data source.
+  - That data source is deleted by name when `cost` is off, since Grafana 13.3 ignores `prune`.
+- **The pipeline alerts:** seven rules (11 uids) on the host dashboard's Pipeline row.
+  - The over-ceiling rule counts only runs from the last 7 days, and posts once a week.
+  - Staleness clocks start at the node's first `cost-sync` run until data arrives.
+- **Left for 06b:** the daily rollups, the forecast and the budgets.
+
 ### 6.7 Dashboards
 
 All dashboards are provisioned and read-only in the UI. They follow the
