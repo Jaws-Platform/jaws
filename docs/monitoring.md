@@ -138,10 +138,11 @@ with the key named:
   comment. Until the release that creates that role, the plan is skipped with
   a notice.
 - **Merging the release PR applies it.** The Release workflow's apply job, in
-  the `prod` environment, applies `foundation/` and then `monitoring/` with
-  `jaws-monitoring-ci-apply`. A failed foundation apply stops the job before
-  the stack, so the first release creates the roles, the bucket and the
-  Databricks job, then the stack.
+  the `prod` environment, applies `foundation/`; its monitoring-apply job, also
+  in `prod` and needing it, then applies `monitoring/` with
+  `jaws-monitoring-ci-apply`. A failed foundation apply skips the stack, so the
+  first release creates the roles, the bucket and the Databricks job, then the
+  stack; a failed monitoring apply does not hold back the CLI image.
 - **Never from a shell, never by an agent.** Nobody runs `terraform apply` in
   `monitoring/` ([AGENTS.md](../AGENTS.md)). Locally, with no credentials:
   `cd monitoring && terraform init -backend=false && terraform validate && terraform test`.

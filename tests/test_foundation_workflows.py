@@ -65,13 +65,12 @@ def test_the_account_comes_from_the_tool(workflow: str) -> None:
         ("release-please.yml", "apply", "infra-ci-apply"),
         ("release-please.yml", "image", "infra-ci-apply"),
         ("ci.yml", "monitoring-plan", "monitoring-ci-plan"),
-        ("release-please.yml", "apply", "monitoring-ci-apply"),
+        ("release-please.yml", "monitoring-apply", "monitoring-ci-apply"),
     ],
 )
 def test_each_job_runs_as_the_accounts_role(workflow: str, job_name: str, role: str) -> None:
     job = _jobs(workflow)[job_name]
     assert "account" in job["needs"] and "strategy" not in job
-    # The release apply assumes the foundation's role, then the monitoring stack's.
     roles = [
         s["with"]["role-to-assume"]
         for s in job["steps"]

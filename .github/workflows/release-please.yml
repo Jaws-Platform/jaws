@@ -128,30 +128,51 @@ jobs:
         run: |
           source ../scripts/databricks-credentials.sh ../config
           terraform apply -no-color -lock-timeout=120s tfplan
-      # The monitoring stack (monitoring/), after the foundation: its apply has
-      # just created the stack's roles and state prefix, the billing bucket and
-      # the Databricks billing job, so one release creates both, in order. A
-      # failed foundation apply stops the job before this. Without
-      # config/monitoring.yaml's monitoring section there is no stack (and no role).
+
+  # The monitoring stack (monitoring/), after the foundation: its apply has just
+  # created the stack's roles and state prefix, the billing bucket and the
+  # Databricks billing job, so one release creates both, in order. A failed
+  # foundation apply skips this job; a failed monitoring apply holds back
+  # nothing else (the image needs only the foundation's apply). Without
+  # config/monitoring.yaml's monitoring section there is no stack (and no role).
+  monitoring-apply:
+    name: Monitoring apply (${{ needs.release-please.outputs.tag_name }})
+    runs-on: ubuntu-latest
+    needs: [release-please, account, apply]
+    if: >-
+      github.event_name == 'push' &&
+      needs.release-please.outputs.release_created == 'true' &&
+      needs.account.outputs.monitoring == 'configured'
+    environment:
+      name: prod
+      url: https://github.com/${{ github.repository }}/releases/tag/${{ needs.release-please.outputs.tag_name }}
+    permissions:
+      id-token: write # assume the stack's apply role through GitHub OIDC
+      contents: read
+    defaults:
+      run:
+        working-directory: monitoring
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "~1.14"
+          terraform_wrapper: false
       - uses: aws-actions/configure-aws-credentials@v6
-        if: needs.account.outputs.monitoring == 'configured'
         with:
           role-to-assume: arn:aws:iam::${{ needs.account.outputs.account_id }}:role/${{ needs.account.outputs.name_root }}-monitoring-ci-apply
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: gha-monitoring-apply-${{ needs.release-please.outputs.tag_name }}
-      - name: terraform init (monitoring)
-        if: needs.account.outputs.monitoring == 'configured'
+      - name: terraform init
         uses: ./.github/actions/terraform-init
         with:
           args: -backend-config=backend/prod.hcl
           working-directory: monitoring
-      - name: terraform plan (monitoring)
-        if: needs.account.outputs.monitoring == 'configured'
-        working-directory: monitoring
+      - name: terraform plan
         run: terraform plan -no-color -lock-timeout=120s -out=tfplan
-      - name: terraform apply (monitoring)
-        if: needs.account.outputs.monitoring == 'configured'
-        working-directory: monitoring
+      - name: terraform apply
         run: terraform apply -no-color -lock-timeout=120s tfplan
 
   image:

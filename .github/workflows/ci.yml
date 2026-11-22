@@ -231,7 +231,7 @@ jobs:
   monitoring-stack:
     # The monitoring stack (monitoring/): validated, linted and tested against
     # mock providers here; planned by monitoring-plan once its plan role exists,
-    # and applied only by the Release apply job.
+    # and applied only by the Release monitoring-apply job.
     name: Monitoring stack validate, tflint, test
     runs-on: ubuntu-latest
     permissions:

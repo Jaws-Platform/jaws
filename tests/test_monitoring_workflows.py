@@ -2,10 +2,11 @@
 
 Merging a pull request provisions nothing: CI validates, tests and plans
 monitoring/ (with jaws-monitoring-ci-plan) and never applies it; the Release
-apply job applies it after the foundation (with jaws-monitoring-ci-apply), so
-one release creates the stack's roles and billing bucket, then the stack. Until
-the release that creates the plan role, the pull request plan is skipped with a
-notice instead of failing.
+monitoring-apply job applies it after the foundation's apply job (with
+jaws-monitoring-ci-apply), so one release creates the stack's roles and billing
+bucket, then the stack, and a failed monitoring apply never holds back the CLI
+image. Until the release that creates the plan role, the pull request plan is
+skipped with a notice instead of failing.
 """
 
 from __future__ import annotations
@@ -32,10 +33,13 @@ def _uses(step: dict[str, Any], action: str) -> bool:
     return str(step.get("uses", "")).startswith(action)
 
 
-def _in_monitoring(step: dict[str, Any]) -> bool:
-    return (step.get("with") or {}).get("working-directory", step.get("working-directory")) == (
-        "monitoring"
-    )
+def _in_monitoring(step: dict[str, Any], job: dict[str, Any] | None = None) -> bool:
+    """A step in monitoring/: its own working directory, or, for a `run` step
+    that names none, its job's default."""
+    directory = (step.get("with") or {}).get("working-directory", step.get("working-directory"))
+    if directory is None and "run" in step and job is not None:
+        directory = ((job.get("defaults") or {}).get("run") or {}).get("working-directory")
+    return bool(directory == "monitoring")
 
 
 def test_the_account_job_says_whether_monitoring_is_configured() -> None:
@@ -102,46 +106,59 @@ def test_the_plan_is_skipped_with_a_notice_until_its_role_exists() -> None:
 
 
 def test_merging_a_pull_request_provisions_nothing() -> None:
-    """Only the Release apply job applies, and only for a release."""
-    for path in sorted(WORKFLOWS.glob("*.yml")):
-        for name, job in yaml.safe_load(path.read_text())["jobs"].items():
-            for step in job.get("steps", []):
-                run = str(step.get("run", ""))
-                in_monitoring = _in_monitoring(step) or (
-                    (job.get("defaults") or {}).get("run", {}).get("working-directory")
-                    == "monitoring"
-                    and "working-directory" not in step
-                )
-                if in_monitoring and "terraform apply" in run:
-                    assert (path.name, name) == ("release-please.yml", "apply"), (path.name, name)
+    """Only the Release monitoring-apply job applies monitoring/."""
+    appliers = [
+        (path.name, name)
+        for path in sorted(WORKFLOWS.glob("*.yml"))
+        for name, job in yaml.safe_load(path.read_text())["jobs"].items()
+        for step in job.get("steps", [])
+        if _in_monitoring(step, job) and "terraform apply" in str(step.get("run", ""))
+    ]
+    assert appliers == [("release-please.yml", "monitoring-apply")]
     assert "terraform apply" not in (WORKFLOWS / "ci.yml").read_text()
-    apply = _jobs("release-please.yml")["apply"]
-    assert apply["if"] == (
-        "github.event_name == 'push' && needs.release-please.outputs.release_created == 'true'"
-    )
 
 
 def test_the_release_applies_monitoring_after_the_foundation() -> None:
-    steps = _jobs("release-please.yml")["apply"]["steps"]
+    """In a job of its own: it needs the foundation's apply, which creates the
+    stack's roles and state prefix, and the CLI image does not need it, so a
+    failed monitoring apply never holds back the image."""
+    jobs = _jobs("release-please.yml")
+    job = jobs["monitoring-apply"]
+    assert job["needs"] == ["release-please", "account", "apply"]
+    assert " ".join(str(job["if"]).split()) == (
+        "github.event_name == 'push' && "
+        f"needs.release-please.outputs.release_created == 'true' && {CONFIGURED}"
+    )
+    assert job["environment"]["name"] == "prod"  # the apply role trusts only prod
+    assert job["permissions"] == {"id-token": "write", "contents": "read"}
+    checkout = next(s for s in job["steps"] if _uses(s, "actions/checkout"))
+    assert checkout == next(s for s in jobs["apply"]["steps"] if _uses(s, "actions/checkout"))
+    assert checkout["with"]["ref"] == "${{ needs.release-please.outputs.tag_name }}"
+
+    image = jobs["image"]
+    assert image["needs"] == ["release-please", "account", "apply"]
+    assert "monitoring-apply" not in str(image["if"])
+
+    # The foundation's apply job touches nothing of the stack.
+    for step in jobs["apply"]["steps"]:
+        assert not _in_monitoring(step, jobs["apply"]), step
+        assert "monitoring" not in str((step.get("with") or {}).get("role-to-assume", "")), step
+
+
+def test_the_monitoring_apply_job_applies_the_plan_it_made_with_its_role() -> None:
+    job = _jobs("release-please.yml")["monitoring-apply"]
+    steps = job["steps"]
 
     def index(predicate: Any) -> int:
         matches = [i for i, s in enumerate(steps) if predicate(s)]
         assert len(matches) == 1, matches
         return matches[0]
 
-    foundation_apply = index(
-        lambda s: "terraform apply" in str(s.get("run", "")) and not _in_monitoring(s)
-    )
-    credentials = index(
-        lambda s: (
-            _uses(s, "aws-actions/configure-aws-credentials")
-            and "monitoring" in s["with"]["role-to-assume"]
-        )
-    )
-    init = index(lambda s: _uses(s, "./.github/actions/terraform-init") and _in_monitoring(s))
-    plan = index(lambda s: "terraform plan" in str(s.get("run", "")) and _in_monitoring(s))
-    apply = index(lambda s: "terraform apply" in str(s.get("run", "")) and _in_monitoring(s))
-    assert foundation_apply < credentials < init < plan < apply
+    credentials = index(lambda s: _uses(s, "aws-actions/configure-aws-credentials"))
+    init = index(lambda s: _uses(s, "./.github/actions/terraform-init") and _in_monitoring(s, job))
+    plan = index(lambda s: "terraform plan" in str(s.get("run", "")) and _in_monitoring(s, job))
+    apply = index(lambda s: "terraform apply" in str(s.get("run", "")) and _in_monitoring(s, job))
+    assert credentials < init < plan < apply
 
     assert steps[credentials]["with"]["role-to-assume"] == (
         f"arn:aws:iam::{ACCOUNT_ID}:role/{NAME_ROOT}-monitoring-ci-apply"
@@ -149,5 +166,3 @@ def test_the_release_applies_monitoring_after_the_foundation() -> None:
     assert steps[init]["with"]["args"] == "-backend-config=backend/prod.hcl"
     assert "-out=tfplan" in steps[plan]["run"]
     assert steps[apply]["run"].rstrip().endswith("tfplan")
-    for i in (credentials, init, plan, apply):
-        assert steps[i]["if"] == CONFIGURED, steps[i]

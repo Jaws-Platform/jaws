@@ -33,9 +33,9 @@ offered there.
 - **Pull requests:** `ci.yml` validates and tests it, and plans it with
   `jaws-monitoring-ci-plan` (skipped, with a notice, until the release that
   creates that role).
-- **Releases:** the Release apply job applies it after the foundation, with
-  `jaws-monitoring-ci-apply`, so the first release creates the roles, the
-  billing bucket and then the stack.
+- **Releases:** the Release monitoring-apply job applies it after the
+  foundation's apply job, with `jaws-monitoring-ci-apply`, so the first release
+  creates the roles, the billing bucket and then the stack.
 - State: `project=monitoring/env=prod/monitoring-prod.tfstate` in the shared
   state bucket (`backend/prod.hcl`), reachable only by the stack's two roles.
 

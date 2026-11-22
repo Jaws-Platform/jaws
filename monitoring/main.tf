@@ -14,7 +14,8 @@
 # Databricks billing job and this stack's roles and state prefix. The owner sets
 # the secrets (`jaws monitoring secrets`) and applies billing-export/, which
 # delivers the AWS bill. Planned on pull requests (ci.yml monitoring-plan) and
-# applied in the release apply after the foundation (release-please.yml).
+# applied by the release's monitoring-apply job after the foundation's apply
+# (release-please.yml).
 
 locals {
   enabled = local.monitoring != null
