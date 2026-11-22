@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.77.0](https://github.com/Jaws-Platform/jaws/compare/v0.76.0...v0.77.0) (2026-11-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **tags:** refuse Organization and ManagedBy in project files ([#301](https://github.com/Jaws-Platform/jaws/issues/301))
+
+### Features
+
+* **tags:** refuse Organization and ManagedBy in project files ([#301](https://github.com/Jaws-Platform/jaws/issues/301)) ([0d14672](https://github.com/Jaws-Platform/jaws/commit/0d146721d35badcc8f2138ea1f8f86bd5ebfdb5f))
+
 ## [0.76.0](https://github.com/Jaws-Platform/jaws/compare/v0.75.0...v0.76.0) (2026-11-22)
 
 
