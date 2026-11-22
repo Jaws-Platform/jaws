@@ -238,7 +238,7 @@ Everything jaws builds lives in one AWS account, the JWall Engineering
 production account (570327089884). `config/aws.yaml` is the account registry,
 and its `primary` account is that one, with its owner's admin role
 (`admin_role_arn`). The rest of the tool configuration describes what jaws
-builds there: the `jaws` name prefix (`context.organization`), the state
+builds there: the `jaws` name root (`context.name_root`), the state
 bucket, the image repository and the `jwall.engineering` zone. A run never
 chooses an account, and every workflow builds its role ARNs from
 `jaws config env`.
@@ -257,11 +257,11 @@ Projects choosing their own environments and accounts from the registry is
 planned ([#294](https://github.com/Jaws-Platform/jaws/issues/294)); today every
 project is built in the primary account.
 
-The tags the account decides are the tool's, never the project file's: every
-stack the tool renders and every task instance it launches gets `Organization`
-and `ManagedBy` from `context.organization` and `context.managed_by` (both
-`jaws`). A project file may state `Organization: jaws` or leave it out, and
-leaves `ManagedBy` out.
+Two tags are the tool's, never the project file's: every stack the tool
+renders and every task instance it launches gets `Organization` (the GitHub
+organization or user the project is registered under in `config/projects.yaml`;
+`Jaws-Platform` for jaws's own stacks) and `ManagedBy` (`JAWS`). A project
+file leaves both out ([docs/tagging.md](docs/tagging.md)).
 
 Credentials must belong to the primary account, even where the role check
 is skipped (`JAWS_SKIP_ROLE_CHECK`), so a secret or a stack is never written
@@ -378,25 +378,25 @@ image bakes it at `/etc/jaws/config`.
 | `aws.yaml` | `aws`: the account registry, and `primary`, the account jaws builds in ([Accounts](#accounts)) |
 | `projects.yaml` | `projects`: every onboarded project, by GitHub owner, with its type, repository and central guardrails ([Projects registry](#projects-registry)) |
 | `terraform.yaml` | `terraform` (version, lock and plan timeouts), `library` (the module family pins, `library.families`), `state` (the state bucket, its region and key template) |
-| `tool.yaml` | `tool` (logging), `context` (organization, owner, managed_by), `plan` (the comment's size), `ecr` (the CLI image repository and its lifecycle) |
+| `tool.yaml` | `tool` (logging), `context` (name_root, organization, owner, managed_by), `plan` (the comment's size), `ecr` (the CLI image repository and its lifecycle) |
 | `sites.yaml` | `dns` (the Route 53 zone), `sync` (the cache headers `publish` sets) |
 | `bots.yaml` | `bot` (the bot runtime: AMIs, availability zones, health check, records prefix, `asset_wait`), `tasks` (remote tasks: Rust toolchain, images, `limits`, `max_run_cost_usd`) |
 | `databricks.yaml` | `databricks` (`enabled`, the account, service principal, metastore, compute policies and `shared_host_url`) |
 
 ## Tags
 
-Every AWS resource this tool manages carries the same six tags, through the provider's `default_tags` (and set explicitly on task instances, which `RunInstances` does not tag by default):
+Every AWS resource this tool manages carries the same six tags, through the provider's `default_tags` (and set explicitly on task instances, which `RunInstances` does not tag by default). [docs/tagging.md](docs/tagging.md) is the tagging strategy: where each tag comes from, and why names and access never depend on `Organization` or `ManagedBy`.
 
 | Tag | Value | Links the resource to |
 | --- | --- | --- |
-| `Organization` | `jaws` | the umbrella all projects belong to |
+| `Organization` | the GitHub organization or user that owns the project's repository, as registered in `config/projects.yaml`, e.g. `Braveheart-Chess`; `Jaws-Platform` for jaws's own stacks | whose project it is |
 | `Project` | the project's kebab-case name, e.g. `braveheart`; `jaws` for the foundation stack | the project that owns it (the CI roles' IAM policies also key on it) |
 | `Environment` | `prod` | the deployment environment |
 | `Repository` | the project's `owner/repo` | the repository whose code it serves |
-| `ManagedBy` | `jaws` | this tool, which provisions and changes it |
+| `ManagedBy` | `JAWS` | this tool, which provisions and changes it |
 | `Owner` | `jwallace145` | the person responsible for it |
 
-Project files state the first five; the CLI cross-checks `Project`, `Repository`, `Environment` and `Organization` against the rest of the file and the tool configuration (`config/`), and adds `ManagedBy` itself. The foundation stack gets the same set from the library's `context` module. Components add `Component`, `Purpose` and `Lifecycle` where they apply. These tags are the cost allocation tags `cost report` groups by; [docs/costs.md](docs/costs.md) lists which must be active.
+Project files state `Project`, `Environment`, `Repository` and `Owner`; the CLI cross-checks the first three against the rest of the file and adds `Organization` and `ManagedBy` itself (a file that still states either is warned, and the value ignored). Names come from `context.name_root` (`jaws`), never from a tag. The foundation stack gets the same set from the library's `context` module. Components add `Component`, `Purpose` and `Lifecycle` where they apply. These tags are the cost allocation tags `cost report` groups by; [docs/costs.md](docs/costs.md) lists which must be active.
 
 ## State bucket and key convention
 
@@ -626,7 +626,7 @@ Every `terraform init` goes through `.github/actions/terraform-init`, which retr
 
 Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`; then the `image` job, also in `prod`, builds the CLI image and pushes it to the account's repository as `<repository>:<tag>` (`ecr.repository` in `config/tool.yaml`, `jaws-cli`). Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
 
-No role ARN is a secret, and this repository needs none as a variable. The foundation's plan and apply jobs build their role (`<organization>-infra-ci-plan` / `-ci-apply`) from the account and organization `jaws config env` reads from the tool configuration (the primary account in `config/aws.yaml`, `context.organization` in `config/tool.yaml`), and keep their state through `backend/prod.hcl`. Bot role ARNs need no variable either: the workflows build them the same way, with the bot's name.
+No role ARN is a secret, and this repository needs none as a variable. The foundation's plan and apply jobs build their role (`<name_root>-infra-ci-plan` / `-ci-apply`) from the account and name root `jaws config env` reads from the tool configuration (the primary account in `config/aws.yaml`, `context.name_root` in `config/tool.yaml`), and keep their state through `backend/prod.hcl`. Bot role ARNs need no variable either: the workflows build them the same way, with the bot's name.
 
 **Bot projects** (`.github/workflows/bot-apply.yml`, by hand): `workflow_dispatch` with the project's name, which must be a bot or research project in `config/projects.yaml`, applies or destroys its stack in the `prod` environment with its apply role. `.github/workflows/container-release.yml` is the reusable workflow a bot repository calls on each release ([guide](docs/lichess-bot.md#the-caller-workflow)).
 

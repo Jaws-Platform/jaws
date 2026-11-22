@@ -591,7 +591,7 @@ tasks end.
 | Log group | `/<org>/<project>/tasks` |
 | Results | `s3://<org>-<project>-tasks/tasks/<role-id>:<instance-id>/` |
 
-Every task instance and its volume carry the project's six tags (the five from the project file plus `ManagedBy=jaws`).
+Every task instance and its volume carry the project's six tags: the four from the project file plus `Organization` (the project's GitHub owner) and `ManagedBy=JAWS` ([tagging](tagging.md)).
 
 | Tag | Value |
 |---|---|
