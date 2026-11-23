@@ -113,11 +113,12 @@ module "monitoring_ci_plan" {
   additional_repositories = local.platform_trust.additional_repositories
   oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
 
-  policies = ["tfstate/read", "monitoring/read", "compute/read"]
+  policies = concat(["tfstate/read", "monitoring/read", "compute/read"], local.hub_image_pull)
 
   policy_inputs = {
     tfstate    = local.monitoring_ci.tfstate
     monitoring = local.monitoring_ci.monitoring
+    ecr        = local.hub_image_ecr
   }
 }
 
@@ -135,15 +136,19 @@ module "monitoring_ci_apply" {
   oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
   environment             = "prod"
 
-  # Eight managed policies: IAM attaches at most ten to a role by default.
-  policies = [
-    "tfstate/write",
-    "monitoring/read", "monitoring/node", "monitoring/config", "monitoring/functions", "monitoring/backup",
-    "compute/read", "compute/manage",
-  ]
+  # Eight managed policies, nine with a hub (ecr/pull): IAM attaches at most ten to a role by default.
+  policies = concat(
+    [
+      "tfstate/write",
+      "monitoring/read", "monitoring/node", "monitoring/config", "monitoring/functions", "monitoring/backup",
+      "compute/read", "compute/manage",
+    ],
+    local.hub_image_pull,
+  )
 
   policy_inputs = {
     tfstate    = local.monitoring_ci.tfstate
     monitoring = local.monitoring_ci.monitoring
+    ecr        = local.hub_image_ecr
   }
 }

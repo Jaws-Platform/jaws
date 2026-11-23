@@ -93,6 +93,13 @@ def _hub_not_trusted(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
+def _hub_image_outside_the_name_root(config: dict[str, Any]) -> dict[str, Any]:
+    """A hub image the apply role may not create (not named <name_root>-*): the plan must stop."""
+    config = _hub(config)
+    config["platform"]["hub"]["image"] = "platform"
+    return config
+
+
 FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "relabelled.yaml": _relabelled,
     "no-task-runners.yaml": _no_task_runners,
@@ -102,6 +109,7 @@ FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "two-repositories.yaml": _two_repositories,
     "hub.yaml": _hub,
     "hub-not-trusted.yaml": _hub_not_trusted,
+    "hub-image-outside-the-name-root.yaml": _hub_image_outside_the_name_root,
 }
 
 

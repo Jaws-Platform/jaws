@@ -310,6 +310,13 @@ run "the_hub_plans_every_site" {
     config_path = "tests/fixtures/hub.yaml"
   }
 
+  override_module {
+    target = module.hub_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-platform"
+    }
+  }
+
   assert {
     condition = alltrue([
       for key, role in module.site_ci_plan :
@@ -329,6 +336,143 @@ run "refuses_a_hub_it_does_not_trust" {
 
   variables {
     config_path = "tests/fixtures/hub-not-trusted.yaml"
+  }
+
+  override_module {
+    target = module.hub_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-platform"
+    }
+  }
+
+  expect_failures = [data.aws_iam_openid_connect_provider.github]
+}
+
+run "no_hub_image_without_a_hub" {
+  command = plan
+
+  assert {
+    condition     = length(module.hub_image) == 0 && local.hub_image_repository_arn == null
+    error_message = "without a hub nothing creates the hub image's repository"
+  }
+
+  assert {
+    condition     = !contains(keys(module.infra_ci_plan.policy_arns), "ecr/pull")
+    error_message = "without a hub the infra plan role pulls nothing"
+  }
+
+  assert {
+    condition     = toset(keys(module.infra_ci_apply.policy_arns)) == toset(["tfstate/write", "foundation/read", "foundation/manage", "ecr/push", "databricks/read"])
+    error_message = "without a hub the infra apply role's policies are today's five"
+  }
+
+  assert {
+    condition     = alltrue([for key, role in module.site_ci_plan : toset(keys(role.policy_arns)) == toset(["tfstate/read", "static-site/read", "ecr/pull"])])
+    error_message = "without a hub a site's plan role keeps today's three policies"
+  }
+}
+
+run "a_hub_gets_its_image_repository" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/hub.yaml"
+  }
+
+  override_module {
+    target = module.hub_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-platform"
+    }
+  }
+
+  assert {
+    condition     = length(module.hub_image) == 1 && local.hub_image_repository_arn == "arn:aws:ecr:us-east-1:${local.account_id}:repository/jaws-platform"
+    error_message = "the hub's image repository is created in the platform account, never the management account"
+  }
+
+  assert {
+    condition = alltrue([
+      for keys in concat(
+        [keys(module.infra_ci_plan.policy_arns), keys(module.infra_ci_apply.policy_arns)],
+        [keys(module.data_access_ci_plan.policy_arns), keys(module.data_access_ci_apply.policy_arns)],
+        [for r in module.monitoring_ci_plan : keys(r.policy_arns)],
+        [for r in module.monitoring_ci_apply : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_plan : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_apply : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_release : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_task : keys(r.policy_arns)],
+        [for k, r in module.databricks_ci_plan : keys(r.policy_arns)],
+        [for k, r in module.databricks_ci_apply : keys(r.policy_arns)],
+        [for k, r in module.site_ci_plan : keys(r.policy_arns)],
+        [for k, r in module.site_ci_preview : keys(r.policy_arns)],
+        [for k, r in module.site_ci_apply : keys(r.policy_arns)],
+      ) : contains(keys, "ecr/pull")
+    ])
+    error_message = "every CI role pulls the hub image"
+  }
+
+  assert {
+    condition     = alltrue([for k, r in module.site_ci_plan : contains(keys(r.policy_arns), "ecr/pull-2")]) && alltrue([for k, r in module.site_ci_preview : contains(keys(r.policy_arns), "ecr/pull-2")]) && alltrue([for k, r in module.site_ci_apply : contains(keys(r.policy_arns), "ecr/pull-2")])
+    error_message = "every site role pulls the hub image through its second ECR policy"
+  }
+
+  assert {
+    condition     = contains(keys(module.infra_ci_apply.policy_arns), "ecr/push-2") && contains(keys(module.infra_ci_apply.policy_arns), "ecr/pull-2")
+    error_message = "the infra apply role pushes and pulls the hub image"
+  }
+}
+
+run "a_hub_keeps_every_role_within_ten_policies" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/hub.yaml"
+  }
+
+  override_module {
+    target = module.hub_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-platform"
+    }
+  }
+
+  # IAM's default quota: 10 managed policies attached to a role. The infra apply
+  # role goes from five to eight with a hub; the others gain one or two.
+  assert {
+    condition = alltrue([
+      for keys in concat(
+        [keys(module.infra_ci_plan.policy_arns), keys(module.infra_ci_apply.policy_arns)],
+        [keys(module.data_access_ci_plan.policy_arns), keys(module.data_access_ci_apply.policy_arns)],
+        [for r in module.monitoring_ci_plan : keys(r.policy_arns)],
+        [for r in module.monitoring_ci_apply : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_plan : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_apply : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_release : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_task : keys(r.policy_arns)],
+        [for k, r in module.databricks_ci_plan : keys(r.policy_arns)],
+        [for k, r in module.databricks_ci_apply : keys(r.policy_arns)],
+        [for k, r in module.site_ci_plan : keys(r.policy_arns)],
+        [for k, r in module.site_ci_preview : keys(r.policy_arns)],
+        [for k, r in module.site_ci_apply : keys(r.policy_arns)],
+      ) : length(keys) <= 10
+    ])
+    error_message = "a role may attach at most 10 managed policies (IAM's default quota)"
+  }
+}
+
+run "refuses_a_hub_image_outside_the_name_root" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/hub-image-outside-the-name-root.yaml"
+  }
+
+  override_module {
+    target = module.hub_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/platform"
+    }
   }
 
   expect_failures = [data.aws_iam_openid_connect_provider.github]

@@ -25,5 +25,10 @@ data "aws_iam_openid_connect_provider" "github" {
       condition     = local.hub == null ? true : length(local.hub_trust) == 1
       error_message = "platform.hub.repository (config/platform.yaml) is not one of platform.repositories: the hub's pull requests are trusted under its entry's IDs, so list it there."
     }
+
+    precondition {
+      condition     = local.hub == null ? true : startswith(local.hub.image, "${local.context.name_root}-") && local.hub.image != local.account.ecr.repository
+      error_message = "platform.hub.image (config/platform.yaml) must be named ${local.context.name_root}-*, the only repositories the foundation's apply role may create, and must not be ecr.repository's: the CLI image keeps its own."
+    }
   }
 }

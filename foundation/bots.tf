@@ -98,11 +98,13 @@ module "bot_ci_plan" {
   policies = concat(
     contains(local.research_projects, each.key) ? ["tfstate/read", "compute/read", "task/read"] : ["tfstate/read", "container/read", "task/read"],
     contains(keys(local.bot_datasets), each.key) ? ["dataset/read"] : [],
+    local.hub_image_pull,
   )
 
   policy_inputs = {
     tfstate = local.bot_tfstate[each.key]
     dataset = contains(keys(local.bot_datasets), each.key) ? { bucket_names = local.bot_datasets[each.key] } : null
+    ecr     = local.hub_image_ecr
   }
 }
 
@@ -123,11 +125,13 @@ module "bot_ci_apply" {
   policies = concat(
     contains(local.research_projects, each.key) ? ["tfstate/write", "compute/read", "compute/manage", "task/read", "task/manage"] : ["tfstate/write", "container/read", "container/manage", "task/read", "task/manage", "container/schedule"],
     contains(keys(local.bot_datasets), each.key) ? ["dataset/read", "dataset/manage"] : [],
+    local.hub_image_pull,
   )
 
   policy_inputs = {
     tfstate = local.bot_tfstate[each.key]
     dataset = contains(keys(local.bot_datasets), each.key) ? { bucket_names = local.bot_datasets[each.key] } : null
+    ecr     = local.hub_image_ecr
   }
 }
 
@@ -143,7 +147,9 @@ module "bot_ci_release" {
   repository_id     = each.value.repository_id
   oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
 
-  policies = ["container/release"]
+  policies = concat(["container/release"], local.hub_image_pull)
+
+  policy_inputs = { ecr = local.hub_image_ecr }
 }
 
 # Launches, runs and terminates the bot's ephemeral CI task instances from
@@ -163,7 +169,7 @@ module "bot_ci_task" {
   oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
 
   # task/records with the billing bucket (monitoring.tf): the run records.
-  policies = concat(["task/launch"], contains(keys(local.task_records), each.key) ? ["task/records"] : [])
+  policies = concat(["task/launch"], contains(keys(local.task_records), each.key) ? ["task/records"] : [], local.hub_image_pull)
 
   policy_inputs = {
     task = {
@@ -171,5 +177,6 @@ module "bot_ci_task" {
       profiles       = local.bot_task_profiles[each.key]
       records        = lookup(local.task_records, each.key, null)
     }
+    ecr = local.hub_image_ecr
   }
 }

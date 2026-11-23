@@ -575,7 +575,7 @@ def _squashed(text: str) -> str:
 
 
 def _hcl_list(block: str, attribute: str) -> list[str]:
-    match = re.search(rf"^\s*{attribute}\s*=\s*\[([^\]]*)\]", block, re.MULTILINE)
+    match = re.search(rf"^\s*{attribute}\s*=\s*(?:concat\(\s*)?\[([^\]]*)\]", block, re.MULTILINE)
     assert match, f"no {attribute} list"
     return re.findall(r'"([^"]+)"', match.group(1))
 

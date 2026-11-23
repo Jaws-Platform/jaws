@@ -301,11 +301,12 @@ module "databricks_ci_plan" {
   additional_repositories = local.platform_trust.additional_repositories
   oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
 
-  policies = ["tfstate/read", "compute/read", "databricks/read"]
+  policies = concat(["tfstate/read", "compute/read", "databricks/read"], local.hub_image_pull)
 
   policy_inputs = {
     tfstate    = local.databricks_ci[each.key].tfstate
     databricks = local.databricks_ci[each.key].databricks
+    ecr        = local.hub_image_ecr
   }
 }
 
@@ -323,11 +324,12 @@ module "databricks_ci_apply" {
   oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
   environment             = "prod"
 
-  policies = ["tfstate/write", "compute/read", "compute/manage", "databricks/read", "databricks/manage"]
+  policies = concat(["tfstate/write", "compute/read", "compute/manage", "databricks/read", "databricks/manage"], local.hub_image_pull)
 
   policy_inputs = {
     tfstate    = local.databricks_ci[each.key].tfstate
     databricks = local.databricks_ci[each.key].databricks
+    ecr        = local.hub_image_ecr
   }
 }
 
