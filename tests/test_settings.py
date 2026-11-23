@@ -631,7 +631,7 @@ def test_databricks_section_parses(settings: Settings) -> None:
     assert poc.compute_policies == ("small-interactive", "jobs")
     assert poc.cost_center == "cc-0000"
     assert poc.vpc_cidr == "10.40.0.0/16"
-    assert poc.admins == ("jimmy.wallace145@gmail.com",)
+    assert poc.admins == ("owner@example.com",)
 
 
 def test_users_in_config_yaml_are_refused_with_the_migration_message(tmp_path: Path) -> None:

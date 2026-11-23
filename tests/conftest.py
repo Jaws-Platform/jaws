@@ -136,7 +136,7 @@ DATABRICKS_POC_GUARDRAILS = ProjectGuardrails(
         compute_policies=("small-interactive", "jobs"),
         cost_center="cc-0000",
         vpc_cidr="10.40.0.0/16",
-        admins=("jimmy.wallace145@gmail.com",),
+        admins=("owner@example.com",),
     )
 )
 

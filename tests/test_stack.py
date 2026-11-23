@@ -938,7 +938,7 @@ def test_databricks_account_tfvars(databricks: Project, settings: Settings) -> N
         "nat_ami_name": settings.databricks.nat_ami,
         "metastore_name": "jaws-us-east-1",
         "deployment_name": None,  # no prefix configured: Databricks picks the URL
-        "admin_user_names": ["jimmy.wallace145@gmail.com"],
+        "admin_user_names": ["owner@example.com"],
         "user_names": ["user@example.com"],  # the project file's users, not config/projects.yaml
         "service_principal_application_id": settings.databricks.client_id,
         "account_id": settings.databricks.account_id,

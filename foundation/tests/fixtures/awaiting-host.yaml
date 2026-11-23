@@ -45,7 +45,7 @@ databricks:
   secret_parameter: /jaws/databricks/client-secret
   metastore_name: jaws-us-east-1
   metastore_admins:
-  - jimmy.wallace145@gmail.com
+  - owner@example.com
   nat_ami: al2023-ami-2023.12.20261026.1-kernel-6.18-arm64
   deployment_name_prefix: null
   audit_bucket: jaws-databricks-audit-logs
@@ -220,7 +220,7 @@ projects:
           cost_center: braveheart
           vpc_cidr: 10.48.0.0/16
           admins:
-          - jimmy.wallace145@gmail.com
+          - owner@example.com
   Pi-Mathematical-Reasoning:
     owner_id: '359343898'
     projects:
