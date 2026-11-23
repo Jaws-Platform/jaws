@@ -1,24 +1,4 @@
-# How jaws runs Terraform: the version every stack runs, the module families
-# it pins, and where every stack's state lives.
-
-terraform:
-  version: 1.14.7
-  lock_timeout: 120s
-  plan_timeout: 15m
-
-library:
-  # The module families, published from Jaws-Platform/terraform-aws-jaws-<family>.
-  # Each family has one version: every pin of it in this repository (sites,
-  # bots, Databricks, the foundation, the monitoring stack) moves with the entry here.
-  families:
-    Jaws-Platform/jaws-ci/aws: 0.4.0
-    Jaws-Platform/jaws-databricks/aws: 0.2.0
-    Jaws-Platform/jaws-foundation/aws: 0.2.0
-    Jaws-Platform/jaws-lichess-bot/aws: 0.1.4
-    Jaws-Platform/jaws-monitoring/aws: 0.8.2
-    Jaws-Platform/jaws-network/aws: 0.1.2
-    Jaws-Platform/jaws-research/aws: 0.1.2
-    Jaws-Platform/jaws-static-site/aws: 0.1.2
+# Where every stack's state lives.
 
 state:
   # In the primary account (config/aws.yaml). Suffixed with the account ID: the

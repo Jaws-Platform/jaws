@@ -12,7 +12,8 @@ import re
 from pathlib import Path
 
 from jaws import __version__
-from tests.conftest import REPO_ROOT, repo_config
+from jaws.product import product_pins
+from tests.conftest import REPO_ROOT
 
 ANNOTATION = "# x-release-please-version"
 WORKFLOWS = ("site-plan.yml", "site-preview.yml", "site-deploy.yml")
@@ -91,8 +92,7 @@ _OLD_LIBRARY = "jwallace145/jwall-engineering/aws"
 
 
 def _families() -> dict[str, str]:
-    families: dict[str, str] = repo_config()["library"]["families"]
-    return families
+    return dict(product_pins().families)
 
 
 def _pins(*paths: Path) -> list[tuple[str, str | None, str]]:
@@ -142,15 +142,15 @@ def test_bot_stack_pins_each_module_at_its_family_version() -> None:
 
 def test_every_registry_pin_matches_config() -> None:
     """AGENTS.md: every pin of a module family moves together with its entry in
-    library.families, and is an exact version."""
+    src/jaws/product.yaml, and is an exact version."""
     families = _families()
     pins = _pins(*_stack_files())
     assert pins, "no registry module pins found"
     for family, module, version in pins:
-        assert family in families, f"{family} (//modules/{module}) is not in library.families"
+        assert family in families, f"{family} (//modules/{module}) is not in src/jaws/product.yaml"
         assert version == families[family], (
             f"{family}//modules/{module} is pinned at {version}, "
-            f"but library.families says {families[family]}"
+            f"but src/jaws/product.yaml says {families[family]}"
         )
 
 

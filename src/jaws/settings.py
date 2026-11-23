@@ -61,7 +61,6 @@ class ToolSection(_Section):
 
 
 class TerraformSection(_Section):
-    version: str = Field(pattern=r"^\d+\.\d+\.\d+$")
     lock_timeout: str = "120s"
     plan_timeout: str = "15m"
 
@@ -74,33 +73,6 @@ class TerraformSection(_Section):
     @property
     def plan_timeout_seconds(self) -> int:
         return parse_duration(self.plan_timeout)
-
-
-_FAMILY_ADDRESS = re.compile(r"^[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[a-z0-9]+$")
-_FAMILY_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
-
-
-class LibrarySection(_Section):
-    """The Terraform module families the stacks are built from: registry
-    address to the one exact version every pin of that family carries."""
-
-    families: dict[str, str] = Field(min_length=1)
-
-    @field_validator("families")
-    @classmethod
-    def _addresses_and_versions(cls, value: dict[str, str]) -> dict[str, str]:
-        for address, version in value.items():
-            if not _FAMILY_ADDRESS.match(address):
-                raise ValueError(
-                    f"library.families key {address!r} must be a registry address, "
-                    "<namespace>/<name>/<provider>"
-                )
-            if not _FAMILY_VERSION.match(version):
-                raise ValueError(
-                    f"library.families[{address!r}] must be an exact version such as 0.1.0, "
-                    f"not {version!r}"
-                )
-        return value
 
 
 class StateSection(_Section):
@@ -236,17 +208,21 @@ class EcrSection(_Section):
 
 
 class SyncSection(_Section):
-    cache_control: str
-    preview_cache_control: str
-    html_cache_control: str
-    immutable_cache_control: str
+    cache_control: str = "public, max-age=3600"  # assets without a content hash
+    preview_cache_control: str = "public, max-age=300"
+    #: Pages: always fresh after a publish.
+    html_cache_control: str = "public, max-age=0, must-revalidate"
+    #: `site.immutable_paths`.
+    immutable_cache_control: str = "public, max-age=31536000, immutable"
 
 
 class BotSection(_Section):
     """How bot projects run: the health check and the records layout prefix."""
 
-    health_log_pattern: str
-    health_seconds: int = Field(ge=10, le=600)
+    #: Bot projects (components: container-image + lichess-bot): the container
+    #: must log this within `health_seconds` after a deploy, or it is rolled back.
+    health_log_pattern: str = "awaiting challenges"
+    health_seconds: int = Field(default=90, ge=10, le=600)
     records_prefix: str = Field(pattern=r"^([a-z0-9][a-z0-9-]*/)+$")
     #: Zones of the bot VPC's public subnets, in order (the bot uses the first).
     #: Spot tasks try each, so list every zone that offers their type; append
@@ -878,23 +854,17 @@ class TasksSection(_Section):
         return value
 
 
-class PlanSection(_Section):
-    comment_max_bytes: int = Field(ge=1024, le=65000)
-
-
 class Settings(_Section):
     """The whole tool configuration (every file of config/)."""
 
     tool: ToolSection = ToolSection()
-    terraform: TerraformSection
-    library: LibrarySection
+    terraform: TerraformSection = TerraformSection()
     state: StateSection
     aws: AwsSection
     context: ContextSection
     dns: DnsSection
     ecr: EcrSection
-    sync: SyncSection
-    plan: PlanSection
+    sync: SyncSection = SyncSection()
     bot: BotSection
     tasks: TasksSection
     #: Every onboarded project, grouped by the GitHub owner of its repository: the
@@ -1090,6 +1060,20 @@ def load_settings(path: Path | None = None, environ: dict[str, str] | None = Non
         tool["log_format"] = env["JAWS_LOG_FORMAT"]
     raw["tool"] = tool
 
+    terraform_section = raw.get("terraform")
+    for key, present in (
+        ("library", "library" in raw),
+        (
+            "terraform.version",
+            isinstance(terraform_section, dict) and "version" in terraform_section,
+        ),
+        ("plan", "plan" in raw),
+    ):
+        if present:
+            raise ConfigError(
+                f"{path}: {key}: this belongs to the Jaws release (src/jaws/product.yaml), "
+                "not the platform configuration"
+            )
     for legacy in ("production", "management", "development"):
         if legacy in raw:
             raise ConfigError(

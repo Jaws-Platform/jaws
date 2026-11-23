@@ -43,3 +43,26 @@ def test_a_malformed_release_file_is_refused(tmp_path: Path, text: str, message:
     path.write_text(text)
     with pytest.raises(ConfigError, match=message):
         load_product_pins(path)
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("library: {families: {a/b/aws: 0.1.0}}\n", "terraform.version"),
+        ("", "mapping at the top level"),
+        ("- a\n- b\n", "mapping at the top level"),
+        ("terraform: [unclosed\n", "cannot be read as YAML"),
+    ],
+)
+def test_a_structurally_broken_release_file_is_refused(
+    tmp_path: Path, text: str, message: str
+) -> None:
+    path = tmp_path / "product.yaml"
+    path.write_text(text)
+    with pytest.raises(ConfigError, match=message):
+        load_product_pins(path)
+
+
+def test_the_cached_pins_cannot_be_mutated() -> None:
+    with pytest.raises(TypeError):
+        product_pins().families["a/b/aws"] = "0.0.1"  # type: ignore[index]

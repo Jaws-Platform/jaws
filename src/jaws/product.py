@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import yaml
@@ -24,7 +25,7 @@ PRODUCT_FILE = Path(__file__).with_name("product.yaml")
 PLAN_COMMENT_MAX_BYTES = 60000
 
 _FAMILY_ADDRESS = re.compile(r"^[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[a-z0-9]+$")
-_FAMILY_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+_EXACT_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 @dataclass(frozen=True)
@@ -39,7 +40,7 @@ class ProductPins:
 def load_product_pins(path: Path = PRODUCT_FILE) -> ProductPins:
     """Read and validate a release file; raises ConfigError if it is malformed."""
     try:
-        raw: Any = yaml.safe_load(path.read_text())
+        raw: Any = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as exc:
         raise ConfigError(f"{path}: cannot be read as YAML: {exc}") from exc
     if not isinstance(raw, dict):
@@ -47,7 +48,7 @@ def load_product_pins(path: Path = PRODUCT_FILE) -> ProductPins:
 
     terraform = raw.get("terraform")
     version = terraform.get("version") if isinstance(terraform, dict) else None
-    if not isinstance(version, str) or not _FAMILY_VERSION.match(version):
+    if not isinstance(version, str) or not _EXACT_VERSION.match(version):
         raise ConfigError(
             f"{path}: terraform.version must be an exact version such as 1.14.7, not {version!r}"
         )
@@ -62,12 +63,12 @@ def load_product_pins(path: Path = PRODUCT_FILE) -> ProductPins:
                 f"{path}: library.families key {address!r} must be a registry address, "
                 "<namespace>/<name>/<provider>"
             )
-        if not isinstance(family_version, str) or not _FAMILY_VERSION.match(family_version):
+        if not isinstance(family_version, str) or not _EXACT_VERSION.match(family_version):
             raise ConfigError(
                 f"{path}: library.families[{address!r}] must be an exact version such as 0.1.0, "
                 f"not {family_version!r}"
             )
-    return ProductPins(terraform_version=version, families=dict(families))
+    return ProductPins(terraform_version=version, families=MappingProxyType(dict(families)))
 
 
 @cache

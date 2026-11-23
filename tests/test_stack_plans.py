@@ -7,8 +7,9 @@ from typing import Any
 
 import yaml
 
+from jaws.product import product_pins
 from jaws.settings import Settings
-from tests.conftest import REPO_ROOT, fixture_settings, repo_config
+from tests.conftest import REPO_ROOT, fixture_settings
 from tests.stack_plans.render import cases
 
 PLANS = REPO_ROOT / "tests" / "stack_plans"
@@ -64,7 +65,7 @@ def test_ci_runs_the_script_with_the_pinned_terraform() -> None:
     runs = [s.get("run") for s in job["steps"]]
     assert "scripts/test-stack-plans.sh" in runs
     setup = next(s for s in job["steps"] if "setup-terraform" in s.get("uses", ""))
-    pinned = repo_config()["terraform"]["version"]
+    pinned = product_pins().terraform_version
     assert setup["with"]["terraform_version"] == pinned
     assert setup["with"]["terraform_wrapper"] is False
 

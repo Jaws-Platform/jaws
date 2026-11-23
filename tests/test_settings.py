@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -30,15 +31,10 @@ from tests.conftest import (
 SECTION_FILES = {
     "aws": "aws.yaml",
     "projects": "projects.yaml",
-    "terraform": "terraform.yaml",
-    "library": "terraform.yaml",
     "state": "terraform.yaml",
-    "tool": "tool.yaml",
     "context": "tool.yaml",
-    "plan": "tool.yaml",
     "ecr": "tool.yaml",
     "dns": "sites.yaml",
-    "sync": "sites.yaml",
     "bot": "bots.yaml",
     "tasks": "bots.yaml",
     "databricks": "databricks.yaml",
@@ -1014,3 +1010,81 @@ def test_project_files_cannot_set_monitoring(tmp_path: Path, fixture: Path) -> N
     project_entry(config, "braveheart-trainer")["monitoring"] = {"budgets": {"total": 1000}}
     with pytest.raises(ConfigError, match=r"braveheart-trainer\.monitoring"):
         _load_raw(tmp_path, config)
+
+
+def _write_raw(tmp_path: Path, raw: dict[str, Any], single_file: bool) -> Path:
+    """`raw` as a config directory, one file per section, or as one file."""
+    if single_file:
+        path = tmp_path / "config.yaml"
+        path.write_text(yaml.safe_dump(raw))
+        return path
+    directory = tmp_path / "config"
+    directory.mkdir()
+    for section, value in raw.items():
+        (directory / f"{section}.yaml").write_text(yaml.safe_dump({section: value}))
+    return directory
+
+
+@pytest.mark.parametrize("single_file", [False, True])
+@pytest.mark.parametrize(
+    ("extra", "key"),
+    [
+        ({"library": {"families": {"a/b/aws": "0.1.0"}}}, "library"),
+        ({"terraform": {"version": "1.14.7"}}, "terraform.version"),
+        ({"plan": {"comment_max_bytes": 60000}}, "plan"),
+    ],
+)
+def test_release_owned_keys_are_refused(
+    tmp_path: Path, extra: dict[str, Any], key: str, single_file: bool
+) -> None:
+    raw = {**fixture_config(), **extra}
+    with pytest.raises(ConfigError, match=rf"{re.escape(key)}.*src/jaws/product\.yaml"):
+        load_settings(_write_raw(tmp_path, raw, single_file), environ={})
+
+
+def test_product_defaults_fill_what_the_platform_leaves_out(tmp_path: Path) -> None:
+    raw = fixture_config()
+    for section in ("tool", "terraform", "sync"):
+        raw.pop(section, None)
+    raw["bot"].pop("health_log_pattern", None)
+    raw["bot"].pop("health_seconds", None)
+    settings = load_settings(_write_raw(tmp_path, raw, single_file=True), environ={})
+    assert (settings.tool.log_level, settings.tool.log_format) == ("info", "console")
+    assert settings.terraform.lock_timeout == "120s"
+    assert settings.terraform.plan_timeout_seconds == 900
+    assert settings.sync.cache_control == "public, max-age=3600"
+    assert settings.sync.preview_cache_control == "public, max-age=300"
+    assert settings.sync.html_cache_control == "public, max-age=0, must-revalidate"
+    assert settings.sync.immutable_cache_control == "public, max-age=31536000, immutable"
+    assert (settings.bot.health_log_pattern, settings.bot.health_seconds) == (
+        "awaiting challenges",
+        90,
+    )
+
+
+def test_a_partial_section_keeps_the_other_defaults(tmp_path: Path) -> None:
+    raw = {
+        **fixture_config(),
+        "terraform": {"lock_timeout": "300s"},
+        "sync": {"cache_control": "public, max-age=60"},
+    }
+    settings = load_settings(_write_raw(tmp_path, raw, single_file=True), environ={})
+    assert (settings.terraform.lock_timeout, settings.terraform.plan_timeout) == ("300s", "15m")
+    assert settings.sync.cache_control == "public, max-age=60"
+    assert settings.sync.html_cache_control == "public, max-age=0, must-revalidate"
+
+
+def test_an_override_out_of_range_is_still_refused(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw["bot"]["health_seconds"] = 5
+    with pytest.raises(ConfigError, match=r"bot\.health_seconds"):
+        load_settings(_write_raw(tmp_path, raw, single_file=True), environ={})
+
+
+def test_the_log_level_variable_works_without_a_tool_section(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw.pop("tool", None)
+    settings = load_settings(
+        _write_raw(tmp_path, raw, single_file=True), environ={"JAWS_LOG_LEVEL": "debug"}
+    )
+    assert settings.tool.log_level == "debug"

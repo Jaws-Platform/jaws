@@ -2,8 +2,8 @@
 # with their modules and providers vendored, and the tool configuration (config/). Only the S3 backend touches
 # the network at run time.
 #
-# Build: docker build --build-arg TERRAFORM_VERSION=<terraform.version from config/terraform.yaml> .
-# The CLI refuses to run if the Terraform inside differs from config/terraform.yaml.
+# Build: docker build --build-arg TERRAFORM_VERSION=<terraform.version from src/jaws/product.yaml> .
+# The CLI refuses to run if the Terraform inside differs from src/jaws/product.yaml.
 
 ARG PYTHON_VERSION=3.13
 ARG UV_VERSION=0.11.15

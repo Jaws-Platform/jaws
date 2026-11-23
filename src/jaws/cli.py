@@ -59,6 +59,7 @@ from .components import CPU_PROFILE, TaskRunner
 from .errors import ConfigError, PreflightError, RunError, SitesError
 from .events import EventLog, base_fields
 from .log import annotate_error, artifacts_dir, phase, setup_logging
+from .product import PLAN_COMMENT_MAX_BYTES
 from .project import Project, Role
 from .settings import (
     DatabricksSection,
@@ -591,7 +592,7 @@ def plan(ctx: typer.Context) -> None:
             comment = report.plan_comment(
                 exit_code,
                 plan_text,
-                run.settings.plan.comment_max_bytes,
+                PLAN_COMMENT_MAX_BYTES,
                 plan_subject(run.project.project, run.settings, run.project.config.domain),
                 github.provenance(tool_version()),
                 # The workflow that applies every bot-stack project, research too.
@@ -685,7 +686,7 @@ def report_plan_comment(
         comment = report.plan_comment(
             exit_code,
             plan.read_text(),
-            run.settings.plan.comment_max_bytes,
+            PLAN_COMMENT_MAX_BYTES,
             subject,
             github.provenance(tool_version()),
         )

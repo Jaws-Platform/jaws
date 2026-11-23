@@ -351,7 +351,7 @@ def test_version_mismatch_fails_fast(
 ) -> None:
     monkeypatch.setenv("FAKE_TF_VERSION", "1.9.0")
     terraform = _terraform(guitar, settings, logger)
-    with pytest.raises(RunError, match=r"config/terraform\.yaml pins 1\.14\.7"):
+    with pytest.raises(RunError, match=r"src/jaws/product\.yaml"):
         terraform.prepare()
 
 
