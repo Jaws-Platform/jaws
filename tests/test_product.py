@@ -12,7 +12,7 @@ def test_the_release_pins_terraform_and_every_family() -> None:
     pins = product_pins()
     assert pins.terraform_version == "1.14.7"
     assert pins.families["Jaws-Platform/jaws-ci/aws"] == "0.6.0"
-    assert pins.families["Jaws-Platform/jaws-monitoring/aws"] == "0.9.0"
+    assert pins.families["Jaws-Platform/jaws-monitoring/aws"] == "0.9.1"
     assert len(pins.families) == 8
 
 
