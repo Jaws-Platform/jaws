@@ -4,3 +4,13 @@
 dns:
   zone: jwall.engineering
   zone_id: Z0644006DW6W2HALU9BI
+  # TXT records that belong to the zone owner, not to a project. The GitHub
+  # Pages challenge keeps jwall.engineering verified for the jwallace145
+  # account, so no other GitHub user can publish a Pages site on the domain
+  # or its subdomains. The token is the one GitHub shows under
+  # https://github.com/settings/pages > Verified domains; it stays the same
+  # while the domain is registered there. GitHub re-checks the record and
+  # unverifies the domain if it is missing for 7 days, so it must stay here.
+  txt_records:
+    _github-pages-challenge-jwallace145:
+      - "278aa0fd98189307922e6679ba36f1"

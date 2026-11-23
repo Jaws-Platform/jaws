@@ -9,6 +9,8 @@ import yaml
 
 from jaws.errors import ConfigError
 from jaws.settings import (
+    PlatformHub,
+    PlatformRepository,
     ProjectGuardrails,
     Settings,
     load_document,
@@ -35,6 +37,7 @@ SECTION_FILES = {
     "context": "tool.yaml",
     "ecr": "tool.yaml",
     "dns": "sites.yaml",
+    "platform": "platform.yaml",
     "bot": "bots.yaml",
     "tasks": "bots.yaml",
     "databricks": "databricks.yaml",
@@ -1102,3 +1105,81 @@ def test_the_log_level_variable_works_without_a_tool_section(tmp_path: Path) -> 
         _write_raw(tmp_path, raw, single_file=True), environ={"JAWS_LOG_LEVEL": "debug"}
     )
     assert settings.tool.log_level == "debug"
+
+
+#: A second platform repository: neutral values no other file holds.
+SECOND = {"repository": "Example-Hub/platform", "owner_id": "10000099", "repository_id": "20000099"}
+
+
+def test_the_platform_lists_its_own_repository_and_no_hub(settings: Settings) -> None:
+    assert [r.repository for r in settings.platform.repositories] == ["Jaws-Platform/jaws"]
+    assert settings.platform.hub is None
+    assert settings.dns.txt_records  # moved from foundation/dns.tf
+
+
+def test_a_second_repository_and_a_hub_are_read(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw["platform"]["repositories"].append(SECOND)
+    raw["platform"]["hub"] = {"repository": "Example-Hub/platform", "image": "jaws-platform"}
+    platform = _load_raw(tmp_path, raw).platform
+    assert platform.repositories[1] == PlatformRepository(**SECOND)
+    assert platform.hub == PlatformHub(repository="Example-Hub/platform", image="jaws-platform")
+
+
+@pytest.mark.parametrize(
+    ("platform", "message"),
+    [
+        ({"repositories": []}, r"platform\.repositories"),
+        ({"repositories": [SECOND, SECOND]}, r"Example-Hub/platform is listed twice"),
+        ({"repositories": [{**SECOND, "owner_id": 10000099}]}, r"owner_id"),
+        ({"repositories": [{**SECOND, "repository": "platform"}]}, r"repository"),
+        (
+            {
+                "repositories": [SECOND],
+                "hub": {"repository": "Other-Org/platform", "image": "jaws-platform"},
+            },
+            r"platform\.hub\.repository Other-Org/platform is not one of platform\.repositories",
+        ),
+    ],
+)
+def test_a_malformed_platform_section_is_refused(
+    tmp_path: Path, platform: dict[str, Any], message: str
+) -> None:
+    raw = {**fixture_config(), "platform": platform}
+    with pytest.raises(ConfigError, match=message):
+        _load_raw(tmp_path, raw)
+
+
+def test_the_hub_image_has_its_own_repository_under_the_name_root(tmp_path: Path) -> None:
+    raw = fixture_config()
+    ecr_repository = raw["ecr"]["repository"]
+    raw["platform"] = {
+        "repositories": [SECOND],
+        "hub": {"repository": SECOND["repository"], "image": "platform"},
+    }
+    with pytest.raises(ConfigError, match=r"platform\.hub\.image"):
+        _load_raw(tmp_path, raw)
+    raw["platform"]["hub"]["image"] = ecr_repository
+    with pytest.raises(ConfigError, match=r"platform\.hub\.image"):
+        _load_raw(tmp_path, raw)
+
+
+@pytest.mark.parametrize("kind", ["under the zone", "uppercase", "empty", "quote"])
+def test_the_zone_s_own_txt_records_are_checked(tmp_path: Path, kind: str) -> None:
+    raw = fixture_config()
+    zone = raw["dns"]["zone"]
+    records = {
+        "under the zone": {f"a.{zone}": ["x"]},
+        "uppercase": {"Name": ["x"]},
+        "empty": {"name": []},
+        "quote": {"name": ['a"b']},
+    }[kind]
+    raw["dns"]["txt_records"] = records
+    with pytest.raises(ConfigError, match=r"dns\.txt_records"):
+        _load_raw(tmp_path, raw)
+
+
+def test_the_zone_apex_takes_a_txt_record(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw["dns"]["txt_records"] = {"@": ["v=spf1 -all"]}
+    assert _load_raw(tmp_path, raw).dns.txt_records == {"@": ("v=spf1 -all",)}

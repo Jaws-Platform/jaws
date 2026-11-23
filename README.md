@@ -387,7 +387,8 @@ image bakes it at `/etc/jaws/config`.
 | `projects.yaml` | `projects`: every onboarded project, by GitHub owner, with its type, repository and central guardrails ([Projects registry](#projects-registry)) |
 | `terraform.yaml` | `state` (the state bucket, its region and key template) |
 | `tool.yaml` | `context` (name_root, organization, owner, managed_by), `ecr` (the CLI image repository and its lifecycle) |
-| `sites.yaml` | `dns` (the Route 53 zone) |
+| `sites.yaml` | `dns` (the Route 53 zone, and its own TXT records) |
+| `platform.yaml` | `platform` (the repositories whose own workflows plan and apply the platform, which its roles trust, and the hub) |
 | `bots.yaml` | `bot` (the bot runtime: AMIs, availability zones, records prefix, `asset_wait`), `tasks` (remote tasks: Rust toolchain, images, `limits`, `max_run_cost_usd`) |
 | `databricks.yaml` | `databricks` (`enabled`, the account, service principal, metastore, compute policies and `shared_host_url`) |
 | `monitoring.yaml` | `monitoring` (the monitoring node's `instance_type`, `ami`, `domain`, `snapshots` and off-hours `schedule`; `cost`: the billing bucket, its providers, `budgets` and the anomaly floor; `slack`: the channels' webhook parameters and the alert routes; `thresholds` overrides). Platform-owned: no project file can set it |

@@ -196,9 +196,75 @@ class ContextSection(_Section):
     managed_by: str = Field(default="JAWS", pattern=r"^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$")
 
 
+class PlatformRepository(_Section):
+    #: As GitHub's OIDC subject spells it: IAM compares the name case-sensitively.
+    repository: str = Field(
+        pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?/[A-Za-z0-9._-]{1,100}$"
+    )
+    owner_id: str = Field(pattern=r"^[0-9]+$")
+    repository_id: str = Field(pattern=r"^[0-9]+$")
+
+
+class PlatformHub(_Section):
+    repository: str = Field(
+        pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?/[A-Za-z0-9._-]{1,100}$"
+    )
+    #: The hub's private ECR repository (not `ecr.repository`).
+    image: str = Field(pattern=r"^[a-z0-9]+(?:[._-][a-z0-9]+)*$")
+
+
+class PlatformSection(_Section):
+    """The repositories whose own workflows plan and apply the platform, and its hub."""
+
+    #: Each once, in order: the first is the platform's own.
+    repositories: tuple[PlatformRepository, ...] = Field(min_length=1)
+    hub: PlatformHub | None = None
+
+    @model_validator(mode="after")
+    def _repositories_and_hub(self) -> PlatformSection:
+        seen: set[str] = set()
+        for entry in self.repositories:
+            if entry.repository in seen:
+                raise ValueError(
+                    f"platform.repositories: {entry.repository} is listed twice; "
+                    "each repository is trusted once"
+                )
+            seen.add(entry.repository)
+        if self.hub is not None and self.hub.repository not in seen:
+            raise ValueError(
+                f"platform.hub.repository {self.hub.repository} is not one of "
+                "platform.repositories; the hub is trusted under its entry's IDs"
+            )
+        return self
+
+
+_TXT_NAME = re.compile(
+    r"^[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?(\.[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?)*$"
+)
+
+
 class DnsSection(_Section):
     zone: str = Field(pattern=r"^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
     zone_id: str = Field(pattern=r"^Z[A-Z0-9]{5,31}$")
+    #: TXT records of the zone's owner: "@" or a name relative to the zone.
+    txt_records: dict[str, tuple[str, ...]] = {}
+
+    @model_validator(mode="after")
+    def _txt_records_are_well_formed(self) -> DnsSection:
+        for name, values in self.txt_records.items():
+            if name != "@" and (
+                not _TXT_NAME.match(name) or name == self.zone or name.endswith(f".{self.zone}")
+            ):
+                raise ValueError(
+                    f"dns.txt_records: {name!r} must be @ or a lowercase record name "
+                    f"relative to {self.zone}"
+                )
+            if not values or any(not 1 <= len(v) <= 255 or '"' in v for v in values):
+                raise ValueError(
+                    f"dns.txt_records.{name} needs at least one string of 1 to 255 "
+                    "characters without double quotes"
+                )
+        return self
 
 
 class EcrSection(_Section):
@@ -863,6 +929,7 @@ class Settings(_Section):
     aws: AwsSection
     context: ContextSection
     dns: DnsSection
+    platform: PlatformSection
     ecr: EcrSection
     sync: SyncSection = SyncSection()
     bot: BotSection
@@ -952,6 +1019,24 @@ class Settings(_Section):
             raise ValueError(
                 f"monitoring.domain {domain} is not a name in the dns zone {self.dns.zone} "
                 "(config/sites.yaml), where the stack creates its record"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _hub_image_has_its_own_repository(self) -> Settings:
+        hub = self.platform.hub
+        if hub is None:
+            return self
+        root = self.context.name_root
+        if not hub.image.startswith(f"{root}-"):
+            raise ValueError(
+                f"platform.hub.image {hub.image} must be named {root}-…: the foundation's "
+                f"apply role manages only {root}-* repositories"
+            )
+        if hub.image == self.ecr.repository:
+            raise ValueError(
+                f"platform.hub.image {hub.image} is ecr.repository's; "
+                "the hub image needs its own repository"
             )
         return self
 

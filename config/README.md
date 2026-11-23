@@ -13,7 +13,8 @@ section defined twice, and a `.yml` file instead of skipping it.
 | [`aws.yaml`](aws.yaml) | `aws` | The account registry: every account by type, and `primary`, the one jaws builds in |
 | [`terraform.yaml`](terraform.yaml) | `state` | The state bucket and key template |
 | [`tool.yaml`](tool.yaml) | `context`, `ecr` | The name root, the Organization tag of jaws's own stacks, the owner and the ManagedBy tag, the CLI's image repository |
-| [`sites.yaml`](sites.yaml) | `dns` | The hosted zone sites live in |
+| [`sites.yaml`](sites.yaml) | `dns` | The hosted zone sites live in, and its own TXT records |
+| [`platform.yaml`](platform.yaml) | `platform` | The repositories whose own workflows plan and apply the platform, which its roles trust, and the hub |
 | [`bots.yaml`](bots.yaml) | `bot`, `tasks` | How a bot instance runs, and how remote tasks run and what any task may ask for |
 | [`databricks.yaml`](databricks.yaml) | `databricks` | The Databricks account, its service principal, the metastore and the compute policies |
 | [`monitoring.yaml`](monitoring.yaml) | `monitoring` | The monitoring node (type, image, name, snapshots, off-hours), the billing bucket and its providers, budgets, and the Slack channels and routes for alerts |
