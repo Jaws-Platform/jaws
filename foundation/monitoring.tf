@@ -14,7 +14,8 @@
 #   jaws-monitoring-ci-plan    trusted for pull_request      tfstate/read, monitoring/read, compute/read
 #   jaws-monitoring-ci-apply   trusted for environment:prod  tfstate/write, monitoring/read, monitoring/node,
 #                                                            monitoring/config, monitoring/functions,
-#                                                            monitoring/backup, compute/read, compute/manage
+#                                                            monitoring/backup, monitoring/off-hours-page,
+#                                                            compute/read, compute/manage
 #
 # The roles' project is monitoring, so the stack is named jaws-monitoring and
 # tags everything Project = monitoring (monitoring/providers.tf): the
@@ -78,7 +79,7 @@ locals {
 module "billing_bucket" {
   count   = local.billing_bucket == null ? 0 : 1
   source  = "Jaws-Platform/jaws-monitoring/aws//modules/billing-bucket"
-  version = "0.8.2"
+  version = "0.9.0"
 
   bucket_name                   = local.billing_bucket.name
   aws_export_source_account_ids = local.billing_bucket.aws_export_source_account_ids
@@ -103,7 +104,7 @@ module "databricks_billing_export" {
 module "monitoring_ci_plan" {
   count   = local.monitoring == null ? 0 : 1
   source  = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
-  version = "0.5.0"
+  version = "0.6.0"
 
   project                 = local.monitoring_ci.project
   name_root               = local.context.name_root
@@ -125,7 +126,7 @@ module "monitoring_ci_plan" {
 module "monitoring_ci_apply" {
   count   = local.monitoring == null ? 0 : 1
   source  = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
-  version = "0.5.0"
+  version = "0.6.0"
 
   project                 = local.monitoring_ci.project
   name_root               = local.context.name_root
@@ -136,13 +137,18 @@ module "monitoring_ci_apply" {
   oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
   environment             = "prod"
 
-  # Eight managed policies, nine with a hub (ecr/pull): IAM attaches at most ten to a role by default.
+  # Eight managed policies, nine with the domain (monitoring/off-hours-page), ten with a hub (ecr/pull):
+  # IAM attaches at most ten to a role by default.
   policies = concat(
     [
       "tfstate/write",
       "monitoring/read", "monitoring/node", "monitoring/config", "monitoring/functions", "monitoring/backup",
       "compute/read", "compute/manage",
     ],
+    # The off-hours page's certificate needs the node's domain, so a private node has no such policy.
+    # Keyed on the domain, not the schedule: the policy outlives a schedule removal, which still has
+    # the page's resources to destroy.
+    local.monitoring_ci.monitoring == null ? [] : ["monitoring/off-hours-page"],
     local.hub_image_pull,
   )
 

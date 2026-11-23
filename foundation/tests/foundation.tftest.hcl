@@ -651,7 +651,7 @@ run "the_monitoring_roles_get_the_monitoring_and_compute_leaves" {
   assert {
     condition = toset(keys(module.monitoring_ci_apply[0].policy_arns)) == toset([
       "tfstate/write", "monitoring/read", "monitoring/node", "monitoring/config", "monitoring/functions", "monitoring/backup",
-      "compute/read", "compute/manage",
+      "monitoring/off-hours-page", "compute/read", "compute/manage",
     ])
     error_message = "the apply role holds every monitoring/* leaf, and compute/* for the stack's own VPC (spec 6.5)"
   }
@@ -663,7 +663,7 @@ run "the_monitoring_roles_get_the_monitoring_and_compute_leaves" {
   }
 }
 
-run "the_monitoring_roles_may_change_only_the_grafana_record" {
+run "the_monitoring_roles_reach_the_grafana_record_and_the_pages_validation_record" {
   command = plan
 
   override_module {
@@ -677,6 +677,29 @@ run "the_monitoring_roles_may_change_only_the_grafana_record" {
   assert {
     condition     = local.monitoring_ci.monitoring == { zone_id = "Z0000000000EXAMPLE", domain = "grafana.example.com" }
     error_message = "the roles' record is monitoring.domain in the foundation's zone, given together as the catalog requires"
+  }
+
+  assert {
+    condition     = contains(keys(module.monitoring_ci_apply[0].policy_arns), "monitoring/off-hours-page") && !contains(keys(module.monitoring_ci_plan[0].policy_arns), "monitoring/off-hours-page")
+    error_message = "the Grafana A record is the plan role's reach; the apply role adds the page's certificate validation CNAME through monitoring/off-hours-page"
+  }
+}
+
+run "a_private_node_has_no_off_hours_page_permissions" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/private-node.yaml"
+  }
+
+  assert {
+    condition     = local.monitoring_ci.monitoring == null
+    error_message = "without monitoring.domain the roles are given no record"
+  }
+
+  assert {
+    condition     = length(module.monitoring_ci_apply) == 1 && !contains(keys(module.monitoring_ci_apply[0].policy_arns), "monitoring/off-hours-page")
+    error_message = "a private node's apply role has no off-hours page policy: the catalog refuses it without the zone and domain"
   }
 }
 

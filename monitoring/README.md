@@ -28,6 +28,9 @@ The node's zone is pinned in `main.tf` (`us-east-1a`): moving it means a new
 subnet, instance and data volume. The plan stops if the instance type is not
 offered there.
 
+Other choices are fixed in `main.tf`: `off_hours_page = true` (the page shows
+only with a schedule and a domain).
+
 ## How it is applied
 
 - **Pull requests:** `ci.yml` validates and tests it, and plans it with

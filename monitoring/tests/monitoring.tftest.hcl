@@ -72,6 +72,29 @@ mock_provider "aws" {
       arn = "arn:aws:iam::222222222222:role/jaws-monitoring"
     }
   }
+
+  # The off-hours page's certificate is DNS-validated: the module makes one
+  # validation record per domain_validation_options entry.
+  mock_resource "aws_acm_certificate" {
+    defaults = {
+      arn = "arn:aws:acm:us-east-1:222222222222:certificate/00000000-0000-0000-0000-000000000000"
+      domain_validation_options = [
+        {
+          domain_name           = "grafana.example.com"
+          resource_record_name  = "_0123456789abcdef.grafana.example.com."
+          resource_record_type  = "CNAME"
+          resource_record_value = "_fedcba9876543210.acm-validations.example.invalid."
+        }
+      ]
+    }
+  }
+
+  mock_resource "aws_cloudfront_distribution" {
+    defaults = {
+      domain_name    = "d1234567890abc.cloudfront.net"
+      hosted_zone_id = "Z2FDTNDATAQYW2"
+    }
+  }
 }
 
 mock_provider "archive" {}
@@ -190,6 +213,17 @@ run "the_stack_runs_on_its_schedule" {
       timezone = "America/Denver"
     })
     error_message = "the node runs from 08:00 to midnight every day in America/Denver: monitoring.schedule"
+  }
+}
+
+run "grafana_shows_a_page_off_hours" {
+  command = plan
+
+  # The fixture's monitoring config has a schedule and a domain, so the module's
+  # off-hours page plans: a CloudFront page the name points at while the node is stopped.
+  assert {
+    condition     = module.monitoring[0].off_hours_page_domain_name != null
+    error_message = "with a schedule and a domain, Grafana's address shows an off-hours page while the node is stopped"
   }
 }
 
