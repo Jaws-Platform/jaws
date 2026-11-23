@@ -155,7 +155,7 @@ def test_every_registry_pin_matches_config() -> None:
 
 
 def test_every_configured_family_is_used() -> None:
-    """A family nothing pins is a stale line in config/terraform.yaml."""
+    """A family nothing pins is a stale line in src/jaws/product.yaml."""
     used = {family for family, _, _ in _pins(*_stack_files())}
     assert used == set(_families())
 

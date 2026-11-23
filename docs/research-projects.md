@@ -469,7 +469,7 @@ stack is here, and the rendered `terraform.tfvars.json` and `backend.hcl` exist
 only in a temporary directory that the CLI deletes unless the run failed and
 `JAWS_KEEP_WORKDIR=1` or debug logging is on. So render them with the CLI's code,
 from this repository's root, and with the Terraform version in
-`config/terraform.yaml`:
+`src/jaws/product.yaml`:
 
 ```sh
 consumer_file=../math-prover/jaws.yaml   # its default branch

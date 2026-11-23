@@ -7,7 +7,7 @@
 # per component), pinned to an exact version in every block (module versions
 # are not recorded in .terraform.lock.hcl, so a range would not be
 # reproducible). Dependabot opens bump PRs; keep every pin of a family
-# identical, and equal to library.families in config/terraform.yaml.
+# identical, and equal to the family's entry in src/jaws/product.yaml.
 
 locals {
   # The sites (type site in config/projects.yaml). repository_id is the numeric

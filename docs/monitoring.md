@@ -487,7 +487,7 @@ The module family holds the mapper; Jaws turns it on.
    `foundation/monitoring.tf`.
 3. **One pull request here:** bump every `jaws-monitoring` pin together
    (`monitoring/`, `foundation/monitoring.tf`, `billing-export/` and
-   `library.families` in `config/terraform.yaml`; `tests/test_versions.py`
+   its entry in `src/jaws/product.yaml`; `tests/test_versions.py`
    checks), add the provider's switch to `MonitoringCost` in
    `src/jaws/settings.py` with its tests and to `config/monitoring.yaml`, and
    pass it in `local.cost` in `monitoring/main.tf`, with a run in
