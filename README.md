@@ -580,7 +580,7 @@ The policies come from the library's `ci-policies` catalog, whose README holds t
 - Route 53 access is limited to the `jwall.engineering` zone. It cannot create or delete zones.
 - Neither role carries `ReadOnlyAccess`, which would grant `s3:GetObject` on every bucket, every project's state included. `foundation/read` grants the reads refresh and drift detection need for this stack.
 
-Both roles trust only the `Jaws-Platform/jaws` repository through the OIDC provider, with the audience pinned to `sts.amazonaws.com`.
+Every role this repository's workflows assume trusts the repositories in `platform.repositories` (`config/platform.yaml`), today `Jaws-Platform/jaws` alone, through the OIDC provider. That covers these two, the monitoring and data access roles, and each bot, research and Databricks project's plan and apply roles. With `platform.hub`, each site's plan role also trusts the hub's pull requests. The audience stays pinned to `sts.amazonaws.com`.
 
 ## Bootstrap (one time, run locally by the owner with admin credentials)
 

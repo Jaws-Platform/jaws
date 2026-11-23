@@ -105,14 +105,13 @@ module "monitoring_ci_plan" {
   source  = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
   version = "0.5.0"
 
-  project                    = local.monitoring_ci.project
-  name_root                  = local.context.name_root
-  repository                 = local.context.repository
-  repository_aliases         = local.context.repository_aliases
-  repository_alias_owner_ids = local.context.repository_alias_owner_ids
-  owner_id                   = local.github.owner_id
-  repository_id              = local.github.repository_id
-  oidc_provider_arn          = data.aws_iam_openid_connect_provider.github.arn
+  project                 = local.monitoring_ci.project
+  name_root               = local.context.name_root
+  repository              = local.platform_trust.repository
+  owner_id                = local.platform_trust.owner_id
+  repository_id           = local.platform_trust.repository_id
+  additional_repositories = local.platform_trust.additional_repositories
+  oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
 
   policies = ["tfstate/read", "monitoring/read", "compute/read"]
 
@@ -127,15 +126,14 @@ module "monitoring_ci_apply" {
   source  = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
   version = "0.5.0"
 
-  project                    = local.monitoring_ci.project
-  name_root                  = local.context.name_root
-  repository                 = local.context.repository
-  repository_aliases         = local.context.repository_aliases
-  repository_alias_owner_ids = local.context.repository_alias_owner_ids
-  owner_id                   = local.github.owner_id
-  repository_id              = local.github.repository_id
-  oidc_provider_arn          = data.aws_iam_openid_connect_provider.github.arn
-  environment                = "prod"
+  project                 = local.monitoring_ci.project
+  name_root               = local.context.name_root
+  repository              = local.platform_trust.repository
+  owner_id                = local.platform_trust.owner_id
+  repository_id           = local.platform_trust.repository_id
+  additional_repositories = local.platform_trust.additional_repositories
+  oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
+  environment             = "prod"
 
   # Eight managed policies: IAM attaches at most ten to a role by default.
   policies = [

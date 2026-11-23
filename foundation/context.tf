@@ -20,29 +20,10 @@ locals {
     # Project tag value, and the prefix of this stack's Name tags.
     project     = "jaws"
     environment = "prod"
-    repository  = local.platform_repository.repository
 
     # The `Repository` tag: the repository that manages this stack.
     repository_tag = local.platform_repository.repository
     owner          = local.account.context.owner
-
-    # Other names the roles its own workflows assume also trust, because
-    # GitHub's OIDC subject contains the name: set the new name here before a
-    # rename or transfer (with the new owner's ID in repository_alias_owner_ids
-    # for a transfer), and clear both once the move is done. Empty since the
-    # transfer to Jaws-Platform on 2026-11-21. IAM compares the subject
-    # case-sensitively: names are spelled exactly as GitHub sends the login.
-    repository_aliases         = []
-    repository_alias_owner_ids = {}
-  }
-
-  # Numeric GitHub IDs for the immutable OIDC subject form
-  # (repo:<owner>@<owner_id>/<name>@<repo_id>:...), which GitHub issues when
-  # "use immutable subject" is on for the repository (the default for new
-  # repos). Look up with: gh api repos/<owner>/<repo> --jq '{id, owner_id: .owner.id}'
-  github = {
-    owner_id      = local.platform_repository.owner_id
-    repository_id = local.platform_repository.repository_id
   }
 
   # Resource name prefix for this stack's own CI roles and Name tags. The

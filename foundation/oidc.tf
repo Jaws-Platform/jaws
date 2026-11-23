@@ -19,4 +19,11 @@
 
 data "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"
+
+  lifecycle {
+    precondition {
+      condition     = local.hub == null ? true : length(local.hub_trust) == 1
+      error_message = "platform.hub.repository (config/platform.yaml) is not one of platform.repositories: the hub's pull requests are trusted under its entry's IDs, so list it there."
+    }
+  }
 }

@@ -92,6 +92,9 @@ module "site_ci_plan" {
   repository_id     = each.value.repository_id
   oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
 
+  # The hub plans every site too, once platform.hub names it.
+  additional_repositories = local.hub_trust
+
   policies = ["tfstate/read", "static-site/read", "ecr/pull"]
 
   policy_inputs = {

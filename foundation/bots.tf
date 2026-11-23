@@ -87,14 +87,13 @@ module "bot_ci_plan" {
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
   version  = "0.5.0"
 
-  project                    = each.key
-  name_root                  = local.context.name_root
-  repository                 = local.context.repository
-  repository_aliases         = local.context.repository_aliases
-  repository_alias_owner_ids = local.context.repository_alias_owner_ids
-  owner_id                   = local.github.owner_id
-  repository_id              = local.github.repository_id
-  oidc_provider_arn          = data.aws_iam_openid_connect_provider.github.arn
+  project                 = each.key
+  name_root               = local.context.name_root
+  repository              = local.platform_trust.repository
+  owner_id                = local.platform_trust.owner_id
+  repository_id           = local.platform_trust.repository_id
+  additional_repositories = local.platform_trust.additional_repositories
+  oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
 
   policies = concat(
     contains(local.research_projects, each.key) ? ["tfstate/read", "compute/read", "task/read"] : ["tfstate/read", "container/read", "task/read"],
@@ -112,15 +111,14 @@ module "bot_ci_apply" {
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
   version  = "0.5.0"
 
-  project                    = each.key
-  name_root                  = local.context.name_root
-  repository                 = local.context.repository
-  repository_aliases         = local.context.repository_aliases
-  repository_alias_owner_ids = local.context.repository_alias_owner_ids
-  owner_id                   = local.github.owner_id
-  repository_id              = local.github.repository_id
-  oidc_provider_arn          = data.aws_iam_openid_connect_provider.github.arn
-  environment                = "prod"
+  project                 = each.key
+  name_root               = local.context.name_root
+  repository              = local.platform_trust.repository
+  owner_id                = local.platform_trust.owner_id
+  repository_id           = local.platform_trust.repository_id
+  additional_repositories = local.platform_trust.additional_repositories
+  oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
+  environment             = "prod"
 
   policies = concat(
     contains(local.research_projects, each.key) ? ["tfstate/write", "compute/read", "compute/manage", "task/read", "task/manage"] : ["tfstate/write", "container/read", "container/manage", "task/read", "task/manage", "container/schedule"],

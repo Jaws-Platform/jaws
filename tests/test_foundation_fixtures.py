@@ -3,7 +3,7 @@
 `foundation/tests/foundation.tftest.hcl` plans the tool configuration (config/)
 as written, and a few states it isn't in: a ManagedBy no code spells, no task
 runner, the Databricks host before its URL is recorded, an admin role of
-another account, and no monitoring section. Each fixture under
+another account, no monitoring section, and a second repository or a hub. Each fixture under
 `foundation/tests/fixtures/` is config/ as one file
 (`jaws.settings.load_document`) with a few values set; this test keeps them
 from drifting.
@@ -66,12 +66,42 @@ def _no_monitoring(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
+HUB_REPOSITORY = {
+    "repository": "Example-Hub/platform",
+    "owner_id": "10000099",
+    "repository_id": "20000099",
+}
+HUB = {"repository": "Example-Hub/platform", "image": "jaws-platform"}
+
+
+def _two_repositories(config: dict[str, Any]) -> dict[str, Any]:
+    """A second repository trusted beside the platform's own."""
+    config["platform"]["repositories"].append(dict(HUB_REPOSITORY))
+    return config
+
+
+def _hub(config: dict[str, Any]) -> dict[str, Any]:
+    """The second repository is the hub: it also plans every site."""
+    config = _two_repositories(config)
+    config["platform"]["hub"] = dict(HUB)
+    return config
+
+
+def _hub_not_trusted(config: dict[str, Any]) -> dict[str, Any]:
+    """A hub that is not among platform.repositories: the plan must stop."""
+    config["platform"]["hub"] = dict(HUB)
+    return config
+
+
 FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "relabelled.yaml": _relabelled,
     "no-task-runners.yaml": _no_task_runners,
     "awaiting-host.yaml": _awaiting_host,
     "foreign-admin.yaml": _foreign_admin,
     "no-monitoring.yaml": _no_monitoring,
+    "two-repositories.yaml": _two_repositories,
+    "hub.yaml": _hub,
+    "hub-not-trusted.yaml": _hub_not_trusted,
 }
 
 

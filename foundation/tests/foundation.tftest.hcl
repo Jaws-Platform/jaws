@@ -45,20 +45,6 @@ override_module {
 }
 
 override_module {
-  target = module.data_access_ci_plan
-  outputs = {
-    role_arn = "arn:aws:iam::570327089884:role/jaws-data-access-ci-plan"
-  }
-}
-
-override_module {
-  target = module.data_access_ci_apply
-  outputs = {
-    role_arn = "arn:aws:iam::570327089884:role/jaws-data-access-ci-apply"
-  }
-}
-
-override_module {
   target = module.site_bucket["main-site"]
   outputs = {
     arn = "arn:aws:s3:::jaws-main-site"
@@ -177,6 +163,20 @@ run "every_registered_project_is_served" {
 run "the_reconcile_reaches_its_state" {
   command = plan
 
+  override_module {
+    target = module.data_access_ci_plan
+    outputs = {
+      role_arn = "arn:aws:iam::570327089884:role/jaws-data-access-ci-plan"
+    }
+  }
+
+  override_module {
+    target = module.data_access_ci_apply
+    outputs = {
+      role_arn = "arn:aws:iam::570327089884:role/jaws-data-access-ci-apply"
+    }
+  }
+
   assert {
     condition = jsonencode(try(local.state_prefix_access[local.data_access_ci.tfstate.key], null)) == jsonencode({
       read  = ["arn:aws:iam::570327089884:role/jaws-data-access-ci-plan"]
@@ -220,14 +220,15 @@ run "databricks_is_built_and_onboards_the_registry" {
   }
 }
 
-# The repository is Jaws-Platform/jaws. Its own workflows' tokens name it, and
-# only it. (Which roles take aliases: tests/test_repository_trust.py.)
-run "the_repository_is_trusted_under_its_name_only" {
+# The platform's repositories are Jaws-Platform/jaws alone, with no hub. Its own
+# workflows' tokens name it, and only it. (Which roles trust them:
+# tests/test_repository_trust.py.)
+run "the_platform_repository_is_trusted_as_before" {
   command = plan
 
   assert {
-    condition     = local.context.repository == local.platform_repository.repository && local.github.owner_id == local.platform_repository.owner_id && local.github.repository_id == local.platform_repository.repository_id
-    error_message = "the repository and its GitHub IDs are the first of platform.repositories"
+    condition     = local.platform_trust.repository == "Jaws-Platform/jaws" && length(local.platform_trust.additional_repositories) == 0 && length(local.hub_trust) == 0
+    error_message = "config/platform.yaml lists Jaws-Platform/jaws alone, and names no hub"
   }
 
   assert {
@@ -236,9 +237,100 @@ run "the_repository_is_trusted_under_its_name_only" {
   }
 
   assert {
-    condition     = length(local.context.repository_aliases) == 0 && length(local.context.repository_alias_owner_ids) == 0
-    error_message = "no other name of the repository is trusted"
+    condition = jsondecode(module.infra_ci_plan.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == [
+      "repo:${local.platform_repository.repository}:pull_request",
+      "repo:${split("/", local.platform_repository.repository)[0]}@${local.platform_repository.owner_id}/${split("/", local.platform_repository.repository)[1]}@${local.platform_repository.repository_id}:pull_request",
+    ]
+    error_message = "with one repository the plan role trusts its pull requests in both subject forms and nothing else: the trust policy jaws-ci 0.4.0 built"
   }
+
+  assert {
+    condition     = alltrue([for key, role in module.site_ci_plan : length(jsondecode(role.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == 2])
+    error_message = "without a hub a site's plan role trusts only its own repository"
+  }
+}
+
+run "a_second_repository_is_trusted_alongside_the_first" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/two-repositories.yaml"
+  }
+
+  assert {
+    condition = jsondecode(module.infra_ci_plan.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == [
+      "repo:Jaws-Platform/jaws:pull_request",
+      "repo:Example-Hub/platform:pull_request",
+      "repo:Jaws-Platform@359185083/jaws@1420037633:pull_request",
+      "repo:Example-Hub@10000099/platform@20000099:pull_request",
+    ]
+    error_message = "the plan role trusts both repositories' pull requests, the classic subjects (first, second) before the immutable ones"
+  }
+
+  assert {
+    condition = alltrue([
+      for policy in concat(
+        [module.data_access_ci_plan.assume_role_policy],
+        [for role in module.monitoring_ci_plan : role.assume_role_policy],
+        [for key, role in module.bot_ci_plan : role.assume_role_policy],
+        [for key, role in module.databricks_ci_plan : role.assume_role_policy],
+      ) : contains(jsondecode(policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"], "repo:Example-Hub@10000099/platform@20000099:pull_request")
+    ])
+    error_message = "every plan role of the platform's own trusts the second repository's pull requests"
+  }
+
+  assert {
+    condition = alltrue([
+      for policy in concat(
+        [module.data_access_ci_apply.assume_role_policy],
+        [for role in module.monitoring_ci_apply : role.assume_role_policy],
+        [for key, role in module.bot_ci_apply : role.assume_role_policy],
+        [for key, role in module.databricks_ci_apply : role.assume_role_policy],
+      ) : contains(jsondecode(policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"], "repo:Example-Hub@10000099/platform@20000099:environment:prod")
+    ])
+    error_message = "every apply role of the platform's own trusts the second repository's prod environment"
+  }
+
+  assert {
+    condition     = module.context.tags["Repository"] == local.platform_repository.repository && module.context.tags["Repository"] == "Jaws-Platform/jaws"
+    error_message = "the Repository tag names the first repository"
+  }
+
+  assert {
+    condition     = alltrue([for key, role in module.site_ci_plan : length(jsondecode(role.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == 2])
+    error_message = "without a hub a site's plan role still trusts only its own repository"
+  }
+}
+
+run "the_hub_plans_every_site" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/hub.yaml"
+  }
+
+  assert {
+    condition = alltrue([
+      for key, role in module.site_ci_plan :
+      length(jsondecode(role.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == 4 && contains(jsondecode(role.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"], "repo:Example-Hub@10000099/platform@20000099:pull_request")
+    ])
+    error_message = "with a hub each site's plan role trusts the hub's pull requests too"
+  }
+
+  assert {
+    condition     = alltrue([for key, role in module.site_ci_apply : length(jsondecode(role.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == 2])
+    error_message = "a site's apply role still trusts only its own repository"
+  }
+}
+
+run "refuses_a_hub_it_does_not_trust" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/hub-not-trusted.yaml"
+  }
+
+  expect_failures = [data.aws_iam_openid_connect_provider.github]
 }
 
 run "takes_its_identity_from_the_configuration" {

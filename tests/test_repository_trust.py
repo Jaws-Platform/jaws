@@ -1,15 +1,17 @@
-"""The roles this repository's own workflows assume trust it under every name it has.
+"""The roles this repository's own workflows assume trust `platform.repositories`.
 
-GitHub's OIDC subject contains the repository's name, so a rename changes the
-subject of every token this repository's workflows present. The roles those
-workflows assume (the foundation's, data-access's, the monitoring stack's, and
-each project's plan and apply role) therefore take `repository_aliases`; the roles a consumer's
-workflows assume (release, task, the sites' roles) trust another repository
-and must not.
+GitHub's OIDC subject contains the repository's name, so a rename or a move
+changes the subject of every token this repository's workflows present. The
+roles those workflows assume (the foundation's, data-access's, the monitoring
+stack's, and each project's plan and apply role) therefore trust the first of
+`platform.repositories` and every further entry (`additional_repositories`);
+a site's plan role also trusts the hub. The roles a consumer's workflows assume
+(release, task, preview, a site's apply role) trust another repository and
+must not.
 
-What an alias does to a trust policy is the library's test
+What `additional_repositories` does to a trust policy is the library's test
 (`github-oidc-role`). This file checks the wiring the foundation owns: which
-module blocks pass the alias.
+module blocks pass it.
 """
 
 from __future__ import annotations
@@ -50,40 +52,38 @@ def _role_modules() -> dict[str, dict[str, str]]:
     return modules
 
 
-def test_the_roles_that_trust_this_repository_are_the_tools_own() -> None:
+def test_the_roles_that_trust_the_platform_s_repositories_are_the_tools_own() -> None:
     trusting = {
         name
         for name, arguments in _role_modules().items()
-        if arguments["repository"] == "local.context.repository"
+        if arguments.get("repository") == "local.platform_trust.repository"
     }
     assert trusting == TOOL_ROLES
 
 
-def test_each_of_them_trusts_every_name_of_the_repository() -> None:
+def test_each_of_them_trusts_every_platform_repository() -> None:
     modules = _role_modules()
     for name in sorted(TOOL_ROLES):
-        assert modules[name].get("repository_aliases") == "local.context.repository_aliases", name
-        # A transferred name is trusted under its new owner's ID, so the owner
-        # IDs of the aliases travel with them.
+        assert modules[name].get("owner_id") == "local.platform_trust.owner_id", name
+        assert modules[name].get("repository_id") == "local.platform_trust.repository_id", name
         assert (
-            modules[name].get("repository_alias_owner_ids")
-            == "local.context.repository_alias_owner_ids"
+            modules[name].get("additional_repositories")
+            == "local.platform_trust.additional_repositories"
         ), name
+        assert "repository_aliases" not in modules[name], name
+        assert "repository_alias_owner_ids" not in modules[name], name
 
 
-def test_roles_for_consumer_repositories_take_no_alias() -> None:
-    others = {n: a for n, a in _role_modules().items() if n not in TOOL_ROLES}
+def test_a_site_plan_role_also_trusts_the_hub() -> None:
+    assert _role_modules()["site_ci_plan"].get("additional_repositories") == "local.hub_trust"
+
+
+def test_other_roles_trust_only_their_own_repository() -> None:
+    others = {
+        n: a for n, a in _role_modules().items() if n not in TOOL_ROLES and n != "site_ci_plan"
+    }
     assert others, "the foundation has release, task and site roles"
     for name, arguments in others.items():
+        assert "additional_repositories" not in arguments, name
         assert "repository_aliases" not in arguments, name
         assert "repository_alias_owner_ids" not in arguments, name
-
-
-def test_every_alias_owner_id_belongs_to_an_alias() -> None:
-    context = (FOUNDATION / "context.tf").read_text()
-    aliases = re.search(r"repository_aliases\s*=\s*\[(?P<list>[^\]]*)\]", context)
-    owner_ids = re.search(r"repository_alias_owner_ids\s*=\s*\{(?P<map>[^}]*)\}", context)
-    assert aliases and owner_ids
-    alias_names = set(re.findall(r'"([^"]+)"', aliases["list"]))
-    owner_id_names = set(re.findall(r'"([^"]+)"\s*=', owner_ids["map"]))
-    assert owner_id_names <= alias_names

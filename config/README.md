@@ -74,6 +74,20 @@ others are recorded for owner-access, which grants the owner admin access to
 them. Projects choosing their environments from this registry is
 [#294](https://github.com/Jaws-Platform/jaws/issues/294).
 
+## The platform's repositories
+
+`platform.repositories` (`platform.yaml`) lists the repositories whose workflows
+plan and apply this platform, each with its GitHub IDs. Every role those
+workflows assume trusts all of them. The first is the platform's own: the
+Repository tag, the zone's comment and the roles' descriptions name it. To move,
+rename or transfer the platform:
+
+1. Add the new repository second, with its IDs; the next release trusts both.
+2. Name it in `platform.hub` when its image and site plans are wanted. The hub
+   must be listed in `platform.repositories`, or the plan stops.
+3. Drop the old first entry once the new one has run a release. The Repository
+   tag, the zone's comment and the roles' descriptions follow the new first entry.
+
 ## Reading it elsewhere
 
 ```sh
