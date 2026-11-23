@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.79.0](https://github.com/Jaws-Platform/jaws/compare/v0.78.1...v0.79.0) (2026-11-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** separate the release's settings from the platform's ([#314](https://github.com/Jaws-Platform/jaws/issues/314))
+
+### Features
+
+* **foundation:** trust the platform's repositories and read the platform from its configuration ([#316](https://github.com/Jaws-Platform/jaws/issues/316)) ([ef89d7a](https://github.com/Jaws-Platform/jaws/commit/ef89d7acf4cc1344e5cde1663edfdb0f8cb42413))
+
+
+### Code Refactoring
+
+* **cli:** separate the release's settings from the platform's ([#314](https://github.com/Jaws-Platform/jaws/issues/314)) ([27b02c8](https://github.com/Jaws-Platform/jaws/commit/27b02c87d38d35311aaf91ad461e59836722fb3b))
+
 ## [0.78.1](https://github.com/Jaws-Platform/jaws/compare/v0.78.0...v0.78.1) (2026-11-23)
 
 
