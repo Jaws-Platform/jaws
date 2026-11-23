@@ -26,7 +26,10 @@ few sections from their file with `yq` (`aws`, `projects`, `ecr`,
 The Terraform version and the module family versions are the release's
 (`src/jaws/product.yaml`), not this directory's. The product's defaults for
 logging, timeouts, cache headers and the bot health check apply unless a
-section here overrides them.
+section here overrides them. An override goes in the section's file: `tool` in
+`tool.yaml`, `terraform` (timeouts) in `terraform.yaml`, `sync` in `sites.yaml`,
+`bot.health_*` in `bots.yaml`; a new section also goes in `SECTION_FILES` in
+`tests/test_settings.py`.
 
 ## Onboarding a project
 
