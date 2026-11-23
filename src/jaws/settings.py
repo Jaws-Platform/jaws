@@ -1033,6 +1033,12 @@ class Settings(_Section):
                 f"platform.hub.image {hub.image} must be named {root}-…: the foundation's "
                 f"apply role manages only {root}-* repositories"
             )
+        for key in self.projects:
+            if hub.image == f"{root}-{key}":
+                raise ValueError(
+                    f"platform.hub.image {hub.image} is project {key!r}'s repository "
+                    f"({root}-<project>): its release role could push the hub image"
+                )
         if hub.image == self.ecr.repository:
             raise ValueError(
                 f"platform.hub.image {hub.image} is ecr.repository's; "

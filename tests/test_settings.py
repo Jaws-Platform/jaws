@@ -1164,6 +1164,18 @@ def test_the_hub_image_has_its_own_repository_under_the_name_root(tmp_path: Path
         _load_raw(tmp_path, raw)
 
 
+def test_the_hub_image_is_not_a_project_s_repository(tmp_path: Path) -> None:
+    raw = fixture_config()
+    root = raw["context"]["name_root"]
+    key = next(iter(next(iter(raw["projects"].values()))["projects"]))
+    raw["platform"] = {
+        "repositories": [SECOND],
+        "hub": {"repository": SECOND["repository"], "image": f"{root}-{key}"},
+    }
+    with pytest.raises(ConfigError, match=r"platform\.hub\.image .* project"):
+        _load_raw(tmp_path, raw)
+
+
 @pytest.mark.parametrize("kind", ["under the zone", "uppercase", "empty", "quote"])
 def test_the_zone_s_own_txt_records_are_checked(tmp_path: Path, kind: str) -> None:
     raw = fixture_config()
