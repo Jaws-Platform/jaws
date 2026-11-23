@@ -92,6 +92,12 @@ override_module {
   }
 }
 
+# The fixtures are single files under tests/fixtures/, which has no datasets/:
+# every run reads the repository's registry unless it says otherwise.
+variables {
+  datasets_path = "../datasets"
+}
+
 run "the_account_is_config_yamls" {
   command = plan
 
@@ -502,4 +508,59 @@ run "no_task_records_without_the_billing_bucket" {
     condition     = length(local.task_records) == 0 && alltrue([for key, role in module.bot_ci_task : toset(keys(role.policy_arns)) == toset(["task/launch"])])
     error_message = "without the billing bucket the task roles only launch"
   }
+}
+
+run "reads_its_configuration_and_datasets_from_the_repository_outside_the_image" {
+  command = plan
+
+  variables {
+    datasets_path = null
+  }
+
+  # path.module is "." under terraform test, and dirname() cleans "./.." to "..".
+  assert {
+    condition     = !local.in_image && local.config_path == "./../config" && local.datasets_path == "../datasets"
+    error_message = "without /etc/jaws/config the stack reads config/ and the datasets/ beside it, at the repository root, as the CLI reads ./config"
+  }
+}
+
+run "the_datasets_are_beside_a_configuration_given_elsewhere" {
+  command = plan
+
+  variables {
+    config_path   = "tests/fixtures/awaiting-host.yaml"
+    datasets_path = null
+  }
+
+  # No dataset is onboarded before the host's URL is recorded, so the missing registry stops nothing.
+  expect_failures = [check.shared_host_url]
+
+  assert {
+    condition     = local.datasets_path == "tests/fixtures/datasets"
+    error_message = "config_path is where a caller's JAWS_CONFIG points, and the registry is the datasets/ beside it (jaws.access.infra_root)"
+  }
+}
+
+run "a_configuration_directory_may_end_in_a_slash" {
+  command = plan
+
+  variables {
+    config_path   = "../config/"
+    datasets_path = null
+  }
+
+  assert {
+    condition     = local.datasets_path == "../datasets"
+    error_message = "a trailing slash on config_path must not make the registry the config directory itself"
+  }
+}
+
+run "stops_without_the_datasets_registry" {
+  command = plan
+
+  variables {
+    datasets_path = "tests/fixtures/no-datasets"
+  }
+
+  expect_failures = [data.aws_caller_identity.current]
 }

@@ -8,18 +8,30 @@
 # and state prefixes to is an entry of config/projects.yaml (`local.registry`).
 
 variable "config_path" {
-  description = "The tool configuration: a directory of .yaml files, or one .yaml file holding every section. Null reads config/ at the repository root; the tests pass a fixture file."
+  description = "The tool configuration: a directory of .yaml files, or one .yaml file holding every section. Null reads /etc/jaws/config when the hub's image has it, else config/ at the repository root; a caller passes JAWS_CONFIG (TF_VAR_config_path), the tests a fixture file."
+  type        = string
+  default     = null
+}
+
+variable "datasets_path" {
+  description = "The onboarded datasets: the directory holding <owner>/<name>.yaml. Null reads the datasets/ beside the configuration (/etc/jaws/datasets in the hub's image, datasets/ at the repository root); a caller passes $JAWS_INFRA_ROOT/datasets (TF_VAR_datasets_path)."
   type        = string
   default     = null
 }
 
 locals {
-  config_path = var.config_path == null ? "${path.module}/../config" : var.config_path
+  # Where the hub's image keeps the configuration, as the CLI looks (jaws.settings.IMAGE_CONFIG_PATH).
+  image_config_path = "/etc/jaws/config"
+  in_image          = length(fileset(local.image_config_path, "*.yaml")) > 0
+  config_path       = var.config_path != null ? var.config_path : local.in_image ? local.image_config_path : "${path.module}/../config"
   config_files = endswith(local.config_path, ".yaml") ? [local.config_path] : [
     for name in sort(fileset(local.config_path, "*.yaml")) : "${local.config_path}/${name}"
   ]
   config_documents = [for config_file in local.config_files : yamldecode(file(config_file))]
   tool_config      = merge(local.config_documents...)
+
+  # The datasets/ beside the configuration, as the CLI reads them (jaws.access.infra_root).
+  datasets_path = var.datasets_path != null ? var.datasets_path : "${dirname(trimsuffix(local.config_path, "/"))}/datasets"
 
   # The account this root builds in.
   primary_account = local.tool_config.aws.accounts[local.tool_config.aws.primary]
@@ -59,6 +71,12 @@ data "aws_caller_identity" "current" {
     precondition {
       condition     = length(flatten([for document in local.config_documents : keys(document)])) == length(keys(local.tool_config))
       error_message = "A section of the tool configuration is in two files of ${local.config_path}: each section lives in one."
+    }
+
+    # A missing directory reads as an empty registry, which would plan every onboarded dataset away.
+    precondition {
+      condition     = !(local.databricks_enabled && local.databricks_host_recorded) || fileexists("${local.datasets_path}/README.md")
+      error_message = "The onboarded datasets are not at ${local.datasets_path} (no README.md there): planned without them, every onboarded dataset would be removed. Set datasets_path (TF_VAR_datasets_path), or keep datasets/ beside the configuration."
     }
 
     precondition {

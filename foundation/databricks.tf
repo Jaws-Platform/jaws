@@ -163,7 +163,7 @@ module "databricks_shared_host" {
 module "dataset_registry" {
   source = "./registry"
 
-  directory = "${path.module}/../datasets"
+  directory = local.datasets_path
   name_root = local.context.name_root
 
   # Each workspace's own catalog is <project> with - replaced by _.
