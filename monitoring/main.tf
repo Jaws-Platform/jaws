@@ -138,7 +138,7 @@ module "network" {
 module "monitoring" {
   count   = local.enabled ? 1 : 0
   source  = "Jaws-Platform/jaws-monitoring/aws"
-  version = "0.8.2"
+  version = "0.9.0"
 
   name        = local.name
   bucket_name = local.cost.bucket_name
@@ -152,8 +152,10 @@ module "monitoring" {
   grafana_admin = local.node.grafana_admin
   snapshots     = local.node.snapshots
   schedule      = local.node.schedule
-  slack         = local.node.slack
-  thresholds    = local.node.thresholds
+  # Acts only with a schedule and a domain: Grafana's name points at a page while the node is stopped.
+  off_hours_page = true
+  slack          = local.node.slack
+  thresholds     = local.node.thresholds
 
   aws                      = local.cost.aws
   databricks               = local.cost.databricks

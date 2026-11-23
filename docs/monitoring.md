@@ -265,6 +265,12 @@ it; a stop is a normal shutdown, so every service stops cleanly.
 - **While it is off**, the export, the Databricks job, the normalizer and the
   task records keep filling the bucket, and the node loads all of it at boot.
   Host metrics have a gap for the night.
+- **An off-hours page.** At the stop, the node's name points at a CloudFront
+  page saying Grafana is off and when it is back, instead of a dead address;
+  the node points the name back at itself at boot. It acts only with a
+  schedule and a domain.
+  Rollout check: the first night the page shows from 00:00, and Grafana
+  answers again by about 08:02.
 - **The watchdog** reads the same schedule ([below](#the-watchdog)).
 - **Changing it** is a pull request to `monitoring.schedule`, within the rules
   in [Configuration](#configuration), then a release. Leaving it out runs the
@@ -541,6 +547,7 @@ so the node is priced like a `t4g.medium`.
 | CloudWatch: 2 alarms, credit and status reads | under $0.50 |
 | The Databricks billing job (serverless) | about $0.50 to $3, to be measured |
 | Lambda, Scheduler, SNS, S3 | cents (free tiers; the bucket grows about 1 GB a year) |
+| CloudFront, ACM and Scheduler for the off-hours page | $0 (inside their free tiers) |
 | **Total, 24/7** | **about $33 to $36** |
 | **Total on Jaws's schedule, 16 hours a day** | **about $24 to $27** |
 
@@ -554,6 +561,15 @@ bucket and the Databricks job, whose DBUs are on **Cost · Databricks**.
 
 ## Known gaps
 
+- **After a crash or a manual stop, the name still points at the released
+  address.** Only the scheduled stop moves it to the off-hours page; a node
+  that stops any other way leaves the name on the old address until the next
+  boot.
+- **Turning the page off may fail once.** The provider polls `GetDistribution`
+  after the delete, and the read is tag-scoped, so CloudFront may answer
+  AccessDenied. Recover with
+  `terraform state rm 'module.monitoring[0].module.node.aws_cloudfront_distribution.off_hours_page[0]'`
+  and re-apply. Grafana is unaffected.
 - **Unconfirmed until the first live run:** EC2's `recover` action on T9g, the
   watchdog's alarm reads scoped to the alarms' ARNs, pressure-stall metrics on
   the AL2023 kernel (without them their panel is hidden and there is no rule),

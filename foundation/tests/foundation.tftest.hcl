@@ -651,7 +651,7 @@ run "the_monitoring_roles_get_the_monitoring_and_compute_leaves" {
   assert {
     condition = toset(keys(module.monitoring_ci_apply[0].policy_arns)) == toset([
       "tfstate/write", "monitoring/read", "monitoring/node", "monitoring/config", "monitoring/functions", "monitoring/backup",
-      "compute/read", "compute/manage",
+      "monitoring/off-hours-page", "compute/read", "compute/manage",
     ])
     error_message = "the apply role holds every monitoring/* leaf, and compute/* for the stack's own VPC (spec 6.5)"
   }
