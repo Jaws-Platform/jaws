@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.0](https://github.com/Jaws-Platform/jaws/compare/v0.79.0...v0.80.0) (2026-11-23)
+
+
+### Features
+
+* **monitoring:** show an off-hours page at grafana's address ([#319](https://github.com/Jaws-Platform/jaws/issues/319)) ([5586bc2](https://github.com/Jaws-Platform/jaws/commit/5586bc2d8a4f24c9b2736586d9880237bf807c55))
+
 ## [0.79.0](https://github.com/Jaws-Platform/jaws/compare/v0.78.1...v0.79.0) (2026-11-23)
 
 
