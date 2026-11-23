@@ -221,7 +221,7 @@ def _command(body: Callable[[Run], None]) -> Callable[[typer.Context], None]:
             body(run)
         except SitesError as exc:
             run.logger.error("%s", exc)
-            annotate_error(str(exc))
+            annotate_error(str(exc), title=run.settings.brand.name)
             raise typer.Exit(exc.exit_code) from exc
 
     return wrapper
@@ -597,6 +597,7 @@ def plan(ctx: typer.Context) -> None:
                 github.provenance(tool_version()),
                 # The workflow that applies every bot-stack project, research too.
                 applied_by="Bot apply" if run.project.has_components else None,
+                brand=run.settings.brand,
             )
             (run.artifacts / "plan-comment.md").write_text(comment)
             github.write_output("result", report.plan_result_name(exit_code))
@@ -633,7 +634,9 @@ def preview_deploy(
             result = _sync_to(run, session, prefix, path, run.settings.sync.preview_cache_control)
         url = site.preview_url(pr)
         (run.artifacts / "preview-comment.md").write_text(
-            report.preview_comment(url, pr, site.domain, github.provenance(tool_version()))
+            report.preview_comment(
+                url, pr, site.domain, github.provenance(tool_version()), brand=run.settings.brand
+            )
         )
         github.write_output("preview_url", url)
         github.append_summary(report.sync_summary(f"Preview for #{pr}", url, result, None))
@@ -657,7 +660,9 @@ def preview_remove(
         with phase("remove"):
             count = sync.delete_prefix(session.client("s3"), site.bucket, prefix, run.logger)
         (run.artifacts / "preview-comment.md").write_text(
-            report.preview_removed_comment(pr, site.domain, github.provenance(tool_version()))
+            report.preview_removed_comment(
+                pr, site.domain, github.provenance(tool_version()), brand=run.settings.brand
+            )
         )
         github.append_summary(
             report.run_summary(f"Preview for #{pr} removed", {"objects deleted": str(count)})
@@ -689,6 +694,7 @@ def report_plan_comment(
             PLAN_COMMENT_MAX_BYTES,
             subject,
             github.provenance(tool_version()),
+            brand=run.settings.brand,
         )
         target = out or run.artifacts / "plan-comment.md"
         target.write_text(comment)
@@ -981,6 +987,14 @@ def config_env(
             "apply gate: without config/monitoring.yaml's section it has no roles).",
         ),
     ] = False,
+    brand: Annotated[
+        bool,
+        typer.Option(
+            "--brand",
+            help="Also print `check_prefix=<brand.check_prefix>`, the first word of the "
+            "workflows' job names.",
+        ),
+    ] = False,
 ) -> None:
     """Print the account's values as `key=value` lines, for a workflow to append
     to GITHUB_OUTPUT: every workflow builds its role ARNs, state bucket and image
@@ -1000,6 +1014,8 @@ def config_env(
             lines.append(("databricks", "ready" if dbx.shared_host_url else "awaiting-host"))
     if monitoring:
         lines.append(("monitoring", "absent" if settings.monitoring is None else "configured"))
+    if brand:
+        lines.append(("check_prefix", settings.brand.check_prefix))
     for key, value in lines:
         print(f"{key}={value}")
 

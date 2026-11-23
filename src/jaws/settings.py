@@ -196,6 +196,48 @@ class ContextSection(_Section):
     managed_by: str = Field(default="JAWS", pattern=r"^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$")
 
 
+class BrandSection(_Section):
+    """How the platform presents itself where people read the tool's output."""
+
+    #: The name in the header of every PR comment and the title of CLI annotations.
+    #: The footer keeps "Built with Jaws".
+    name: str = Field(default="Jaws", pattern=r"^\S(?:.{0,38}\S)?$")
+    #: Shown before the name in the comment header: an emoji, short text, or an
+    #: `https://` image URL. None shows the name alone. A brand that sets its `name`
+    #: and not its `mark` gets None, never the shark.
+    mark: str | None = "🦈"
+    #: The first word of the project-facing workflows' job names (`<prefix> / plan`).
+    check_prefix: str = Field(
+        default="jaws", max_length=30, pattern=r"^[A-Za-z0-9]+(?:[ ._-][A-Za-z0-9]+)*$"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_inherited_mark(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "name" in data and "mark" not in data:
+            return {**data, "mark": None}
+        return data
+
+    @field_validator("mark")
+    @classmethod
+    def _mark_is_short_text_or_an_image(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if value.startswith("https://"):
+            ok = len(value) <= 512 and re.fullmatch(r"https://[^\s\"'<>]+", value) is not None
+        else:
+            ok = (
+                1 <= len(value) <= 8
+                and not re.search(r"\s", value)
+                and not value.startswith("http")
+            )
+        if not ok:
+            raise ValueError(
+                "an emoji or text of at most 8 characters, or an https:// image URL; null for none"
+            )
+        return value
+
+
 class PlatformRepository(_Section):
     #: As GitHub's OIDC subject spells it: IAM compares the name case-sensitively.
     repository: str = Field(
@@ -928,6 +970,8 @@ class Settings(_Section):
     state: StateSection
     aws: AwsSection
     context: ContextSection
+    #: The platform's brand (config/tool.yaml); Jaws's own unless a platform sets one.
+    brand: BrandSection = BrandSection()
     dns: DnsSection
     platform: PlatformSection
     ecr: EcrSection

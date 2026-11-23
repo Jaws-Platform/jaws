@@ -17,7 +17,7 @@ from typer.testing import CliRunner
 from jaws import cli
 from jaws.errors import ConfigError
 from jaws.settings import load_settings
-from tests.conftest import CONFIG_DIR, repo_config
+from tests.conftest import CONFIG_DIR, fixture_config, repo_config
 
 runner = CliRunner()
 
@@ -127,3 +127,21 @@ def test_config_env_says_whether_monitoring_is_configured(tmp_path: Path, config
 def test_there_is_no_account_option() -> None:
     result = runner.invoke(cli.app, ["--account", "production", "config", "env"])
     assert result.exit_code != 0
+
+
+@pytest.mark.parametrize(
+    ("brand", "prefix"),
+    [(None, "jaws"), ({"name": "Acme Platform", "check_prefix": "acme"}, "acme")],
+)
+def test_config_env_prints_the_check_prefix_of_the_job_names(
+    tmp_path: Path, brand: dict[str, str] | None, prefix: str
+) -> None:
+    raw = fixture_config()
+    raw.pop("brand", None)
+    if brand:
+        raw["brand"] = brand
+    result = runner.invoke(
+        cli.app, ["--config", str(_write(tmp_path, raw)), "config", "env", "--brand"]
+    )
+    assert result.exit_code == 0, result.output
+    assert result.stdout.splitlines()[-1] == f"check_prefix={prefix}"

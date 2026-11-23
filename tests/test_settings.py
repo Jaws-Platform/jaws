@@ -1170,3 +1170,35 @@ def test_the_zone_apex_takes_a_txt_record(tmp_path: Path) -> None:
     raw = fixture_config()
     raw["dns"]["txt_records"] = {"@": ["v=spf1 -all"]}
     assert _load_raw(tmp_path, raw).dns.txt_records == {"@": ("v=spf1 -all",)}
+
+
+def test_the_brand_is_jaws_s_unless_the_platform_sets_one(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw.pop("brand", None)
+    brand = _load_raw(tmp_path, raw).brand
+    assert (brand.name, brand.mark, brand.check_prefix) == ("Jaws", "🦈", "jaws")
+
+
+def test_a_brand_that_names_itself_does_not_inherit_the_shark(tmp_path: Path) -> None:
+    brand = _load_raw(tmp_path, {**fixture_config(), "brand": {"name": "Acme Platform"}}).brand
+    assert (brand.name, brand.mark, brand.check_prefix) == ("Acme Platform", None, "jaws")
+
+
+@pytest.mark.parametrize(
+    ("brand", "key"),
+    [
+        ({"name": ""}, "brand.name"),
+        ({"name": " Acme"}, "brand.name"),
+        ({"name": "A" * 41}, "brand.name"),
+        ({"mark": "http://example.com/mark.png"}, "brand.mark"),
+        ({"mark": "two words"}, "brand.mark"),
+        ({"mark": "123456789"}, "brand.mark"),
+        ({"check_prefix": "acme/ci"}, "brand.check_prefix"),
+        ({"check_prefix": "-acme"}, "brand.check_prefix"),
+        ({"check_prefix": "a" * 31}, "brand.check_prefix"),
+        ({"colour": "teal"}, "brand.colour"),
+    ],
+)
+def test_a_bad_brand_names_its_key(tmp_path: Path, brand: dict[str, str], key: str) -> None:
+    with pytest.raises(ConfigError, match=re.escape(key)):
+        _load_raw(tmp_path, {**fixture_config(), "brand": brand})

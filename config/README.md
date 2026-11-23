@@ -32,6 +32,22 @@ section here overrides them. An override goes in the section's file: `tool` in
 `bot.health_*` in `bots.yaml`; a new section also goes in `SECTION_FILES` in
 `tests/test_settings.py`.
 
+### The brand
+
+A platform that adopts Jaws sets its own `brand` in `tool.yaml`, next to
+`context`; without one the comments and annotations are Jaws's.
+
+- `name` (default `Jaws`) heads every PR comment and titles the CLI's
+  annotations.
+- `mark` (default `🦈`) shows before the name: an emoji, short text, or an
+  `https://` image URL, such as one the organization's branding repository
+  publishes. `null` means none, and a brand that sets its `name` gets none
+  unless it states one.
+- `check_prefix` (default `jaws`) is the first word of the project-facing
+  workflows' job names; `jaws config env --brand` prints it.
+
+Comments keep a small "Built with Jaws vX.Y.Z" line in the footer.
+
 ## Onboarding a project
 
 A project is onboarded with one reviewed change to [`projects.yaml`](projects.yaml):

@@ -95,11 +95,22 @@ def get_logger() -> logging.Logger:
     return logging.getLogger(LOGGER_NAME)
 
 
+def _escape_property(value: str) -> str:
+    """A property value as GitHub's toolkit escapes it."""
+    return (
+        value.replace("%", "%25")
+        .replace("\r", "%0D")
+        .replace("\n", "%0A")
+        .replace(":", "%3A")
+        .replace(",", "%2C")
+    )
+
+
 def _emit_workflow_command(command: str, message: str = "", **params: str) -> None:
     """Print a GitHub Actions workflow command, bypassing the logger so the
     runner sees it on its own line."""
     sys.stdout.flush()
-    props = ",".join(f"{key}={value}" for key, value in params.items() if value)
+    props = ",".join(f"{key}={_escape_property(value)}" for key, value in params.items() if value)
     header = f"::{command} {props}" if props else f"::{command}"
     print(f"{header}::{message}", flush=True)
 
@@ -121,12 +132,12 @@ def phase(name: str) -> Iterator[None]:
             _emit_workflow_command("endgroup")
 
 
-def annotate_error(message: str, title: str = "Jaws") -> None:
+def annotate_error(message: str, title: str) -> None:
     """An `::error::` annotation so the failure shows on the job summary."""
     if in_github_actions():
         _emit_workflow_command("error", message.replace("\n", "%0A"), title=title)
 
 
-def annotate_warning(message: str, title: str = "Jaws") -> None:
+def annotate_warning(message: str, title: str) -> None:
     if in_github_actions():
         _emit_workflow_command("warning", message.replace("\n", "%0A"), title=title)

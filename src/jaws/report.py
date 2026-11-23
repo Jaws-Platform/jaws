@@ -1,6 +1,6 @@
 """The Markdown the tool writes: sticky PR comments and step summaries.
 
-Every comment is a branded card: a centred product header, one GitHub alert
+Every comment is a branded card: a centred header with the platform's brand, one GitHub alert
 that says the single most important thing (no changes / changes / destructive
 changes / failed), the detail a reviewer needs without expanding anything, and
 a provenance footer. GitHub strips styles from comments, so the layout uses
@@ -9,14 +9,16 @@ only what its Markdown keeps: `align`, alerts, tables, `<details>` and `<sub>`.
 
 from __future__ import annotations
 
+import html
 import re
 from dataclasses import dataclass
 
+from .settings import BrandSection
 from .stack import PLAN_CHANGES, PLAN_NO_CHANGES
 from .sync import SyncResult
 
 PRODUCT = "Jaws"
-PRODUCT_MARK = "🦈"
+MARK_HEIGHT = 28
 MAX_RESOURCE_ROWS = 40
 _MIN_BODY_BYTES = 256
 _SEP = " &nbsp;·&nbsp; "
@@ -116,12 +118,19 @@ def truncate_tail(text: str, max_bytes: int) -> tuple[str, bool]:
 # -- building blocks ----------------------------------------------------------
 
 
-def _header(kind: str, subject: str, extra: str | None = None) -> list[str]:
+def _header(kind: str, subject: str, brand: BrandSection, extra: str | None = None) -> list[str]:
     parts = [f"<b>{kind}</b>", f"<code>{subject}</code>"]
     if extra:
         parts.append(extra)
+    name = html.escape(brand.name)
+    if brand.mark is None:
+        title = name
+    elif brand.mark.startswith("https://"):
+        title = f'<img src="{html.escape(brand.mark)}" alt="" height="{MARK_HEIGHT}"> {name}'
+    else:
+        title = f"{html.escape(brand.mark)} {name}"
     return [
-        f'<h2 align="center">{PRODUCT_MARK} {PRODUCT}</h2>',
+        f'<h2 align="center">{title}</h2>',
         f'<p align="center">{_SEP.join(parts)}</p>',
         "",
     ]
@@ -131,8 +140,9 @@ def _alert(kind: str, *lines: str) -> list[str]:
     return [f"> [!{kind}]", *(f"> {line}" for line in lines), ""]
 
 
-def _footer(provenance: Provenance, note: str | None = None) -> list[str]:
-    parts = [f"<b>{PRODUCT}</b> v{provenance.version}"]
+def _footer(provenance: Provenance, brand: BrandSection, note: str | None = None) -> list[str]:
+    product = f"<b>{PRODUCT}</b> v{provenance.version}"
+    parts = [product if brand.name == PRODUCT else f"Built with {product}"]
     if provenance.sha:
         short = f"<code>{provenance.sha[:7]}</code>"
         if provenance.commit_url:
@@ -251,12 +261,16 @@ def plan_comment(
     subject: str,
     provenance: Provenance,
     applied_by: str | None = None,
+    *,
+    brand: BrandSection,
 ) -> str:
     """The sticky plan comment. `max_bytes` bounds the whole comment. `applied_by`
     names the manual workflow for stacks that merging does not apply."""
     summary = parse_plan(plan_text)
     failed = exit_code not in (PLAN_NO_CHANGES, PLAN_CHANGES)
-    head = _header("Terraform plan", subject) + _plan_alert(exit_code, summary, subject, applied_by)
+    head = _header("Terraform plan", subject, brand) + _plan_alert(
+        exit_code, summary, subject, applied_by
+    )
     if exit_code == PLAN_CHANGES and summary.add is not None:
         head += _counts_table(summary)
     if exit_code == PLAN_CHANGES and summary.resources:
@@ -265,7 +279,7 @@ def plan_comment(
     title = "Terraform output" if failed else "Full plan output"
     head += [f"{details}<summary>📄 {title}</summary>", ""]
     truncated_note = "_Plan output truncated to its tail; the full plan is in the run's artifacts._"
-    tail = ["```", "", "</details>", "", *_footer(provenance, "Updated on every push"), ""]
+    tail = ["```", "", "</details>", "", *_footer(provenance, brand, "Updated on every push"), ""]
 
     fixed = "\n".join([*head, truncated_note, "", "```hcl", *tail]).encode("utf-8")
     budget = max(max_bytes - len(fixed) - 1, _MIN_BODY_BYTES)  # -1: the newline before the body
@@ -317,11 +331,13 @@ def stacks_plan_comment(
     subject: str,
     provenance: Provenance,
     applied_by: str | None = None,
+    *,
+    brand: BrandSection,
 ) -> str:
     """One sticky plan comment for a project of several stacks, with the check
     table. `max_bytes` bounds the whole comment; the plan bodies share it."""
     exit_code = _overall_exit_code(sections)
-    head = _header("Terraform plan", subject)
+    head = _header("Terraform plan", subject, brand)
     head += _plan_alert(exit_code, _merged_summary(sections), subject, applied_by)
     parts: list[tuple[list[str], str | None]] = []  # (lines before the body, the body)
     for section in sections:
@@ -345,7 +361,7 @@ def stacks_plan_comment(
         parts.append((lines, section.plan_text.rstrip("\n")))
     after_body = ["```", "", "</details>", ""]
     checks = ["### Preflight checks", "", checks_markdown, ""] if checks_markdown else []
-    tail = [*checks, *_footer(provenance, "Updated on every push"), ""]
+    tail = [*checks, *_footer(provenance, brand, "Updated on every push"), ""]
     truncated_note = "_Plan output truncated to its tail; the full plan is in the run's artifacts._"
 
     bodies = [body for _, body in parts if body is not None]
@@ -371,12 +387,14 @@ def stacks_plan_comment(
     return "\n".join([*out, *tail])
 
 
-def preview_comment(url: str, pr: int, subject: str, provenance: Provenance) -> str:
+def preview_comment(
+    url: str, pr: int, subject: str, provenance: Provenance, *, brand: BrandSection
+) -> str:
     built = "this pull request"
     if provenance.sha:
         short = f"`{provenance.sha[:7]}`"
         built = f"[{short}]({provenance.commit_url})" if provenance.commit_url else short
-    lines = _header("Preview", subject, f"#{pr}")
+    lines = _header("Preview", subject, brand, f"#{pr}")
     lines += _alert(
         "TIP",
         f"**Preview deployed.** The site built from this pull request is live at **{url}**",
@@ -389,18 +407,20 @@ def preview_comment(url: str, pr: int, subject: str, provenance: Provenance) -> 
         "| ♻️ Lifecycle | Updated on every push, removed when the pull request closes |",
         "",
     ]
-    lines += _footer(provenance)
+    lines += _footer(provenance, brand)
     return "\n".join(lines) + "\n"
 
 
-def preview_removed_comment(pr: int, subject: str, provenance: Provenance) -> str:
-    lines = _header("Preview", subject, f"#{pr}")
+def preview_removed_comment(
+    pr: int, subject: str, provenance: Provenance, *, brand: BrandSection
+) -> str:
+    lines = _header("Preview", subject, brand, f"#{pr}")
     lines += _alert(
         "NOTE",
         f"**Preview removed.** Pull request #{pr} is closed, so its preview of `{subject}` "
         "has been deleted.",
     )
-    lines += _footer(provenance)
+    lines += _footer(provenance, brand)
     return "\n".join(lines) + "\n"
 
 

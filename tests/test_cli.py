@@ -9,12 +9,13 @@ from unittest.mock import patch
 
 import boto3
 import pytest
+import yaml
 from moto import mock_aws
 from typer.testing import CliRunner
 
 from jaws import cli
 from jaws.stack import PLAN_CHANGES
-from tests.conftest import project_entry, read_config, write_config
+from tests.conftest import fixture_config, project_entry, read_config, write_config
 
 runner = CliRunner()
 PLAN_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-guitar-knowledge-base-ci-plan/s"
@@ -79,13 +80,30 @@ def test_plan_writes_comment_and_outputs(
     assert "result=changes\nchanges=true\n" in github_output.read_text()
 
 
-def test_report_plan_comment_renders_a_plan_log(workspace: Path, tmp_path: Path) -> None:
+def _branded_config(tmp_path: Path, brand: dict[str, str]) -> Path:
+    path = tmp_path / "branded.yaml"
+    path.write_text(yaml.safe_dump({**fixture_config(), "brand": brand}))
+    return path
+
+
+@pytest.mark.parametrize(
+    ("brand", "header"),
+    [
+        (None, '<h2 align="center">🦈 Jaws</h2>'),
+        ({"name": "Acme Platform", "mark": "🔧"}, '<h2 align="center">🔧 Acme Platform</h2>'),
+    ],
+)
+def test_report_plan_comment_renders_a_plan_log(
+    workspace: Path, tmp_path: Path, brand: dict[str, str] | None, header: str
+) -> None:
     plan_log = tmp_path / "plan.log"
     plan_log.write_text("No changes. Your infrastructure matches the configuration.\n")
     out = tmp_path / "plan-comment.md"
+    config = ["--config", str(_branded_config(tmp_path, brand))] if brand else []
     result = runner.invoke(
         cli.app,
         [
+            *config,
             "report",
             "plan-comment",
             "--exit-code",
@@ -100,9 +118,28 @@ def test_report_plan_comment_renders_a_plan_log(workspace: Path, tmp_path: Path)
     )
     assert result.exit_code == 0, result.output
     comment = out.read_text()
-    assert "Jaws" in comment
+    assert comment.splitlines()[0] == header
     assert "> [!NOTE]" in comment and "No changes" in comment
     assert "the foundation stack" in comment
+
+
+@pytest.mark.parametrize(
+    ("name", "title"),
+    [
+        ("Acme Platform", "Acme Platform"),
+        ("Acme, Inc.: Platform", "Acme%2C Inc.%3A Platform"),
+        ("Acme 100%", "Acme 100%25"),
+    ],
+)
+def test_an_error_annotation_carries_the_platform_s_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str, title: str
+) -> None:
+    config = _branded_config(tmp_path, {"name": name})
+    monkeypatch.chdir(tmp_path)  # no jaws.yaml here: validate fails with a ConfigError
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    result = runner.invoke(cli.app, ["--config", str(config), "validate"])
+    assert result.exit_code == 2
+    assert f"::error title={title}::" in result.output
 
 
 def test_plan_refuses_the_wrong_role(workspace: Path, fake_terraform: Path) -> None:
@@ -1029,9 +1066,6 @@ def test_destroy_bot_releases_its_dataset_buckets_too(
     summary = next(line for line in result.output.splitlines() if "destroyed braveheart" in line)
     assert "jaws-braveheart-nnue" in summary
     assert "records bucket" in summary and "secret" in summary
-
-
-import yaml  # noqa: E402
 
 
 @pytest.fixture
