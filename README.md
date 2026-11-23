@@ -74,7 +74,7 @@ this repository publishes. The design is in
 
 Every command checks that the credentials are the role it expects, that the
 built site and bucket exist, and that the Terraform in the image is the
-version `config/terraform.yaml` pins, before touching anything. Failures exit 1
+version this release is built with (`src/jaws/product.yaml`), before touching anything. Failures exit 1
 (Terraform or AWS), 2 (configuration) or 3 (preflight). Run artifacts and a
 debug log go to `./.jaws/`.
 
@@ -82,7 +82,7 @@ debug log go to `./.jaws/`.
 uv sync                                  # the CLI and its dev tools
 uv run jaws --help
 uv run ruff check && uv run mypy && uv run pytest
-docker build --build-arg "TERRAFORM_VERSION=$(yq -r .terraform.version config/terraform.yaml)" -t jaws:local .
+docker build --build-arg "TERRAFORM_VERSION=$(yq -r .terraform.version src/jaws/product.yaml)" -t jaws:local .
 ```
 
 ### Reusable workflows for site repositories
@@ -216,8 +216,8 @@ on what the plan found:
 | Plan failed | `CAUTION` | the Terraform output, already expanded |
 
 The resource table lists at most 40 resources (the rest are in the full
-output) and the whole comment is kept under `plan.comment_max_bytes` from
-`config/tool.yaml`, truncating the plan text from the head. This repository's own
+output) and the whole comment is kept under 60000 bytes (the release's
+`PLAN_COMMENT_MAX_BYTES`), truncating the plan text from the head. This repository's own
 `Terraform plan` job renders its comment with `report plan-comment`, so the
 foundation plan and the site plans look the same.
 
@@ -325,7 +325,7 @@ module "site_bucket" {
 }
 ```
 
-Versions are pinned exactly, not with `~>`, because Terraform records provider versions in `.terraform.lock.hcl` but not module versions; an exact pin is the only way two applies of the same commit resolve the same code. Every pin of a family (in `foundation/`, the stacks under `stacks/`, `owner-access/`, `data-access/`, `monitoring/` and `billing-export/`) is always bumped together, and so is that family's entry under `library.families` in `config/terraform.yaml`.
+Versions are pinned exactly, not with `~>`, because Terraform records provider versions in `.terraform.lock.hcl` but not module versions; an exact pin is the only way two applies of the same commit resolve the same code. Every pin of a family (in `foundation/`, the stacks under `stacks/`, `owner-access/`, `data-access/`, `monitoring/` and `billing-export/`) is always bumped together, and so is that family's entry in `src/jaws/product.yaml`.
 
 **Upgrading.** When a family publishes a release, Dependabot's Terraform ecosystem opens a `chore(deps)` PR bumping its pins. The CI plan comment on that PR shows exactly what the new version changes in AWS. Read the family's changelog entry (`CHANGELOG.md` in `Jaws-Platform/terraform-aws-jaws-<family>`), check the plan, merge, and the change applies with the next release of this repo. While a family is on `0.x`, a breaking change bumps the minor version and is marked `!` in its changelog.
 
@@ -347,7 +347,7 @@ files](#the-tool-configuration-config)).
 | `dns.tf` | The hosted zone, its CAA record and the zone owner's TXT records (`hosted-zone` module) |
 | `ci-roles.tf` | This repo's own plan and apply roles (`ci-plan-role` and `ci-apply-role` modules) |
 | `ecr.tf` | The ECR repository for the infra CLI image, configured from `ecr` in `config/tool.yaml` |
-| `config/` (root) | Tool configuration for the infra CLI and the foundation stack: the account registry, every onboarded project with its central guardrails, Terraform version, module family pins, state bucket, DNS zone, ECR lifecycle, sync headers, the bot and task runtimes and Databricks ([its files](#the-tool-configuration-config)) |
+| `config/` (root) | Tool configuration for the infra CLI and the foundation stack: the account registry, every onboarded project with its central guardrails, state bucket, DNS zone, ECR lifecycle, the bot and task runtimes and Databricks ([its files](#the-tool-configuration-config)) |
 | `src/jaws/`, `tests/`, `pyproject.toml` | The infra CLI, its tests and its `uv` project |
 | `stacks/site/` | The site stack the CLI renders for each site, pinned to the static-site module family like any consumer |
 | `stacks/bot/` | The bot stack the CLI renders for each bot or research project: ECR repository, VPC, records bucket, bot instance (the image and bot are off for a research project), task runner and dataset buckets |
@@ -385,10 +385,10 @@ image bakes it at `/etc/jaws/config`.
 | --- | --- |
 | `aws.yaml` | `aws`: the account registry, and `primary`, the account jaws builds in ([Accounts](#accounts)) |
 | `projects.yaml` | `projects`: every onboarded project, by GitHub owner, with its type, repository and central guardrails ([Projects registry](#projects-registry)) |
-| `terraform.yaml` | `terraform` (version, lock and plan timeouts), `library` (the module family pins, `library.families`), `state` (the state bucket, its region and key template) |
-| `tool.yaml` | `tool` (logging), `context` (name_root, organization, owner, managed_by), `plan` (the comment's size), `ecr` (the CLI image repository and its lifecycle) |
-| `sites.yaml` | `dns` (the Route 53 zone), `sync` (the cache headers `publish` sets) |
-| `bots.yaml` | `bot` (the bot runtime: AMIs, availability zones, health check, records prefix, `asset_wait`), `tasks` (remote tasks: Rust toolchain, images, `limits`, `max_run_cost_usd`) |
+| `terraform.yaml` | `state` (the state bucket, its region and key template) |
+| `tool.yaml` | `context` (name_root, organization, owner, managed_by), `ecr` (the CLI image repository and its lifecycle) |
+| `sites.yaml` | `dns` (the Route 53 zone) |
+| `bots.yaml` | `bot` (the bot runtime: AMIs, availability zones, records prefix, `asset_wait`), `tasks` (remote tasks: Rust toolchain, images, `limits`, `max_run_cost_usd`) |
 | `databricks.yaml` | `databricks` (`enabled`, the account, service principal, metastore, compute policies and `shared_host_url`) |
 | `monitoring.yaml` | `monitoring` (the monitoring node's `instance_type`, `ami`, `domain`, `snapshots` and off-hours `schedule`; `cost`: the billing bucket, its providers, `budgets` and the anomaly floor; `slack`: the channels' webhook parameters and the alert routes; `thresholds` overrides). Platform-owned: no project file can set it |
 

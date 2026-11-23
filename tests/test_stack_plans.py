@@ -7,8 +7,9 @@ from typing import Any
 
 import yaml
 
+from jaws.product import product_pins
 from jaws.settings import Settings
-from tests.conftest import REPO_ROOT, fixture_settings, repo_config
+from tests.conftest import REPO_ROOT, fixture_settings
 from tests.stack_plans.render import cases
 
 PLANS = REPO_ROOT / "tests" / "stack_plans"
@@ -64,10 +65,24 @@ def test_ci_runs_the_script_with_the_pinned_terraform() -> None:
     runs = [s.get("run") for s in job["steps"]]
     assert "scripts/test-stack-plans.sh" in runs
     setup = next(s for s in job["steps"] if "setup-terraform" in s.get("uses", ""))
-    pinned = repo_config()["terraform"]["version"]
+    pinned = product_pins().terraform_version
     assert setup["with"]["terraform_version"] == pinned
     assert setup["with"]["terraform_wrapper"] is False
 
 
 def test_the_script_is_executable() -> None:
     assert os.access(SCRIPT, os.X_OK)
+
+
+def test_every_exact_terraform_version_in_a_workflow_is_the_release_pin() -> None:
+    pinned = product_pins().terraform_version
+    found = 0
+    for workflow in sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml")):
+        doc: dict[Any, Any] = yaml.safe_load(workflow.read_text())
+        for name, job in doc["jobs"].items():
+            for step in job.get("steps", []):
+                version = str((step.get("with") or {}).get("terraform_version", ""))
+                if version[:1].isdigit():
+                    found += 1
+                    assert version == pinned, f"{workflow.name} {name}: {version} != {pinned}"
+    assert found

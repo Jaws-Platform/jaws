@@ -413,9 +413,12 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - name: Read the Terraform version from config/terraform.yaml
+      - name: Read the Terraform version from the release (src/jaws/product.yaml)
         id: config
-        run: echo "terraform_version=$(yq -r .terraform.version config/terraform.yaml)" >> "$GITHUB_OUTPUT"
+        run: |
+          version=$(yq -r .terraform.version src/jaws/product.yaml)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::src/jaws/product.yaml pins no exact terraform.version"; exit 1; }
+          echo "terraform_version=$version" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v4
       - uses: docker/build-push-action@v7
         with:
@@ -434,8 +437,15 @@ jobs:
             -v "$RUNNER_TEMP/site:/work" \
             jaws:ci --file guitar-knowledge-base.yaml validate
           test -s "$RUNNER_TEMP/site/.jaws/jaws.log"
-      - name: Smoke test (the image's Terraform matches config/terraform.yaml)
-        run: docker run --rm --network none --entrypoint terraform jaws:ci version
+      - name: Smoke test (the image's Terraform is the release's, and the release file ships)
+        run: |
+          docker run --rm --network none --entrypoint python jaws:ci -c '
+          import json, subprocess
+          from jaws.product import product_pins
+          out = subprocess.run(["terraform", "version", "-json"], capture_output=True, text=True, check=True).stdout
+          actual, expected = json.loads(out)["terraform_version"], product_pins().terraform_version
+          assert actual == expected, f"image has terraform {actual}, the release pins {expected}"
+          print("terraform", actual, "is the release pin")'
       - name: Smoke test (the pruned botocore still serves the clients the tool uses)
         run: |
           docker run --rm --network none --entrypoint python jaws:ci -c '

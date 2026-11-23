@@ -114,6 +114,16 @@ def test_the_image_is_pushed_to_the_accounts_repository() -> None:
     )
 
 
+def test_a_republished_tag_without_the_release_file_reads_the_old_config() -> None:
+    """Releases cut before src/jaws/product.yaml pinned Terraform in config/terraform.yaml."""
+    job = _jobs("release-please.yml")["image"]
+    step = next(s for s in job["steps"] if s.get("id") == "config")
+    assert "src/jaws/product.yaml" in step["run"]
+    assert "config/terraform.yaml" in step["run"]
+    assert "exit 1" in step["run"], "no silent empty version"
+    assert "TAG" in job["env"]
+
+
 def test_the_account_is_read_for_a_release_and_for_a_republished_tag() -> None:
     job = _jobs("release-please.yml")["account"]
     assert job["needs"] == "release-please"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -30,15 +31,10 @@ from tests.conftest import (
 SECTION_FILES = {
     "aws": "aws.yaml",
     "projects": "projects.yaml",
-    "terraform": "terraform.yaml",
-    "library": "terraform.yaml",
     "state": "terraform.yaml",
-    "tool": "tool.yaml",
     "context": "tool.yaml",
-    "plan": "tool.yaml",
     "ecr": "tool.yaml",
     "dns": "sites.yaml",
-    "sync": "sites.yaml",
     "bot": "bots.yaml",
     "tasks": "bots.yaml",
     "databricks": "databricks.yaml",
@@ -69,9 +65,9 @@ def test_one_file_reads_like_the_directory(tmp_path: Path) -> None:
 
 
 def test_a_section_in_two_files_is_refused(tmp_path: Path) -> None:
-    (tmp_path / "a.yaml").write_text(yaml.safe_dump({"plan": {"comment_max_bytes": 60000}}))
-    (tmp_path / "b.yaml").write_text(yaml.safe_dump({"plan": {"comment_max_bytes": 1024}}))
-    with pytest.raises(ConfigError, match=r"b\.yaml: section 'plan' is already in a\.yaml"):
+    (tmp_path / "a.yaml").write_text(yaml.safe_dump({"dns": {"zone": "a.example"}}))
+    (tmp_path / "b.yaml").write_text(yaml.safe_dump({"dns": {"zone": "b.example"}}))
+    with pytest.raises(ConfigError, match=r"b\.yaml: section 'dns' is already in a\.yaml"):
         load_document(tmp_path)
 
 
@@ -164,15 +160,6 @@ def test_bot_section_defaults(settings: Settings) -> None:
     assert settings.bot.availability_zones == (
         "us-east-1a", "us-east-1b", "us-east-1c", "us-east-1d", "us-east-1f",
     )  # fmt: skip
-
-
-def test_bot_health_seconds_bounds(tmp_path: Path) -> None:
-    raw = repo_config()
-    raw["bot"]["health_seconds"] = 5
-    path = tmp_path / "config.yaml"
-    path.write_text(yaml.safe_dump(raw))
-    with pytest.raises(ConfigError, match="health_seconds"):
-        load_settings(path, environ={})
 
 
 def test_aws_account_is_configured(settings: Settings) -> None:
@@ -1014,3 +1001,104 @@ def test_project_files_cannot_set_monitoring(tmp_path: Path, fixture: Path) -> N
     project_entry(config, "braveheart-trainer")["monitoring"] = {"budgets": {"total": 1000}}
     with pytest.raises(ConfigError, match=r"braveheart-trainer\.monitoring"):
         _load_raw(tmp_path, config)
+
+
+def _write_raw(tmp_path: Path, raw: dict[str, Any], single_file: bool) -> Path:
+    """`raw` as a config directory, one file per section, or as one file."""
+    if single_file:
+        path = tmp_path / "config.yaml"
+        path.write_text(yaml.safe_dump(raw))
+        return path
+    directory = tmp_path / "config"
+    directory.mkdir()
+    for section, value in raw.items():
+        (directory / f"{section}.yaml").write_text(yaml.safe_dump({section: value}))
+    return directory
+
+
+@pytest.mark.parametrize("single_file", [False, True])
+@pytest.mark.parametrize(
+    ("extra", "key"),
+    [
+        ({"library": {"families": {"a/b/aws": "0.1.0"}}}, "library"),
+        ({"terraform": {"version": "1.14.7"}}, "terraform.version"),
+        ({"plan": {"comment_max_bytes": 60000}}, "plan"),
+    ],
+)
+def test_release_owned_keys_are_refused(
+    tmp_path: Path, extra: dict[str, Any], key: str, single_file: bool
+) -> None:
+    raw = {**fixture_config(), **extra}
+    home = r"src/jaws/product\.py" if key == "plan" else r"src/jaws/product\.yaml"
+    with pytest.raises(ConfigError, match=rf"{re.escape(key)}.*{home}") as caught:
+        load_settings(_write_raw(tmp_path, raw, single_file), environ={})
+    if not single_file:
+        section = key.split(".")[0]
+        assert f"{section}.yaml" in str(caught.value)
+
+
+@pytest.mark.parametrize("single_file", [False, True])
+def test_every_release_owned_key_is_named_in_one_error(tmp_path: Path, single_file: bool) -> None:
+    raw = {
+        **fixture_config(),
+        "library": {"families": {"a/b/aws": "0.1.0"}},
+        "terraform": {"version": "1.14.7"},
+        "plan": {"comment_max_bytes": 60000},
+    }
+    with pytest.raises(ConfigError) as caught:
+        load_settings(_write_raw(tmp_path, raw, single_file), environ={})
+    message = str(caught.value)
+    for named in ("library", "terraform.version", "plan", "product.yaml", "product.py"):
+        assert named in message
+    if not single_file:
+        assert "library.yaml" in message
+        assert "terraform.yaml" in message
+        assert "plan.yaml" in message
+
+
+def test_product_defaults_fill_what_the_platform_leaves_out(tmp_path: Path) -> None:
+    raw = fixture_config()
+    for section in ("tool", "terraform", "sync"):
+        raw.pop(section, None)
+    raw["bot"].pop("health_log_pattern", None)
+    raw["bot"].pop("health_seconds", None)
+    settings = load_settings(_write_raw(tmp_path, raw, single_file=True), environ={})
+    assert (settings.tool.log_level, settings.tool.log_format) == ("info", "console")
+    assert settings.terraform.lock_timeout == "120s"
+    assert settings.terraform.plan_timeout_seconds == 900
+    assert settings.sync.cache_control == "public, max-age=3600"
+    assert settings.sync.preview_cache_control == "public, max-age=300"
+    assert settings.sync.html_cache_control == "public, max-age=0, must-revalidate"
+    assert settings.sync.immutable_cache_control == "public, max-age=31536000, immutable"
+    assert (settings.bot.health_log_pattern, settings.bot.health_seconds) == (
+        "awaiting challenges",
+        90,
+    )
+
+
+def test_a_partial_section_keeps_the_other_defaults(tmp_path: Path) -> None:
+    raw = {
+        **fixture_config(),
+        "terraform": {"lock_timeout": "300s"},
+        "sync": {"cache_control": "public, max-age=60"},
+    }
+    settings = load_settings(_write_raw(tmp_path, raw, single_file=True), environ={})
+    assert (settings.terraform.lock_timeout, settings.terraform.plan_timeout) == ("300s", "15m")
+    assert settings.sync.cache_control == "public, max-age=60"
+    assert settings.sync.html_cache_control == "public, max-age=0, must-revalidate"
+
+
+def test_an_override_out_of_range_is_still_refused(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw["bot"]["health_seconds"] = 5
+    with pytest.raises(ConfigError, match=r"bot\.health_seconds"):
+        load_settings(_write_raw(tmp_path, raw, single_file=True), environ={})
+
+
+def test_the_log_level_variable_works_without_a_tool_section(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw.pop("tool", None)
+    settings = load_settings(
+        _write_raw(tmp_path, raw, single_file=True), environ={"JAWS_LOG_LEVEL": "debug"}
+    )
+    assert settings.tool.log_level == "debug"

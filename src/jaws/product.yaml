@@ -1,0 +1,17 @@
+# What this Jaws release is built with. The image installs this Terraform and
+# vendors the modules of stacks/site and stacks/bot only, so a platform's
+# configuration cannot change them. tests/test_versions.py checks that every pin
+# of a family in foundation/, stacks/, owner-access/, data-access/, monitoring/
+# and billing-export/ carries its version here.
+terraform:
+  version: 1.14.7
+library:
+  families:
+    Jaws-Platform/jaws-ci/aws: 0.4.0
+    Jaws-Platform/jaws-databricks/aws: 0.2.0
+    Jaws-Platform/jaws-foundation/aws: 0.2.0
+    Jaws-Platform/jaws-lichess-bot/aws: 0.1.4
+    Jaws-Platform/jaws-monitoring/aws: 0.8.2
+    Jaws-Platform/jaws-network/aws: 0.1.2
+    Jaws-Platform/jaws-research/aws: 0.1.2
+    Jaws-Platform/jaws-static-site/aws: 0.1.2

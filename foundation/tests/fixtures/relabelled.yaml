@@ -17,8 +17,6 @@ aws:
       account_id: '859674017655'
       description: Console and CLI access for the owner, such as asking for EC2 quotas
 bot:
-  health_log_pattern: awaiting challenges
-  health_seconds: 90
   asset_wait: 30m
   records_prefix: records/
   availability_zones:
@@ -255,39 +253,15 @@ projects:
 dns:
   zone: jwall.engineering
   zone_id: Z0644006DW6W2HALU9BI
-sync:
-  cache_control: public, max-age=3600
-  preview_cache_control: public, max-age=300
-  html_cache_control: public, max-age=0, must-revalidate
-  immutable_cache_control: public, max-age=31536000, immutable
-terraform:
-  version: 1.14.7
-  lock_timeout: 120s
-  plan_timeout: 15m
-library:
-  families:
-    Jaws-Platform/jaws-ci/aws: 0.4.0
-    Jaws-Platform/jaws-databricks/aws: 0.2.0
-    Jaws-Platform/jaws-foundation/aws: 0.2.0
-    Jaws-Platform/jaws-lichess-bot/aws: 0.1.4
-    Jaws-Platform/jaws-monitoring/aws: 0.8.2
-    Jaws-Platform/jaws-network/aws: 0.1.2
-    Jaws-Platform/jaws-research/aws: 0.1.2
-    Jaws-Platform/jaws-static-site/aws: 0.1.2
 state:
   bucket: jaws-terraform-state-570327089884
   region: us-east-1
   key_template: project={project}/env={environment}/{project}-{environment}.tfstate
-tool:
-  log_level: info
-  log_format: console
 context:
   name_root: jaws
   organization: Jaws-Platform
   owner: jwallace145
   managed_by: jaws-relabelled
-plan:
-  comment_max_bytes: 60000
 ecr:
   repository: jaws-cli
   keep_release_images: 20

@@ -61,7 +61,6 @@ class ToolSection(_Section):
 
 
 class TerraformSection(_Section):
-    version: str = Field(pattern=r"^\d+\.\d+\.\d+$")
     lock_timeout: str = "120s"
     plan_timeout: str = "15m"
 
@@ -74,33 +73,6 @@ class TerraformSection(_Section):
     @property
     def plan_timeout_seconds(self) -> int:
         return parse_duration(self.plan_timeout)
-
-
-_FAMILY_ADDRESS = re.compile(r"^[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[a-z0-9]+$")
-_FAMILY_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
-
-
-class LibrarySection(_Section):
-    """The Terraform module families the stacks are built from: registry
-    address to the one exact version every pin of that family carries."""
-
-    families: dict[str, str] = Field(min_length=1)
-
-    @field_validator("families")
-    @classmethod
-    def _addresses_and_versions(cls, value: dict[str, str]) -> dict[str, str]:
-        for address, version in value.items():
-            if not _FAMILY_ADDRESS.match(address):
-                raise ValueError(
-                    f"library.families key {address!r} must be a registry address, "
-                    "<namespace>/<name>/<provider>"
-                )
-            if not _FAMILY_VERSION.match(version):
-                raise ValueError(
-                    f"library.families[{address!r}] must be an exact version such as 0.1.0, "
-                    f"not {version!r}"
-                )
-        return value
 
 
 class StateSection(_Section):
@@ -236,17 +208,21 @@ class EcrSection(_Section):
 
 
 class SyncSection(_Section):
-    cache_control: str
-    preview_cache_control: str
-    html_cache_control: str
-    immutable_cache_control: str
+    cache_control: str = "public, max-age=3600"  # assets without a content hash
+    preview_cache_control: str = "public, max-age=300"
+    #: Pages: always fresh after a publish.
+    html_cache_control: str = "public, max-age=0, must-revalidate"
+    #: `site.immutable_paths`.
+    immutable_cache_control: str = "public, max-age=31536000, immutable"
 
 
 class BotSection(_Section):
     """How bot projects run: the health check and the records layout prefix."""
 
-    health_log_pattern: str
-    health_seconds: int = Field(ge=10, le=600)
+    #: Bot projects (components: container-image + lichess-bot): the container
+    #: must log this within `health_seconds` after a deploy, or it is rolled back.
+    health_log_pattern: str = "awaiting challenges"
+    health_seconds: int = Field(default=90, ge=10, le=600)
     records_prefix: str = Field(pattern=r"^([a-z0-9][a-z0-9-]*/)+$")
     #: Zones of the bot VPC's public subnets, in order (the bot uses the first).
     #: Spot tasks try each, so list every zone that offers their type; append
@@ -878,23 +854,17 @@ class TasksSection(_Section):
         return value
 
 
-class PlanSection(_Section):
-    comment_max_bytes: int = Field(ge=1024, le=65000)
-
-
 class Settings(_Section):
     """The whole tool configuration (every file of config/)."""
 
     tool: ToolSection = ToolSection()
-    terraform: TerraformSection
-    library: LibrarySection
+    terraform: TerraformSection = TerraformSection()
     state: StateSection
     aws: AwsSection
     context: ContextSection
     dns: DnsSection
     ecr: EcrSection
-    sync: SyncSection
-    plan: PlanSection
+    sync: SyncSection = SyncSection()
     bot: BotSection
     tasks: TasksSection
     #: Every onboarded project, grouped by the GitHub owner of its repository: the
@@ -1039,6 +1009,11 @@ def load_document(path: Path) -> dict[str, Any]:
     `path` is the config directory, whose `*.yaml` files are merged (each section
     in one file only), or a single file holding every section.
     """
+    return _load_document_with_origin(path)[0]
+
+
+def _load_document_with_origin(path: Path) -> tuple[dict[str, Any], dict[str, str]]:
+    """`load_document`, and the name of the file each section came from."""
     if path.is_dir():
         files = sorted(path.glob("*.yaml"))
         strays = sorted(p.name for p in path.glob("*.yml"))
@@ -1069,7 +1044,7 @@ def load_document(path: Path) -> dict[str, Any]:
                 )
             document[section] = value
             origin[section] = file.name
-    return document
+    return document, origin
 
 
 def load_settings(path: Path | None = None, environ: dict[str, str] | None = None) -> Settings:
@@ -1081,7 +1056,7 @@ def load_settings(path: Path | None = None, environ: dict[str, str] | None = Non
     """
     env = os.environ if environ is None else environ
     path = path or default_config_path()
-    raw = load_document(path)
+    raw, origin = _load_document_with_origin(path)
 
     tool = dict(raw.get("tool") or {})
     if "JAWS_LOG_LEVEL" in env:
@@ -1090,6 +1065,31 @@ def load_settings(path: Path | None = None, environ: dict[str, str] | None = Non
         tool["log_format"] = env["JAWS_LOG_FORMAT"]
     raw["tool"] = tool
 
+    terraform_section = raw.get("terraform")
+    owned: list[str] = []
+    for key, section, present, home in (
+        ("library", "library", "library" in raw, "src/jaws/product.yaml"),
+        (
+            "terraform.version",
+            "terraform",
+            isinstance(terraform_section, dict) and "version" in terraform_section,
+            "src/jaws/product.yaml",
+        ),
+        (
+            "plan",
+            "plan",
+            "plan" in raw,
+            "src/jaws/product.py (PLAN_COMMENT_MAX_BYTES)",
+        ),
+    ):
+        if present:
+            where = f" in {origin[section]}" if path.is_dir() else ""
+            owned.append(f"{key}{where}: belongs in {home}")
+    if owned:
+        raise ConfigError(
+            f"{path}: {'; '.join(owned)}; the Jaws release owns these, "
+            "not the platform configuration"
+        )
     for legacy in ("production", "management", "development"):
         if legacy in raw:
             raise ConfigError(

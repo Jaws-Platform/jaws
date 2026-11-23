@@ -1,9 +1,4 @@
-# How the jaws CLI itself runs, names and tags what it builds, reports plans,
-# and ships its own image.
-
-tool:
-  log_level: info # JAWS_LOG_LEVEL overrides, for local debugging
-  log_format: console # json in CI
+# How the jaws CLI names and tags what it builds, and ships its own image.
 
 context:
   # The root of every name the tool gives: jaws-<project>-..., jaws-infra-ci-*.
@@ -17,9 +12,6 @@ context:
   # The ManagedBy tag the tool stamps on everything it builds; like Organization,
   # the tool's, never a project file's.
   managed_by: JAWS
-
-plan:
-  comment_max_bytes: 60000
 
 # The jaws CLI's own image repository, in the primary account.
 ecr:

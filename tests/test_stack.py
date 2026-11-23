@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from jaws import stack as stack_module
 from jaws.databricks_auth import terraform_env
 from jaws.errors import ConfigError, RunError
+from jaws.product import product_pins
 from jaws.project import Project
 from jaws.settings import Settings
 from jaws.site import Site, load_site_config
@@ -351,7 +352,8 @@ def test_version_mismatch_fails_fast(
 ) -> None:
     monkeypatch.setenv("FAKE_TF_VERSION", "1.9.0")
     terraform = _terraform(guitar, settings, logger)
-    with pytest.raises(RunError, match=r"config/terraform\.yaml pins 1\.14\.7"):
+    expected = re.escape(product_pins().terraform_version)
+    with pytest.raises(RunError, match=rf"built with {expected} \(src/jaws/product\.yaml\)"):
         terraform.prepare()
 
 

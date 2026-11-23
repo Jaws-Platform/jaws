@@ -200,10 +200,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ needs.release-please.outputs.tag_name || inputs.tag }}
-      - name: Read the image settings from config/terraform.yaml
+      - name: Read the Terraform version from the release (src/jaws/product.yaml, or config/terraform.yaml before it)
         id: config
         run: |
-          echo "terraform_version=$(yq -r .terraform.version config/terraform.yaml)" >> "$GITHUB_OUTPUT"
+          # Releases cut before src/jaws/product.yaml existed pinned it in config/terraform.yaml.
+          file=src/jaws/product.yaml
+          [ -f "$file" ] || file=config/terraform.yaml
+          version=$(yq -r .terraform.version "$file")
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::$file at $TAG pins no exact terraform.version"; exit 1; }
+          echo "terraform_version=$version" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::${{ needs.account.outputs.account_id }}:role/${{ needs.account.outputs.name_root }}-infra-ci-apply

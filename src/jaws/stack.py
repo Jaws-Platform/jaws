@@ -25,6 +25,7 @@ from typing import Any, Final
 from .access import Access, project_registry_ids
 from .components import Dataset, TaskRunner, project_reader
 from .errors import ConfigError, RunError
+from .product import product_pins
 from .project import Project
 from .settings import DatabricksProject, DatabricksSection, Settings
 from .site import ENVIRONMENT, Site
@@ -569,7 +570,7 @@ class Terraform:
     # -- working directory ----------------------------------------------------
 
     def check_version(self) -> str:
-        """Fail fast unless the terraform on PATH is the version config/terraform.yaml pins."""
+        """Fail fast unless the terraform on PATH is the version this Jaws release is built with."""
         try:
             completed = subprocess.run(
                 [self.binary, "version", "-json"],
@@ -583,11 +584,11 @@ class Terraform:
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             raise RunError(f"{self.binary} version failed: {exc}") from exc
         actual = str(json.loads(completed.stdout).get("terraform_version", ""))
-        expected = self.settings.terraform.version
+        expected = product_pins().terraform_version
         if actual != expected:
             raise RunError(
-                f"terraform {actual} is on PATH but config/terraform.yaml pins {expected}; "
-                "the image and its configuration disagree"
+                f"terraform {actual} is on PATH but this Jaws release is built with {expected} "
+                "(src/jaws/product.yaml)"
             )
         self.logger.debug("terraform %s", actual)
         return actual

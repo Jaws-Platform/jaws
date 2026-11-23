@@ -40,6 +40,7 @@ from .diagnose import CATALOGUE, Failure, _redact, diagnose, render_failure
 from .errors import RunError
 from .events import EventLog, Result
 from .log import ARTIFACTS_DIR, LOG_FILE_NAME, phase
+from .product import PLAN_COMMENT_MAX_BYTES
 from .project import Project
 
 if TYPE_CHECKING:
@@ -524,7 +525,7 @@ class DatabricksDeployment:
         comment = report.stacks_plan_comment(
             sections,
             checks_render.markdown_table(self.results) if self.results else None,
-            self.settings.plan.comment_max_bytes,
+            PLAN_COMMENT_MAX_BYTES,
             self.project.project,
             github.provenance(self._version),
             applied_by=APPLIED_BY,

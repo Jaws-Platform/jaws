@@ -144,13 +144,13 @@ variable "log_retention_days" {
 }
 
 variable "health_log_pattern" {
-  description = "Line a new container must log to count as healthy (bot.health_log_pattern in config/bots.yaml)."
+  description = "Line a new container must log to count as healthy (bot.health_log_pattern: the product default, which config/bots.yaml may override)."
   type        = string
   default     = null
 }
 
 variable "health_seconds" {
-  description = "Seconds a new container has to become healthy (bot.health_seconds in config/bots.yaml)."
+  description = "Seconds a new container has to become healthy (bot.health_seconds: the product default, which config/bots.yaml may override)."
   type        = number
   default     = null
 }
