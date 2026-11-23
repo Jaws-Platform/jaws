@@ -15,7 +15,7 @@ tags:
   Project: pi-benchmarks
   Environment: prod
   Repository: Pi-Mathematical-Reasoning/pi-benchmarks
-  Owner: jwallace145
+  Owner: example-owner
 
 components:
   - kind: dataset

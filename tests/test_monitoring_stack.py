@@ -35,7 +35,6 @@ def test_the_state_key_follows_the_key_template() -> None:
     backend = (STACK / "backend" / "prod.hcl").read_text()
     key = settings.state.key_template.format(project=RESERVED, environment="prod")
     assert f'key          = "{key}"' in backend
-    assert f'bucket       = "{settings.state.bucket}"' in backend
     assert sorted(p.name for p in (STACK / "backend").iterdir()) == ["prod.hcl"]
 
 

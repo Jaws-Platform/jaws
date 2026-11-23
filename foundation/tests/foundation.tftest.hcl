@@ -1,18 +1,19 @@
-# The foundation of the account the tool configuration (config/) describes. The default runs plan
-# the tool configuration (config/) as written; the others plan fixtures (tests/fixtures/*.yaml, kept
-# equal to the tool configuration (config/) plus a few values by tests/test_foundation_fixtures.py).
+# The foundation of the account the platform configuration describes. The default runs plan the
+# product's neutral platform configuration (../tests/fixtures/platform) as written; the others plan
+# fixtures (tests/fixtures/*.yaml, kept equal to it plus a few values by
+# tests/test_foundation_fixtures.py).
 # Mock providers: nothing is called.
 
 mock_provider "aws" {
   mock_data "aws_caller_identity" {
     defaults = {
-      account_id = "570327089884"
+      account_id = "222222222222"
     }
   }
 
   mock_data "aws_iam_openid_connect_provider" {
     defaults = {
-      arn = "arn:aws:iam::570327089884:oidc-provider/token.actions.githubusercontent.com"
+      arn = "arn:aws:iam::222222222222:oidc-provider/token.actions.githubusercontent.com"
     }
   }
 }
@@ -32,7 +33,7 @@ mock_provider "time" {}
 override_module {
   target = module.sites_image
   outputs = {
-    arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-cli"
+    arn = "arn:aws:ecr:us-east-1:222222222222:repository/jaws-cli"
   }
 }
 
@@ -40,7 +41,7 @@ override_module {
   target = module.databricks_shared_host
   outputs = {
     workspace_id  = 1111111111111111
-    workspace_url = "https://dbc-287077d7-e617.cloud.databricks.com"
+    workspace_url = "https://dbc-00000000-0000.cloud.databricks.com"
   }
 }
 
@@ -74,13 +75,14 @@ override_module {
     external_location_name  = "jaws-dataset-catalogs"
     storage_credential_name = "jaws-dataset-catalogs"
     bucket_name             = "jaws-dataset-catalogs"
-    uc_role_arn             = "arn:aws:iam::570327089884:role/jaws-dataset-catalogs"
+    uc_role_arn             = "arn:aws:iam::222222222222:role/jaws-dataset-catalogs"
   }
 }
 
 # The fixtures are single files under tests/fixtures/, which has no datasets/:
 # every run reads the repository's registry unless it says otherwise.
 variables {
+  config_path   = "../tests/fixtures/platform"
   datasets_path = "../datasets"
 }
 
@@ -88,8 +90,8 @@ run "the_account_is_config_yamls" {
   command = plan
 
   assert {
-    condition     = local.account_id == "570327089884" && local.state_bucket_name == "jaws-terraform-state-570327089884"
-    error_message = "the account is 570327089884, with the state bucket jaws-terraform-state-570327089884"
+    condition     = local.account_id == "222222222222" && local.state_bucket_name == "jaws-terraform-state-222222222222"
+    error_message = "the account is 222222222222, with the state bucket jaws-terraform-state-222222222222"
   }
 
   assert {
@@ -98,20 +100,20 @@ run "the_account_is_config_yamls" {
   }
 
   assert {
-    condition     = local.sites_image_repository_arn == "arn:aws:ecr:us-east-1:570327089884:repository/jaws-cli"
+    condition     = local.sites_image_repository_arn == "arn:aws:ecr:us-east-1:222222222222:repository/jaws-cli"
     error_message = "the tool's image repository is jaws-cli"
   }
 
   assert {
     condition = jsonencode(module.context.tags) == jsonencode({
-      Organization = "Jaws-Platform"
+      Organization = "Example-Platform"
       Project      = "jaws"
       Environment  = "prod"
       Repository   = "Jaws-Platform/jaws"
       ManagedBy    = "JAWS"
-      Owner        = "jwallace145"
+      Owner        = "example-owner"
     })
-    error_message = "the foundation's tags are Organization=Jaws-Platform (this repository's GitHub owner), Project=jaws, ManagedBy=JAWS"
+    error_message = "the foundation's tags are Organization=Example-Platform (context.organization), Project=jaws, ManagedBy=JAWS"
   }
 
   assert {
@@ -121,8 +123,8 @@ run "the_account_is_config_yamls" {
 
   assert {
     condition = length(local.bucket_admin_principal_arns) == 3 && slice(local.bucket_admin_principal_arns, 0, 2) == [
-      "arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_013589f39f92382a",
-      "arn:aws:iam::570327089884:root",
+      "arn:aws:iam::222222222222:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_0123456789abcdef",
+      "arn:aws:iam::222222222222:root",
     ]
     error_message = "the break-glass principals are the owner's admin role and the account's root, then the apply role"
   }
@@ -166,21 +168,21 @@ run "the_reconcile_reaches_its_state" {
   override_module {
     target = module.data_access_ci_plan
     outputs = {
-      role_arn = "arn:aws:iam::570327089884:role/jaws-data-access-ci-plan"
+      role_arn = "arn:aws:iam::222222222222:role/jaws-data-access-ci-plan"
     }
   }
 
   override_module {
     target = module.data_access_ci_apply
     outputs = {
-      role_arn = "arn:aws:iam::570327089884:role/jaws-data-access-ci-apply"
+      role_arn = "arn:aws:iam::222222222222:role/jaws-data-access-ci-apply"
     }
   }
 
   assert {
     condition = jsonencode(try(local.state_prefix_access[local.data_access_ci.tfstate.key], null)) == jsonencode({
-      read  = ["arn:aws:iam::570327089884:role/jaws-data-access-ci-plan"]
-      write = ["arn:aws:iam::570327089884:role/jaws-data-access-ci-apply"]
+      read  = ["arn:aws:iam::222222222222:role/jaws-data-access-ci-plan"]
+      write = ["arn:aws:iam::222222222222:role/jaws-data-access-ci-apply"]
     })
     error_message = "the state bucket policy must list data-access's key, readable by its plan role and writable by its apply role, or both roles are denied their own state"
   }
@@ -205,7 +207,7 @@ run "databricks_is_built_and_onboards_the_registry" {
   }
 
   assert {
-    condition     = local.databricks_secret_parameter_arn == "arn:aws:ssm:us-east-1:570327089884:parameter/jaws/databricks/client-secret" && local.databricks_events_arn_prefix == "arn:aws:s3:::jaws-databricks-audit-logs/events/"
+    condition     = local.databricks_secret_parameter_arn == "arn:aws:ssm:us-east-1:222222222222:parameter/jaws/databricks/client-secret" && local.databricks_events_arn_prefix == "arn:aws:s3:::jaws-databricks-audit-logs/events/"
     error_message = "the roles name the account's Databricks secret and audit bucket"
   }
 
@@ -313,7 +315,7 @@ run "the_hub_plans_every_site" {
   override_module {
     target = module.hub_image
     outputs = {
-      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-platform"
+      arn = "arn:aws:ecr:us-east-1:222222222222:repository/jaws-platform"
     }
   }
 
@@ -341,7 +343,7 @@ run "refuses_a_hub_it_does_not_trust" {
   override_module {
     target = module.hub_image
     outputs = {
-      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-platform"
+      arn = "arn:aws:ecr:us-east-1:222222222222:repository/jaws-platform"
     }
   }
 
@@ -382,7 +384,7 @@ run "a_hub_gets_its_image_repository" {
   override_module {
     target = module.hub_image
     outputs = {
-      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-platform"
+      arn = "arn:aws:ecr:us-east-1:222222222222:repository/jaws-platform"
     }
   }
 
@@ -433,7 +435,7 @@ run "a_hub_keeps_every_role_within_ten_policies" {
   override_module {
     target = module.hub_image
     outputs = {
-      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-platform"
+      arn = "arn:aws:ecr:us-east-1:222222222222:repository/jaws-platform"
     }
   }
 
@@ -471,7 +473,7 @@ run "refuses_a_hub_image_outside_the_name_root" {
   override_module {
     target = module.hub_image
     outputs = {
-      arn = "arn:aws:ecr:us-east-1:570327089884:repository/platform"
+      arn = "arn:aws:ecr:us-east-1:222222222222:repository/platform"
     }
   }
 
@@ -488,7 +490,7 @@ run "refuses_a_hub_image_named_like_the_cli_image" {
   override_module {
     target = module.hub_image
     outputs = {
-      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-cli"
+      arn = "arn:aws:ecr:us-east-1:222222222222:repository/jaws-cli"
     }
   }
 
@@ -505,7 +507,7 @@ run "refuses_a_hub_image_named_like_a_project_repository" {
   override_module {
     target = module.hub_image
     outputs = {
-      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-braveheart-bot"
+      arn = "arn:aws:ecr:us-east-1:222222222222:repository/jaws-braveheart-bot"
     }
   }
 
@@ -521,7 +523,7 @@ run "takes_its_identity_from_the_configuration" {
   }
 
   assert {
-    condition     = module.context.tags["ManagedBy"] == "jaws-relabelled" && module.context.tags["Organization"] == "Jaws-Platform"
+    condition     = module.context.tags["ManagedBy"] == "jaws-relabelled" && module.context.tags["Organization"] == "Example-Platform"
     error_message = "the ManagedBy tag is config/tool.yaml's context.managed_by, as the CLI stamps it on every stack it renders"
   }
 
@@ -578,7 +580,7 @@ run "rejects_another_accounts_credentials" {
   override_data {
     target = data.aws_caller_identity.current
     values = {
-      account_id = "650503560686"
+      account_id = "111111111111"
     }
   }
 
@@ -604,12 +606,12 @@ run "the_billing_bucket_takes_the_organizations_export" {
   command = plan
 
   assert {
-    condition     = length(module.billing_bucket) == 1 && module.billing_bucket[0].arn == "arn:aws:s3:::jaws-billing-570327089884"
-    error_message = "the billing bucket is monitoring.cost.bucket, jaws-billing-570327089884"
+    condition     = length(module.billing_bucket) == 1 && module.billing_bucket[0].arn == "arn:aws:s3:::jaws-billing-222222222222"
+    error_message = "the billing bucket is monitoring.cost.bucket, jaws-billing-222222222222"
   }
 
   assert {
-    condition     = jsonencode(local.billing_bucket.aws_export_source_account_ids) == jsonencode(["650503560686"])
+    condition     = jsonencode(local.billing_bucket.aws_export_source_account_ids) == jsonencode(["111111111111"])
     error_message = "only the management account's exports (config/aws.yaml, type management) may deliver: the payer's export covers every account"
   }
 
@@ -628,7 +630,7 @@ run "databricks_billing_is_exported_from_the_shared_host" {
   }
 
   assert {
-    condition     = module.databricks_billing_export[0].role_arn == "arn:aws:iam::570327089884:role/jaws-databricks-billing-export" && module.databricks_billing_export[0].prefix == "raw/provider=databricks/source=system-tables"
+    condition     = module.databricks_billing_export[0].role_arn == "arn:aws:iam::222222222222:role/jaws-databricks-billing-export" && module.databricks_billing_export[0].prefix == "raw/provider=databricks/source=system-tables"
     error_message = "the job writes as jaws-databricks-billing-export, under the Databricks source prefix the normalizer reads"
   }
 }
@@ -667,13 +669,13 @@ run "the_monitoring_roles_may_change_only_the_grafana_record" {
   override_module {
     target = module.zone
     outputs = {
-      zone_id = "Z0644006DW6W2HALU9BI"
-      arn     = "arn:aws:route53:::hostedzone/Z0644006DW6W2HALU9BI"
+      zone_id = "Z0000000000EXAMPLE"
+      arn     = "arn:aws:route53:::hostedzone/Z0000000000EXAMPLE"
     }
   }
 
   assert {
-    condition     = local.monitoring_ci.monitoring == { zone_id = "Z0644006DW6W2HALU9BI", domain = "grafana.jwall.engineering" }
+    condition     = local.monitoring_ci.monitoring == { zone_id = "Z0000000000EXAMPLE", domain = "grafana.example.com" }
     error_message = "the roles' record is monitoring.domain in the foundation's zone, given together as the catalog requires"
   }
 }
@@ -695,21 +697,21 @@ run "the_monitoring_stack_reaches_its_state" {
   override_module {
     target = module.monitoring_ci_plan
     outputs = {
-      role_arn = "arn:aws:iam::570327089884:role/jaws-monitoring-ci-plan"
+      role_arn = "arn:aws:iam::222222222222:role/jaws-monitoring-ci-plan"
     }
   }
 
   override_module {
     target = module.monitoring_ci_apply
     outputs = {
-      role_arn = "arn:aws:iam::570327089884:role/jaws-monitoring-ci-apply"
+      role_arn = "arn:aws:iam::222222222222:role/jaws-monitoring-ci-apply"
     }
   }
 
   assert {
     condition = jsonencode(try(local.state_prefix_access["project=monitoring/env=prod/monitoring-prod.tfstate"], null)) == jsonencode({
-      read  = ["arn:aws:iam::570327089884:role/jaws-monitoring-ci-plan"]
-      write = ["arn:aws:iam::570327089884:role/jaws-monitoring-ci-apply"]
+      read  = ["arn:aws:iam::222222222222:role/jaws-monitoring-ci-plan"]
+      write = ["arn:aws:iam::222222222222:role/jaws-monitoring-ci-apply"]
     })
     error_message = "the state bucket policy lists monitoring/'s key (monitoring/backend/prod.hcl), readable by its plan role and writable by its apply role"
   }
@@ -781,7 +783,7 @@ run "each_task_role_writes_only_its_own_run_records" {
 
   assert {
     condition = local.task_records["braveheart-trainer"] == {
-      bucket = "jaws-billing-570327089884"
+      bucket = "jaws-billing-222222222222"
       prefix = "raw/provider=jaws/source=task-runs/project=braveheart-trainer"
     }
     error_message = "a project's task role writes only under raw/provider=jaws/source=task-runs/project=<project>/ in the billing bucket"
@@ -805,8 +807,15 @@ run "reads_its_configuration_and_datasets_from_the_repository_outside_the_image"
   command = plan
 
   variables {
+    config_path   = null
     datasets_path = null
   }
+
+  # The one run that depends on the owner's configuration: the default path is the repository's
+  # own config/, so the plan fails on the mocked neutral credentials and the owner's recorded
+  # host (the asserts below are still evaluated). Plan 07 replaces it when config/ leaves the
+  # repository.
+  expect_failures = [data.aws_caller_identity.current, check.shared_host_url]
 
   # path.module is "." under terraform test, and dirname() cleans "./.." to "..".
   assert {
@@ -836,12 +845,12 @@ run "a_configuration_directory_may_end_in_a_slash" {
   command = plan
 
   variables {
-    config_path   = "../config/"
+    config_path   = "../tests/fixtures/platform/"
     datasets_path = null
   }
 
   assert {
-    condition     = local.datasets_path == "../datasets"
+    condition     = local.datasets_path == "../tests/fixtures/datasets"
     error_message = "a trailing slash on config_path must not make the registry the config directory itself"
   }
 }

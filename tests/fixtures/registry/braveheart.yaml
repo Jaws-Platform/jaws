@@ -20,7 +20,7 @@ tags:
   Project: braveheart
   Environment: prod
   Repository: Braveheart-Chess/braveheart
-  Owner: jwallace145
+  Owner: example-owner
 
 components:
   # Remote CI tasks (SPRT, matches) on dedicated, ephemeral EC2 instances,

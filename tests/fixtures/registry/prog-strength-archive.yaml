@@ -16,7 +16,7 @@ tags:
   Project: prog-strength-archive
   Environment: prod
   Repository: Prog-Strength/prog-strength-archive
-  Owner: jwallace145
+  Owner: example-owner
 
 components:
   - kind: dataset

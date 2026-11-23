@@ -1,0 +1,38 @@
+"""Each root's backend file names the owner's state bucket."""
+
+from __future__ import annotations
+
+import pytest
+
+from jaws.settings import load_settings
+from tests.conftest import PLATFORM_CONFIG_DIR, REPO_ROOT
+
+
+def _backend(root: str) -> str:
+    return (REPO_ROOT / root / "backend" / "prod.hcl").read_text()
+
+
+def _management_bucket() -> str:
+    accounts = load_settings(PLATFORM_CONFIG_DIR, environ={}).aws.accounts.values()
+    management = next(a for a in accounts if a.type == "management")
+    return f"jaws-owner-access-state-{management.account_id}"
+
+
+def test_the_monitoring_state_is_in_the_shared_bucket() -> None:
+    settings = load_settings(PLATFORM_CONFIG_DIR, environ={})
+    if f'bucket       = "{settings.state.bucket}"' not in _backend("monitoring"):
+        pytest.fail(
+            "monitoring/backend/prod.hcl does not name the shared state bucket", pytrace=False
+        )
+
+
+def test_owner_access_and_billing_export_state_is_in_the_management_accounts_bucket() -> None:
+    shared = load_settings(PLATFORM_CONFIG_DIR, environ={}).state.bucket
+    for root in ("owner-access", "billing-export"):
+        backend = _backend(root)
+        if f'bucket       = "{_management_bucket()}"' not in backend:
+            pytest.fail(
+                f"{root}/backend/prod.hcl does not name the management bucket", pytrace=False
+            )
+        if shared in backend:
+            pytest.fail(f"{root}/backend/prod.hcl names the shared state bucket", pytrace=False)

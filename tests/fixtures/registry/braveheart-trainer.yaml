@@ -15,7 +15,7 @@ tags:
   Project: braveheart-trainer
   Environment: prod
   Repository: Braveheart-Chess/braveheart-trainer
-  Owner: jwallace145
+  Owner: example-owner
 
 components:
   # Training on dedicated, ephemeral EC2 instances, through

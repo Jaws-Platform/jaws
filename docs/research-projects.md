@@ -184,13 +184,13 @@ entry exists only in the tests' `research` fixture.
 ```yaml
 version: 1
 project: math-prover
-repository: jwallace145/math-prover
+repository: example-owner/math-prover
 
 tags:
   Project: math-prover
   Environment: prod
-  Repository: jwallace145/math-prover
-  Owner: jwallace145
+  Repository: example-owner/math-prover
+  Owner: example-owner
 
 components:
   - kind: dataset

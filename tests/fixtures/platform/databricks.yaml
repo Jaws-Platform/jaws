@@ -1,0 +1,55 @@
+# A neutral platform configuration for the product's tests: config/'s shape, with every identifying value replaced (tests/platform/test_no_owner_values.py).
+databricks:
+  enabled: true
+  account_id: 00000000-0000-4000-8000-000000000001
+  client_id: 00000000-0000-4000-8000-000000000002
+  secret_parameter: /jaws/databricks/client-secret
+  metastore_name: jaws-us-east-1
+  metastore_admins:
+  - owner@example.test
+  nat_ami: al2023-ami-2023.12.20261026.1-kernel-6.18-arm64
+  deployment_name_prefix: null
+  audit_bucket: jaws-databricks-audit-logs
+  events_prefix: events/
+  readiness_timeout: 20m
+  shared_host_url: https://dbc-00000000-0000.cloud.databricks.com
+  compute_policies:
+    small-interactive:
+      description: Small interactive clusters on cheap Graviton spot nodes
+      definition:
+        num_workers:
+          type: range
+          maxValue: 2
+        autotermination_minutes:
+          type: fixed
+          value: 30
+          hidden: false
+        node_type_id:
+          type: allowlist
+          values:
+          - m7g.large
+          - m7g.xlarge
+        aws_attributes.availability:
+          type: fixed
+          value: SPOT_WITH_FALLBACK
+    jobs:
+      description: Job clusters, up to four workers
+      definition:
+        cluster_type:
+          type: fixed
+          value: job
+        num_workers:
+          type: range
+          maxValue: 4
+        autotermination_minutes:
+          type: fixed
+          value: 30
+          hidden: true
+        node_type_id:
+          type: allowlist
+          values:
+          - m7g.large
+          - m7g.xlarge
+        aws_attributes.availability:
+          type: fixed
+          value: SPOT_WITH_FALLBACK

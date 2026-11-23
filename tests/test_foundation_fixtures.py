@@ -1,14 +1,14 @@
 """The configurations the foundation's tests plan against.
 
-`foundation/tests/foundation.tftest.hcl` plans the tool configuration (config/)
-as written, and a few states it isn't in: a ManagedBy no code spells, no task
-runner, the Databricks host before its URL is recorded, an admin role of
+`foundation/tests/foundation.tftest.hcl` plans the platform configuration
+(tests/fixtures/platform/) as written, and a few states it isn't in: a ManagedBy no code
+spells, no task runner, the Databricks host before its URL is recorded, an admin role of
 another account, no monitoring section, and a second repository or a hub. Each fixture under
-`foundation/tests/fixtures/` is config/ as one file
+`foundation/tests/fixtures/` is tests/fixtures/platform/ as one file
 (`jaws.settings.load_document`) with a few values set; this test keeps them
 from drifting.
 
-Regenerate after changing config/:
+Regenerate after changing the fixture:
 
     uv run python -m tests.test_foundation_fixtures
 """
@@ -55,7 +55,7 @@ def _foreign_admin(config: dict[str, Any]) -> dict[str, Any]:
     """An admin role that is not in the primary account: the plan must stop."""
     primary = config["aws"]["accounts"][config["aws"]["primary"]]
     primary["admin_role_arn"] = primary["admin_role_arn"].replace(
-        primary["account_id"], "650503560686"
+        primary["account_id"], "111111111111"
     )
     return config
 
@@ -140,7 +140,8 @@ def _expected(name: str) -> dict[str, Any]:
 def test_a_foundation_fixture_is_the_config_with_its_few_changes(name: str) -> None:
     actual = yaml.safe_load((FIXTURES_DIR / name).read_text())
     assert actual == _expected(name), (
-        f"{name} has drifted from config/: uv run python -m tests.test_foundation_fixtures"
+        f"{name} has drifted from tests/fixtures/platform/: "
+        "uv run python -m tests.test_foundation_fixtures"
     )
 
 
@@ -151,7 +152,10 @@ def test_every_fixture_file_is_accounted_for() -> None:
 if __name__ == "__main__":
     FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
     for fixture in sorted(FIXTURES):
-        header = "# Generated from config/ by tests/test_foundation_fixtures.py: do not edit.\n"
+        header = (
+            "# Generated from tests/fixtures/platform/ by tests/test_foundation_fixtures.py: "
+            "do not edit.\n"
+        )
         (FIXTURES_DIR / fixture).write_text(
             header + yaml.safe_dump(_expected(fixture), sort_keys=False)
         )

@@ -28,37 +28,12 @@ from tests.conftest import (
     with_guardrails,
 )
 
-#: Which file of config/ holds each section. Workflows and scripts read some
-#: sections from their file with yq, so a section moves only with its readers.
-SECTION_FILES = {
-    "aws": "aws.yaml",
-    "projects": "projects.yaml",
-    "state": "terraform.yaml",
-    "context": "tool.yaml",
-    "ecr": "tool.yaml",
-    "dns": "sites.yaml",
-    "platform": "platform.yaml",
-    "bot": "bots.yaml",
-    "tasks": "bots.yaml",
-    "databricks": "databricks.yaml",
-    "monitoring": "monitoring.yaml",
-}
-
 
 def test_repository_config_loads() -> None:
     settings = load_settings(CONFIG_DIR, environ={})
     assert settings.ecr.repository == "jaws-cli"
-    assert settings.state.bucket == "jaws-terraform-state-570327089884"
-    assert settings.dns.zone == "jwall.engineering"
-
-
-def test_every_section_is_in_its_file() -> None:
-    found = {
-        section: path.name
-        for path in sorted(CONFIG_DIR.glob("*.yaml"))
-        for section in yaml.safe_load(path.read_text())
-    }
-    assert found == SECTION_FILES
+    assert settings.state.bucket == "jaws-terraform-state-222222222222"
+    assert settings.dns.zone == "example.com"
 
 
 def test_one_file_reads_like_the_directory(tmp_path: Path) -> None:
@@ -148,7 +123,7 @@ def test_env_overrides_only_logging(tmp_path: Path) -> None:
     )
     assert settings.tool.log_level == "debug"
     assert settings.tool.log_format == "json"
-    assert settings.state.bucket == "jaws-terraform-state-570327089884"
+    assert settings.state.bucket == "jaws-terraform-state-222222222222"
 
 
 def test_missing_file_is_a_config_error(tmp_path: Path) -> None:
@@ -168,9 +143,9 @@ def test_bot_section_defaults(settings: Settings) -> None:
 def test_aws_account_is_configured(settings: Settings) -> None:
     """The one place the account ID lives: workflows build role ARNs from it."""
     assert settings.aws.primary == "production"
-    assert settings.aws.account_id == "570327089884"
+    assert settings.aws.account_id == "222222222222"
     assert settings.aws.admin_role_arn is not None
-    assert settings.aws.admin_role_arn.startswith("arn:aws:iam::570327089884:role/aws-reserved/")
+    assert settings.aws.admin_role_arn.startswith("arn:aws:iam::222222222222:role/aws-reserved/")
 
 
 def test_the_registry_records_every_account_by_type(settings: Settings) -> None:
@@ -178,10 +153,10 @@ def test_the_registry_records_every_account_by_type(settings: Settings) -> None:
     by_type = {t: {n: a.account_id for n, a in settings.aws.of_type(t).items()} for t in
                ("management", "development", "staging", "production")}  # fmt: skip
     assert by_type == {
-        "management": {"management": "650503560686"},
-        "development": {"development": "859674017655"},
+        "management": {"management": "111111111111"},
+        "development": {"development": "333333333333"},
         "staging": {},
-        "production": {"production": "570327089884"},
+        "production": {"production": "222222222222"},
     }
     assert all(a.description for a in settings.aws.accounts.values())
 
@@ -208,11 +183,11 @@ def test_an_account_id_must_be_twelve_digits(tmp_path: Path) -> None:
 
 def test_two_accounts_cannot_share_an_id(tmp_path: Path) -> None:
     aws = _registry()
-    aws["accounts"]["development"]["account_id"] = "570327089884"
+    aws["accounts"]["development"]["account_id"] = "222222222222"
     with pytest.raises(
         ConfigError,
         match=r"accounts (development and production|production and development) are both "
-        r"570327089884",
+        r"222222222222",
     ):
         _load_aws(tmp_path, aws)
 
@@ -248,8 +223,8 @@ def test_an_account_type_is_one_of_the_known_types(tmp_path: Path) -> None:
 def test_the_admin_role_must_be_in_its_account(tmp_path: Path) -> None:
     aws = _registry()
     role = aws["accounts"]["production"]["admin_role_arn"]
-    aws["accounts"]["production"]["admin_role_arn"] = role.replace("570327089884", "650503560686")
-    with pytest.raises(ConfigError, match="is not a role in account 570327089884"):
+    aws["accounts"]["production"]["admin_role_arn"] = role.replace("222222222222", "111111111111")
+    with pytest.raises(ConfigError, match="is not a role in account 222222222222"):
         _load_aws(tmp_path, aws)
 
 
@@ -275,7 +250,7 @@ def test_accounts_may_have_any_names(tmp_path: Path) -> None:
 @pytest.mark.parametrize("legacy", ["management", "development", "production"])
 def test_the_old_account_sections_point_at_the_registry(tmp_path: Path, legacy: str) -> None:
     raw = repo_config()
-    raw[legacy] = {"account_id": "650503560686"}
+    raw[legacy] = {"account_id": "111111111111"}
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(raw))
     with pytest.raises(
@@ -286,7 +261,7 @@ def test_the_old_account_sections_point_at_the_registry(tmp_path: Path, legacy: 
 
 def test_the_old_aws_account_id_points_at_the_registry(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match=r"aws\.account_id: the accounts are the registry"):
-        _load_aws(tmp_path, {"account_id": "570327089884"})
+        _load_aws(tmp_path, {"account_id": "222222222222"})
 
 
 def test_bot_amis_are_validated(tmp_path: Path) -> None:
@@ -426,8 +401,8 @@ def test_the_registry_onboards_every_project_once(settings: Settings) -> None:
     }
     assert all(p.description for p in real.projects.values())
     assert real.repository("pi-prover") == "Pi-Mathematical-Reasoning/pi"
-    assert real.repository("main-site") == "jwallace145/site"
-    assert real.owners["Braveheart-Chess"].owner_id == "356866252"
+    assert real.repository("main-site") == "example-owner/site"
+    assert real.owners["Braveheart-Chess"].owner_id == "10000003"
 
 
 @pytest.mark.parametrize(
@@ -631,7 +606,7 @@ def test_databricks_section_parses(settings: Settings) -> None:
     assert poc.compute_policies == ("small-interactive", "jobs")
     assert poc.cost_center == "cc-0000"
     assert poc.vpc_cidr == "10.40.0.0/16"
-    assert poc.admins == ("jimmy.wallace145@gmail.com",)
+    assert poc.admins == ("owner@example.com",)
 
 
 def test_users_in_config_yaml_are_refused_with_the_migration_message(tmp_path: Path) -> None:
@@ -805,7 +780,7 @@ def test_the_monitoring_section_loads() -> None:
     assert monitoring is not None
     assert monitoring.instance_type == "t9g.medium"
     assert monitoring.ami == "al2023-ami-2023.12.20261026.1-kernel-6.18-arm64"
-    assert monitoring.domain == "grafana.jwall.engineering"
+    assert monitoring.domain == "grafana.example.com"
     assert monitoring.snapshots is True
     schedule = monitoring.schedule
     assert schedule is not None
@@ -814,7 +789,7 @@ def test_the_monitoring_section_loads() -> None:
     assert (schedule.on, schedule.off) == ("08:00", "24:00")
     cost = monitoring.cost
     assert cost is not None
-    assert cost.bucket == "jaws-billing-570327089884"
+    assert cost.bucket == "jaws-billing-222222222222"
     assert (cost.protect_raw, cost.aws, cost.databricks) == (False, True, True)
     assert cost.budgets.total == 100
     assert (cost.budgets.projects, cost.budgets.accounts) == ({}, {})
@@ -918,7 +893,7 @@ def _both(*edits: Any) -> Any:
         (_set("ami", "al2023-ami-2023.12.20261026.1-kernel-6.18-x86_64"), r"monitoring\.ami"),
         (_set("ami", "amzn2-ami-hvm-2.0.20261026-arm64"), r"monitoring\.ami"),
         (_set("instance_type", "t3.medium"), r"monitoring\.instance_type"),
-        (_set("domain", "grafana.example.com"), r"monitoring\.domain"),
+        (_set("domain", "grafana.example.org"), r"monitoring\.domain"),
         # Overrides of the module's thresholds, by name and shape.
         (_set("thresholds", {"cpu_percnt": {"warning": 50, "critical": 80}}),
          r"monitoring\.thresholds\.cpu_percnt"),
@@ -959,7 +934,7 @@ def test_bad_monitoring_config_names_its_key(tmp_path: Path, edit: Any, key: str
         _both(_set("schedule.on", "00:00"), _set("schedule.off", "04:00")),
         _set("schedule.timezone", "UTC"),
         _set("cost.budgets.projects", {"braveheart-trainer": 40}),
-        _set("cost.budgets.accounts", {"570327089884": 90}),
+        _set("cost.budgets.accounts", {"222222222222": 90}),
         _set("cost.anomaly_floor_usd", 0),
         _set("thresholds", {"cpu_percent": {"warning": 50, "critical": 80},
                             "untagged_daily_usd": {"warning": 1}}),

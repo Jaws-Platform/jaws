@@ -32,8 +32,8 @@ def test_a_registry_file_is_its_id(tmp_path: Path) -> None:
     assert d.platform_name("jaws") == "jaws-ds-braveheart-selfplay-positions"
     assert d.bucket("jaws") == "jaws-braveheart-selfplay-positions"
     assert d.url("jaws") == "s3://jaws-braveheart-selfplay-positions/data"
-    assert d.role_arn("570327089884", "jaws") == (
-        "arn:aws:iam::570327089884:role/jaws-ds-braveheart-selfplay-positions"
+    assert d.role_arn("222222222222", "jaws") == (
+        "arn:aws:iam::222222222222:role/jaws-ds-braveheart-selfplay-positions"
     )
     assert (d.prefix, d.description) == ("data/", "d")
 

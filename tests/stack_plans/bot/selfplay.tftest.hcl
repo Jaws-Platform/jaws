@@ -39,8 +39,8 @@ run "plans_a_task_runner_and_the_positions_bucket" {
 
   assert {
     condition = jsonencode(var.datasets[0].readers) == jsonencode([
-      "arn:aws:iam::570327089884:role/jaws-braveheart-trainer-task-gpu",
-      "arn:aws:iam::570327089884:role/jaws-ds-braveheart-selfplay-positions",
+      "arn:aws:iam::222222222222:role/jaws-braveheart-trainer-task-gpu",
+      "arn:aws:iam::222222222222:role/jaws-ds-braveheart-selfplay-positions",
     ])
     error_message = "the trainer's GPU tasks and the onboarded dataset's role (an agreed handshake with braveheart-databricks), and only they, read the positions through the bucket policy"
   }

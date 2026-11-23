@@ -31,24 +31,25 @@ def _write(tmp_path: Path, raw: dict[str, Any]) -> Path:
 def test_the_primary_account_is_production() -> None:
     settings = load_settings(CONFIG_DIR, environ={})
     assert settings.aws.primary == "production"
-    assert settings.aws.account_id == "570327089884"
+    assert settings.aws.account_id == "222222222222"
     assert settings.context.name_root == "jaws"
     assert (
-        settings.context.organization == "Jaws-Platform" and settings.context.managed_by == "JAWS"
+        settings.context.organization == "Example-Platform"
+        and settings.context.managed_by == "JAWS"
     )
-    assert settings.state.bucket == "jaws-terraform-state-570327089884"
+    assert settings.state.bucket == "jaws-terraform-state-222222222222"
     assert settings.ecr.repository == "jaws-cli"
     by_type = {a.type: a.account_id for a in settings.aws.accounts.values()}
     assert by_type == {
-        "management": "650503560686",
-        "production": "570327089884",
-        "development": "859674017655",
+        "management": "111111111111",
+        "production": "222222222222",
+        "development": "333333333333",
     }
 
 
 @pytest.mark.parametrize("section", ["production", "management", "development"])
 def test_an_old_account_section_is_refused(tmp_path: Path, section: str) -> None:
-    raw = {**repo_config(), section: {"account_id": "650503560686"}}
+    raw = {**repo_config(), section: {"account_id": "111111111111"}}
     with pytest.raises(ConfigError, match=rf"{section}: the accounts are the registry"):
         load_settings(_write(tmp_path, raw), environ={})
 
@@ -67,9 +68,9 @@ def test_config_env_prints_the_account_the_workflows_build_roles_from(tmp_path: 
     result = runner.invoke(cli.app, ["--config", str(path), "config", "env"])
     assert result.exit_code == 0, result.output
     assert result.stdout.splitlines() == [
-        "account_id=570327089884",
+        "account_id=222222222222",
         "name_root=jaws",
-        "state_bucket=jaws-terraform-state-570327089884",
+        "state_bucket=jaws-terraform-state-222222222222",
         "ecr_repository=jaws-cli",
     ]
 
@@ -77,7 +78,7 @@ def test_config_env_prints_the_account_the_workflows_build_roles_from(tmp_path: 
 def test_config_env_reads_the_config_directory() -> None:
     result = runner.invoke(cli.app, ["--config", str(CONFIG_DIR), "config", "env"])
     assert result.exit_code == 0, result.output
-    assert result.stdout.splitlines()[0] == "account_id=570327089884"
+    assert result.stdout.splitlines()[0] == "account_id=222222222222"
 
 
 def test_config_env_follows_the_primary_account(tmp_path: Path) -> None:
@@ -86,7 +87,7 @@ def test_config_env_follows_the_primary_account(tmp_path: Path) -> None:
     raw["aws"]["primary"] = "development"
     result = runner.invoke(cli.app, ["--config", str(_write(tmp_path, raw)), "config", "env"])
     assert result.exit_code == 0, result.output
-    assert result.stdout.splitlines()[0] == "account_id=859674017655"
+    assert result.stdout.splitlines()[0] == "account_id=333333333333"
 
 
 @pytest.mark.parametrize(

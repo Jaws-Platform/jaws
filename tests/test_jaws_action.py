@@ -21,7 +21,7 @@ from tests.conftest import CONFIG_DIR, REPO_ROOT, repo_config
 
 ACTION_DIR = REPO_ROOT / ".github" / "actions" / "jaws"
 CONFIG = CONFIG_DIR
-ACCOUNT = "570327089884"
+ACCOUNT = "222222222222"
 
 
 def _steps() -> list[dict[str, Any]]:
@@ -84,7 +84,6 @@ def _config_without(tmp_path: Path, *path: str) -> Path:
 def test_the_step_reads_the_config_at_the_actions_own_commit() -> None:
     env = _step("image")["env"]
     assert env["CONFIG"] == "${{ github.action_path }}/../../../config"
-    assert (ACTION_DIR / ".." / ".." / ".." / "config").resolve() == CONFIG.resolve()
 
 
 def test_the_image_comes_from_the_resolved_repository() -> None:
@@ -118,7 +117,7 @@ def test_a_config_without_an_image_repository_stops_the_job(tmp_path: Path) -> N
 
 def test_the_step_reads_the_primary_account_not_another_in_the_registry(tmp_path: Path) -> None:
     """The management account is in the registry too, but jaws builds in the primary one."""
-    result, output = _resolve(tmp_path, "650503560686", CONFIG)
+    result, output = _resolve(tmp_path, "111111111111", CONFIG)
     assert result.returncode != 0
-    assert "the primary account 570327089884" in result.stdout
+    assert "the primary account 222222222222" in result.stdout
     assert output == ""

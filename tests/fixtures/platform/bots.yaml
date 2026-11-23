@@ -1,0 +1,22 @@
+# A neutral platform configuration for the product's tests: config/'s shape, with every identifying value replaced (tests/platform/test_no_owner_values.py).
+bot:
+  asset_wait: 30m
+  records_prefix: records/
+  availability_zones:
+  - us-east-1a
+  - us-east-1b
+  - us-east-1c
+  - us-east-1d
+  - us-east-1f
+  amis:
+    x86_64: al2023-ami-2023.12.20261026.1-kernel-6.18-x86_64
+tasks:
+  rust_toolchain: 1.99.1
+  poll_seconds: 5
+  images:
+    deep-learning-gpu: Deep Learning Base OSS Nvidia Driver GPU AMI (Amazon Linux 2023) 20261027
+  limits:
+    max_hours: 6
+    max_vcpus: 256
+    root_volume_gb: 200
+  max_run_cost_usd: 50

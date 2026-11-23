@@ -1,15 +1,20 @@
-# The monitoring stack plans the tool configuration (config/) as written, against
-# mock providers: nothing is called. A run block cannot address resources inside
+# The monitoring stack plans the product's neutral platform configuration
+# (../tests/fixtures/platform) as written, against mock providers: nothing is called.
+# One run, the default path, plans the repository's own config/ (see it below). A run block cannot address resources inside
 # a child module, so these assert what the stack hands the monitoring module
 # (local.*), the module's outputs, and the tags; the module's own tests
 # (terraform-aws-jaws-monitoring) cover what it builds from them.
+
+variables {
+  config_path = "../tests/fixtures/platform"
+}
 
 mock_provider "aws" {
   override_during = plan
 
   mock_data "aws_caller_identity" {
     defaults = {
-      account_id = "570327089884"
+      account_id = "222222222222"
     }
   }
 
@@ -64,7 +69,7 @@ mock_provider "aws" {
 
   mock_resource "aws_iam_role" {
     defaults = {
-      arn = "arn:aws:iam::570327089884:role/jaws-monitoring"
+      arn = "arn:aws:iam::222222222222:role/jaws-monitoring"
     }
   }
 }
@@ -80,7 +85,7 @@ run "the_stack_reads_its_config" {
   }
 
   assert {
-    condition     = local.node.domain == "grafana.jwall.engineering" && local.node.zone_id == "Z0644006DW6W2HALU9BI"
+    condition     = local.node.domain == "grafana.example.com" && local.node.zone_id == "Z0000000000EXAMPLE"
     error_message = "Grafana is served at monitoring.domain, in the dns zone of config/sites.yaml (dns.zone_id)"
   }
 
@@ -101,7 +106,7 @@ run "the_stack_reads_its_config" {
   }
 
   assert {
-    condition     = local.cost.bucket_name == "jaws-billing-570327089884"
+    condition     = local.cost.bucket_name == "jaws-billing-222222222222"
     error_message = "the normalizer and the node read the foundation's billing bucket, monitoring.cost.bucket"
   }
 
@@ -143,7 +148,7 @@ run "the_node_is_named_for_the_platform" {
   }
 
   assert {
-    condition     = output.node.parameter_prefix == "/jaws-monitoring/node" && output.node.config_bucket == "jaws-monitoring-config-570327089884"
+    condition     = output.node.parameter_prefix == "/jaws-monitoring/node" && output.node.config_bucket == "jaws-monitoring-config-222222222222"
     error_message = "the node's own parameters and config bucket are named for jaws-monitoring"
   }
 
@@ -156,12 +161,12 @@ run "the_node_is_named_for_the_platform" {
   # aws:ResourceTag/Project = monitoring, the roles' project: this tag is load-bearing.
   assert {
     condition = jsonencode(module.context.tags) == jsonencode({
-      Organization = "Jaws-Platform"
+      Organization = "Example-Platform"
       Project      = "monitoring"
       Environment  = "prod"
       Repository   = "Jaws-Platform/jaws"
       ManagedBy    = "JAWS"
-      Owner        = "jwallace145"
+      Owner        = "example-owner"
     })
     error_message = "every resource is tagged Project = monitoring, with the platform's Organization, Environment, Repository, ManagedBy and Owner"
   }
@@ -207,7 +212,7 @@ run "refuses_another_accounts_credentials" {
   override_data {
     target = data.aws_caller_identity.current
     values = {
-      account_id = "650503560686"
+      account_id = "999999999999"
     }
   }
 
@@ -216,6 +221,16 @@ run "refuses_another_accounts_credentials" {
 
 run "reads_its_configuration_from_the_repository_outside_the_image" {
   command = plan
+
+  variables {
+    config_path = null
+  }
+
+  # The second run that depends on the owner's configuration (the foundation's default-path run
+  # is the first): the default path is the repository's own config/, so the plan fails on the
+  # mocked neutral credentials (the asserts below are still evaluated). Plan 07 replaces it
+  # when config/ leaves the repository.
+  expect_failures = [data.aws_caller_identity.current]
 
   assert {
     condition     = !local.in_image && local.config_path == "./../config"

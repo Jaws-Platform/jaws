@@ -38,22 +38,22 @@ from tests.conftest import FIXTURES, REPO_ROOT, offboard, project_entry
 #: Step 6's "no changes" plan depends on these staying identical.
 EXPECTED_TFVARS = {
     "guitar-knowledge-base": {
-        "domain_name": "guitar.jwall.engineering",
+        "domain_name": "guitar.example.com",
         "dev_domain_name": None,
         "enable_preview": True,
-        "zone_id": "Z0644006DW6W2HALU9BI",
+        "zone_id": "Z0000000000EXAMPLE",
     },
     "cs-survival-guide": {
-        "domain_name": "survival-guide.jwall.engineering",
+        "domain_name": "survival-guide.example.com",
         "dev_domain_name": None,
         "enable_preview": True,
-        "zone_id": "Z0644006DW6W2HALU9BI",
+        "zone_id": "Z0000000000EXAMPLE",
     },
     "main-site": {
-        "domain_name": "jwall.engineering",
+        "domain_name": "example.com",
         "dev_domain_name": None,
         "enable_preview": True,
-        "zone_id": "Z0644006DW6W2HALU9BI",
+        "zone_id": "Z0000000000EXAMPLE",
     },
 }
 
@@ -66,13 +66,13 @@ def test_rendered_tfvars_match_the_old_infra_directories(site: Site) -> None:
     assert tfvars["repository"] == site.config.repository
     assert tfvars["tags"]["Project"] == site.project
     assert tfvars["name_root"] == "jaws"
-    assert tfvars["tags"]["Organization"] == site.organization == "jwallace145"
+    assert tfvars["tags"]["Organization"] == site.organization == "example-owner"
     assert tfvars["tags"]["ManagedBy"] == "JAWS"
 
 
 def test_rendered_backend_matches_the_old_backend_files(site: Site) -> None:
     assert render_backend(site) == (
-        'bucket       = "jaws-terraform-state-570327089884"\n'
+        'bucket       = "jaws-terraform-state-222222222222"\n'
         f'key          = "project={site.project}/env=prod/{site.project}-prod.tfstate"\n'
         'region       = "us-east-1"\n'
         "use_lockfile = true\n"
@@ -107,7 +107,7 @@ def test_render_tfvars_for_bot(bot: Project, settings: Settings) -> None:
             "Project": "braveheart",
             "Environment": "prod",
             "Repository": "Braveheart-Chess/braveheart",
-            "Owner": "jwallace145",
+            "Owner": "example-owner",
             "Organization": "Braveheart-Chess",
             "ManagedBy": "JAWS",
         },
@@ -120,8 +120,8 @@ def test_render_tfvars_for_bot(bot: Project, settings: Settings) -> None:
         "records_enabled": True,
         "records_prefix": "records/",
         "bucket_admin_principal_arns": [
-            "arn:aws:iam::570327089884:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_013589f39f92382a",
-            "arn:aws:iam::570327089884:root",
+            "arn:aws:iam::222222222222:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_0123456789abcdef",
+            "arn:aws:iam::222222222222:root",
         ],
         "records_container_path": "/opt/lichess-bot/game_records",
         "log_retention_days": 30,
@@ -938,7 +938,7 @@ def test_databricks_account_tfvars(databricks: Project, settings: Settings) -> N
         "nat_ami_name": settings.databricks.nat_ami,
         "metastore_name": "jaws-us-east-1",
         "deployment_name": None,  # no prefix configured: Databricks picks the URL
-        "admin_user_names": ["jimmy.wallace145@gmail.com"],
+        "admin_user_names": ["owner@example.com"],
         "user_names": ["user@example.com"],  # the project file's users, not config/projects.yaml
         "service_principal_application_id": settings.databricks.client_id,
         "account_id": settings.databricks.account_id,
@@ -1082,10 +1082,10 @@ def test_workspace_tfvars_take_account_outputs(databricks: Project, settings: Se
     assert tfvars["fixed_tags"] == databricks.databricks_tags
     assert "governance_project" not in tfvars
     assert tfvars["apply_role_arn"] == (
-        "arn:aws:iam::570327089884:role/jaws-databricks-poc-ci-apply"
+        "arn:aws:iam::222222222222:role/jaws-databricks-poc-ci-apply"
     )
     assert tfvars["management_role_arns"] == [
-        "arn:aws:iam::570327089884:role/jaws-databricks-poc-ci-plan"
+        "arn:aws:iam::222222222222:role/jaws-databricks-poc-ci-plan"
     ]
     assert tfvars["catalog_tags"] == {"Project": "databricks-poc", "Owner": "owner@example.com"}
 
@@ -1353,7 +1353,7 @@ def test_extra_env_is_not_in_the_parent_environment(
 
 # -- readers and endpoints from handshakes (access.py) -----------------------------
 
-_ROLES = "arn:aws:iam::570327089884:role/"
+_ROLES = "arn:aws:iam::222222222222:role/"
 _TRAINER_GPU = _ROLES + "jaws-braveheart-trainer-task-gpu"
 _POSITIONS_ROLE = _ROLES + "jaws-ds-braveheart-selfplay-positions"
 

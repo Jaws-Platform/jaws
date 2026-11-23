@@ -37,7 +37,6 @@ def test_no_project_is_registered_under_the_owner_access_key() -> None:
 def test_owner_access_state_key_is_the_reserved_prefix() -> None:
     backend = (REPO_ROOT / "owner-access" / "backend" / "prod.hcl").read_text()
     assert f'key          = "project={RESERVED}/env=prod/{RESERVED}-prod.tfstate"' in backend
-    assert 'bucket       = "jaws-owner-access-state-650503560686"' in backend
 
 
 def test_ci_never_plans_or_applies_owner_access() -> None:

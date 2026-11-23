@@ -36,9 +36,9 @@ LOG = logging.getLogger("test-records")
 #: How the CLI speaks of a run record, in any message.
 RECORD_MESSAGE = re.compile(r"\b(started|finished|swept) record\b")
 runner = CliRunner()
-BUCKET = "jaws-billing-570327089884"
+BUCKET = "jaws-billing-222222222222"
 SHA = "0123456789abcdef0123456789abcdef01234567"
-TASK_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-braveheart-ci-task/s"
+TASK_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-braveheart-ci-task/s"
 LAUNCHED_AT = datetime(2026, 11, 24, 21, 10, 3, tzinfo=UTC)
 ENDED_AT = datetime(2026, 11, 25, 2, 52, 41, tzinfo=UTC)
 PREFIX = "raw/provider=jaws/source=task-runs/project=braveheart"

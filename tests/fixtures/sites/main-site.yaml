@@ -1,13 +1,13 @@
 version: 1
 project: main-site
-repository: jwallace145/site
-domain: jwall.engineering
+repository: example-owner/site
+domain: example.com
 
 tags:
   Project: main-site
   Environment: prod
-  Repository: jwallace145/site
-  Owner: jwallace145
+  Repository: example-owner/site
+  Owner: example-owner
   CostCenter: personal # an extra tag, passed through
 
 site:

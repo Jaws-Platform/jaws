@@ -11,8 +11,8 @@ mock_provider "aws" {
 
   mock_data "aws_caller_identity" {
     defaults = {
-      account_id = "570327089884"
-      arn        = "arn:aws:iam::570327089884:root"
+      account_id = "222222222222"
+      arn        = "arn:aws:iam::222222222222:root"
     }
   }
 
@@ -125,9 +125,9 @@ run "a_deployer_reaches_the_workspace_module" {
 
   variables {
     deployer = {
-      repository    = "jwallace145/databricks-poc"
-      repository_id = "1458298100"
-      owner_id      = "35950238"
+      repository    = "example-owner/databricks-poc"
+      repository_id = "20000099"
+      owner_id      = "10000002"
     }
   }
 

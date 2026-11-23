@@ -45,7 +45,7 @@ def test_the_registry_is_read_like_the_workflows_read_it() -> None:
     assert repositories["braveheart-databricks"] == "Braveheart-Chess/braveheart-databricks"
     listed = json.loads(
         subprocess.run(
-            ["scripts/projects.sh", "bot", "research", "databricks"],
+            ["scripts/projects.sh", "--config", str(CONFIG_DIR), "bot", "research", "databricks"],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
@@ -163,14 +163,12 @@ def test_registry_ids_come_from_the_onboarding_registry() -> None:
     settings = _settings()
     ids = project_registry_ids(settings)
     assert ids["braveheart-databricks"] == RegistryIds(
-        "Braveheart-Chess/braveheart-databricks", "1458504699", "356866252"
+        "Braveheart-Chess/braveheart-databricks", "20000009", "10000003"
     )
     assert ids["braveheart-selfplay"] == RegistryIds(
-        "Braveheart-Chess/braveheart-selfplay", "1459456470", "356866252"
+        "Braveheart-Chess/braveheart-selfplay", "20000007", "10000003"
     )
-    assert ids["pi-prover"] == RegistryIds(
-        "Pi-Mathematical-Reasoning/pi", "1466017315", "359343898"
-    )
+    assert ids["pi-prover"] == RegistryIds("Pi-Mathematical-Reasoning/pi", "20000011", "10000004")
     assert {key: i.repository for key, i in ids.items()} == project_repositories(settings)
 
 

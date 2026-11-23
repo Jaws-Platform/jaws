@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 import yaml
 
-from tests.conftest import REPO_ROOT, repo_config
+from tests.conftest import CONFIG_DIR, REPO_ROOT, fixture_root, repo_config
 
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 CREDENTIALS_SCRIPT = REPO_ROOT / "scripts" / "databricks-credentials.sh"
@@ -179,7 +179,7 @@ def test_no_workflow_exports_a_databricks_secret() -> None:
 
 
 def _projects(*types: str, config: Path | None = None) -> subprocess.CompletedProcess[str]:
-    args = [str(PROJECTS_SCRIPT)] + (["--config", str(config)] if config else []) + list(types)
+    args = [str(PROJECTS_SCRIPT), "--config", str(config or CONFIG_DIR), *list(types)]
     return subprocess.run(args, cwd=REPO_ROOT, capture_output=True, text=True, check=False)
 
 
@@ -338,7 +338,7 @@ def test_databricks_apply_refuses_an_unregistered_project(tmp_path: Path) -> Non
     lookup = steps[_index(steps, lambda s: s.get("id") == "project")]
     result = subprocess.run(
         ["bash", "-e", "-c", lookup["run"]],
-        cwd=REPO_ROOT,
+        cwd=fixture_root(tmp_path),
         env={**os.environ, "PROJECT": "not-a-project", "GITHUB_OUTPUT": str(tmp_path / "o")},
         capture_output=True,
         text=True,

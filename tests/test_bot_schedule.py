@@ -31,8 +31,8 @@ from .conftest import FIXTURES
 
 REGION = "us-east-1"
 PREFIX = "/jaws/braveheart/bot"
-RELEASE_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-braveheart-ci-release/s"
-PLAN_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-braveheart-ci-plan/s"
+RELEASE_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-braveheart-ci-release/s"
+PLAN_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-braveheart-ci-plan/s"
 DAILY = {"days": "daily", "start": "08:00", "stop": "20:00"}
 runner = CliRunner()
 logger = logging.getLogger("test")
@@ -56,7 +56,7 @@ def _project(tmp_path: Path, settings: Settings, schedule: dict[str, Any] | None
 
 
 def _as_role(arn: str) -> AbstractContextManager[Any]:
-    return patch("jaws.aws.caller_identity", return_value=("570327089884", arn))
+    return patch("jaws.aws.caller_identity", return_value=("222222222222", arn))
 
 
 def _instance(ec2: Any, state: str = "running") -> str:

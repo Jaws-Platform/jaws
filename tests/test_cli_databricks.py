@@ -26,13 +26,13 @@ from tests.conftest import read_config, write_config
 runner = CliRunner()
 SENTINEL = "dapi-SENTINEL-s3cr3t-value"
 PARAM = "/jaws/databricks/client-secret"
-PLAN_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-databricks-poc-ci-plan/s"
-APPLY_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-databricks-poc-ci-apply/s"
-OWNER = "arn:aws:sts::570327089884:assumed-role/owner/s"
+PLAN_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-databricks-poc-ci-plan/s"
+APPLY_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-databricks-poc-ci-apply/s"
+OWNER = "arn:aws:sts::222222222222:assumed-role/owner/s"
 
 
 def _as_role(arn: str) -> AbstractContextManager[Any]:
-    return patch("jaws.aws.caller_identity", return_value=("570327089884", arn))
+    return patch("jaws.aws.caller_identity", return_value=("222222222222", arn))
 
 
 def _put_secret(value: str = SENTINEL) -> None:

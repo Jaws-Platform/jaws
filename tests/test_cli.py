@@ -17,19 +17,19 @@ from jaws.stack import PLAN_CHANGES
 from tests.conftest import project_entry, read_config, write_config
 
 runner = CliRunner()
-PLAN_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-guitar-knowledge-base-ci-plan/s"
-PREVIEW_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-guitar-knowledge-base-ci-preview/s"
-APPLY_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-guitar-knowledge-base-ci-apply/s"
+PLAN_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-guitar-knowledge-base-ci-plan/s"
+PREVIEW_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-guitar-knowledge-base-ci-preview/s"
+APPLY_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-guitar-knowledge-base-ci-apply/s"
 BUCKET = "jaws-guitar-knowledge-base"
-BOT_PLAN_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-braveheart-ci-plan/s"
-BOT_APPLY_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-braveheart-ci-apply/s"
+BOT_PLAN_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-braveheart-ci-plan/s"
+BOT_APPLY_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-braveheart-ci-apply/s"
 # The owner's shell: admin credentials in the account the project lives in. The
 # commands that accept any role still refuse another account's credentials.
-OWNER = "arn:aws:sts::570327089884:assumed-role/AWSReservedSSO_AdministratorAccess_0f/owner"
+OWNER = "arn:aws:sts::222222222222:assumed-role/AWSReservedSSO_AdministratorAccess_0f/owner"
 
 
 def _as_role(arn: str) -> AbstractContextManager[Any]:
-    return patch("jaws.aws.caller_identity", return_value=("570327089884", arn))
+    return patch("jaws.aws.caller_identity", return_value=("222222222222", arn))
 
 
 def test_config_show(workspace: Path) -> None:
@@ -75,7 +75,7 @@ def test_plan_writes_comment_and_outputs(
     comment = (artifacts / "plan-comment.md").read_text()
     assert "Jaws" in comment
     assert "> [!WARNING]" in comment and "Changes pending" in comment
-    assert "`guitar.jwall.engineering`" in comment
+    assert "`guitar.example.com`" in comment
     assert "result=changes\nchanges=true\n" in github_output.read_text()
 
 
@@ -134,12 +134,9 @@ def test_preview_deploy_and_remove(
         assert asset["CacheControl"] == "public, max-age=300"
         comment = (workspace / ".jaws" / "preview-comment.md").read_text()
         assert "Jaws" in comment
-        assert "**https://pr-12.preview.guitar.jwall.engineering/**" in comment
+        assert "**https://pr-12.preview.guitar.example.com/**" in comment
         assert "#12" in comment
-        assert (
-            "preview_url=https://pr-12.preview.guitar.jwall.engineering/"
-            in github_output.read_text()
-        )
+        assert "preview_url=https://pr-12.preview.guitar.example.com/" in github_output.read_text()
 
         result = runner.invoke(cli.app, ["preview", "remove", "--pr", "12"])
         assert result.exit_code == 0, result.output
@@ -329,7 +326,7 @@ def test_destroy_refuses_sites(workspace: Path, fake_terraform: Path) -> None:
     assert "not supported for sites" in result.output
 
 
-BOT_RELEASE_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-braveheart-ci-release/s"
+BOT_RELEASE_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-braveheart-ci-release/s"
 TOKEN_PARAM = "/jaws/braveheart/lichess-token"
 
 
@@ -795,8 +792,8 @@ def test_bot_build_waits_for_assets_attached_after_publishing(
 
 # -- research projects ---------------------------------------------------------------
 
-RESEARCH_PLAN_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-math-prover-ci-plan/s"
-RESEARCH_APPLY_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-math-prover-ci-apply/s"
+RESEARCH_PLAN_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-math-prover-ci-plan/s"
+RESEARCH_APPLY_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-math-prover-ci-apply/s"
 RESEARCH_BUCKET = "jaws-math-prover-artifacts"
 TF_RM = "state rm -lock-timeout=120s "
 

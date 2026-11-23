@@ -28,15 +28,27 @@ from jaws.site import Site, load_site_config
 FIXTURES = Path(__file__).parent / "fixtures"
 SITE_FIXTURES = sorted((FIXTURES / "sites").glob("*.yaml"))
 REPO_ROOT = Path(__file__).resolve().parent.parent
-#: The tool configuration, which the suite's baseline starts from.
-CONFIG_DIR = REPO_ROOT / "config"
+#: The platform configuration the suite's baseline starts from: a neutral copy of
+#: config/'s shape, so no test depends on the owner's own values.
+CONFIG_DIR = REPO_ROOT / "tests" / "fixtures" / "platform"
+#: The owner's own configuration. Only tests/platform/ reads it.
+PLATFORM_CONFIG_DIR = REPO_ROOT / "config"
 #: The GitHub owner the suite onboards its sample projects under.
 TEST_OWNER = "Test-Fixtures"
 
 
 def repo_config() -> dict[str, Any]:
-    """The repository's tool configuration (config/) as one raw mapping."""
+    """The suite's platform configuration (the neutral fixture) as one raw mapping."""
     return load_document(CONFIG_DIR)
+
+
+def fixture_root(tmp_path: Path) -> Path:
+    """A throwaway repository root: scripts/ and the neutral fixture as config/, for a
+    workflow step that calls scripts/projects.sh without --config."""
+    root = tmp_path / "repo"
+    shutil.copytree(REPO_ROOT / "scripts", root / "scripts")
+    shutil.copytree(CONFIG_DIR, root / "config")
+    return root
 
 
 def project_entry(config: dict[str, Any], key: str) -> dict[str, Any]:
@@ -136,7 +148,7 @@ DATABRICKS_POC_GUARDRAILS = ProjectGuardrails(
         compute_policies=("small-interactive", "jobs"),
         cost_center="cc-0000",
         vpc_cidr="10.40.0.0/16",
-        admins=("jimmy.wallace145@gmail.com",),
+        admins=("owner@example.com",),
     )
 )
 
@@ -294,11 +306,11 @@ def fake_terraform(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         json.dumps(
             {
                 "bucket_name": {"value": "jaws-guitar-knowledge-base"},
-                "prod_url": {"value": "https://guitar.jwall.engineering/"},
+                "prod_url": {"value": "https://guitar.example.com/"},
                 "prod_distribution_id": {"value": "E1PROD"},
                 "dev_url": {"value": None},
                 "dev_distribution_id": {"value": None},
-                "preview_url_pattern": {"value": "https://pr-<n>.preview.guitar.jwall.engineering"},
+                "preview_url_pattern": {"value": "https://pr-<n>.preview.guitar.example.com"},
                 "preview_distribution_id": {"value": "E1PREVIEW"},
             }
         )

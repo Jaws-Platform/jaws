@@ -4,7 +4,7 @@ A reusable workflow checks this repository out to use its action and CLI. It
 must check out its own commit, the one the consumer pinned. `github.*`
 describes the caller, and `github.job_workflow_sha` is empty inside a reusable
 workflow: `actions/checkout` then falls back to the default branch, so every
-consumer silently ran `main` (seen in jwallace145/site run 43856592781).
+consumer silently ran `main` (seen in a consumer's workflow run).
 `job.workflow_sha` is the commit of the workflow file that defines the job.
 
 Each checkout is followed by a step that refuses to go on unless the checkout

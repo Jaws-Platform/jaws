@@ -1,0 +1,34 @@
+# A neutral platform configuration for the product's tests: config/'s shape, with every identifying value replaced (tests/platform/test_no_owner_values.py).
+monitoring:
+  instance_type: t9g.medium
+  ami: al2023-ami-2023.12.20261026.1-kernel-6.18-arm64
+  domain: grafana.example.com
+  snapshots: true
+  schedule:
+    timezone: America/Denver
+    days:
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
+    - sat
+    - sun
+    'on': 08:00
+    'off': '24:00'
+  cost:
+    bucket: jaws-billing-222222222222
+    protect_raw: false
+    aws: true
+    databricks: true
+    budgets:
+      total: 100
+    anomaly_floor_usd: 2
+  slack:
+    channels:
+      platform: /jaws/monitoring/slack/platform
+      costs: /jaws/monitoring/slack/costs
+    routes:
+      host: platform
+      pipeline: platform
+      cost: costs

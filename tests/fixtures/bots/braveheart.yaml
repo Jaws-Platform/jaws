@@ -9,7 +9,7 @@ tags:
   Project: braveheart
   Environment: prod
   Repository: Braveheart-Chess/braveheart
-  Owner: jwallace145
+  Owner: example-owner
 
 components:
   - kind: container-image
