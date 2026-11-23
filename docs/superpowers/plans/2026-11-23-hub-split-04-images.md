@@ -410,14 +410,22 @@ def test_the_image_ships_every_stack_where_the_cli_looks() -> None:
     assert f"{IMAGE_STACKS_ROOT}/*/" in loops[0]
     assert f"terraform providers mirror {IMAGE_PLUGIN_DIR}" in loops[0]
     project_stacks = {p.name for p in (REPO_ROOT / "stacks").iterdir()}
-    assert not set(PLATFORM_STACKS) & project_stacks, "a platform stack would shadow a project stack"
+    assert not set(PLATFORM_STACKS) & project_stacks, (
+        "a platform stack would shadow a project stack"
+    )
 
 
 def test_the_build_context_keeps_backends_lock_files_and_stack_tests_out() -> None:
     """backend/prod.hcl names the owner's state bucket, and the stacks' tests/ hold
     fixtures generated from the owner's configuration: neither may reach the public image."""
     ignored = set((REPO_ROOT / ".dockerignore").read_text().split())
-    assert {"**/backend", "**/tests", "**/.terraform", "**/.terraform.lock.hcl", "owner-access"} <= ignored
+    assert {
+        "**/backend",
+        "**/tests",
+        "**/.terraform",
+        "**/.terraform.lock.hcl",
+        "owner-access",
+    } <= ignored
     assert not ignored & {"stacks", *PLATFORM_STACKS, "config", "datasets", "src"}
 ```
 
