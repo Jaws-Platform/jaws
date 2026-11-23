@@ -138,7 +138,7 @@ module "network" {
 module "monitoring" {
   count   = local.enabled ? 1 : 0
   source  = "Jaws-Platform/jaws-monitoring/aws"
-  version = "0.9.0"
+  version = "0.9.1"
 
   name        = local.name
   bucket_name = local.cost.bucket_name

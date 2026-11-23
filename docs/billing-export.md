@@ -66,8 +66,8 @@ destroy the export on its next apply.
 management account                            production account
 Data Export jaws-focus-daily ── daily, ──►    s3://jaws-billing-570327089884/raw/provider=aws/source=data-exports/
                                 across        jaws-focus-daily/
-                                accounts        data/BILLING_PERIOD=YYYY-MM/<timestamp>-<execution-id>/jaws-focus-daily-00001.snappy.parquet
-                                                metadata/BILLING_PERIOD=YYYY-MM/Manifest.json
+                                accounts        data/billing_period=YYYY-MM/<timestamp>-<execution-id>/jaws-focus-daily-00001.snappy.parquet
+                                                metadata/billing_period=YYYY-MM/jaws-focus-daily-Manifest.json
                                                       │
                                                       ▼  jaws-monitoring-normalizer, hourly
                                               normalized/schema=focus-1.2/provider=aws/billing_period=YYYY-MM/data.parquet
@@ -78,7 +78,7 @@ Data Export jaws-focus-daily ── daily, ──►    s3://jaws-billing-570327
    for the management account's exports (`aws:SourceAccount` and
    `aws:SourceArn`), and the export names production as the bucket's owner.
    Each refresh writes a new execution folder for the billing period, then
-   rewrites that period's `Manifest.json` to point at it.
+   rewrites that period's `jaws-focus-daily-Manifest.json` to point at it.
 2. **The normalizer reads the newest delivery.** Every hour it reads each
    period's manifest, and rebuilds the period's normalized rows when the
    manifest names a newer execution. AWS refreshes the current month at
@@ -110,7 +110,7 @@ The owner's, after the export exists:
    dashboards use have been active since 2026-10-30 ([docs/costs.md](costs.md#cost-allocation-tags)).
 2. **Check the first delivery, then set `protect_raw: true`.** The first
    delivery lands within about 24 hours, under
-   `raw/provider=aws/source=data-exports/jaws-focus-daily/data/BILLING_PERIOD=YYYY-MM/`.
+   `raw/provider=aws/source=data-exports/jaws-focus-daily/data/billing_period=YYYY-MM/`.
    Check it is there and that nothing landed elsewhere, and check the first
    Databricks run the same way, under `raw/provider=databricks/source=system-tables/`:
 
