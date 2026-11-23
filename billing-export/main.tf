@@ -25,7 +25,7 @@ locals {
 module "export" {
   count   = local.enabled ? 1 : 0
   source  = "Jaws-Platform/jaws-monitoring/aws//modules/aws-billing-export"
-  version = "0.8.1"
+  version = "0.8.2"
 
   name                    = local.export.name
   bucket_name             = local.export.bucket_name

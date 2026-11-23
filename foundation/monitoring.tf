@@ -78,7 +78,7 @@ locals {
 module "billing_bucket" {
   count   = local.billing_bucket == null ? 0 : 1
   source  = "Jaws-Platform/jaws-monitoring/aws//modules/billing-bucket"
-  version = "0.8.1"
+  version = "0.8.2"
 
   bucket_name                   = local.billing_bucket.name
   aws_export_source_account_ids = local.billing_bucket.aws_export_source_account_ids
