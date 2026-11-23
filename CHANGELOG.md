@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.1](https://github.com/Jaws-Platform/jaws/compare/v0.80.0...v0.80.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **monitoring:** pick up jaws-monitoring 0.9.1's normalizer and schedule fixes ([#321](https://github.com/Jaws-Platform/jaws/issues/321)) ([10e2c57](https://github.com/Jaws-Platform/jaws/commit/10e2c57bb4d2fb092adb4696adf8c20c90e3f333))
+
 ## [0.80.0](https://github.com/Jaws-Platform/jaws/compare/v0.79.0...v0.80.0) (2026-11-23)
 
 
