@@ -259,9 +259,9 @@ run "a_second_repository_is_trusted_alongside_the_first" {
 
   assert {
     condition = jsondecode(module.infra_ci_plan.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == [
-      "repo:Jaws-Platform/jaws:pull_request",
+      "repo:${local.platform_repository.repository}:pull_request",
       "repo:Example-Hub/platform:pull_request",
-      "repo:Jaws-Platform@359185083/jaws@1420037633:pull_request",
+      "repo:${split("/", local.platform_repository.repository)[0]}@${local.platform_repository.owner_id}/${split("/", local.platform_repository.repository)[1]}@${local.platform_repository.repository_id}:pull_request",
       "repo:Example-Hub@10000099/platform@20000099:pull_request",
     ]
     error_message = "the plan role trusts both repositories' pull requests, the classic subjects (first, second) before the immutable ones"
@@ -282,6 +282,7 @@ run "a_second_repository_is_trusted_alongside_the_first" {
   assert {
     condition = alltrue([
       for policy in concat(
+        [module.infra_ci_apply.assume_role_policy],
         [module.data_access_ci_apply.assume_role_policy],
         [for role in module.monitoring_ci_apply : role.assume_role_policy],
         [for key, role in module.bot_ci_apply : role.assume_role_policy],
