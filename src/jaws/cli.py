@@ -73,7 +73,7 @@ from .site import DEV_PREFIX, ENVIRONMENT, PROD_PREFIX, SITE_FILE, Site, load_si
 
 app = typer.Typer(
     name="jaws",
-    help="Provisions and publishes a jwall.engineering site from jaws.yaml.",
+    help="Provisions and publishes a site from jaws.yaml.",
     no_args_is_help=True,
     add_completion=False,
     rich_markup_mode=None,

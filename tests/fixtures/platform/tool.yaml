@@ -1,0 +1,10 @@
+# A neutral platform configuration for the product's tests: config/'s shape, with every identifying value replaced (tests/platform/test_no_owner_values.py).
+context:
+  name_root: jaws
+  organization: Jaws-Platform
+  owner: example-owner
+  managed_by: JAWS
+ecr:
+  repository: jaws-cli
+  keep_release_images: 20
+  expire_untagged_after_days: 7

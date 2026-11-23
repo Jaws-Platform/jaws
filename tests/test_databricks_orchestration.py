@@ -41,8 +41,8 @@ runner = CliRunner()
 SENTINEL = "dapi-SENTINEL-s3cr3t-value"
 PARAM = "/jaws/databricks/client-secret"
 AUDIT_BUCKET = "jaws-databricks-audit-logs"
-PLAN_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-databricks-poc-ci-plan/s"
-APPLY_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-databricks-poc-ci-apply/s"
+PLAN_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-databricks-poc-ci-plan/s"
+APPLY_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-databricks-poc-ci-apply/s"
 PARTIAL = "account stack applied; workspace stack failed; re-running apply is safe"
 DEFERRED = "workspace stack is planned after the workspace exists"
 WORKSPACE_ADDRESS = "module.workspace.databricks_mws_workspaces.this"
@@ -78,7 +78,7 @@ class FakeClients:
 
 
 def _as_role(arn: str) -> AbstractContextManager[Any]:
-    return patch("jaws.aws.caller_identity", return_value=("570327089884", arn))
+    return patch("jaws.aws.caller_identity", return_value=("222222222222", arn))
 
 
 def _outputs_file(path: Path, values: dict[str, Any]) -> Path:

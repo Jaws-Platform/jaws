@@ -18,8 +18,8 @@ from jaws import cli
 from tests.conftest import FIXTURES, fixture_config, write_config
 from tests.test_cli import _as_role, _calls, runner
 
-SELFPLAY_PLAN_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-braveheart-selfplay-ci-plan/s"
-POSITIONS_ROLE = "arn:aws:iam::570327089884:role/jaws-ds-braveheart-selfplay-positions"
+SELFPLAY_PLAN_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-braveheart-selfplay-ci-plan/s"
+POSITIONS_ROLE = "arn:aws:iam::222222222222:role/jaws-ds-braveheart-selfplay-positions"
 
 
 @pytest.fixture

@@ -28,7 +28,7 @@ from tests.conftest import CONFIG_DIR, FIXTURES
 CONFIG = CONFIG_DIR
 BOT = FIXTURES / "registry" / "braveheart-bot.yaml"
 PRODUCTION_ADMIN = (
-    "arn:aws:sts::570327089884:assumed-role/"
+    "arn:aws:sts::222222222222:assumed-role/"
     "AWSReservedSSO_AdministratorAccess_013589f39f92382a/owner"
 )
 runner = CliRunner()
@@ -93,7 +93,7 @@ def test_bot_secrets_set_writes_the_addressed_account_s_parameter(
     (bot_workspace / "jaws.yaml").write_text(yaml.safe_dump(raw))
     lichess_config = (bot_workspace / "lichess" / "config.yml").read_text()
     (bot_workspace / raw["components"][1]["config"]).write_text(lichess_config)
-    production = ("570327089884", PRODUCTION_ADMIN)
+    production = ("222222222222", PRODUCTION_ADMIN)
     with mock_aws(), patch("jaws.aws.caller_identity", return_value=production):
         result = runner.invoke(
             cli.app,

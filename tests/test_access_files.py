@@ -163,14 +163,12 @@ def test_registry_ids_come_from_the_onboarding_registry() -> None:
     settings = _settings()
     ids = project_registry_ids(settings)
     assert ids["braveheart-databricks"] == RegistryIds(
-        "Braveheart-Chess/braveheart-databricks", "1458504699", "356866252"
+        "Braveheart-Chess/braveheart-databricks", "20000009", "10000003"
     )
     assert ids["braveheart-selfplay"] == RegistryIds(
-        "Braveheart-Chess/braveheart-selfplay", "1459456470", "356866252"
+        "Braveheart-Chess/braveheart-selfplay", "20000007", "10000003"
     )
-    assert ids["pi-prover"] == RegistryIds(
-        "Pi-Mathematical-Reasoning/pi", "1466017315", "359343898"
-    )
+    assert ids["pi-prover"] == RegistryIds("Pi-Mathematical-Reasoning/pi", "20000011", "10000004")
     assert {key: i.repository for key, i in ids.items()} == project_repositories(settings)
 
 

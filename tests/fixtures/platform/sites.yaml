@@ -1,0 +1,7 @@
+# A neutral platform configuration for the product's tests: config/'s shape, with every identifying value replaced (tests/platform/test_no_owner_values.py).
+dns:
+  zone: example.com
+  zone_id: Z0000000000EXAMPLE
+  txt_records:
+    _example-challenge-1:
+    - example-token-1-1

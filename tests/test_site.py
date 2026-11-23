@@ -86,7 +86,7 @@ def test_each_required_tag_is_required(tmp_path: Path, tag: str) -> None:
     ("tag", "value"),
     [
         ("Project", "other"),
-        ("Repository", "jwallace145/other"),
+        ("Repository", "example-owner/other"),
         ("Environment", "dev"),
     ],
 )
@@ -107,7 +107,7 @@ def test_empty_tag_value(tmp_path: Path) -> None:
         load_site_config(_write(tmp_path, _raw({"tags.Owner": "  "})))
 
 
-@pytest.mark.parametrize("stated", ["jwallace145", "jaws", "someone-else"])
+@pytest.mark.parametrize("stated", ["example-owner", "jaws", "someone-else"])
 def test_a_stated_organization_is_refused(tmp_path: Path, stated: str) -> None:
     """The tool sets Organization; a file may not state it, even with the right owner."""
     with pytest.raises(
@@ -148,7 +148,7 @@ def test_the_tool_stamps_organization_and_names_keep_the_root(
     """Organization is the GitHub owner the project is registered under; the
     names keep the name root."""
     site = Site.from_config(load_site_config(_write(tmp_path, _raw())), settings)
-    assert site.tags["Organization"] == settings.owner(site.project) == "jwallace145"
+    assert site.tags["Organization"] == settings.owner(site.project) == "example-owner"
     assert site.bucket == f"jaws-{site.project}" and site.name_root == "jaws"
 
 
@@ -156,33 +156,31 @@ def test_a_file_without_the_tool_tags_is_stamped(tmp_path: Path, settings: Setti
     site = Site.from_config(load_site_config(_write(tmp_path, _raw())), settings)
     assert "Organization" not in site.config.tags and "ManagedBy" not in site.config.tags
     assert {k: site.tags[k] for k in TOOL_TAGS} == {
-        "Organization": "jwallace145",
+        "Organization": "example-owner",
         "ManagedBy": "JAWS",
     }
 
 
 def test_domain_must_be_under_the_zone(tmp_path: Path, settings: Settings) -> None:
-    config = load_site_config(_write(tmp_path, _raw({"domain": "guitar.example.com"})))
+    config = load_site_config(_write(tmp_path, _raw({"domain": "guitar.example.org"})))
     with pytest.raises(ConfigError, match="not under the zone"):
         Site.from_config(config, settings)
 
 
 def test_apex_domain_is_under_the_zone(settings: Settings) -> None:
     config = load_site_config(FIXTURES / "sites" / "main-site.yaml")
-    assert Site.from_config(config, settings).config.domain == "jwall.engineering"
+    assert Site.from_config(config, settings).config.domain == "example.com"
 
 
 def test_dev_domain(tmp_path: Path, settings: Settings) -> None:
-    config = load_site_config(
-        _write(tmp_path, _raw({"dev": {"domain": "dev.guitar.jwall.engineering"}}))
-    )
+    config = load_site_config(_write(tmp_path, _raw({"dev": {"domain": "dev.guitar.example.com"}})))
     site = Site.from_config(config, settings)
-    assert site.dev_url == "https://dev.guitar.jwall.engineering/"
+    assert site.dev_url == "https://dev.guitar.example.com/"
 
 
 def test_dev_domain_must_differ(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match=r"dev\.domain must differ"):
-        load_site_config(_write(tmp_path, _raw({"dev": {"domain": "guitar.jwall.engineering"}})))
+        load_site_config(_write(tmp_path, _raw({"dev": {"domain": "guitar.example.com"}})))
 
 
 @pytest.mark.parametrize(
@@ -191,8 +189,8 @@ def test_dev_domain_must_differ(tmp_path: Path) -> None:
         ("version", 2, "version"),
         ("project", "Guitar", "project"),
         ("project", "a" * 31, "project"),
-        ("repository", "jwallace145", "repository"),
-        ("domain", "Guitar.jwall.engineering", "domain"),
+        ("repository", "example-owner", "repository"),
+        ("domain", "Guitar.example.com", "domain"),
         ("site.output_dir", "../site", "output_dir"),
         ("site.output_dir", "/site", "output_dir"),
         ("site.immutable_paths", ["/abs/**"], "immutable_paths"),

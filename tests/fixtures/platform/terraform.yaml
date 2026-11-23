@@ -1,0 +1,5 @@
+# A neutral platform configuration for the product's tests: config/'s shape, with every identifying value replaced (tests/platform/test_no_owner_values.py).
+state:
+  bucket: jaws-terraform-state-222222222222
+  region: us-east-1
+  key_template: project={project}/env={environment}/{project}-{environment}.tfstate

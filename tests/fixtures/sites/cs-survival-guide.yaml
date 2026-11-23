@@ -1,13 +1,13 @@
 version: 1
 project: cs-survival-guide
-repository: jwallace145/cs-survival-guide
-domain: survival-guide.jwall.engineering
+repository: example-owner/cs-survival-guide
+domain: survival-guide.example.com
 
 tags:
   Project: cs-survival-guide
   Environment: prod
-  Repository: jwallace145/cs-survival-guide
-  Owner: jwallace145
+  Repository: example-owner/cs-survival-guide
+  Owner: example-owner
 
 site:
   output_dir: site

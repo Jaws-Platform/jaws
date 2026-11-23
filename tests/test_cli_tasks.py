@@ -16,8 +16,8 @@ from tests.conftest import offboard, project_entry, read_config, write_config
 from tests.test_cli import BOT_PLAN_ROLE, RESEARCH_PLAN_ROLE, _as_role
 
 runner = CliRunner()
-TASK_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-braveheart-ci-task/s"
-RESEARCH_TASK_ROLE = "arn:aws:sts::570327089884:assumed-role/jaws-math-prover-ci-task/s"
+TASK_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-braveheart-ci-task/s"
+RESEARCH_TASK_ROLE = "arn:aws:sts::222222222222:assumed-role/jaws-math-prover-ci-task/s"
 SHA = "0123456789abcdef0123456789abcdef01234567"
 NOW = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
 
@@ -436,7 +436,7 @@ def test_task_run_on_research_takes_the_profile_from_its_file(
     assert result.exit_code == 0, result.output
     spec = seen["spec"]
     assert spec.project.project == "math-prover"
-    assert spec.repository == "jwallace145/math-prover"
+    assert spec.repository == "example-owner/math-prover"
     assert (spec.profile, spec.instance_type, spec.gpu) == ("train", "g6e.xlarge", True)
 
 

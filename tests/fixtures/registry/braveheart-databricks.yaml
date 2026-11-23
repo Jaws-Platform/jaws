@@ -13,7 +13,7 @@ tags:
   Project: braveheart-databricks
   Environment: prod
   Repository: Braveheart-Chess/braveheart-databricks
-  Owner: jwallace145
+  Owner: example-owner
 
 components:
   - kind: databricks-workspace

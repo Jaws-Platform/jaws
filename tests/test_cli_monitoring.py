@@ -19,7 +19,7 @@ from jaws import cli
 from tests.conftest import read_config, repo_config, write_config
 
 runner = CliRunner()
-OWNER = "arn:aws:sts::570327089884:assumed-role/AWSReservedSSO_AdministratorAccess_0f/owner"
+OWNER = "arn:aws:sts::222222222222:assumed-role/AWSReservedSSO_AdministratorAccess_0f/owner"
 SENTINEL = "hooks.slack.com/services/T000/B000/SENTINEL-s3cr3t"
 #: Every secret config/monitoring.yaml implies: the Grafana admin, and one
 #: webhook per Slack channel, at the parameter the channel names.
@@ -31,7 +31,7 @@ SECRETS = {
 }
 
 
-def _as(arn: str, account: str = "570327089884") -> AbstractContextManager[Any]:
+def _as(arn: str, account: str = "222222222222") -> AbstractContextManager[Any]:
     return patch("jaws.aws.caller_identity", return_value=(account, arn))
 
 
@@ -102,13 +102,13 @@ def test_set_refuses_a_name_the_config_does_not_imply(
 
 
 def test_set_refuses_another_accounts_credentials(platform: Path) -> None:
-    with mock_aws(), _as("arn:aws:sts::650503560686:assumed-role/admin/s", "650503560686"):
+    with mock_aws(), _as("arn:aws:sts::111111111111:assumed-role/admin/s", "111111111111"):
         result = runner.invoke(
             cli.app, ["monitoring", "secrets", "set", "grafana-admin-user"], input="x\n"
         )
         assert result.exit_code == 3, result.output
         assert _ssm().describe_parameters()["Parameters"] == []
-    assert "570327089884" in result.output
+    assert "222222222222" in result.output
 
 
 def test_check_lists_the_missing_secrets(platform: Path) -> None:

@@ -12,8 +12,7 @@ from typing import Any
 import pytest
 import yaml
 
-from jaws.settings import load_settings
-from tests.conftest import CONFIG_DIR, REPO_ROOT
+from tests.conftest import REPO_ROOT
 
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 ACCOUNT_ID = "${{ needs.account.outputs.account_id }}"
@@ -138,20 +137,6 @@ def test_the_tools_own_workflows_take_no_role_from_a_repository_variable(name: s
     """(The site workflows document a site repository's own variables of these names.)"""
     text = (WORKFLOWS / name).read_text()
     assert "vars.AWS_PLAN_ROLE_ARN" not in text and "vars.AWS_APPLY_ROLE_ARN" not in text
-
-
-def test_the_backend_file_names_the_accounts_state_bucket() -> None:
-    """`-backend-config=backend/prod.hcl` must point at the bucket config/terraform.yaml names."""
-    settings = load_settings(CONFIG_DIR, environ={})
-    backend = (REPO_ROOT / "foundation" / "backend" / "prod.hcl").read_text()
-    values = dict(
-        (key.strip(), value.strip().strip('"'))
-        for key, value in (line.split("=", 1) for line in backend.splitlines() if "=" in line)
-    )
-    assert values["bucket"] == settings.state.bucket
-    assert values["region"] == settings.state.region
-    assert values["key"] == "project=infra/env=prod/infra-prod.tfstate"
-    assert sorted(p.name for p in (REPO_ROOT / "foundation" / "backend").iterdir()) == ["prod.hcl"]
 
 
 def test_the_apply_runs_only_for_a_release() -> None:

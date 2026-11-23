@@ -109,7 +109,7 @@ def test_task_tags(bot: Project) -> None:
         "Project": "braveheart",
         "Environment": "prod",
         "Repository": "Braveheart-Chess/braveheart",
-        "Owner": "jwallace145",
+        "Owner": "example-owner",
         "ManagedBy": "JAWS",
         "Component": "task-runner",
         "Purpose": "ci-task",

@@ -17,7 +17,7 @@ from jaws import cli, costs
 from jaws.errors import PreflightError, RunError
 from tests.test_cli import _as_role
 
-OWNER = "arn:aws:iam::570327089884:user/owner"
+OWNER = "arn:aws:iam::222222222222:user/owner"
 AUG, SEP, OCT = "2026-08-01", "2026-09-01", "2026-10-01"
 START, END = date(2026, 8, 1), date(2026, 10, 31)
 

@@ -1,0 +1,6 @@
+# A neutral platform configuration for the product's tests: config/'s shape, with every identifying value replaced (tests/platform/test_no_owner_values.py).
+platform:
+  repositories:
+  - repository: Jaws-Platform/jaws
+    owner_id: '10000001'
+    repository_id: '20000001'

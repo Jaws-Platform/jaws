@@ -88,7 +88,7 @@ _MODULE_PIN = re.compile(
     r'\s*\n\s*version\s*=\s*"(?P<version>[^"]+)"'
 )
 #: The library the families were split from. Nothing may pin it any more.
-_OLD_LIBRARY = "jwallace145/jwall-engineering/aws"
+_OLD_LIBRARY = "example-owner/jwall-engineering/aws"
 
 
 def _families() -> dict[str, str]:

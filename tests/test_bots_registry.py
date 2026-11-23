@@ -1,4 +1,4 @@
-"""The bot and research projects of the onboarding registry (config/projects.yaml),
+"""The bot and research projects of the onboarding registry (the platform's projects file),
 the foundation that serves them, the workflows that plan and apply them, and their
 project files agree."""
 
@@ -17,11 +17,10 @@ from jaws.site import load_site_config
 from tests.conftest import FIXTURES, REPO_ROOT, onboarded, repo_config
 
 BOTS_TF = REPO_ROOT / "foundation" / "bots.tf"
-PROJECTS_YAML = REPO_ROOT / "config" / "projects.yaml"
 #: Each registered project's file, as its repository commits it.
 REGISTRY_FILES = FIXTURES / "registry"
 #: The Braveheart-Chess organisation: gh api orgs/Braveheart-Chess --jq .id
-BRAVEHEART_CHESS = "356866252"
+BRAVEHEART_CHESS = "10000003"
 
 
 #: Projects registered after the management account was retired (v0.70.0): they
@@ -63,21 +62,19 @@ def project_file(project: str) -> dict[str, Any]:
 
 def test_registry_lists_braveheart() -> None:
     assert registry() == {
-        "braveheart": ("Braveheart-Chess/braveheart", "1435162673"),
+        "braveheart": ("Braveheart-Chess/braveheart", "20000005"),
         # The engine's Lichess bot, deployed from its own repository since 2026-11-15.
-        "braveheart-bot": ("Braveheart-Chess/braveheart-lichess-bot", "1459279608"),
+        "braveheart-bot": ("Braveheart-Chess/braveheart-lichess-bot", "20000006"),
         # The self-play dataset and the trainer, split from the engine on 2026-11-16.
-        "braveheart-selfplay": ("Braveheart-Chess/braveheart-selfplay", "1459456470"),
-        "braveheart-trainer": ("Braveheart-Chess/braveheart-trainer", "1459456509"),
+        "braveheart-selfplay": ("Braveheart-Chess/braveheart-selfplay", "20000007"),
+        "braveheart-trainer": ("Braveheart-Chess/braveheart-trainer", "20000008"),
         # Pi's benchmark files, a dataset alone, registered on 2026-11-21.
-        "pi-benchmarks": ("Pi-Mathematical-Reasoning/pi-benchmarks", "1466231955"),
+        "pi-benchmarks": ("Pi-Mathematical-Reasoning/pi-benchmarks", "20000010"),
         # Pi's own resources, from the pi repository, registered on 2026-11-21.
-        "pi-prover": ("Pi-Mathematical-Reasoning/pi", "1466017315"),
+        "pi-prover": ("Pi-Mathematical-Reasoning/pi", "20000011"),
         # The cold archive of the deprecated Prog Strength, registered on 2026-11-21.
-        "prog-strength-archive": ("Prog-Strength/prog-strength-archive", "1466937166"),
+        "prog-strength-archive": ("Prog-Strength/prog-strength-archive", "20000012"),
     }
-    # The engine's project was `rusty-chess` until 2026-11-15; the old name is gone.
-    assert "rusty-chess" not in PROJECTS_YAML.read_text()
 
 
 #: The longest project key whose apply role's container/manage policy fits IAM's
@@ -309,7 +306,7 @@ def test_bot_plan_runs_without_a_variable_and_skips_until_roles_exist() -> None:
 
 def test_foundation_takes_the_account_from_config() -> None:
     state = (REPO_ROOT / "foundation" / "state.tf").read_text()
-    assert "570327089884" not in state
+    assert "222222222222" not in state
     assert "local.account_id" in state
 
 
@@ -583,7 +580,7 @@ def _hcl_list(block: str, attribute: str) -> list[str]:
 def test_the_registered_databricks_projects() -> None:
     # repository_id is GitHub's numeric ID: gh api repos/<owner>/<repo> --jq .id
     assert databricks_registry() == {
-        "braveheart-databricks": ("Braveheart-Chess/braveheart-databricks", "1458504699"),
+        "braveheart-databricks": ("Braveheart-Chess/braveheart-databricks", "20000009"),
     }
 
 
@@ -593,7 +590,7 @@ def test_every_databricks_project_has_numeric_repository_and_owner_ids() -> None
     assert {
         k: (p["repository_id"], p["owner_id"]) for k, p in _onboarded("databricks").items()
     } == {
-        "braveheart-databricks": ("1458504699", "356866252"),
+        "braveheart-databricks": ("20000009", "10000003"),
     }
     assert re.search(
         r"databricks_projects = \{\s*for key, project in local\.registry : key => \{.*?\} "

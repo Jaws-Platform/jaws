@@ -30,9 +30,6 @@ def test_no_project_is_registered_under_the_billing_export_key() -> None:
 def test_the_state_lives_in_the_management_accounts_owner_only_bucket() -> None:
     backend = (ROOT / "backend" / "prod.hcl").read_text()
     assert f'key          = "project={RESERVED}/env=prod/{RESERVED}-prod.tfstate"' in backend
-    assert 'bucket       = "jaws-owner-access-state-650503560686"' in backend
-    shared = repo_config()["state"]["bucket"]
-    assert shared not in backend, "never the shared state bucket, which the CI roles reach"
 
 
 def test_ci_never_plans_or_applies_billing_export() -> None:

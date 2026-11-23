@@ -38,7 +38,7 @@ run "plans_a_task_runner_and_the_nets_bucket" {
   }
 
   assert {
-    condition     = jsonencode(var.datasets[0].readers) == jsonencode(["arn:aws:iam::570327089884:role/jaws-braveheart-selfplay-task-relabel"])
+    condition     = jsonencode(var.datasets[0].readers) == jsonencode(["arn:aws:iam::222222222222:role/jaws-braveheart-selfplay-task-relabel"])
     error_message = "self-play's relabel tasks, and only they, read the nets through the bucket policy"
   }
 

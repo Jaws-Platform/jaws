@@ -14,7 +14,7 @@ tags:
   Project: braveheart-selfplay
   Environment: prod
   Repository: Braveheart-Chess/braveheart-selfplay
-  Owner: jwallace145
+  Owner: example-owner
 
 components:
   # Self-play and relabelling on dedicated, ephemeral EC2 instances, through

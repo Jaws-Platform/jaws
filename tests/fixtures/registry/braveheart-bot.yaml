@@ -14,7 +14,7 @@ tags:
   Project: braveheart-bot
   Environment: prod
   Repository: Braveheart-Chess/braveheart-lichess-bot
-  Owner: jwallace145
+  Owner: example-owner
 
 components:
   - kind: container-image
@@ -43,7 +43,7 @@ components:
     # the x86-64-v3 release asset as-is.
     instance_type: c8a.medium
     config: config.yml              # lichess-bot config with LICHESS_TOKEN_PLACEHOLDER
-    lichess_user: jwallace145       # the bot account, for the profile URL in `bot status`
+    lichess_user: example-owner       # the bot account, for the profile URL in `bot status`
     secrets:
       LICHESS_TOKEN: lichess-token    # /<organization>/braveheart-bot/lichess-token in the account
     engine:

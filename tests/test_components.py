@@ -118,7 +118,7 @@ def test_bot_without_image_fails(tmp_path: Path, settings: Settings) -> None:
 
 def test_components_with_domain_fail(tmp_path: Path, settings: Settings) -> None:
     raw = _raw()
-    raw["domain"] = "chess.jwall.engineering"
+    raw["domain"] = "chess.example.com"
     with pytest.raises(ConfigError, match="either"):
         _load(tmp_path, raw, settings)
 
