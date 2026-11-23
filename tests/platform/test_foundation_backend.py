@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from jaws.settings import load_settings
 from tests.conftest import PLATFORM_CONFIG_DIR, REPO_ROOT
 
@@ -14,7 +16,7 @@ def test_the_backend_file_names_the_accounts_state_bucket() -> None:
         (key.strip(), value.strip().strip('"'))
         for key, value in (line.split("=", 1) for line in backend.splitlines() if "=" in line)
     )
-    assert values["bucket"] == settings.state.bucket
-    assert values["region"] == settings.state.region
+    if values["bucket"] != settings.state.bucket or values["region"] != settings.state.region:
+        pytest.fail("foundation/backend/prod.hcl differs from config/terraform.yaml", pytrace=False)
     assert values["key"] == "project=infra/env=prod/infra-prod.tfstate"
     assert sorted(p.name for p in (REPO_ROOT / "foundation" / "backend").iterdir()) == ["prod.hcl"]

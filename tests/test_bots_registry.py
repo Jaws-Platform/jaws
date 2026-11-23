@@ -14,12 +14,12 @@ from typing import Any
 import pytest
 
 from jaws.site import load_site_config
-from tests.conftest import FIXTURES, REPO_ROOT, onboarded, repo_config
+from tests.conftest import CONFIG_DIR, FIXTURES, REPO_ROOT, fixture_root, onboarded, repo_config
 
 BOTS_TF = REPO_ROOT / "foundation" / "bots.tf"
 #: Each registered project's file, as its repository commits it.
 REGISTRY_FILES = FIXTURES / "registry"
-#: The Braveheart-Chess organisation: gh api orgs/Braveheart-Chess --jq .id
+#: The Braveheart-Chess organisation's (neutral) owner ID in the fixture.
 BRAVEHEART_CHESS = "10000003"
 
 
@@ -181,7 +181,11 @@ def _listed(*types: str) -> list[dict[str, str]]:
     import json
 
     out = subprocess.run(
-        ["scripts/projects.sh", *types], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+        ["scripts/projects.sh", "--config", str(CONFIG_DIR), *types],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     listed: list[dict[str, str]] = json.loads(out.stdout)
     return listed
@@ -225,7 +229,7 @@ def test_bot_apply_looks_up_only_bot_and_research_projects(
     output = tmp_path / "out"
     result = subprocess.run(
         ["bash", "-e", "-c", lookup["run"]],
-        cwd=REPO_ROOT,
+        cwd=fixture_root(tmp_path),
         env={**os.environ, "PROJECT": project, "GITHUB_OUTPUT": str(output)},
         capture_output=True,
         text=True,
@@ -306,7 +310,7 @@ def test_bot_plan_runs_without_a_variable_and_skips_until_roles_exist() -> None:
 
 def test_foundation_takes_the_account_from_config() -> None:
     state = (REPO_ROOT / "foundation" / "state.tf").read_text()
-    assert "222222222222" not in state
+    assert not re.search(r"\b\d{12}\b", state)
     assert "local.account_id" in state
 
 

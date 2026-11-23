@@ -126,7 +126,7 @@ run "a_deployer_reaches_the_workspace_module" {
   variables {
     deployer = {
       repository    = "example-owner/databricks-poc"
-      repository_id = "1458298100"
+      repository_id = "20000099"
       owner_id      = "10000002"
     }
   }

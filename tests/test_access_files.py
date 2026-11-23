@@ -45,7 +45,7 @@ def test_the_registry_is_read_like_the_workflows_read_it() -> None:
     assert repositories["braveheart-databricks"] == "Braveheart-Chess/braveheart-databricks"
     listed = json.loads(
         subprocess.run(
-            ["scripts/projects.sh", "bot", "research", "databricks"],
+            ["scripts/projects.sh", "--config", str(CONFIG_DIR), "bot", "research", "databricks"],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,

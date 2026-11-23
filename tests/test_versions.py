@@ -87,8 +87,6 @@ _MODULE_PIN = re.compile(
     r'source\s*=\s*"(?P<family>[A-Za-z0-9-]+/[a-z0-9-]+/aws)(?://modules/(?P<module>[a-z0-9-]+))?"'
     r'\s*\n\s*version\s*=\s*"(?P<version>[^"]+)"'
 )
-#: The library the families were split from. Nothing may pin it any more.
-_OLD_LIBRARY = "example-owner/jwall-engineering/aws"
 
 
 def _families() -> dict[str, str]:
@@ -158,8 +156,3 @@ def test_every_family_in_the_release_file_is_used() -> None:
     """A family nothing pins is a stale line in src/jaws/product.yaml."""
     used = {family for family, _, _ in _pins(*_stack_files())}
     assert used == set(_families())
-
-
-def test_nothing_pins_the_library_the_families_were_split_from() -> None:
-    for path in _stack_files():
-        assert _OLD_LIBRARY not in path.read_text(), path

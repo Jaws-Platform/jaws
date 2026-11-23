@@ -5,6 +5,7 @@ The values come from config/ at run time, so this file holds none itself.
 
 from __future__ import annotations
 
+import functools
 import re
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,7 @@ def _ids(node: Any) -> set[str]:
     return found
 
 
+@functools.cache
 def owner_values() -> set[str]:
     """The values in config/ that identify the owner (not the vendor's own name,
     `context.organization`, which stays until the hub exists)."""
@@ -51,11 +53,13 @@ def owner_values() -> set[str]:
         values.add(account["account_id"])
         if "admin_role_arn" in account:
             values.add(account["admin_role_arn"])
+            values.add(account["admin_role_arn"].rsplit("/", 1)[-1])
     values.add(document["context"]["owner"])
     values |= {document["dns"]["zone"], document["dns"]["zone_id"]}
     databricks = document["databricks"]
     values |= {databricks["account_id"], databricks["client_id"]}
-    values.add(urlparse(databricks["shared_host_url"]).netloc)
+    host = urlparse(databricks["shared_host_url"]).netloc
+    values |= {host, host.split(".", 1)[0]}
     for text in _strings(document):
         values |= set(EMAIL.findall(text))
     values |= _ids(document)
@@ -65,7 +69,12 @@ def owner_values() -> set[str]:
 
 def _scanned_files() -> list[Path]:
     """Every text file the product ships or tests with, but this directory's."""
-    roots = [REPO_ROOT / "src" / "jaws", REPO_ROOT / "tests", REPO_ROOT / "foundation" / "tests"]
+    roots = [
+        REPO_ROOT / "src" / "jaws",
+        REPO_ROOT / "tests",
+        REPO_ROOT / "foundation" / "tests",
+        REPO_ROOT / "monitoring" / "tests",
+    ]
     files: list[Path] = []
     for root in roots:
         for path in sorted(root.rglob("*")):

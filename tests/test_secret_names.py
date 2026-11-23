@@ -29,7 +29,7 @@ CONFIG = CONFIG_DIR
 BOT = FIXTURES / "registry" / "braveheart-bot.yaml"
 PRODUCTION_ADMIN = (
     "arn:aws:sts::222222222222:assumed-role/"
-    "AWSReservedSSO_AdministratorAccess_013589f39f92382a/owner"
+    "AWSReservedSSO_AdministratorAccess_0123456789abcdef/owner"
 )
 runner = CliRunner()
 

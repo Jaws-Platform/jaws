@@ -38,8 +38,17 @@ TEST_OWNER = "Test-Fixtures"
 
 
 def repo_config() -> dict[str, Any]:
-    """The repository's tool configuration (config/) as one raw mapping."""
+    """The suite's platform configuration (the neutral fixture) as one raw mapping."""
     return load_document(CONFIG_DIR)
+
+
+def fixture_root(tmp_path: Path) -> Path:
+    """A throwaway repository root: scripts/ and the neutral fixture as config/, for a
+    workflow step that calls scripts/projects.sh without --config."""
+    root = tmp_path / "repo"
+    shutil.copytree(REPO_ROOT / "scripts", root / "scripts")
+    shutil.copytree(CONFIG_DIR, root / "config")
+    return root
 
 
 def project_entry(config: dict[str, Any], key: str) -> dict[str, Any]:

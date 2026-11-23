@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from jaws.settings import load_settings
 from tests.conftest import PLATFORM_CONFIG_DIR, REPO_ROOT
 
@@ -18,12 +20,19 @@ def _management_bucket() -> str:
 
 def test_the_monitoring_state_is_in_the_shared_bucket() -> None:
     settings = load_settings(PLATFORM_CONFIG_DIR, environ={})
-    assert f'bucket       = "{settings.state.bucket}"' in _backend("monitoring")
+    if f'bucket       = "{settings.state.bucket}"' not in _backend("monitoring"):
+        pytest.fail(
+            "monitoring/backend/prod.hcl does not name the shared state bucket", pytrace=False
+        )
 
 
 def test_owner_access_and_billing_export_state_is_in_the_management_accounts_bucket() -> None:
     shared = load_settings(PLATFORM_CONFIG_DIR, environ={}).state.bucket
     for root in ("owner-access", "billing-export"):
         backend = _backend(root)
-        assert f'bucket       = "{_management_bucket()}"' in backend, root
-        assert shared not in backend, f"{root}: never the shared state bucket, which CI reaches"
+        if f'bucket       = "{_management_bucket()}"' not in backend:
+            pytest.fail(
+                f"{root}/backend/prod.hcl does not name the management bucket", pytrace=False
+            )
+        if shared in backend:
+            pytest.fail(f"{root}/backend/prod.hcl names the shared state bucket", pytrace=False)
