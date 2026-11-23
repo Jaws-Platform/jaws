@@ -137,13 +137,18 @@ module "monitoring_ci_apply" {
   oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
   environment             = "prod"
 
-  # Nine managed policies, ten with a hub (ecr/pull): IAM attaches at most ten to a role by default.
+  # Eight managed policies, nine with the domain (monitoring/off-hours-page), ten with a hub (ecr/pull):
+  # IAM attaches at most ten to a role by default.
   policies = concat(
     [
       "tfstate/write",
       "monitoring/read", "monitoring/node", "monitoring/config", "monitoring/functions", "monitoring/backup",
-      "monitoring/off-hours-page", "compute/read", "compute/manage",
+      "compute/read", "compute/manage",
     ],
+    # The off-hours page's certificate needs the node's domain, so a private node has no such policy.
+    # Keyed on the domain, not the schedule: the policy outlives a schedule removal, which still has
+    # the page's resources to destroy.
+    local.monitoring_ci.monitoring == null ? [] : ["monitoring/off-hours-page"],
     local.hub_image_pull,
   )
 

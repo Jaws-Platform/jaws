@@ -568,7 +568,7 @@ token. `terraform output bots` lists the role ARNs.
 | `jaws-infra-ci-plan` | `pull_request` | `tfstate/read` (this stack's state key, write of its `.tflock` only), `foundation/read` |
 | `jaws-infra-ci-apply` | `environment:prod` | `tfstate/write`, `foundation/read`, `foundation/manage`: everything needed to manage this stack, see below; `ecr/push` for the infra CLI image |
 | `jaws-monitoring-ci-plan` | `pull_request` | `tfstate/read` (the monitoring stack's state key), `monitoring/read`, `compute/read` |
-| `jaws-monitoring-ci-apply` | `environment:prod` | `tfstate/write`, `monitoring/read`, `monitoring/node`, `monitoring/config`, `monitoring/functions`, `monitoring/backup` (the `jaws-monitoring` stack, its Grafana record and nothing else in the zone), `compute/read`, `compute/manage` (its VPC) |
+| `jaws-monitoring-ci-apply` | `environment:prod` | `tfstate/write`, `monitoring/read`, `monitoring/node`, `monitoring/config`, `monitoring/functions`, `monitoring/backup` (the `jaws-monitoring` stack, its Grafana record, and with a domain `monitoring/off-hours-page`: the certificate's validation CNAME `_*.<domain>` and the `Project`-tagged ACM certificate, CloudFront distribution and function; nothing else in the zone), `compute/read`, `compute/manage` (its VPC) |
 
 ### Why the apply role is scoped the way it is
 

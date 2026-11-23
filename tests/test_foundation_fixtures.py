@@ -3,10 +3,10 @@
 `foundation/tests/foundation.tftest.hcl` plans the platform configuration
 (tests/fixtures/platform/) as written, and a few states it isn't in: a ManagedBy no code
 spells, no task runner, the Databricks host before its URL is recorded, an admin role of
-another account, no monitoring section, and a second repository or a hub. Each fixture under
-`foundation/tests/fixtures/` is tests/fixtures/platform/ as one file
-(`jaws.settings.load_document`) with a few values set; this test keeps them
-from drifting.
+another account, no monitoring section, a private monitoring node, and a second
+repository or a hub. Each fixture under `foundation/tests/fixtures/` is
+tests/fixtures/platform/ as one file (`jaws.settings.load_document`) with a few
+values set; this test keeps them from drifting.
 
 Regenerate after changing the fixture:
 
@@ -63,6 +63,12 @@ def _foreign_admin(config: dict[str, Any]) -> dict[str, Any]:
 def _no_monitoring(config: dict[str, Any]) -> dict[str, Any]:
     """No monitoring section: no billing bucket, job, roles or state prefix."""
     config.pop("monitoring")
+    return config
+
+
+def _private_node(config: dict[str, Any]) -> dict[str, Any]:
+    """A private monitoring node: no domain, so no record and no off-hours page."""
+    config["monitoring"].pop("domain")
     return config
 
 
@@ -123,6 +129,7 @@ FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "awaiting-host.yaml": _awaiting_host,
     "foreign-admin.yaml": _foreign_admin,
     "no-monitoring.yaml": _no_monitoring,
+    "private-node.yaml": _private_node,
     "two-repositories.yaml": _two_repositories,
     "hub.yaml": _hub,
     "hub-not-trusted.yaml": _hub_not_trusted,

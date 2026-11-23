@@ -250,8 +250,9 @@ names every missing secret while any is missing.
 ## The schedule
 
 The node runs from 08:00 to midnight every day, `America/Denver`, and is
-stopped from 00:00 to 08:00. Two EventBridge Scheduler schedules start and stop
-it; a stop is a normal shutdown, so every service stops cleanly.
+stopped from 00:00 to 08:00. Three EventBridge Scheduler schedules start and stop
+it, and move the name to the off-hours page at the stop; a stop is a normal
+shutdown, so every service stops cleanly.
 
 - **Muted after the start.** Grafana mutes notifications for the first 15
   minutes after each scheduled start (the mute timing
@@ -270,14 +271,15 @@ it; a stop is a normal shutdown, so every service stops cleanly.
   the node points the name back at itself at boot. It acts only with a
   schedule and a domain.
   Rollout check: the first night the page shows from 00:00, and Grafana
-  answers again by about 08:02.
+  answers again by about 08:02. If the page still shows after about 08:05, the
+  node's boot upsert of the name failed: check the node's bootstrap log.
 - **The watchdog** reads the same schedule ([below](#the-watchdog)).
 - **Changing it** is a pull request to `monitoring.schedule`, within the rules
   in [Configuration](#configuration), then a release. Leaving it out runs the
   node all day, for about $9.40 a month more.
 
 The module's [off-hours
-section](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.8.1/modules/monitoring-node/README.md#off-hours)
+section](https://github.com/Jaws-Platform/terraform-aws-jaws-monitoring/blob/v0.9.0/modules/monitoring-node/README.md#off-hours)
 has the rest.
 
 ## Dashboards and alerts
@@ -564,12 +566,15 @@ bucket and the Databricks job, whose DBUs are on **Cost · Databricks**.
 - **After a crash or a manual stop, the name still points at the released
   address.** Only the scheduled stop moves it to the off-hours page; a node
   that stops any other way leaves the name on the old address until the next
-  boot.
+  scheduled stop or boot, whichever comes first.
 - **Turning the page off may fail once.** The provider polls `GetDistribution`
   after the delete, and the read is tag-scoped, so CloudFront may answer
-  AccessDenied. Recover with
-  `terraform state rm 'module.monitoring[0].module.node.aws_cloudfront_distribution.off_hours_page[0]'`
-  and re-apply. Grafana is unaffected.
+  AccessDenied. Nobody runs `terraform apply` in `monitoring/`: once the error
+  is the wait after the delete and the distribution is gone from CloudFront,
+  with the owner's credentials run
+  `terraform init -backend-config=backend/prod.hcl`, then
+  `terraform state rm 'module.monitoring[0].module.node.aws_cloudfront_distribution.off_hours_page[0]'`,
+  and let a release re-apply. Grafana is unaffected.
 - **Unconfirmed until the first live run:** EC2's `recover` action on T9g, the
   watchdog's alarm reads scoped to the alarms' ARNs, pressure-stall metrics on
   the AL2023 kernel (without them their panel is hidden and there is no rule),
