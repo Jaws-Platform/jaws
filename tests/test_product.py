@@ -66,3 +66,10 @@ def test_a_structurally_broken_release_file_is_refused(
 def test_the_cached_pins_cannot_be_mutated() -> None:
     with pytest.raises(TypeError):
         product_pins().families["a/b/aws"] = "0.0.1"  # type: ignore[index]
+
+
+def test_a_block_scalar_version_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / "product.yaml"
+    path.write_text("terraform:\n  version: |\n    1.14.7\nlibrary: {families: {a/b/aws: 0.1.0}}\n")
+    with pytest.raises(ConfigError, match=r"terraform\.version"):
+        load_product_pins(path)

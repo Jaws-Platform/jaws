@@ -24,8 +24,8 @@ PRODUCT_FILE = Path(__file__).with_name("product.yaml")
 #: limit is 65536 characters).
 PLAN_COMMENT_MAX_BYTES = 60000
 
-_FAMILY_ADDRESS = re.compile(r"^[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[a-z0-9]+$")
-_EXACT_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+_FAMILY_ADDRESS = re.compile(r"[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[a-z0-9]+")
+_EXACT_VERSION = re.compile(r"\d+\.\d+\.\d+")
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,7 @@ def load_product_pins(path: Path = PRODUCT_FILE) -> ProductPins:
 
     terraform = raw.get("terraform")
     version = terraform.get("version") if isinstance(terraform, dict) else None
-    if not isinstance(version, str) or not _EXACT_VERSION.match(version):
+    if not isinstance(version, str) or not _EXACT_VERSION.fullmatch(version):
         raise ConfigError(
             f"{path}: terraform.version must be an exact version such as 1.14.7, not {version!r}"
         )
@@ -58,12 +58,12 @@ def load_product_pins(path: Path = PRODUCT_FILE) -> ProductPins:
     if not isinstance(families, dict) or not families:
         raise ConfigError(f"{path}: library.families must name at least one module family")
     for address, family_version in families.items():
-        if not isinstance(address, str) or not _FAMILY_ADDRESS.match(address):
+        if not isinstance(address, str) or not _FAMILY_ADDRESS.fullmatch(address):
             raise ConfigError(
                 f"{path}: library.families key {address!r} must be a registry address, "
                 "<namespace>/<name>/<provider>"
             )
-        if not isinstance(family_version, str) or not _EXACT_VERSION.match(family_version):
+        if not isinstance(family_version, str) or not _EXACT_VERSION.fullmatch(family_version):
             raise ConfigError(
                 f"{path}: library.families[{address!r}] must be an exact version such as 0.1.0, "
                 f"not {family_version!r}"

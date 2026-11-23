@@ -1009,6 +1009,11 @@ def load_document(path: Path) -> dict[str, Any]:
     `path` is the config directory, whose `*.yaml` files are merged (each section
     in one file only), or a single file holding every section.
     """
+    return _load_document_with_origin(path)[0]
+
+
+def _load_document_with_origin(path: Path) -> tuple[dict[str, Any], dict[str, str]]:
+    """`load_document`, and the name of the file each section came from."""
     if path.is_dir():
         files = sorted(path.glob("*.yaml"))
         strays = sorted(p.name for p in path.glob("*.yml"))
@@ -1039,7 +1044,7 @@ def load_document(path: Path) -> dict[str, Any]:
                 )
             document[section] = value
             origin[section] = file.name
-    return document
+    return document, origin
 
 
 def load_settings(path: Path | None = None, environ: dict[str, str] | None = None) -> Settings:
@@ -1051,7 +1056,7 @@ def load_settings(path: Path | None = None, environ: dict[str, str] | None = Non
     """
     env = os.environ if environ is None else environ
     path = path or default_config_path()
-    raw = load_document(path)
+    raw, origin = _load_document_with_origin(path)
 
     tool = dict(raw.get("tool") or {})
     if "JAWS_LOG_LEVEL" in env:
@@ -1061,19 +1066,30 @@ def load_settings(path: Path | None = None, environ: dict[str, str] | None = Non
     raw["tool"] = tool
 
     terraform_section = raw.get("terraform")
-    for key, present in (
-        ("library", "library" in raw),
+    owned: list[str] = []
+    for key, section, present, home in (
+        ("library", "library", "library" in raw, "src/jaws/product.yaml"),
         (
             "terraform.version",
+            "terraform",
             isinstance(terraform_section, dict) and "version" in terraform_section,
+            "src/jaws/product.yaml",
         ),
-        ("plan", "plan" in raw),
+        (
+            "plan",
+            "plan",
+            "plan" in raw,
+            "src/jaws/product.py (PLAN_COMMENT_MAX_BYTES)",
+        ),
     ):
         if present:
-            raise ConfigError(
-                f"{path}: {key}: this belongs to the Jaws release (src/jaws/product.yaml), "
-                "not the platform configuration"
-            )
+            where = f" in {origin[section]}" if path.is_dir() else ""
+            owned.append(f"{key}{where}: belongs in {home}")
+    if owned:
+        raise ConfigError(
+            f"{path}: {'; '.join(owned)}; the Jaws release owns these, "
+            "not the platform configuration"
+        )
     for legacy in ("production", "management", "development"):
         if legacy in raw:
             raise ConfigError(

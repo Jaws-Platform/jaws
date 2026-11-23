@@ -1,7 +1,8 @@
 # What this Jaws release is built with. The image installs this Terraform and
-# vendors these module family versions, so a platform's configuration cannot
-# change them. Every pin of a family in stacks/ carries its version here
-# (tests/test_versions.py checks).
+# vendors the modules of stacks/site and stacks/bot only, so a platform's
+# configuration cannot change them. tests/test_versions.py checks that every pin
+# of a family in foundation/, stacks/, owner-access/, data-access/, monitoring/
+# and billing-export/ carries its version here.
 terraform:
   version: 1.14.7
 library:
