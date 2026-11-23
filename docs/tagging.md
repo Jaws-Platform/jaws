@@ -72,9 +72,9 @@ the keys Databricks reserves for itself.
   `Purpose`, `Profile`, `Lifecycle`, `Name` and the run's own tags
   (`Workflow`, `RunId`, `TaskId` and so on).
 - **The foundation:**
-  - Its tags come from the library's `context` module. `Organization`,
-    `Owner` and `ManagedBy` come from `context`, `Repository` from the first
-    of `platform.repositories`, and `Project` is the name root.
+  - Its tags come from the library's `context` module: `Organization`
+    `Jaws-Platform`, `Project` `jaws`, `Repository` `Jaws-Platform/jaws`,
+    `ManagedBy` `JAWS`.
   - The resources it creates for projects (their CI roles, dataset buckets
     and Databricks objects) are the foundation's and carry its tags.
   - The shared Databricks workspace's `CostCenter` is the name root, `jaws`.

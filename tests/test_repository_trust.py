@@ -3,11 +3,12 @@
 GitHub's OIDC subject contains the repository's name, so a rename or a move
 changes the subject of every token this repository's workflows present. The
 roles those workflows assume (the foundation's, data-access's, the monitoring
-stack's, and each project's plan and apply role) therefore trust the first of
+stack's, and the plan and apply roles of each bot, research and Databricks
+project) therefore trust the first of
 `platform.repositories` and every further entry (`additional_repositories`);
 a site's plan role also trusts the hub. The roles a consumer's workflows assume
-(release, task, preview, a site's apply role) trust another repository and
-must not.
+(release, task, preview, a site's apply role) trust another repository, so they
+must not trust `platform.repositories`.
 
 What `additional_repositories` does to a trust policy is the library's test
 (`github-oidc-role`). This file checks the wiring the foundation owns: which
