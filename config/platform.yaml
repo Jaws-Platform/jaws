@@ -1,0 +1,18 @@
+# The repositories whose own workflows plan and apply this platform, and its hub.
+
+platform:
+  # Each role those workflows assume trusts every repository listed (the
+  # foundation's own, monitoring's, data access's, and each bot, research and
+  # Databricks project's plan and apply roles), under its own IDs:
+  #   gh api repos/<owner>/<name> --jq '{id, owner_id: .owner.id}'
+  # The first is the platform's own: the Repository tag of its stacks, the
+  # zone's comment and the roles' descriptions name it. A move, a rename or a
+  # transfer lists the new repository after it, then drops the old one once the
+  # new one has run a release. IAM compares names case-sensitively: spell them
+  # as GitHub does.
+  repositories:
+    - repository: Jaws-Platform/jaws
+      owner_id: "359185083"
+      repository_id: "1420037633"
+  # hub: one of the repositories above, whose pull requests also plan every
+  # site, and the private ECR repository its image is pushed to (<name_root>-*).

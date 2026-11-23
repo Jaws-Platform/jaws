@@ -11,7 +11,7 @@ from jaws.product import PLAN_COMMENT_MAX_BYTES, load_product_pins, product_pins
 def test_the_release_pins_terraform_and_every_family() -> None:
     pins = product_pins()
     assert pins.terraform_version == "1.14.7"
-    assert pins.families["Jaws-Platform/jaws-ci/aws"] == "0.4.0"
+    assert pins.families["Jaws-Platform/jaws-ci/aws"] == "0.5.0"
     assert pins.families["Jaws-Platform/jaws-monitoring/aws"] == "0.8.2"
     assert len(pins.families) == 8
 

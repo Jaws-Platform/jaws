@@ -9,7 +9,7 @@
 The foundation stack for every [jwall.engineering](https://jwall.engineering) site. It owns:
 
 - the shared Terraform state bucket `jaws-terraform-state-570327089884`
-- a reference to the account's GitHub Actions OIDC identity provider (owned by prog-strength-infra for now)
+- a reference to the account's GitHub Actions OIDC identity provider (created outside this stack: by hand at bootstrap in a new account, in this account by prog-strength-infra; the foundation only reads it, and destroying the stack that owns it removes the provider every CI role trusts)
 - the `jwall.engineering` Route 53 hosted zone (zone-level records only)
 - for each site onboarded in `config/projects.yaml`, an S3 bucket and three CI roles
 - its own plan and apply CI roles
@@ -343,10 +343,10 @@ files](#the-tool-configuration-config)).
 | `backend.tf`, `backend/prod.hcl` | S3 backend with native lockfile locking (no DynamoDB) |
 | `config.tf` | The tool configuration (`config/`) as the foundation reads it: the primary account, every onboarded project (`local.registry`), and the check that the credentials are the primary account's |
 | `state.tf` | The shared state bucket (`tfstate-bucket` module) |
-| `oidc.tf` | GitHub OIDC provider (data source; owned by prog-strength-infra, see the TODO there) |
+| `oidc.tf` | GitHub OIDC provider (data source; created outside this stack, by hand at bootstrap in a new account and in this account by prog-strength-infra: see the TODO(owner) there; destroying that stack removes the provider every CI role trusts) |
 | `dns.tf` | The hosted zone, its CAA record and the zone owner's TXT records (`hosted-zone` module) |
 | `ci-roles.tf` | This repo's own plan and apply roles (`ci-plan-role` and `ci-apply-role` modules) |
-| `ecr.tf` | The ECR repository for the infra CLI image, configured from `ecr` in `config/tool.yaml` |
+| `ecr.tf` | The ECR repositories for the infra CLI image (`ecr` in `config/tool.yaml`) and, with a hub, for the hub image (`platform.hub.image`), and who pulls and pushes them |
 | `config/` (root) | Tool configuration for the infra CLI and the foundation stack: the account registry, every onboarded project with its central guardrails, state bucket, DNS zone, ECR lifecycle, the bot and task runtimes and Databricks ([its files](#the-tool-configuration-config)) |
 | `src/jaws/`, `tests/`, `pyproject.toml` | The infra CLI, its tests and its `uv` project |
 | `stacks/site/` | The site stack the CLI renders for each site, pinned to the static-site module family like any consumer |
@@ -387,7 +387,8 @@ image bakes it at `/etc/jaws/config`.
 | `projects.yaml` | `projects`: every onboarded project, by GitHub owner, with its type, repository and central guardrails ([Projects registry](#projects-registry)) |
 | `terraform.yaml` | `state` (the state bucket, its region and key template) |
 | `tool.yaml` | `context` (name_root, organization, owner, managed_by), `ecr` (the CLI image repository and its lifecycle) |
-| `sites.yaml` | `dns` (the Route 53 zone) |
+| `sites.yaml` | `dns` (the Route 53 zone, and its own TXT records) |
+| `platform.yaml` | `platform` (the repositories whose own workflows plan and apply the platform, which its roles trust, and the hub) |
 | `bots.yaml` | `bot` (the bot runtime: AMIs, availability zones, records prefix, `asset_wait`), `tasks` (remote tasks: Rust toolchain, images, `limits`, `max_run_cost_usd`) |
 | `databricks.yaml` | `databricks` (`enabled`, the account, service principal, metastore, compute policies and `shared_host_url`) |
 | `monitoring.yaml` | `monitoring` (the monitoring node's `instance_type`, `ami`, `domain`, `snapshots` and off-hours `schedule`; `cost`: the billing bucket, its providers, `budgets` and the anomaly floor; `slack`: the channels' webhook parameters and the alert routes; `thresholds` overrides). Platform-owned: no project file can set it |
@@ -579,7 +580,7 @@ The policies come from the library's `ci-policies` catalog, whose README holds t
 - Route 53 access is limited to the `jwall.engineering` zone. It cannot create or delete zones.
 - Neither role carries `ReadOnlyAccess`, which would grant `s3:GetObject` on every bucket, every project's state included. `foundation/read` grants the reads refresh and drift detection need for this stack.
 
-Both roles trust only the `Jaws-Platform/jaws` repository through the OIDC provider, with the audience pinned to `sts.amazonaws.com`.
+Every role this repository's workflows assume trusts the repositories in `platform.repositories` (`config/platform.yaml`), today `Jaws-Platform/jaws` alone, through the OIDC provider. That covers these two, the monitoring and data access roles, and each bot, research and Databricks project's plan and apply roles. With `platform.hub`, each site's plan role also trusts the hub's pull requests. The audience stays pinned to `sts.amazonaws.com`.
 
 ## Bootstrap (one time, run locally by the owner with admin credentials)
 

@@ -44,7 +44,7 @@ locals {
 
     # The infra CLI image this repo publishes on release.
     ecr = {
-      repository_arn = local.sites_image_repository_arn
+      repository_arns = local.image_repository_arns
     }
 
     # databricks/read: the secret, and this stack's events under project=infra/
@@ -58,41 +58,40 @@ locals {
 
 module "infra_ci_plan" {
   source  = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
-  version = "0.4.0"
+  version = "0.5.0"
 
-  project                    = local.infra_ci.project
-  name_root                  = local.context.name_root
-  repository                 = local.context.repository
-  repository_aliases         = local.context.repository_aliases
-  repository_alias_owner_ids = local.context.repository_alias_owner_ids
-  owner_id                   = local.github.owner_id
-  repository_id              = local.github.repository_id
-  oidc_provider_arn          = data.aws_iam_openid_connect_provider.github.arn
+  project                 = local.infra_ci.project
+  name_root               = local.context.name_root
+  repository              = local.platform_trust.repository
+  owner_id                = local.platform_trust.owner_id
+  repository_id           = local.platform_trust.repository_id
+  additional_repositories = local.platform_trust.additional_repositories
+  oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
 
-  policies = ["tfstate/read", "foundation/read", "databricks/read"]
+  policies = concat(["tfstate/read", "foundation/read", "databricks/read"], local.hub_image_pull)
 
   policy_inputs = {
     tfstate    = local.infra_ci.tfstate
     foundation = local.infra_ci.foundation
     databricks = local.infra_ci.databricks
+    ecr        = local.hub_image_ecr
   }
 }
 
 module "infra_ci_apply" {
   source  = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
-  version = "0.4.0"
+  version = "0.5.0"
 
-  project                    = local.infra_ci.project
-  name_root                  = local.context.name_root
-  repository                 = local.context.repository
-  repository_aliases         = local.context.repository_aliases
-  repository_alias_owner_ids = local.context.repository_alias_owner_ids
-  owner_id                   = local.github.owner_id
-  repository_id              = local.github.repository_id
-  oidc_provider_arn          = data.aws_iam_openid_connect_provider.github.arn
-  environment                = "prod"
+  project                 = local.infra_ci.project
+  name_root               = local.context.name_root
+  repository              = local.platform_trust.repository
+  owner_id                = local.platform_trust.owner_id
+  repository_id           = local.platform_trust.repository_id
+  additional_repositories = local.platform_trust.additional_repositories
+  oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
+  environment             = "prod"
 
-  policies = ["tfstate/write", "foundation/read", "foundation/manage", "ecr/push", "databricks/read"]
+  policies = concat(["tfstate/write", "foundation/read", "foundation/manage", "ecr/push", "databricks/read"], local.hub_image_pull)
 
   policy_inputs = {
     tfstate    = local.infra_ci.tfstate
@@ -130,43 +129,43 @@ locals {
 
 module "data_access_ci_plan" {
   source  = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
-  version = "0.4.0"
+  version = "0.5.0"
 
-  project                    = local.data_access_ci.project
-  name_root                  = local.context.name_root
-  repository                 = local.context.repository
-  repository_aliases         = local.context.repository_aliases
-  repository_alias_owner_ids = local.context.repository_alias_owner_ids
-  owner_id                   = local.github.owner_id
-  repository_id              = local.github.repository_id
-  oidc_provider_arn          = data.aws_iam_openid_connect_provider.github.arn
+  project                 = local.data_access_ci.project
+  name_root               = local.context.name_root
+  repository              = local.platform_trust.repository
+  owner_id                = local.platform_trust.owner_id
+  repository_id           = local.platform_trust.repository_id
+  additional_repositories = local.platform_trust.additional_repositories
+  oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
 
-  policies = ["tfstate/read", "databricks/read"]
+  policies = concat(["tfstate/read", "databricks/read"], local.hub_image_pull)
 
   policy_inputs = {
     tfstate    = local.data_access_ci.tfstate
     databricks = local.data_access_ci.databricks
+    ecr        = local.hub_image_ecr
   }
 }
 
 module "data_access_ci_apply" {
   source  = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
-  version = "0.4.0"
+  version = "0.5.0"
 
-  project                    = local.data_access_ci.project
-  name_root                  = local.context.name_root
-  repository                 = local.context.repository
-  repository_aliases         = local.context.repository_aliases
-  repository_alias_owner_ids = local.context.repository_alias_owner_ids
-  owner_id                   = local.github.owner_id
-  repository_id              = local.github.repository_id
-  oidc_provider_arn          = data.aws_iam_openid_connect_provider.github.arn
-  environment                = "prod"
+  project                 = local.data_access_ci.project
+  name_root               = local.context.name_root
+  repository              = local.platform_trust.repository
+  owner_id                = local.platform_trust.owner_id
+  repository_id           = local.platform_trust.repository_id
+  additional_repositories = local.platform_trust.additional_repositories
+  oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
+  environment             = "prod"
 
-  policies = ["tfstate/write", "databricks/read"]
+  policies = concat(["tfstate/write", "databricks/read"], local.hub_image_pull)
 
   policy_inputs = {
     tfstate    = local.data_access_ci.tfstate
     databricks = local.data_access_ci.databricks
+    ecr        = local.hub_image_ecr
   }
 }

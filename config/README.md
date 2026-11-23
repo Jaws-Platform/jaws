@@ -13,7 +13,8 @@ section defined twice, and a `.yml` file instead of skipping it.
 | [`aws.yaml`](aws.yaml) | `aws` | The account registry: every account by type, and `primary`, the one jaws builds in |
 | [`terraform.yaml`](terraform.yaml) | `state` | The state bucket and key template |
 | [`tool.yaml`](tool.yaml) | `context`, `ecr` | The name root, the Organization tag of jaws's own stacks, the owner and the ManagedBy tag, the CLI's image repository |
-| [`sites.yaml`](sites.yaml) | `dns` | The hosted zone sites live in |
+| [`sites.yaml`](sites.yaml) | `dns` | The hosted zone sites live in, and its own TXT records |
+| [`platform.yaml`](platform.yaml) | `platform` | The repositories whose own workflows plan and apply the platform, which its roles trust, and the hub |
 | [`bots.yaml`](bots.yaml) | `bot`, `tasks` | How a bot instance runs, and how remote tasks run and what any task may ask for |
 | [`databricks.yaml`](databricks.yaml) | `databricks` | The Databricks account, its service principal, the metastore and the compute policies |
 | [`monitoring.yaml`](monitoring.yaml) | `monitoring` | The monitoring node (type, image, name, snapshots, off-hours), the billing bucket and its providers, budgets, and the Slack channels and routes for alerts |
@@ -72,6 +73,20 @@ what its entry here approves.
 others are recorded for owner-access, which grants the owner admin access to
 them. Projects choosing their environments from this registry is
 [#294](https://github.com/Jaws-Platform/jaws/issues/294).
+
+## The platform's repositories
+
+`platform.repositories` (`platform.yaml`) lists the repositories whose workflows
+plan and apply this platform, each with its GitHub IDs. Every role those
+workflows assume trusts all of them. The first is the platform's own: the
+Repository tag, the zone's comment and the roles' descriptions name it. To move,
+rename or transfer the platform:
+
+1. Add the new repository second, with its IDs; the next release trusts both.
+2. Name it in `platform.hub` when its image and site plans are wanted. The hub
+   must be listed in `platform.repositories`, or the plan stops.
+3. Drop the old first entry once the new one has run a release. The Repository
+   tag, the zone's comment and the roles' descriptions follow the new first entry.
 
 ## Reading it elsewhere
 

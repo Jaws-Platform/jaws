@@ -124,7 +124,9 @@ def test_every_repository_is_trusted_with_its_owners_id() -> None:
     assert "owner_id          = local.bots[each.key].owner_id" in task
     # The plan and apply roles are assumed from this repository, whoever owns the bot's.
     for name in ("bot_ci_plan", "bot_ci_apply"):
-        assert re.search(r"^  owner_id += local\.github\.owner_id$", _module(name), re.M), name
+        assert re.search(r"^  owner_id += local\.platform_trust\.owner_id$", _module(name), re.M), (
+            name
+        )
     assert "github_owner_id" not in BOTS_TF.read_text()
 
 
@@ -573,7 +575,7 @@ def _squashed(text: str) -> str:
 
 
 def _hcl_list(block: str, attribute: str) -> list[str]:
-    match = re.search(rf"^\s*{attribute}\s*=\s*\[([^\]]*)\]", block, re.MULTILINE)
+    match = re.search(rf"^\s*{attribute}\s*=\s*(?:concat\(\s*)?\[([^\]]*)\]", block, re.MULTILINE)
     assert match, f"no {attribute} list"
     return re.findall(r'"([^"]+)"', match.group(1))
 
@@ -618,7 +620,7 @@ def test_databricks_projects_get_plan_and_apply_roles_with_databricks_policies()
     for block in map(_squashed, (plan, apply)):
         assert "for_each = local.databricks_projects" in block
         # Planned and applied from this repository, as bots are.
-        assert "repository = local.context.repository" in block
+        assert "repository = local.platform_trust.repository" in block
         assert "tfstate = local.databricks_ci[each.key].tfstate" in block
         assert "databricks = local.databricks_ci[each.key].databricks" in block
     assert _hcl_list(plan, "policies") == ["tfstate/read", "compute/read", "databricks/read"]

@@ -85,58 +85,60 @@ locals {
 module "bot_ci_plan" {
   for_each = local.bots
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
-  version  = "0.4.0"
+  version  = "0.5.0"
 
-  project                    = each.key
-  name_root                  = local.context.name_root
-  repository                 = local.context.repository
-  repository_aliases         = local.context.repository_aliases
-  repository_alias_owner_ids = local.context.repository_alias_owner_ids
-  owner_id                   = local.github.owner_id
-  repository_id              = local.github.repository_id
-  oidc_provider_arn          = data.aws_iam_openid_connect_provider.github.arn
+  project                 = each.key
+  name_root               = local.context.name_root
+  repository              = local.platform_trust.repository
+  owner_id                = local.platform_trust.owner_id
+  repository_id           = local.platform_trust.repository_id
+  additional_repositories = local.platform_trust.additional_repositories
+  oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
 
   policies = concat(
     contains(local.research_projects, each.key) ? ["tfstate/read", "compute/read", "task/read"] : ["tfstate/read", "container/read", "task/read"],
     contains(keys(local.bot_datasets), each.key) ? ["dataset/read"] : [],
+    local.hub_image_pull,
   )
 
   policy_inputs = {
     tfstate = local.bot_tfstate[each.key]
     dataset = contains(keys(local.bot_datasets), each.key) ? { bucket_names = local.bot_datasets[each.key] } : null
+    ecr     = local.hub_image_ecr
   }
 }
 
 module "bot_ci_apply" {
   for_each = local.bots
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
-  version  = "0.4.0"
+  version  = "0.5.0"
 
-  project                    = each.key
-  name_root                  = local.context.name_root
-  repository                 = local.context.repository
-  repository_aliases         = local.context.repository_aliases
-  repository_alias_owner_ids = local.context.repository_alias_owner_ids
-  owner_id                   = local.github.owner_id
-  repository_id              = local.github.repository_id
-  oidc_provider_arn          = data.aws_iam_openid_connect_provider.github.arn
-  environment                = "prod"
+  project                 = each.key
+  name_root               = local.context.name_root
+  repository              = local.platform_trust.repository
+  owner_id                = local.platform_trust.owner_id
+  repository_id           = local.platform_trust.repository_id
+  additional_repositories = local.platform_trust.additional_repositories
+  oidc_provider_arn       = data.aws_iam_openid_connect_provider.github.arn
+  environment             = "prod"
 
   policies = concat(
     contains(local.research_projects, each.key) ? ["tfstate/write", "compute/read", "compute/manage", "task/read", "task/manage"] : ["tfstate/write", "container/read", "container/manage", "task/read", "task/manage", "container/schedule"],
     contains(keys(local.bot_datasets), each.key) ? ["dataset/read", "dataset/manage"] : [],
+    local.hub_image_pull,
   )
 
   policy_inputs = {
     tfstate = local.bot_tfstate[each.key]
     dataset = contains(keys(local.bot_datasets), each.key) ? { bucket_names = local.bot_datasets[each.key] } : null
+    ecr     = local.hub_image_ecr
   }
 }
 
 module "bot_ci_release" {
   for_each = { for key, bot in local.bots : key => bot if !contains(local.research_projects, key) }
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-release-role"
-  version  = "0.4.0"
+  version  = "0.5.0"
 
   project           = each.key
   name_root         = local.context.name_root
@@ -145,7 +147,9 @@ module "bot_ci_release" {
   repository_id     = each.value.repository_id
   oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
 
-  policies = ["container/release"]
+  policies = concat(["container/release"], local.hub_image_pull)
+
+  policy_inputs = { ecr = local.hub_image_ecr }
 }
 
 # Launches, runs and terminates the bot's ephemeral CI task instances from
@@ -155,7 +159,7 @@ module "bot_ci_release" {
 module "bot_ci_task" {
   for_each = local.bot_task_types
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-task-role"
-  version  = "0.4.0"
+  version  = "0.5.0"
 
   project           = each.key
   name_root         = local.context.name_root
@@ -165,7 +169,7 @@ module "bot_ci_task" {
   oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
 
   # task/records with the billing bucket (monitoring.tf): the run records.
-  policies = concat(["task/launch"], contains(keys(local.task_records), each.key) ? ["task/records"] : [])
+  policies = concat(["task/launch"], contains(keys(local.task_records), each.key) ? ["task/records"] : [], local.hub_image_pull)
 
   policy_inputs = {
     task = {
@@ -173,5 +177,6 @@ module "bot_ci_task" {
       profiles       = local.bot_task_profiles[each.key]
       records        = lookup(local.task_records, each.key, null)
     }
+    ecr = local.hub_image_ecr
   }
 }

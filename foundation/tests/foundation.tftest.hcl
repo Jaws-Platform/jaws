@@ -45,20 +45,6 @@ override_module {
 }
 
 override_module {
-  target = module.data_access_ci_plan
-  outputs = {
-    role_arn = "arn:aws:iam::570327089884:role/jaws-data-access-ci-plan"
-  }
-}
-
-override_module {
-  target = module.data_access_ci_apply
-  outputs = {
-    role_arn = "arn:aws:iam::570327089884:role/jaws-data-access-ci-apply"
-  }
-}
-
-override_module {
   target = module.site_bucket["main-site"]
   outputs = {
     arn = "arn:aws:s3:::jaws-main-site"
@@ -90,6 +76,12 @@ override_module {
     bucket_name             = "jaws-dataset-catalogs"
     uc_role_arn             = "arn:aws:iam::570327089884:role/jaws-dataset-catalogs"
   }
+}
+
+# The fixtures are single files under tests/fixtures/, which has no datasets/:
+# every run reads the repository's registry unless it says otherwise.
+variables {
+  datasets_path = "../datasets"
 }
 
 run "the_account_is_config_yamls" {
@@ -171,6 +163,20 @@ run "every_registered_project_is_served" {
 run "the_reconcile_reaches_its_state" {
   command = plan
 
+  override_module {
+    target = module.data_access_ci_plan
+    outputs = {
+      role_arn = "arn:aws:iam::570327089884:role/jaws-data-access-ci-plan"
+    }
+  }
+
+  override_module {
+    target = module.data_access_ci_apply
+    outputs = {
+      role_arn = "arn:aws:iam::570327089884:role/jaws-data-access-ci-apply"
+    }
+  }
+
   assert {
     condition = jsonencode(try(local.state_prefix_access[local.data_access_ci.tfstate.key], null)) == jsonencode({
       read  = ["arn:aws:iam::570327089884:role/jaws-data-access-ci-plan"]
@@ -214,23 +220,299 @@ run "databricks_is_built_and_onboards_the_registry" {
   }
 }
 
-# The repository is Jaws-Platform/jaws. Its own workflows' tokens name it, and
-# only it. (Which roles take aliases: tests/test_repository_trust.py.)
-run "the_repository_is_trusted_under_its_name_only" {
+# The platform's repositories are Jaws-Platform/jaws alone, with no hub. Its own
+# workflows' tokens name it, and only it. (Which roles trust them:
+# tests/test_repository_trust.py.)
+run "the_platform_repository_is_trusted_as_before" {
   command = plan
 
   assert {
-    condition     = local.context.repository == "Jaws-Platform/jaws" && local.github.owner_id == 359185083
-    error_message = "the repository is Jaws-Platform/jaws, owned by the Jaws-Platform organization (359185083)"
+    condition     = local.platform_trust.repository == "Jaws-Platform/jaws" && length(local.platform_trust.additional_repositories) == 0 && length(local.hub_trust) == 0
+    error_message = "config/platform.yaml lists Jaws-Platform/jaws alone, and names no hub"
   }
 
   assert {
-    condition     = length(local.context.repository_aliases) == 0 && length(local.context.repository_alias_owner_ids) == 0
-    error_message = "no other name of the repository is trusted"
+    condition     = module.context.tags["Repository"] == "Jaws-Platform/jaws"
+    error_message = "the Repository tag is Jaws-Platform/jaws"
+  }
+
+  assert {
+    condition = jsondecode(module.infra_ci_plan.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == [
+      "repo:${local.platform_repository.repository}:pull_request",
+      "repo:${split("/", local.platform_repository.repository)[0]}@${local.platform_repository.owner_id}/${split("/", local.platform_repository.repository)[1]}@${local.platform_repository.repository_id}:pull_request",
+    ]
+    error_message = "with one repository the plan role trusts its pull requests in both subject forms and nothing else: the trust policy jaws-ci 0.4.0 built"
+  }
+
+  assert {
+    condition     = alltrue([for key, role in module.site_ci_plan : length(jsondecode(role.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == 2])
+    error_message = "without a hub a site's plan role trusts only its own repository"
   }
 }
 
-run "takes_its_managed_by_from_the_configuration" {
+run "a_second_repository_is_trusted_alongside_the_first" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/two-repositories.yaml"
+  }
+
+  assert {
+    condition = jsondecode(module.infra_ci_plan.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == [
+      "repo:${local.platform_repository.repository}:pull_request",
+      "repo:Example-Hub/platform:pull_request",
+      "repo:${split("/", local.platform_repository.repository)[0]}@${local.platform_repository.owner_id}/${split("/", local.platform_repository.repository)[1]}@${local.platform_repository.repository_id}:pull_request",
+      "repo:Example-Hub@10000099/platform@20000099:pull_request",
+    ]
+    error_message = "the plan role trusts both repositories' pull requests, the classic subjects (first, second) before the immutable ones"
+  }
+
+  assert {
+    condition = alltrue([
+      for policy in concat(
+        [module.data_access_ci_plan.assume_role_policy],
+        [for role in module.monitoring_ci_plan : role.assume_role_policy],
+        [for key, role in module.bot_ci_plan : role.assume_role_policy],
+        [for key, role in module.databricks_ci_plan : role.assume_role_policy],
+      ) : contains(jsondecode(policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"], "repo:Example-Hub@10000099/platform@20000099:pull_request")
+    ])
+    error_message = "every plan role of the platform's own trusts the second repository's pull requests"
+  }
+
+  assert {
+    condition = alltrue([
+      for policy in concat(
+        [module.infra_ci_apply.assume_role_policy],
+        [module.data_access_ci_apply.assume_role_policy],
+        [for role in module.monitoring_ci_apply : role.assume_role_policy],
+        [for key, role in module.bot_ci_apply : role.assume_role_policy],
+        [for key, role in module.databricks_ci_apply : role.assume_role_policy],
+      ) : contains(jsondecode(policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"], "repo:Example-Hub@10000099/platform@20000099:environment:prod")
+    ])
+    error_message = "every apply role of the platform's own trusts the second repository's prod environment"
+  }
+
+  assert {
+    condition     = module.context.tags["Repository"] == local.platform_repository.repository && module.context.tags["Repository"] == "Jaws-Platform/jaws"
+    error_message = "the Repository tag names the first repository"
+  }
+
+  assert {
+    condition     = alltrue([for key, role in module.site_ci_plan : length(jsondecode(role.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == 2])
+    error_message = "without a hub a site's plan role still trusts only its own repository"
+  }
+}
+
+run "the_hub_plans_every_site" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/hub.yaml"
+  }
+
+  override_module {
+    target = module.hub_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-platform"
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for key, role in module.site_ci_plan :
+      length(jsondecode(role.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == 4 && contains(jsondecode(role.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"], "repo:Example-Hub@10000099/platform@20000099:pull_request")
+    ])
+    error_message = "with a hub each site's plan role trusts the hub's pull requests too"
+  }
+
+  assert {
+    condition     = alltrue([for key, role in module.site_ci_apply : length(jsondecode(role.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == 2])
+    error_message = "a site's apply role still trusts only its own repository"
+  }
+}
+
+run "refuses_a_hub_it_does_not_trust" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/hub-not-trusted.yaml"
+  }
+
+  override_module {
+    target = module.hub_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-platform"
+    }
+  }
+
+  expect_failures = [data.aws_iam_openid_connect_provider.github]
+}
+
+run "no_hub_image_without_a_hub" {
+  command = plan
+
+  assert {
+    condition     = length(module.hub_image) == 0 && local.hub_image_repository_arn == null
+    error_message = "without a hub nothing creates the hub image's repository"
+  }
+
+  assert {
+    condition     = !contains(keys(module.infra_ci_plan.policy_arns), "ecr/pull")
+    error_message = "without a hub the infra plan role pulls nothing"
+  }
+
+  assert {
+    condition     = toset(keys(module.infra_ci_apply.policy_arns)) == toset(["tfstate/write", "foundation/read", "foundation/manage", "ecr/push", "databricks/read"])
+    error_message = "without a hub the infra apply role's policies are today's five"
+  }
+
+  assert {
+    condition     = alltrue([for key, role in module.site_ci_plan : toset(keys(role.policy_arns)) == toset(["tfstate/read", "static-site/read", "ecr/pull"])])
+    error_message = "without a hub a site's plan role keeps today's three policies"
+  }
+}
+
+run "a_hub_gets_its_image_repository" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/hub.yaml"
+  }
+
+  override_module {
+    target = module.hub_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-platform"
+    }
+  }
+
+  assert {
+    condition     = length(module.hub_image) == 1 && local.hub_image_repository_arn == "arn:aws:ecr:us-east-1:${local.account_id}:repository/jaws-platform"
+    error_message = "the hub's image repository is created in the platform account, never the management account"
+  }
+
+  assert {
+    condition = alltrue([
+      for keys in concat(
+        [keys(module.infra_ci_plan.policy_arns), keys(module.infra_ci_apply.policy_arns)],
+        [keys(module.data_access_ci_plan.policy_arns), keys(module.data_access_ci_apply.policy_arns)],
+        [for r in module.monitoring_ci_plan : keys(r.policy_arns)],
+        [for r in module.monitoring_ci_apply : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_plan : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_apply : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_release : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_task : keys(r.policy_arns)],
+        [for k, r in module.databricks_ci_plan : keys(r.policy_arns)],
+        [for k, r in module.databricks_ci_apply : keys(r.policy_arns)],
+        [for k, r in module.site_ci_plan : keys(r.policy_arns)],
+        [for k, r in module.site_ci_preview : keys(r.policy_arns)],
+        [for k, r in module.site_ci_apply : keys(r.policy_arns)],
+      ) : contains(keys, "ecr/pull")
+    ])
+    error_message = "every CI role pulls the hub image"
+  }
+
+  assert {
+    condition     = alltrue([for k, r in module.site_ci_plan : contains(keys(r.policy_arns), "ecr/pull-2")]) && alltrue([for k, r in module.site_ci_preview : contains(keys(r.policy_arns), "ecr/pull-2")]) && alltrue([for k, r in module.site_ci_apply : contains(keys(r.policy_arns), "ecr/pull-2")])
+    error_message = "every site role pulls the hub image through its second ECR policy"
+  }
+
+  assert {
+    condition     = contains(keys(module.infra_ci_apply.policy_arns), "ecr/push-2") && contains(keys(module.infra_ci_apply.policy_arns), "ecr/pull-2")
+    error_message = "the infra apply role pushes and pulls the hub image"
+  }
+}
+
+run "a_hub_keeps_every_role_within_ten_policies" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/hub.yaml"
+  }
+
+  override_module {
+    target = module.hub_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-platform"
+    }
+  }
+
+  # IAM's default quota: 10 managed policies attached to a role. The infra apply
+  # role goes from five to eight with a hub; every other role gains exactly one (ecr/pull, or ecr/pull-2 on a site role).
+  assert {
+    condition = alltrue([
+      for keys in concat(
+        [keys(module.infra_ci_plan.policy_arns), keys(module.infra_ci_apply.policy_arns)],
+        [keys(module.data_access_ci_plan.policy_arns), keys(module.data_access_ci_apply.policy_arns)],
+        [for r in module.monitoring_ci_plan : keys(r.policy_arns)],
+        [for r in module.monitoring_ci_apply : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_plan : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_apply : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_release : keys(r.policy_arns)],
+        [for k, r in module.bot_ci_task : keys(r.policy_arns)],
+        [for k, r in module.databricks_ci_plan : keys(r.policy_arns)],
+        [for k, r in module.databricks_ci_apply : keys(r.policy_arns)],
+        [for k, r in module.site_ci_plan : keys(r.policy_arns)],
+        [for k, r in module.site_ci_preview : keys(r.policy_arns)],
+        [for k, r in module.site_ci_apply : keys(r.policy_arns)],
+      ) : length(keys) <= 10
+    ])
+    error_message = "a role may attach at most 10 managed policies (IAM's default quota)"
+  }
+}
+
+run "refuses_a_hub_image_outside_the_name_root" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/hub-image-outside-the-name-root.yaml"
+  }
+
+  override_module {
+    target = module.hub_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/platform"
+    }
+  }
+
+  expect_failures = [data.aws_iam_openid_connect_provider.github]
+}
+
+run "refuses_a_hub_image_named_like_the_cli_image" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/hub-image-is-the-cli-image.yaml"
+  }
+
+  override_module {
+    target = module.hub_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-cli"
+    }
+  }
+
+  expect_failures = [data.aws_iam_openid_connect_provider.github]
+}
+
+run "refuses_a_hub_image_named_like_a_project_repository" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/hub-image-is-a-project-repository.yaml"
+  }
+
+  override_module {
+    target = module.hub_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-braveheart-bot"
+    }
+  }
+
+  expect_failures = [data.aws_iam_openid_connect_provider.github]
+}
+
+run "takes_its_identity_from_the_configuration" {
   command = plan
 
   # context.managed_by is a value no code spells.
@@ -241,6 +523,21 @@ run "takes_its_managed_by_from_the_configuration" {
   assert {
     condition     = module.context.tags["ManagedBy"] == "jaws-relabelled" && module.context.tags["Organization"] == "Jaws-Platform"
     error_message = "the ManagedBy tag is config/tool.yaml's context.managed_by, as the CLI stamps it on every stack it renders"
+  }
+
+  assert {
+    condition     = module.context.tags["Repository"] == "Example-Org/platform" && module.context.tags["Owner"] == "example-owner"
+    error_message = "the Repository tag is the first of platform.repositories, and Owner is context.owner"
+  }
+
+  assert {
+    condition     = local.zone_name == "example.com" && local.zone_comment == "jaws: zone owned by Example-Org/platform; records owned by project repos"
+    error_message = "the zone is dns.zone, and its comment names the platform's own repository"
+  }
+
+  assert {
+    condition     = jsonencode(local.txt_records) == jsonencode({ "_example-challenge" = ["example-token"] })
+    error_message = "the zone's own TXT records are dns.txt_records"
   }
 }
 
@@ -502,4 +799,59 @@ run "no_task_records_without_the_billing_bucket" {
     condition     = length(local.task_records) == 0 && alltrue([for key, role in module.bot_ci_task : toset(keys(role.policy_arns)) == toset(["task/launch"])])
     error_message = "without the billing bucket the task roles only launch"
   }
+}
+
+run "reads_its_configuration_and_datasets_from_the_repository_outside_the_image" {
+  command = plan
+
+  variables {
+    datasets_path = null
+  }
+
+  # path.module is "." under terraform test, and dirname() cleans "./.." to "..".
+  assert {
+    condition     = !local.in_image && local.config_path == "./../config" && local.datasets_path == "../datasets"
+    error_message = "without /etc/jaws/config the stack reads config/ and the datasets/ beside it, at the repository root, as the CLI reads ./config"
+  }
+}
+
+run "the_datasets_are_beside_a_configuration_given_elsewhere" {
+  command = plan
+
+  variables {
+    config_path   = "tests/fixtures/awaiting-host.yaml"
+    datasets_path = null
+  }
+
+  # No dataset is onboarded before the host's URL is recorded, so the missing registry stops nothing.
+  expect_failures = [check.shared_host_url]
+
+  assert {
+    condition     = local.datasets_path == "tests/fixtures/datasets"
+    error_message = "config_path is where a caller's JAWS_CONFIG points, and the registry is the datasets/ beside it (jaws.access.infra_root)"
+  }
+}
+
+run "a_configuration_directory_may_end_in_a_slash" {
+  command = plan
+
+  variables {
+    config_path   = "../config/"
+    datasets_path = null
+  }
+
+  assert {
+    condition     = local.datasets_path == "../datasets"
+    error_message = "a trailing slash on config_path must not make the registry the config directory itself"
+  }
+}
+
+run "stops_without_the_datasets_registry" {
+  command = plan
+
+  variables {
+    datasets_path = "tests/fixtures/no-datasets"
+  }
+
+  expect_failures = [data.aws_caller_identity.current]
 }

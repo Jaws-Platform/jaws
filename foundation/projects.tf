@@ -74,7 +74,7 @@ locals {
         record_names = local.project_record_names[key]
       }
       ecr = {
-        repository_arn = local.sites_image_repository_arn
+        repository_arns = local.image_repository_arns
       }
     }
   }
@@ -83,7 +83,7 @@ locals {
 module "site_ci_plan" {
   for_each = local.projects
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
-  version  = "0.4.0"
+  version  = "0.5.0"
 
   project           = each.key
   name_root         = local.context.name_root
@@ -91,6 +91,9 @@ module "site_ci_plan" {
   owner_id          = each.value.owner_id
   repository_id     = each.value.repository_id
   oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
+
+  # The hub plans every site too, once platform.hub names it.
+  additional_repositories = local.hub_trust
 
   policies = ["tfstate/read", "static-site/read", "ecr/pull"]
 
@@ -104,7 +107,7 @@ module "site_ci_plan" {
 module "site_ci_preview" {
   for_each = local.projects
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-preview-role"
-  version  = "0.4.0"
+  version  = "0.5.0"
 
   project           = each.key
   name_root         = local.context.name_root
@@ -124,7 +127,7 @@ module "site_ci_preview" {
 module "site_ci_apply" {
   for_each = local.projects
   source   = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
-  version  = "0.4.0"
+  version  = "0.5.0"
 
   project           = each.key
   name_root         = local.context.name_root

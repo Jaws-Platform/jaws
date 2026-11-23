@@ -3,7 +3,7 @@
 `foundation/tests/foundation.tftest.hcl` plans the tool configuration (config/)
 as written, and a few states it isn't in: a ManagedBy no code spells, no task
 runner, the Databricks host before its URL is recorded, an admin role of
-another account, and no monitoring section. Each fixture under
+another account, no monitoring section, and a second repository or a hub. Each fixture under
 `foundation/tests/fixtures/` is config/ as one file
 (`jaws.settings.load_document`) with a few values set; this test keeps them
 from drifting.
@@ -28,8 +28,12 @@ FIXTURES_DIR = REPO_ROOT / "foundation" / "tests" / "fixtures"
 
 
 def _relabelled(config: dict[str, Any]) -> dict[str, Any]:
-    """A ManagedBy no code spells: the foundation must take it from the file."""
+    """Values no code spells: the stacks must take them from the file."""
     config["context"]["managed_by"] = "jaws-relabelled"
+    config["context"]["owner"] = "example-owner"
+    config["platform"]["repositories"][0]["repository"] = "Example-Org/platform"
+    config["dns"]["zone"] = "example.com"
+    config["dns"]["txt_records"] = {"_example-challenge": ["example-token"]}
     return config
 
 
@@ -62,12 +66,69 @@ def _no_monitoring(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
+HUB_REPOSITORY = {
+    "repository": "Example-Hub/platform",
+    "owner_id": "10000099",
+    "repository_id": "20000099",
+}
+HUB = {"repository": "Example-Hub/platform", "image": "jaws-platform"}
+
+
+def _two_repositories(config: dict[str, Any]) -> dict[str, Any]:
+    """A second repository trusted beside the platform's own."""
+    config["platform"]["repositories"].append(dict(HUB_REPOSITORY))
+    return config
+
+
+def _hub(config: dict[str, Any]) -> dict[str, Any]:
+    """The second repository is the hub: it also plans every site."""
+    config = _two_repositories(config)
+    config["platform"]["hub"] = dict(HUB)
+    return config
+
+
+def _hub_not_trusted(config: dict[str, Any]) -> dict[str, Any]:
+    """A hub that is not among platform.repositories: the plan must stop."""
+    config["platform"]["hub"] = dict(HUB)
+    return config
+
+
+def _hub_image_outside_the_name_root(config: dict[str, Any]) -> dict[str, Any]:
+    """A hub image the apply role may not create (not named <name_root>-*): the plan must stop."""
+    config = _hub(config)
+    config["platform"]["hub"]["image"] = "platform"
+    return config
+
+
+def _hub_image_is_the_cli_image(config: dict[str, Any]) -> dict[str, Any]:
+    """A hub image named like ecr.repository: the plan must stop."""
+    config = _hub(config)
+    config["platform"]["hub"]["image"] = config["ecr"]["repository"]
+    return config
+
+
+def _hub_image_is_a_project_repository(config: dict[str, Any]) -> dict[str, Any]:
+    """A hub image named like a bot project's repository (<name_root>-<key>): the plan must stop."""
+    config = _hub(config)
+    root = config["context"]["name_root"]
+    key = "braveheart-bot"
+    assert any(key in group["projects"] for group in config["projects"].values())
+    config["platform"]["hub"]["image"] = f"{root}-{key}"
+    return config
+
+
 FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "relabelled.yaml": _relabelled,
     "no-task-runners.yaml": _no_task_runners,
     "awaiting-host.yaml": _awaiting_host,
     "foreign-admin.yaml": _foreign_admin,
     "no-monitoring.yaml": _no_monitoring,
+    "two-repositories.yaml": _two_repositories,
+    "hub.yaml": _hub,
+    "hub-not-trusted.yaml": _hub_not_trusted,
+    "hub-image-outside-the-name-root.yaml": _hub_image_outside_the_name_root,
+    "hub-image-is-the-cli-image.yaml": _hub_image_is_the_cli_image,
+    "hub-image-is-a-project-repository.yaml": _hub_image_is_a_project_repository,
 }
 
 

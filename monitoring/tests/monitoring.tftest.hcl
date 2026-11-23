@@ -213,3 +213,26 @@ run "refuses_another_accounts_credentials" {
 
   expect_failures = [data.aws_caller_identity.current]
 }
+
+run "reads_its_configuration_from_the_repository_outside_the_image" {
+  command = plan
+
+  assert {
+    condition     = !local.in_image && local.config_path == "./../config"
+    error_message = "without /etc/jaws/config the stack reads config/ at the repository root, as the CLI reads ./config"
+  }
+}
+
+run "takes_its_identity_from_the_configuration" {
+  command = plan
+
+  # Values no code spells (foundation/tests/fixtures/relabelled.yaml).
+  variables {
+    config_path = "../foundation/tests/fixtures/relabelled.yaml"
+  }
+
+  assert {
+    condition     = module.context.tags["Repository"] == "Example-Org/platform" && module.context.tags["Owner"] == "example-owner" && module.context.tags["ManagedBy"] == "jaws-relabelled"
+    error_message = "the tags are the configuration's: the first platform repository, context.owner and context.managed_by"
+  }
+}

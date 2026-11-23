@@ -92,6 +92,11 @@ databricks:
         aws_attributes.availability:
           type: fixed
           value: SPOT_WITH_FALLBACK
+platform:
+  repositories:
+  - repository: Jaws-Platform/jaws
+    owner_id: '359185083'
+    repository_id: '1420037633'
 projects:
   jwallace145:
     owner_id: '35950238'
@@ -220,6 +225,9 @@ projects:
 dns:
   zone: jwall.engineering
   zone_id: Z0644006DW6W2HALU9BI
+  txt_records:
+    _github-pages-challenge-jwallace145:
+    - 278aa0fd98189307922e6679ba36f1
 state:
   bucket: jaws-terraform-state-570327089884
   region: us-east-1
