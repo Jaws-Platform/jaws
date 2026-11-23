@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.1](https://github.com/Jaws-Platform/jaws/compare/v0.78.0...v0.78.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **monitoring:** boot the monitoring node with jaws-monitoring 0.8.2 ([#312](https://github.com/Jaws-Platform/jaws/issues/312)) ([0c6ef44](https://github.com/Jaws-Platform/jaws/commit/0c6ef44e1baa837f4d9edd1d9cdad7081fdaaf3d))
+
 ## [0.78.0](https://github.com/Jaws-Platform/jaws/compare/v0.77.1...v0.78.0) (2026-11-22)
 
 
