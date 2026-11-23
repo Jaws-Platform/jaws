@@ -41,7 +41,7 @@ module "context" {
 
   project      = "monitoring"
   environment  = "prod"
-  repository   = "Jaws-Platform/jaws"
+  repository   = local.tool_config.platform.repositories[0].repository
   owner        = local.tool_config.context.owner
   organization = local.tool_config.context.organization
   name_root    = local.name_root
