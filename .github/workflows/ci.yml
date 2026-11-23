@@ -433,8 +433,11 @@ jobs:
         run: |
           # A writable copy: the tool writes its artifacts and debug log into the workspace.
           cp -r tests/fixtures/sites "$RUNNER_TEMP/site"
+          # The smoke test validates the neutral fixture site against the neutral fixture configuration.
           docker run --rm --network none \
             -v "$RUNNER_TEMP/site:/work" \
+            -v "$PWD/tests/fixtures/platform:/fixture-config:ro" \
+            -e JAWS_CONFIG=/fixture-config \
             jaws:ci --file guitar-knowledge-base.yaml validate
           test -s "$RUNNER_TEMP/site/.jaws/jaws.log"
       - name: Smoke test (the image's Terraform is the release's, and the release file ships)
