@@ -103,7 +103,7 @@ module "databricks_billing_export" {
 module "monitoring_ci_plan" {
   count   = local.monitoring == null ? 0 : 1
   source  = "Jaws-Platform/jaws-ci/aws//modules/ci-plan-role"
-  version = "0.4.0"
+  version = "0.5.0"
 
   project                    = local.monitoring_ci.project
   name_root                  = local.context.name_root
@@ -125,7 +125,7 @@ module "monitoring_ci_plan" {
 module "monitoring_ci_apply" {
   count   = local.monitoring == null ? 0 : 1
   source  = "Jaws-Platform/jaws-ci/aws//modules/ci-apply-role"
-  version = "0.4.0"
+  version = "0.5.0"
 
   project                    = local.monitoring_ci.project
   name_root                  = local.context.name_root
