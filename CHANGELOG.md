@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.0](https://github.com/Jaws-Platform/jaws/compare/v0.77.1...v0.78.0) (2026-11-22)
+
+
+### Features
+
+* **monitoring:** add the monitoring and cost stack ([#310](https://github.com/Jaws-Platform/jaws/issues/310)) ([b0f64af](https://github.com/Jaws-Platform/jaws/commit/b0f64af4adae1b82a0e86bfbd840d3d89918667d))
+
 ## [0.77.1](https://github.com/Jaws-Platform/jaws/compare/v0.77.0...v0.77.1) (2026-11-22)
 
 
