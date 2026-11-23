@@ -1,11 +1,11 @@
 # GitHub Actions OIDC identity provider.
 #
-# An account can hold only one IAM OIDC provider per URL, so every stack in
-# this account shares this one. It is currently owned by the prog-strength
-# infra stack (tagged ManagedBy=prog-strength-infra), so this stack only
-# references it. Sharing is safe: the provider grants nothing by itself, and
-# each role's trust policy restricts which repository/environment may assume
-# it.
+# An account can hold only one IAM OIDC provider per URL. It is created by hand
+# at bootstrap (README.md, "Bootstrap"); every stack in this account shares it
+# and this one only reads it. Sharing is safe: the provider grants nothing by
+# itself, and each role's trust policy restricts which repository/environment
+# may assume it. Who owns the provider is an open question: see the TODO(owner)
+# below.
 #
 # TODO(owner): move ownership of the provider into this stack. Steps:
 #   1. In prog-strength-infra, `terraform state rm` the provider and replace

@@ -28,8 +28,12 @@ FIXTURES_DIR = REPO_ROOT / "foundation" / "tests" / "fixtures"
 
 
 def _relabelled(config: dict[str, Any]) -> dict[str, Any]:
-    """A ManagedBy no code spells: the foundation must take it from the file."""
+    """Values no code spells: the stacks must take them from the file."""
     config["context"]["managed_by"] = "jaws-relabelled"
+    config["context"]["owner"] = "example-owner"
+    config["platform"]["repositories"][0]["repository"] = "Example-Org/platform"
+    config["dns"]["zone"] = "example.com"
+    config["dns"]["txt_records"] = {"_example-challenge": ["example-token"]}
     return config
 
 

@@ -226,8 +226,13 @@ run "the_repository_is_trusted_under_its_name_only" {
   command = plan
 
   assert {
-    condition     = local.context.repository == "Jaws-Platform/jaws" && local.github.owner_id == 359185083
-    error_message = "the repository is Jaws-Platform/jaws, owned by the Jaws-Platform organization (359185083)"
+    condition     = local.context.repository == local.platform_repository.repository && local.github.owner_id == local.platform_repository.owner_id && local.github.repository_id == local.platform_repository.repository_id
+    error_message = "the repository and its GitHub IDs are the first of platform.repositories"
+  }
+
+  assert {
+    condition     = module.context.tags["Repository"] == "Jaws-Platform/jaws"
+    error_message = "the Repository tag is Jaws-Platform/jaws"
   }
 
   assert {
@@ -236,7 +241,7 @@ run "the_repository_is_trusted_under_its_name_only" {
   }
 }
 
-run "takes_its_managed_by_from_the_configuration" {
+run "takes_its_identity_from_the_configuration" {
   command = plan
 
   # context.managed_by is a value no code spells.
@@ -247,6 +252,21 @@ run "takes_its_managed_by_from_the_configuration" {
   assert {
     condition     = module.context.tags["ManagedBy"] == "jaws-relabelled" && module.context.tags["Organization"] == "Jaws-Platform"
     error_message = "the ManagedBy tag is config/tool.yaml's context.managed_by, as the CLI stamps it on every stack it renders"
+  }
+
+  assert {
+    condition     = module.context.tags["Repository"] == "Example-Org/platform" && module.context.tags["Owner"] == "example-owner"
+    error_message = "the Repository tag is the first of platform.repositories, and Owner is context.owner"
+  }
+
+  assert {
+    condition     = local.zone_name == "example.com" && local.zone_comment == "jaws: zone owned by Example-Org/platform; records owned by project repos"
+    error_message = "the zone is dns.zone, and its comment names the platform's own repository"
+  }
+
+  assert {
+    condition     = jsonencode(local.txt_records) == jsonencode({ "_example-challenge" = ["example-token"] })
+    error_message = "the zone's own TXT records are dns.txt_records"
   }
 }
 

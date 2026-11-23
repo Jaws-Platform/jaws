@@ -1,6 +1,8 @@
 # Identity of this stack: who owns it, which repo manages it, and the tag set
 # that default_tags stamps on everything. Derived from the library's context
-# module so every jaws stack tags resources the same way.
+# module so every jaws stack tags resources the same way. The owner, the
+# organization and the repository come from the configuration (config/tool.yaml
+# context, and the first of platform.repositories in platform.tf).
 
 locals {
   region = "us-east-1"
@@ -18,11 +20,11 @@ locals {
     # Project tag value, and the prefix of this stack's Name tags.
     project     = "jaws"
     environment = "prod"
-    repository  = "Jaws-Platform/jaws"
+    repository  = local.platform_repository.repository
 
     # The `Repository` tag: the repository that manages this stack.
-    repository_tag = "Jaws-Platform/jaws"
-    owner          = "jwallace145"
+    repository_tag = local.platform_repository.repository
+    owner          = local.account.context.owner
 
     # Other names the roles its own workflows assume also trust, because
     # GitHub's OIDC subject contains the name: set the new name here before a
@@ -39,8 +41,8 @@ locals {
   # "use immutable subject" is on for the repository (the default for new
   # repos). Look up with: gh api repos/<owner>/<repo> --jq '{id, owner_id: .owner.id}'
   github = {
-    owner_id      = 359185083 # Jaws-Platform
-    repository_id = 1420037633
+    owner_id      = local.platform_repository.owner_id
+    repository_id = local.platform_repository.repository_id
   }
 
   # Resource name prefix for this stack's own CI roles and Name tags. The

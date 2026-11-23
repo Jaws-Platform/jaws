@@ -9,12 +9,12 @@ output "state_key_convention" {
 }
 
 output "hosted_zone_id" {
-  description = "Route 53 hosted zone ID for jwall.engineering."
+  description = "Route 53 hosted zone ID of the platform's zone (config/sites.yaml dns.zone)."
   value       = module.zone.zone_id
 }
 
 output "hosted_zone_name_servers" {
-  description = "Name servers delegated for jwall.engineering (for the registrar)."
+  description = "Name servers delegated for the platform's zone (config/sites.yaml dns.zone), for the registrar."
   value       = module.zone.name_servers
 }
 

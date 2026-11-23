@@ -9,7 +9,7 @@
 The foundation stack for every [jwall.engineering](https://jwall.engineering) site. It owns:
 
 - the shared Terraform state bucket `jaws-terraform-state-570327089884`
-- a reference to the account's GitHub Actions OIDC identity provider (owned by prog-strength-infra for now)
+- a reference to the account's GitHub Actions OIDC identity provider (created by hand at bootstrap; the foundation only reads it)
 - the `jwall.engineering` Route 53 hosted zone (zone-level records only)
 - for each site onboarded in `config/projects.yaml`, an S3 bucket and three CI roles
 - its own plan and apply CI roles
@@ -343,7 +343,7 @@ files](#the-tool-configuration-config)).
 | `backend.tf`, `backend/prod.hcl` | S3 backend with native lockfile locking (no DynamoDB) |
 | `config.tf` | The tool configuration (`config/`) as the foundation reads it: the primary account, every onboarded project (`local.registry`), and the check that the credentials are the primary account's |
 | `state.tf` | The shared state bucket (`tfstate-bucket` module) |
-| `oidc.tf` | GitHub OIDC provider (data source; owned by prog-strength-infra, see the TODO there) |
+| `oidc.tf` | GitHub OIDC provider (data source; created at bootstrap, see the TODO(owner) there) |
 | `dns.tf` | The hosted zone, its CAA record and the zone owner's TXT records (`hosted-zone` module) |
 | `ci-roles.tf` | This repo's own plan and apply roles (`ci-plan-role` and `ci-apply-role` modules) |
 | `ecr.tf` | The ECR repository for the infra CLI image, configured from `ecr` in `config/tool.yaml` |
