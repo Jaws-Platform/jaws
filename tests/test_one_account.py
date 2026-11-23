@@ -34,7 +34,8 @@ def test_the_primary_account_is_production() -> None:
     assert settings.aws.account_id == "222222222222"
     assert settings.context.name_root == "jaws"
     assert (
-        settings.context.organization == "Jaws-Platform" and settings.context.managed_by == "JAWS"
+        settings.context.organization == "Example-Platform"
+        and settings.context.managed_by == "JAWS"
     )
     assert settings.state.bucket == "jaws-terraform-state-222222222222"
     assert settings.ecr.repository == "jaws-cli"

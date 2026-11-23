@@ -270,7 +270,7 @@ state:
   key_template: project={project}/env={environment}/{project}-{environment}.tfstate
 context:
   name_root: jaws
-  organization: Jaws-Platform
+  organization: Example-Platform
   owner: example-owner
   managed_by: JAWS
 ecr:

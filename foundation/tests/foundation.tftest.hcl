@@ -106,14 +106,14 @@ run "the_account_is_config_yamls" {
 
   assert {
     condition = jsonencode(module.context.tags) == jsonencode({
-      Organization = "Jaws-Platform"
+      Organization = "Example-Platform"
       Project      = "jaws"
       Environment  = "prod"
       Repository   = "Jaws-Platform/jaws"
       ManagedBy    = "JAWS"
       Owner        = "example-owner"
     })
-    error_message = "the foundation's tags are Organization=Jaws-Platform (this repository's GitHub owner), Project=jaws, ManagedBy=JAWS"
+    error_message = "the foundation's tags are Organization=Example-Platform (context.organization), Project=jaws, ManagedBy=JAWS"
   }
 
   assert {
@@ -523,7 +523,7 @@ run "takes_its_identity_from_the_configuration" {
   }
 
   assert {
-    condition     = module.context.tags["ManagedBy"] == "jaws-relabelled" && module.context.tags["Organization"] == "Jaws-Platform"
+    condition     = module.context.tags["ManagedBy"] == "jaws-relabelled" && module.context.tags["Organization"] == "Example-Platform"
     error_message = "the ManagedBy tag is config/tool.yaml's context.managed_by, as the CLI stamps it on every stack it renders"
   }
 
@@ -811,8 +811,10 @@ run "reads_its_configuration_and_datasets_from_the_repository_outside_the_image"
     datasets_path = null
   }
 
-  # The repository's own configuration is the owner's: the mocked credentials are the neutral
-  # account's, and the recorded host is the owner's.
+  # The one run that depends on the owner's configuration: the default path is the repository's
+  # own config/, so the plan fails on the mocked neutral credentials and the owner's recorded
+  # host (the asserts below are still evaluated). Plan 07 replaces it when config/ leaves the
+  # repository.
   expect_failures = [data.aws_caller_identity.current, check.shared_host_url]
 
   # path.module is "." under terraform test, and dirname() cleans "./.." to "..".
@@ -843,15 +845,12 @@ run "a_configuration_directory_may_end_in_a_slash" {
   command = plan
 
   variables {
-    config_path   = "../config/"
+    config_path   = "../tests/fixtures/platform/"
     datasets_path = null
   }
 
-  # As above: the owner's configuration, planned with the neutral account's mocked credentials.
-  expect_failures = [data.aws_caller_identity.current, check.shared_host_url]
-
   assert {
-    condition     = local.datasets_path == "../datasets"
+    condition     = local.datasets_path == "../tests/fixtures/datasets"
     error_message = "a trailing slash on config_path must not make the registry the config directory itself"
   }
 }

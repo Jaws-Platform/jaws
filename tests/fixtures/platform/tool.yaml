@@ -1,7 +1,7 @@
 # A neutral platform configuration for the product's tests: config/'s shape, with every identifying value replaced (tests/platform/test_no_owner_values.py).
 context:
   name_root: jaws
-  organization: Jaws-Platform
+  organization: Example-Platform
   owner: example-owner
   managed_by: JAWS
 ecr:
