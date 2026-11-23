@@ -213,3 +213,12 @@ run "refuses_another_accounts_credentials" {
 
   expect_failures = [data.aws_caller_identity.current]
 }
+
+run "reads_its_configuration_from_the_repository_outside_the_image" {
+  command = plan
+
+  assert {
+    condition     = !local.in_image && local.config_path == "./../config"
+    error_message = "without /etc/jaws/config the stack reads config/ at the repository root, as the CLI reads ./config"
+  }
+}

@@ -1,12 +1,15 @@
 # The tool configuration, read as the foundation reads it (foundation/config.tf):
-# config/ at the repository root, several YAML files read as one document. This
+# the configuration directory (/etc/jaws/config in the hub's image, else config/ at the repository root), several YAML files read as one document. This
 # stack builds in the account registry's primary account (config/aws.yaml), from
 # the `monitoring` section of config/monitoring.yaml; the CLI validates that
 # section (jaws.settings.MonitoringSection) and this root reads it as written,
 # with the same defaults for the keys it may leave out.
 
 locals {
-  config_path = var.config_path == null ? "${path.module}/../config" : var.config_path
+  # Where the hub's image keeps the configuration, as the CLI looks (jaws.settings.IMAGE_CONFIG_PATH).
+  image_config_path = "/etc/jaws/config"
+  in_image          = length(fileset(local.image_config_path, "*.yaml")) > 0
+  config_path       = var.config_path != null ? var.config_path : local.in_image ? local.image_config_path : "${path.module}/../config"
   config_files = endswith(local.config_path, ".yaml") ? [local.config_path] : [
     for name in sort(fileset(local.config_path, "*.yaml")) : "${local.config_path}/${name}"
   ]
