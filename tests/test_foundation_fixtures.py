@@ -100,6 +100,23 @@ def _hub_image_outside_the_name_root(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
+def _hub_image_is_the_cli_image(config: dict[str, Any]) -> dict[str, Any]:
+    """A hub image named like ecr.repository: the plan must stop."""
+    config = _hub(config)
+    config["platform"]["hub"]["image"] = config["ecr"]["repository"]
+    return config
+
+
+def _hub_image_is_a_project_repository(config: dict[str, Any]) -> dict[str, Any]:
+    """A hub image named like a bot project's repository (<name_root>-<key>): the plan must stop."""
+    config = _hub(config)
+    root = config["context"]["name_root"]
+    key = "braveheart-bot"
+    assert any(key in group["projects"] for group in config["projects"].values())
+    config["platform"]["hub"]["image"] = f"{root}-{key}"
+    return config
+
+
 FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "relabelled.yaml": _relabelled,
     "no-task-runners.yaml": _no_task_runners,
@@ -110,6 +127,8 @@ FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "hub.yaml": _hub,
     "hub-not-trusted.yaml": _hub_not_trusted,
     "hub-image-outside-the-name-root.yaml": _hub_image_outside_the_name_root,
+    "hub-image-is-the-cli-image.yaml": _hub_image_is_the_cli_image,
+    "hub-image-is-a-project-repository.yaml": _hub_image_is_a_project_repository,
 }
 
 

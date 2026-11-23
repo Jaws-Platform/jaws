@@ -10,7 +10,7 @@
 # pushes it. jaws-ci's ECR policies take several repositories: each further one
 # adds an ecr/pull-<n> or ecr/push-<n> policy, so with a hub the infra apply role
 # holds eight managed policies (five, plus ecr/pull, ecr/pull-2 and ecr/push-2),
-# the other roles one or two more than today, none above IAM's limit of ten.
+# every other role one more than today (ecr/pull, or ecr/pull-2 on a site role), none above IAM's limit of ten.
 
 locals {
   # Built from the configured name rather than module.sites_image.arn so the

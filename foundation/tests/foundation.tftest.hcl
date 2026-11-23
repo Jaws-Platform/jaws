@@ -438,7 +438,7 @@ run "a_hub_keeps_every_role_within_ten_policies" {
   }
 
   # IAM's default quota: 10 managed policies attached to a role. The infra apply
-  # role goes from five to eight with a hub; the others gain one or two.
+  # role goes from five to eight with a hub; every other role gains exactly one (ecr/pull, or ecr/pull-2 on a site role).
   assert {
     condition = alltrue([
       for keys in concat(
@@ -472,6 +472,40 @@ run "refuses_a_hub_image_outside_the_name_root" {
     target = module.hub_image
     outputs = {
       arn = "arn:aws:ecr:us-east-1:570327089884:repository/platform"
+    }
+  }
+
+  expect_failures = [data.aws_iam_openid_connect_provider.github]
+}
+
+run "refuses_a_hub_image_named_like_the_cli_image" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/hub-image-is-the-cli-image.yaml"
+  }
+
+  override_module {
+    target = module.hub_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-cli"
+    }
+  }
+
+  expect_failures = [data.aws_iam_openid_connect_provider.github]
+}
+
+run "refuses_a_hub_image_named_like_a_project_repository" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/hub-image-is-a-project-repository.yaml"
+  }
+
+  override_module {
+    target = module.hub_image
+    outputs = {
+      arn = "arn:aws:ecr:us-east-1:570327089884:repository/jaws-braveheart-bot"
     }
   }
 
