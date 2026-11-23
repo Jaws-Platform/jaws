@@ -72,3 +72,17 @@ def test_ci_runs_the_script_with_the_pinned_terraform() -> None:
 
 def test_the_script_is_executable() -> None:
     assert os.access(SCRIPT, os.X_OK)
+
+
+def test_every_exact_terraform_version_in_a_workflow_is_the_release_pin() -> None:
+    pinned = product_pins().terraform_version
+    found = 0
+    for workflow in sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml")):
+        doc: dict[Any, Any] = yaml.safe_load(workflow.read_text())
+        for name, job in doc["jobs"].items():
+            for step in job.get("steps", []):
+                version = str((step.get("with") or {}).get("terraform_version", ""))
+                if version[:1].isdigit():
+                    found += 1
+                    assert version == pinned, f"{workflow.name} {name}: {version} != {pinned}"
+    assert found

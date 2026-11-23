@@ -415,7 +415,10 @@ jobs:
       - uses: actions/checkout@v7
       - name: Read the Terraform version from the release (src/jaws/product.yaml)
         id: config
-        run: echo "terraform_version=$(yq -r .terraform.version src/jaws/product.yaml)" >> "$GITHUB_OUTPUT"
+        run: |
+          version=$(yq -r .terraform.version src/jaws/product.yaml)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::src/jaws/product.yaml pins no exact terraform.version"; exit 1; }
+          echo "terraform_version=$version" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v4
       - uses: docker/build-push-action@v7
         with:
