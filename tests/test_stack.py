@@ -68,6 +68,7 @@ def test_rendered_tfvars_match_the_old_infra_directories(site: Site) -> None:
     assert tfvars["name_root"] == "jaws"
     assert tfvars["tags"]["Organization"] == site.organization == "example-owner"
     assert tfvars["tags"]["ManagedBy"] == "JAWS"
+    assert tfvars["managed_by"] == "JAWS"
 
 
 def test_rendered_backend_matches_the_old_backend_files(site: Site) -> None:
@@ -103,6 +104,7 @@ def test_render_tfvars_for_bot(bot: Project, settings: Settings) -> None:
         "project": "braveheart",
         "repository": "Braveheart-Chess/braveheart",
         "name_root": "jaws",
+        "managed_by": "JAWS",
         "tags": {
             "Project": "braveheart",
             "Environment": "prod",
@@ -551,7 +553,14 @@ def _strip_new_keys(tfvars: dict[str, Any]) -> dict[str, Any]:
         k: v
         for k, v in tfvars.items()
         if k
-        not in ("bot_enabled", "task_rust", "schedule", "bucket_admin_principal_arns", "name_root")
+        not in (
+            "bot_enabled",
+            "task_rust",
+            "schedule",
+            "bucket_admin_principal_arns",
+            "name_root",
+            "managed_by",
+        )
     }
     old["task_profiles"] = [
         {
@@ -884,6 +893,7 @@ ACCOUNT_TFVARS_KEYS = {
     "deployer",
     "project",
     "name_root",
+    "managed_by",
     "environment",
     "repository",
     "tags",
@@ -901,6 +911,7 @@ ACCOUNT_TFVARS_KEYS = {
 WORKSPACE_TFVARS_KEYS = {
     "project",
     "name_root",
+    "managed_by",
     "environment",
     "repository",
     "tags",
@@ -931,6 +942,7 @@ def test_databricks_account_tfvars(databricks: Project, settings: Settings) -> N
     assert tfvars == {
         "project": "databricks-poc",
         "name_root": "jaws",
+        "managed_by": "JAWS",
         "environment": "prod",
         "repository": "example-org/databricks-poc",
         "tags": databricks.databricks_tags,
@@ -1427,3 +1439,37 @@ def test_the_records_bucket_admins_are_the_break_glass_principals(
     assert admins + '["${local.ci_role_arn}-apply"]))' in main
     assert 'listers              = ["${local.ci_role_arn}-plan"]' in main
     assert "{ (var.records_prefix) = [module.bot[0].role_arn] }" in main
+
+
+@pytest.mark.parametrize("stack", ["site", "bot", "databricks-account", "databricks-workspace"])
+def test_every_stack_checks_managed_by_against_the_configured_value(stack: str) -> None:
+    variables = (REPO_ROOT / "stacks" / stack / "variables.tf").read_text()
+    assert 'variable "managed_by"' in variables
+    assert 'lookup(var.tags, "ManagedBy", "") == var.managed_by' in variables
+    assert '"JAWS"' not in variables
+
+
+def _every_stack(
+    site: Site, bot: Project, databricks: Project, settings: Settings, **update: Any
+) -> list[dict[str, Any]]:
+    """The tfvars of every stack kind, each target copied with `update`."""
+    return [
+        render_tfvars(site.model_copy(update=update)),
+        render_tfvars(bot.model_copy(update=update), settings),
+        *(
+            render_tfvars(
+                databricks.model_copy(update=update),
+                settings,
+                stack=s,
+                account_outputs=ACCOUNT_OUTPUTS,
+            )
+            for s in ("account", "workspace")
+        ),
+    ]
+
+
+def test_every_stack_is_rendered_the_platform_s_managed_by(
+    site: Site, bot: Project, databricks: Project, settings: Settings
+) -> None:
+    for tfvars in _every_stack(site, bot, databricks, settings, managed_by="ACME"):
+        assert tfvars["managed_by"] == tfvars["tags"]["ManagedBy"] == "ACME"

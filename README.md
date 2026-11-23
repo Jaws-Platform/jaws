@@ -263,7 +263,7 @@ project is built in the primary account.
 Two tags are the tool's, never the project file's: every stack the tool
 renders and every task instance it launches gets `Organization` (the GitHub
 organization or user the project is registered under in `config/projects.yaml`;
-`Jaws-Platform` for jaws's own stacks) and `ManagedBy` (`JAWS`). A project
+`Jaws-Platform` for jaws's own stacks) and `ManagedBy` (`context.managed_by`, `JAWS` by default). A project
 file may not state either ([docs/tagging.md](docs/tagging.md)).
 
 Credentials must belong to the primary account, even where the role check

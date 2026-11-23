@@ -9,7 +9,6 @@ import yaml
 from jaws.errors import ConfigError
 from jaws.settings import Settings
 from jaws.site import (
-    MANAGED_BY,
     REQUIRED_TAGS,
     TOOL_TAGS,
     Site,
@@ -95,10 +94,16 @@ def test_cross_checked_tags(tmp_path: Path, tag: str, value: str) -> None:
         load_site_config(_write(tmp_path, _raw({f"tags.{tag}": value})))
 
 
-@pytest.mark.parametrize("stated", [MANAGED_BY, "jaws", "hand"])
+@pytest.mark.parametrize("stated", ["JAWS", "jaws", "hand"])
 def test_a_stated_managed_by_is_refused(tmp_path: Path, stated: str) -> None:
     """The tool sets ManagedBy; a file may not state it, even with the tool's value."""
-    with pytest.raises(ConfigError, match=r"tags\.ManagedBy is set by jaws \(JAWS\); remove it"):
+    with pytest.raises(
+        ConfigError,
+        match=(
+            r"tags\.ManagedBy is set by jaws "
+            r"\(context\.managed_by in config/tool\.yaml\); remove it"
+        ),
+    ):
         load_site_config(_write(tmp_path, _raw({"tags.ManagedBy": stated})))
 
 

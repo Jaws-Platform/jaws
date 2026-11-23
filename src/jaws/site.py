@@ -36,10 +36,6 @@ REQUIRED_TAGS = ("Project", "Environment", "Repository", "Owner")
 #: may not state either.
 TOOL_TAGS = ("Organization", "ManagedBy")
 
-#: The ManagedBy value the tool stamps (`context.managed_by`); the stacks'
-#: variables accept exactly this.
-MANAGED_BY = "JAWS"
-
 ENVIRONMENT = "prod"
 PROD_PREFIX = "prod/"
 DEV_PREFIX = "dev/"
@@ -201,7 +197,7 @@ class SiteConfig(_Model):
     def _no_tool_tags(cls, value: dict[str, str]) -> dict[str, str]:
         source = {
             "Organization": "the project's GitHub owner in config/projects.yaml",
-            "ManagedBy": MANAGED_BY,
+            "ManagedBy": "context.managed_by in config/tool.yaml",
         }
         stated = [key for key in TOOL_TAGS if key in value]
         if stated:

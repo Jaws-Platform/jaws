@@ -79,6 +79,13 @@ def _bot_in_production() -> dict[str, Any]:
     return raw
 
 
+def _relabelled(settings: Settings) -> Settings:
+    """`settings` for a platform with its own ManagedBy."""
+    return settings.model_copy(
+        update={"context": settings.context.model_copy(update={"managed_by": "ACME"})}
+    )
+
+
 def _project(raw: dict[str, Any], settings: Settings) -> Project:
     """`Project.from_config` runs the guardrails."""
     return Project.from_config(SiteConfig.model_validate(raw), settings)
@@ -100,6 +107,7 @@ def cases(settings: Settings) -> dict[str, dict[str, dict[str, Any]]]:
     handshakes = _handshakes()
     bots = {
         "braveheart": (_file("braveheart"), sample),
+        "relabelled": (_file("braveheart"), _relabelled(sample)),
         "scheduled_bot": (_scheduled(), sample),
         "selfplay": (_registered("braveheart-selfplay"), settings),
         "trainer": (_registered("braveheart-trainer"), settings),

@@ -136,3 +136,13 @@ run "a_deployer_reaches_the_workspace_module" {
     error_message = "the stack passes deployer to the workspace module and outputs its application ID"
   }
 }
+
+run "refuses_a_managed_by_the_platform_did_not_stamp" {
+  command = plan
+
+  variables {
+    managed_by = "ACME"
+  }
+
+  expect_failures = [var.tags]
+}

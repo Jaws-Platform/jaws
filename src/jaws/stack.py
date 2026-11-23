@@ -131,6 +131,7 @@ def _site_tfvars(site: Site) -> dict[str, Any]:
         "dev_domain_name": site.config.dev.domain if site.config.dev else None,
         "enable_preview": site.config.preview.enabled,
         "zone_id": site.zone_id,
+        "managed_by": site.managed_by,
         "tags": site.tags,
     }
 
@@ -145,6 +146,7 @@ def _site_tfvars_from_project(project: Project) -> dict[str, Any]:
         "dev_domain_name": config.dev.domain if config.dev else None,
         "enable_preview": config.preview.enabled,
         "zone_id": project.zone_id,
+        "managed_by": project.managed_by,
         "tags": project.tags,
     }
 
@@ -210,6 +212,7 @@ def _bot_tfvars(
         "project": project.project,
         "name_root": project.name_root,
         "repository": project.config.repository,
+        "managed_by": project.managed_by,
         "tags": project.tags,
         **kind_tfvars,
         "availability_zones": list(settings.bot.availability_zones),
@@ -369,6 +372,7 @@ def _databricks_account_tfvars(
         "name_root": project.name_root,
         "environment": ENVIRONMENT,
         "repository": project.config.repository,
+        "managed_by": project.managed_by,
         "tags": project.databricks_tags,
         "vpc_cidr": approved.vpc_cidr,
         "nat_ami_name": section.nat_ami,
@@ -449,6 +453,7 @@ def _databricks_workspace_tfvars(
         "name_root": project.name_root,
         "environment": ENVIRONMENT,
         "repository": project.config.repository,
+        "managed_by": project.managed_by,
         "tags": tags,
         **{key: account_outputs[key] for key in _ACCOUNT_OUTPUTS},
         "compute_policies": policies,

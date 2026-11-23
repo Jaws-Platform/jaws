@@ -66,7 +66,7 @@ the keys Databricks reserves for itself.
     `Organization` and `ManagedBy`, and passes the name root as its own
     `name_root` variable.
   - The stacks apply `tags` through the provider's `default_tags`.
-  - The stacks refuse any `ManagedBy` other than `JAWS` and any missing tag.
+  - The stacks refuse a `ManagedBy` other than their `managed_by` variable, which the CLI renders from `context.managed_by` and any missing tag.
 - **Task instances:** `RunInstances` does not inherit `default_tags`, so a
   task is launched with the same six tags. It also gets `Component`,
   `Purpose`, `Profile`, `Lifecycle`, `Name` and the run's own tags
