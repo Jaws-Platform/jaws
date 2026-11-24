@@ -38,6 +38,11 @@ from .errors import ConfigError
 ENV_CONFIG_PATH = "JAWS_CONFIG"
 IMAGE_CONFIG_PATH = Path("/etc/jaws/config")
 LOCAL_CONFIG_PATH = Path("config")
+NO_CONFIGURATION = (
+    f"no tool configuration: {ENV_CONFIG_PATH} is not set, and neither {IMAGE_CONFIG_PATH} "
+    f"nor ./{LOCAL_CONFIG_PATH} exists. The Jaws image holds none of its own: run your "
+    f"platform's image, which adds it at {IMAGE_CONFIG_PATH}, or set {ENV_CONFIG_PATH}"
+)
 
 _DURATION = re.compile(r"^(\d+)([smh])$")
 _DURATION_UNITS = {"s": 1, "m": 60, "h": 3600}
@@ -1302,6 +1307,13 @@ def load_settings(path: Path | None = None, environ: dict[str, str] | None = Non
     tool runs should vary between runs of the same image.
     """
     env = os.environ if environ is None else environ
+    if (
+        path is None
+        and ENV_CONFIG_PATH not in os.environ  # as default_config_path reads it, not `environ`
+        and not IMAGE_CONFIG_PATH.is_dir()
+        and not LOCAL_CONFIG_PATH.exists()
+    ):
+        raise ConfigError(NO_CONFIGURATION)
     path = path or default_config_path()
     raw, origin = _load_document_with_origin(path)
 
