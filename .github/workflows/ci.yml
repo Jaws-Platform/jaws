@@ -420,7 +420,8 @@ jobs:
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::src/jaws/product.yaml pins no exact terraform.version"; exit 1; }
           echo "terraform_version=$version" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v4
-      - uses: docker/build-push-action@v7
+      - name: Build the generic image
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false
@@ -429,6 +430,33 @@ jobs:
           build-args: TERRAFORM_VERSION=${{ steps.config.outputs.terraform_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Build the jaws-cli image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: jaws-cli
+          push: false
+          load: true
+          tags: jaws:ci-cli
+          build-args: TERRAFORM_VERSION=${{ steps.config.outputs.terraform_version }}
+          cache-from: type=gha
+      - name: Smoke test (the generic image holds no configuration)
+        run: docker run --rm --network none --entrypoint sh jaws:ci -c 'test ! -e /etc/jaws'
+      - name: Smoke test (without a configuration, the CLI says where it looks)
+        run: |
+          set +e
+          out=$(docker run --rm --network none jaws:ci config show 2>&1)
+          status=$?
+          set -e
+          echo "$out"
+          [[ $status -eq 2 && "$out" == *JAWS_CONFIG* && "$out" == */etc/jaws/config* ]] || {
+            echo "::error::expected exit 2 naming JAWS_CONFIG and /etc/jaws/config, got exit $status"
+            exit 1
+          }
+      - name: Smoke test (the jaws-cli image holds the configuration and the datasets where the CLI and the stacks look)
+        run: |
+          docker run --rm --network none --entrypoint sh jaws:ci-cli -c \
+            'test -f /etc/jaws/datasets/README.md && ls /etc/jaws/config/*.yaml'
       - name: Smoke test (validate a fixture site offline, inside the image)
         run: |
           # A writable copy: the tool writes its artifacts and debug log into the workspace.

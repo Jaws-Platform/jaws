@@ -1,8 +1,13 @@
 # jaws (Jaws): the CLI, a pinned Terraform, the site and bot stacks
-# with their modules and providers vendored, and the tool configuration (config/). Only the S3 backend touches
-# the network at run time.
+# with their modules and providers vendored. Only the S3 backend touches
+# the network at run time. Two targets:
+#   generic  - Jaws's image, with no configuration inside (the default target).
+#   jaws-cli - generic plus this repository's config/ and datasets/.
 #
-# Build: docker build --build-arg TERRAFORM_VERSION=<terraform.version from src/jaws/product.yaml> .
+# Build the generic image:
+#   docker build --build-arg TERRAFORM_VERSION=<terraform.version from src/jaws/product.yaml> .
+# Build the jaws-cli image:
+#   docker build --target jaws-cli --build-arg TERRAFORM_VERSION=<same> .
 # The CLI refuses to run if the Terraform inside differs from src/jaws/product.yaml.
 
 ARG PYTHON_VERSION=3.13
@@ -71,12 +76,12 @@ RUN for stack in site bot; do \
       || exit 1; \
     done
 
-# --- stage 3: the runtime image --------------------------------------------------
-FROM python:${PYTHON_VERSION}-alpine
+# --- stage 3: the generic image: the runtime, with no configuration ---------------
+FROM python:${PYTHON_VERSION}-alpine AS generic
 ARG TERRAFORM_VERSION
 LABEL org.opencontainers.image.title="jaws" \
       org.opencontainers.image.source="https://github.com/Jaws-Platform/jaws" \
-      org.opencontainers.image.description="Provisions jwall.engineering infrastructure (sites, bots, research projects and Databricks workspaces) with Terraform" \
+      org.opencontainers.image.description="Jaws: the CLI, a pinned Terraform and every stack, with their modules and providers vendored. A platform's image adds the platform's configuration." \
       terraform.version="${TERRAFORM_VERSION}"
 # No git at run time: the library modules are already in the image. No pip
 # either: the virtual environment is complete and nothing installs at run time.
@@ -88,7 +93,6 @@ COPY --from=build /opt/jaws/venv /opt/jaws/venv
 COPY --from=build /usr/local/bin/terraform /usr/local/bin/terraform
 COPY --from=build /opt/jaws/stacks /opt/jaws/stacks
 COPY --from=build /opt/jaws/plugins /opt/jaws/plugins
-COPY config /etc/jaws/config
 ENV PATH="/opt/jaws/venv/bin:${PATH}" \
     TF_IN_AUTOMATION=1 \
     TF_INPUT=0 \
@@ -100,3 +104,14 @@ ENV PATH="/opt/jaws/venv/bin:${PATH}" \
 WORKDIR /work
 ENTRYPOINT ["jaws"]
 CMD ["--help"]
+
+# --- stage 4: the jaws-cli image: generic plus this repository's configuration ------
+# What today's callers run (the composite action pulls jaws-cli:<tag>). It has the
+# shape of every platform's image: generic plus the platform's configuration. It goes
+# with config/ at cleanup (spec 6.10, step 7).
+FROM generic AS jaws-cli
+COPY config /etc/jaws/config
+COPY datasets /etc/jaws/datasets
+
+# The last stage is the default target: a plain `docker build .` builds the generic image.
+FROM generic

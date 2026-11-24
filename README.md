@@ -36,10 +36,12 @@ bundled site stack in `stacks/site/` from that file and the tool
 configuration (`config/`), runs
 `terraform` against the shared state bucket, syncs built content and
 invalidates CloudFront. Site repositories keep no Terraform. It ships as a
-versioned image in the account's private ECR repository (`jaws-cli`),
-published by the
-release workflow, and site repositories run it through the reusable workflows
-this repository publishes. The design is in
+two images, both built from the `Dockerfile` and pushed by each release: the
+generic image, with no configuration, public at
+`public.ecr.aws/<alias>/jaws` (see Jaws's public image), and `jaws-cli`, the
+same image with this repository's `config/` and `datasets/`, in the account's
+private ECR repository. Site repositories run `jaws-cli` through the reusable
+workflows this repository publishes. The design is in
 [#26](https://github.com/Jaws-Platform/jaws/pull/26).
 
 | Command | Role it expects | What it does |
@@ -82,7 +84,8 @@ debug log go to `./.jaws/`.
 uv sync                                  # the CLI and its dev tools
 uv run jaws --help
 uv run ruff check && uv run mypy && uv run pytest
-docker build --build-arg "TERRAFORM_VERSION=$(yq -r .terraform.version src/jaws/product.yaml)" -t jaws:local .
+docker build --build-arg "TERRAFORM_VERSION=$(yq -r .terraform.version src/jaws/product.yaml)" -t jaws:local .   # the generic image
+docker build --target jaws-cli --build-arg "TERRAFORM_VERSION=$(yq -r .terraform.version src/jaws/product.yaml)" -t jaws-cli:local .
 ```
 
 ### Reusable workflows for site repositories
@@ -360,7 +363,7 @@ files](#the-tool-configuration-config)).
 | `docs/monitoring.md`, `docs/billing-export.md` | The monitoring stack: configuration, applies, the owner's setup, Grafana, the schedule, alerts, recovery, new providers and channels, costs; the organization's billing export |
 | `monitoring.tf` | The billing bucket, the Databricks billing job and the monitoring stack's CI roles, with `config/monitoring.yaml`'s `monitoring` section |
 | `stacks/databricks-account/`, `stacks/databricks-workspace/`, `foundation/databricks.tf` | The two stacks of a Databricks project; the metastore, audit log delivery and each Databricks project's roles (type `databricks` in `config/projects.yaml`) |
-| `Dockerfile` | The CLI image: a pinned Terraform, the stack with modules and providers vendored, `config/` (at `/etc/jaws/config`) |
+| `Dockerfile` | The CLI images: `generic`, the default target (the CLI, a pinned Terraform, the stacks with modules and providers vendored, no configuration), and `jaws-cli`: `generic` plus `config/` at `/etc/jaws/config` and `datasets/` at `/etc/jaws/datasets` |
 | `.github/actions/terraform-init` | `terraform init` with a retry for the registry's lag after a library release |
 | `projects.tf` | The sites (type `site` in `config/projects.yaml`), each fed to the registry `site-bucket`, `ci-plan-role`, `ci-preview-role` and `ci-apply-role` modules |
 | `outputs.tf` | Values the project repos and this repo's CI consume |
@@ -380,7 +383,8 @@ top-level sections, and a section lives in one file only (the CLI and the
 foundation both refuse a section defined twice). One file holding every section
 is also accepted, as the tests' fixtures do. The CLI reads `./config` by
 default; `--config` and `JAWS_CONFIG` take the directory or one file, and the
-image bakes it at `/etc/jaws/config`.
+a platform's image holds it at `/etc/jaws/config` (`jaws-cli` holds this
+repository's; the generic image holds none).
 
 | File | Sections |
 | --- | --- |
@@ -633,7 +637,7 @@ state in a local file and then migrates it into the bucket.
 - `Terraform fmt, validate, tflint` (`foundation/`) and `Site stack validate, tflint` (`stacks/site/`)
 - `Terraform plan`: assumes the plan role through OIDC and posts the foundation plan as the branded sticky PR comment (rendered by `jaws report plan-comment`), updated on every push
 - `Python lint, types, tests`: ruff, mypy and pytest for the infra CLI
-- `Image build and smoke test`: builds the CLI image, runs `validate` inside it offline, checks its Terraform version and enforces the compressed-size budget
+- `Image build and smoke test`: builds both images, checks that the generic one holds no configuration and says where it looks for one, validates a fixture site offline inside it with the neutral fixture configuration mounted at `JAWS_CONFIG`, checks that `jaws-cli` holds the configuration and the datasets, checks the Terraform version and enforces the compressed-size budget
 - `Bot stack validate, tflint` (`stacks/bot/`), `Databricks account stack validate, tflint` (`stacks/databricks-account/`) and `Databricks workspace stack validate, tflint` (`stacks/databricks-workspace/`)
 - `Stack plans against mock providers`: `scripts/test-stack-plans.sh` plans `stacks/bot` and both Databricks stacks with tfvars the CLI renders for the cases in `tests/stack_plans/<stack>/`; no AWS or Databricks
 - `Bot plan (<project>)`: for each bot and research project in `config/projects.yaml` (the `Bot projects` job lists them with `scripts/projects.sh bot research`), assumes the project's plan role and posts its plan as a sticky comment. Until the release that creates the project's roles, it skips with a notice instead of failing.
@@ -644,7 +648,7 @@ Every `terraform init` goes through `.github/actions/terraform-init`, which retr
 
 **Releases, applies and the image** (`.github/workflows/release-please.yml`, on push to `main`):
 
-Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`, then, with the `monitoring` section, applies `monitoring/` with `jaws-monitoring-ci-apply`; then the `image` job, also in `prod`, builds the CLI image and pushes it to the account's repository as `<repository>:<tag>` (`ecr.repository` in `config/tool.yaml`, `jaws-cli`). Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
+Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`, then, with the `monitoring` section, applies `monitoring/` with `jaws-monitoring-ci-apply`; then the `image` job, also in `prod`, builds the `jaws-cli` target (for a tag cut before it, the tag's only image) and pushes it to the account's repository as `<repository>:<tag>` (`ecr.repository` in `config/tool.yaml`, `jaws-cli`). Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
 
 No role ARN is a secret, and this repository needs none as a variable. The foundation's plan and apply jobs build their role (`<name_root>-infra-ci-plan` / `-ci-apply`) from the account and name root `jaws config env` reads from the tool configuration (the primary account in `config/aws.yaml`, `context.name_root` in `config/tool.yaml`), and keep their state through `backend/prod.hcl`. Bot role ARNs need no variable either: the workflows build them the same way, with the bot's name.
 
