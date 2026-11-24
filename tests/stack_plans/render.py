@@ -80,9 +80,13 @@ def _bot_in_production() -> dict[str, Any]:
 
 
 def _relabelled(settings: Settings) -> Settings:
-    """`settings` for a platform with its own ManagedBy."""
+    """`settings` for a platform with its own ManagedBy and tags."""
     return settings.model_copy(
-        update={"context": settings.context.model_copy(update={"managed_by": "ACME"})}
+        update={
+            "context": settings.context.model_copy(
+                update={"managed_by": "ACME", "tags": {"Department": "research"}}
+            )
+        }
     )
 
 

@@ -269,9 +269,24 @@ def _format_validation_error(exc: ValidationError) -> str:
     return "; ".join(lines)
 
 
-def stamped_tags(tags: Mapping[str, str], organization: str, managed_by: str) -> dict[str, str]:
-    """The file's `tags` and the tool's own (TOOL_TAGS), which the file may not state."""
-    return {**tags, "Organization": organization, "ManagedBy": managed_by}
+def stamped_tags(
+    tags: Mapping[str, str],
+    organization: str,
+    managed_by: str,
+    platform_tags: Mapping[str, str],
+) -> dict[str, str]:
+    """The file's `tags`, the platform's own (`context.tags`) and the tool's own
+    (TOOL_TAGS), none of which the file may state."""
+    return {**tags, **platform_tags, "Organization": organization, "ManagedBy": managed_by}
+
+
+def platform_tag_problems(tags: Mapping[str, str], settings: Settings) -> list[str]:
+    """One problem per platform tag that a project file states."""
+    return [
+        f"tags.{key} is set by jaws (context.tags in config/tool.yaml); remove it"
+        for key in settings.context.tags
+        if key in tags
+    ]
 
 
 def project_organization(config: SiteConfig, settings: Settings) -> str:
@@ -292,6 +307,8 @@ class Site(_Model):
     #: The Organization tag: the project's GitHub owner (project_organization).
     organization: str
     managed_by: str
+    #: The platform's own tags (config/tool.yaml `context.tags`).
+    platform_tags: dict[str, str]
     zone_id: str
     state_bucket: str
     state_key: str
@@ -304,7 +321,7 @@ class Site(_Model):
                 f"{config.project} is a {config.kind} project, not a site; "
                 "this command works on sites only"
             )
-        problems: list[str] = []
+        problems: list[str] = platform_tag_problems(config.tags, settings)
         zone_suffix = "." + settings.dns.zone
         for label, domain in (
             ("domain", config.domain),
@@ -319,6 +336,7 @@ class Site(_Model):
             name_root=settings.context.name_root,
             organization=project_organization(config, settings),
             managed_by=settings.context.managed_by,
+            platform_tags=dict(settings.context.tags),
             zone_id=settings.dns.zone_id,
             state_bucket=settings.state.bucket,
             state_key=settings.state_key(config.project, ENVIRONMENT),
@@ -332,7 +350,9 @@ class Site(_Model):
     @property
     def tags(self) -> dict[str, str]:
         """The tags every resource of the site carries (docs/tagging.md)."""
-        return stamped_tags(self.config.tags, self.organization, self.managed_by)
+        return stamped_tags(
+            self.config.tags, self.organization, self.managed_by, self.platform_tags
+        )
 
     @property
     def bucket(self) -> str:

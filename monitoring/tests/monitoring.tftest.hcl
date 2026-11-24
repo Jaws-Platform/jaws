@@ -272,6 +272,19 @@ run "reads_its_configuration_from_the_repository_outside_the_image" {
   }
 }
 
+run "stamps_the_platform_s_own_tags" {
+  command = plan
+
+  variables {
+    config_path = "../foundation/tests/fixtures/platform-tags.yaml"
+  }
+
+  assert {
+    condition     = module.context.tags["Department"] == "platform"
+    error_message = "a tag in context.tags is stamped on the monitoring stack's resources"
+  }
+}
+
 run "takes_its_identity_from_the_configuration" {
   command = plan
 

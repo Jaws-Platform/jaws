@@ -2,11 +2,11 @@
 
 `foundation/tests/foundation.tftest.hcl` plans the platform configuration
 (tests/fixtures/platform/) as written, and a few states it isn't in: a ManagedBy no code
-spells, no task runner, the Databricks host before its URL is recorded, an admin role of
-another account, no monitoring section, a private monitoring node, and a second
-repository or a hub. Each fixture under `foundation/tests/fixtures/` is
-tests/fixtures/platform/ as one file (`jaws.settings.load_document`) with a few
-values set; this test keeps them from drifting.
+spells, a tag of the platform's own, no task runner, the Databricks host before its URL
+is recorded, an admin role of another account, no monitoring section, a private
+monitoring node, and a second repository or a hub. Each fixture under
+`foundation/tests/fixtures/` is tests/fixtures/platform/ as one file
+(`jaws.settings.load_document`) with a few values set; this test keeps them from drifting.
 
 Regenerate after changing the fixture:
 
@@ -34,6 +34,12 @@ def _relabelled(config: dict[str, Any]) -> dict[str, Any]:
     config["platform"]["repositories"][0]["repository"] = "Example-Org/platform"
     config["dns"]["zone"] = "example.com"
     config["dns"]["txt_records"] = {"_example-challenge": ["example-token"]}
+    return config
+
+
+def _platform_tags(config: dict[str, Any]) -> dict[str, Any]:
+    """A tag of the platform's own: the platform's stacks stamp it from the file."""
+    config["context"]["tags"] = {"Department": "platform"}
     return config
 
 
@@ -125,6 +131,7 @@ def _hub_image_is_a_project_repository(config: dict[str, Any]) -> dict[str, Any]
 
 FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "relabelled.yaml": _relabelled,
+    "platform-tags.yaml": _platform_tags,
     "no-task-runners.yaml": _no_task_runners,
     "awaiting-host.yaml": _awaiting_host,
     "foreign-admin.yaml": _foreign_admin,

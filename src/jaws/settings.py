@@ -184,6 +184,41 @@ class AwsSection(_Section):
         return {n: a for n, a in self.accounts.items() if a.type == account_type}
 
 
+#: The tag keys that a project file, jaws, the modules, Databricks or a task set
+#: themselves, so `context.tags` may not use them. The sources, which this module
+#: cannot import: `site.REQUIRED_TAGS` and `site.TOOL_TAGS`,
+#: `project.DATABRICKS_RESERVED_TAGS`, and `tasks.task_tags`.
+RESERVED_TAG_KEYS = (
+    "Project",
+    "Environment",
+    "Repository",
+    "Owner",
+    "Organization",
+    "ManagedBy",
+    "Name",
+    "Component",
+    "Purpose",
+    "Profile",
+    "Lifecycle",
+    "CostCenter",
+    "Workspace",
+    "Vendor",
+    "Creator",
+    "ClusterName",
+    "ClusterId",
+    "Workflow",
+    "RunId",
+    "TaskId",
+    "MaxLifetimeHours",
+    "PullRequest",
+    "Campaign",
+)
+
+#: What RunInstances and Databricks accept in a tag (the set `tasks._TAG_VALUE_UNSAFE` keeps).
+_TAG_KEY = re.compile(r"^[A-Za-z0-9 +\-=._:/@]{1,128}$")
+_TAG_VALUE = re.compile(r"^(?=.*\S)[A-Za-z0-9 +\-=._:/@]{1,256}$")
+
+
 class ContextSection(_Section):
     #: The root of every name the tool gives (`<name_root>-<project>-...`, the
     #: `<name_root>-infra-ci-*` roles). A name only, never a tag value.
@@ -194,6 +229,32 @@ class ContextSection(_Section):
     owner: str = Field(pattern=_GITHUB_OWNER.pattern)
     #: The ManagedBy tag the tool stamps on everything it builds.
     managed_by: str = Field(default="JAWS", pattern=r"^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$")
+    #: The platform's own tags, stamped on every resource after a project file's.
+    #: A project file may not state them, and no key may be one jaws sets itself.
+    tags: dict[str, str] = {}
+
+    @field_validator("tags")
+    @classmethod
+    def _tags_are_ones_every_service_accepts(cls, value: dict[str, str]) -> dict[str, str]:
+        problems: list[str] = []
+        for key, tag_value in value.items():
+            if key in RESERVED_TAG_KEYS:
+                problems.append(f"context.tags.{key}: jaws or a stack sets this tag itself")
+            elif key.lower().startswith("aws:"):
+                problems.append(f"context.tags.{key}: AWS reserves keys that start with aws:")
+            elif not _TAG_KEY.fullmatch(key):
+                problems.append(
+                    f"context.tags.{key}: a key is 1 to 128 letters, digits, spaces "
+                    "or + - = . _ : / @"
+                )
+            elif not _TAG_VALUE.fullmatch(tag_value):
+                problems.append(
+                    f"context.tags.{key}: a value is 1 to 256 letters, digits, spaces or "
+                    "+ - = . _ : / @, and not blank"
+                )
+        if problems:
+            raise ValueError("; ".join(problems))
+        return value
 
 
 class BrandSection(_Section):

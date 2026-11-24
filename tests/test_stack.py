@@ -1473,3 +1473,12 @@ def test_every_stack_is_rendered_the_platform_s_managed_by(
 ) -> None:
     for tfvars in _every_stack(site, bot, databricks, settings, managed_by="ACME"):
         assert tfvars["managed_by"] == tfvars["tags"]["ManagedBy"] == "ACME"
+
+
+def test_every_stack_is_rendered_the_platform_s_tags(
+    site: Site, bot: Project, databricks: Project, settings: Settings
+) -> None:
+    for tfvars in _every_stack(
+        site, bot, databricks, settings, platform_tags={"Department": "research"}
+    ):
+        assert tfvars["tags"]["Department"] == "research"

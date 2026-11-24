@@ -857,3 +857,34 @@ def test_the_artifact_repository_is_owner_slash_name(
     _image(raw)["artifact"]["repository"] = repository
     with pytest.raises(ConfigError, match="repository"):
         _load(tmp_path, raw, settings)
+
+
+def _with_platform_tags(settings: Settings, tags: dict[str, str]) -> Settings:
+    return settings.model_copy(
+        update={"context": settings.context.model_copy(update={"tags": tags})}
+    )
+
+
+def test_a_bot_carries_the_platform_s_tags(tmp_path: Path, settings: Settings) -> None:
+    tagged = _with_platform_tags(settings, {"Department": "research"})
+    assert _load(tmp_path, _raw(), tagged).tags["Department"] == "research"
+
+
+def test_a_project_file_cannot_state_a_platform_tag(tmp_path: Path, settings: Settings) -> None:
+    raw = _raw()
+    raw["tags"]["Department"] = "chess"
+    with pytest.raises(ConfigError, match=r"tags\.Department is set by jaws \(context\.tags"):
+        _load(tmp_path, raw, _with_platform_tags(settings, {"Department": "research"}))
+
+
+def test_the_stop_commands_still_load_a_file_that_states_a_platform_tag(
+    tmp_path: Path, settings: Settings
+) -> None:
+    """Like a guardrail change, a new platform tag must not strand an instance."""
+    raw = _raw()
+    raw["tags"]["Department"] = "chess"
+    path = tmp_path / "jaws.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    tagged = _with_platform_tags(settings, {"Department": "research"})
+    project = Project.from_config(load_site_config(path), tagged, check_guardrails=False)
+    assert project.tags["Department"] == "research"

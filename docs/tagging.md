@@ -1,7 +1,8 @@
 # Tagging
 
-Every AWS resource jaws builds carries the same six tags. Each tag has exactly
-one source, and nothing else may set it. Names and access never depend on the
+Every AWS resource jaws builds carries the same six tags, and any the platform
+stamps on everything (`context.tags`). Each tag has exactly one source, and
+nothing else may set it. Names and access never depend on the
 `Organization` or `ManagedBy` tag, so changing either one retags resources in
 place: nothing is renamed or replaced, and no access is granted or revoked.
 
@@ -66,7 +67,8 @@ the keys Databricks reserves for itself.
     `Organization` and `ManagedBy`, and passes the name root as its own
     `name_root` variable.
   - The stacks apply `tags` through the provider's `default_tags`.
-  - The stacks refuse a `ManagedBy` other than their `managed_by` variable, which the CLI renders from `context.managed_by` and any missing tag.
+  - The stacks refuse any missing tag, and any `ManagedBy` other than their
+    `managed_by` variable, which the CLI renders from `context.managed_by`.
 - **Task instances:** `RunInstances` does not inherit `default_tags`, so a
   task is launched with the same six tags. It also gets `Component`,
   `Purpose`, `Profile`, `Lifecycle`, `Name` and the run's own tags
@@ -85,6 +87,26 @@ the keys Databricks reserves for itself.
     `Jaws-Platform/jaws`, the repository that manages it. Its names keep the
     values it was first applied with.
   - Only the owner applies it, so its retag waits for their next apply.
+
+## The platform's own tags
+
+A platform may stamp tags of its own on everything it manages, such as a
+department or a cost pool.
+
+- **Where they are set:** `context.tags` in `config/tool.yaml`. There are none
+  by default.
+- **What carries them:** every stack the CLI renders, every task instance, and
+  the foundation's and monitoring's resources. The owner's `owner-access/` and
+  `billing-export/` do not.
+- **Who may state them:** only the platform. A project file that states one is
+  refused, with a message naming the key. The bot and research stop commands
+  still load such a file, so an instance stays stoppable, and the platform's
+  value wins. A site file that states one is refused everywhere, `preview
+  remove` included: drop the key, then run the remove again.
+- **Which keys:** a key may not be one jaws, a module, Databricks or a task
+  sets itself (`RESERVED_TAG_KEYS` in `src/jaws/settings.py`), and may not
+  start with `aws:`. Keys and values use the characters that every AWS service
+  accepts.
 
 ## Moving to derived tags
 
@@ -105,6 +127,8 @@ Until #290 a project file stated `Organization: jaws`, and the tool stamped
 - A tag that describes every resource and that the tool can know for itself
   belongs to the tool: add it to `TOOL_TAGS` (`src/jaws/site.py`) and to this
   page.
+- A tag the platform wants on everything, that only it knows, goes in
+  `context.tags`.
 - A tag that describes the project belongs in the project file's required
   tags.
 - A tag that describes one component belongs to its module.

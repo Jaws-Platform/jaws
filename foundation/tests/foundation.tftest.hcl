@@ -86,6 +86,19 @@ variables {
   datasets_path = "../datasets"
 }
 
+run "stamps_the_platform_s_own_tags" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/platform-tags.yaml"
+  }
+
+  assert {
+    condition     = module.context.tags["Department"] == "platform"
+    error_message = "a tag in context.tags is stamped on the foundation's resources"
+  }
+}
+
 run "the_account_is_config_yamls" {
   command = plan
 

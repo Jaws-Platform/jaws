@@ -43,4 +43,5 @@ module "context" {
   organization = local.context.organization
   name_root    = local.context.name_root
   managed_by   = local.account.context.managed_by
+  extra_tags   = try(local.account.context.tags, {})
 }

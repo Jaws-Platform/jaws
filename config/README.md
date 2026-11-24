@@ -12,7 +12,7 @@ section defined twice, and a `.yml` file instead of skipping it.
 | [`projects.yaml`](projects.yaml) | `projects` | Every onboarded project, grouped by its GitHub owner: its type, repository, and what it is approved for |
 | [`aws.yaml`](aws.yaml) | `aws` | The account registry: every account by type, and `primary`, the one jaws builds in |
 | [`terraform.yaml`](terraform.yaml) | `state` | The state bucket and key template |
-| [`tool.yaml`](tool.yaml) | `context`, `ecr` | The name root, the Organization tag of jaws's own stacks, the owner and the ManagedBy tag, the CLI's image repository |
+| [`tool.yaml`](tool.yaml) | `context`, `ecr` | The name root, the Organization tag of jaws's own stacks, the owner and the ManagedBy tag, the platform's own tags, the CLI's image repository |
 | [`sites.yaml`](sites.yaml) | `dns` | The hosted zone sites live in, and its own TXT records |
 | [`platform.yaml`](platform.yaml) | `platform` | The repositories whose own workflows plan and apply the platform, which its roles trust, and the hub |
 | [`bots.yaml`](bots.yaml) | `bot`, `tasks` | How a bot instance runs, and how remote tasks run and what any task may ask for |
@@ -22,7 +22,7 @@ section defined twice, and a `.yml` file instead of skipping it.
 Which file holds a section is organisation only. Workflows and scripts read a
 few sections from their file with `yq` (`aws`, `projects`, `ecr`,
 `databricks`), so move a section only with its readers;
-`tests/test_settings.py` pins the layout.
+`tests/platform/test_config_layout.py` pins the layout.
 
 The Terraform version and the module family versions are the release's
 (`src/jaws/product.yaml`), not this directory's. The product's defaults for
@@ -30,7 +30,7 @@ logging, timeouts, cache headers and the bot health check apply unless a
 section here overrides them. An override goes in the section's file: `tool` in
 `tool.yaml`, `terraform` (timeouts) in `terraform.yaml`, `sync` in `sites.yaml`,
 `bot.health_*` in `bots.yaml`; a new section also goes in `SECTION_FILES` in
-`tests/test_settings.py`.
+`tests/platform/test_config_layout.py`.
 
 ### The brand
 

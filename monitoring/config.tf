@@ -46,6 +46,7 @@ module "context" {
   organization = local.tool_config.context.organization
   name_root    = local.name_root
   managed_by   = local.tool_config.context.managed_by
+  extra_tags   = try(local.tool_config.context.tags, {})
 }
 
 # The credentials must be the primary account's, or the plan stops here.

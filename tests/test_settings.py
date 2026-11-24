@@ -8,7 +8,9 @@ import pytest
 import yaml
 
 from jaws.errors import ConfigError
+from jaws.project import DATABRICKS_RESERVED_TAGS
 from jaws.settings import (
+    RESERVED_TAG_KEYS,
     PlatformHub,
     PlatformRepository,
     ProjectGuardrails,
@@ -17,7 +19,7 @@ from jaws.settings import (
     load_settings,
     parse_duration,
 )
-from jaws.site import load_site_config
+from jaws.site import REQUIRED_TAGS, TOOL_TAGS, load_site_config
 from tests.conftest import (
     CONFIG_DIR,
     FIXTURES,
@@ -1202,3 +1204,36 @@ def test_a_brand_that_names_itself_does_not_inherit_the_shark(tmp_path: Path) ->
 def test_a_bad_brand_names_its_key(tmp_path: Path, brand: dict[str, str], key: str) -> None:
     with pytest.raises(ConfigError, match=re.escape(key)):
         _load_raw(tmp_path, {**fixture_config(), "brand": brand})
+
+
+def test_a_platform_stamps_no_tags_of_its_own_by_default(settings: Settings) -> None:
+    assert settings.context.tags == {}
+
+
+def test_a_platform_s_own_tags_load(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw["context"]["tags"] = {"Department": "platform", "cost-pool": "shared/2026"}
+    assert _load_raw(tmp_path, raw).context.tags == raw["context"]["tags"]
+
+
+@pytest.mark.parametrize(
+    "key", [*RESERVED_TAG_KEYS, "aws:createdBy", "AWS:Team", "", "a" * 129, "Team!"]
+)
+def test_a_platform_tag_cannot_shadow_a_tag_jaws_sets(tmp_path: Path, key: str) -> None:
+    raw = fixture_config()
+    raw["context"]["tags"] = {key: "x"}
+    with pytest.raises(ConfigError, match=r"context\.tags"):
+        _load_raw(tmp_path, raw)
+
+
+@pytest.mark.parametrize("value", ["", "   ", "a" * 257, "café", "a;b"])
+def test_a_platform_tag_value_is_one_every_service_accepts(tmp_path: Path, value: str) -> None:
+    raw = fixture_config()
+    raw["context"]["tags"] = {"Department": value}
+    with pytest.raises(ConfigError, match=r"context\.tags"):
+        _load_raw(tmp_path, raw)
+
+
+def test_the_reserved_tags_cover_what_files_jaws_and_databricks_set() -> None:
+    known = {*REQUIRED_TAGS, *TOOL_TAGS, *DATABRICKS_RESERVED_TAGS, "CostCenter", "Workspace"}
+    assert known <= set(RESERVED_TAG_KEYS)

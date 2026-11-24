@@ -263,8 +263,9 @@ project is built in the primary account.
 Two tags are the tool's, never the project file's: every stack the tool
 renders and every task instance it launches gets `Organization` (the GitHub
 organization or user the project is registered under in `config/projects.yaml`;
-`Jaws-Platform` for jaws's own stacks) and `ManagedBy` (`context.managed_by`, `JAWS` by default). A project
-file may not state either ([docs/tagging.md](docs/tagging.md)).
+`Jaws-Platform` for jaws's own stacks) and `ManagedBy` (`context.managed_by`,
+`JAWS` by default). A project file may not state either, nor any of the
+platform's own tags ([docs/tagging.md](docs/tagging.md)).
 
 Credentials must belong to the primary account, even where the role check
 is skipped (`JAWS_SKIP_ROLE_CHECK`), so a secret or a stack is never written
@@ -401,7 +402,7 @@ schedule's `on` and `off` under either name.
 
 ## Tags
 
-Every AWS resource this tool manages carries the same six tags, through the provider's `default_tags` (and set explicitly on task instances, which `RunInstances` does not tag by default). [docs/tagging.md](docs/tagging.md) is the tagging strategy: where each tag comes from, and why names and access never depend on `Organization` or `ManagedBy`.
+Every AWS resource this tool manages carries the same six tags, plus the platform's own (`context.tags`), through the provider's `default_tags` (and set explicitly on task instances, which `RunInstances` does not tag by default). [docs/tagging.md](docs/tagging.md) is the tagging strategy: where each tag comes from, and why names and access never depend on `Organization` or `ManagedBy`.
 
 | Tag | Value | Links the resource to |
 | --- | --- | --- |

@@ -28,6 +28,7 @@ from .site import (
     ENVIRONMENT,
     Site,
     SiteConfig,
+    platform_tag_problems,
     project_organization,
     stamped_tags,
 )
@@ -47,6 +48,8 @@ class Project(BaseModel):
     #: The Organization tag: the project's GitHub owner (site.project_organization).
     organization: str
     managed_by: str
+    #: The platform's own tags (config/tool.yaml `context.tags`).
+    platform_tags: dict[str, str]
     state_bucket: str
     state_key: str
     region: str
@@ -67,6 +70,7 @@ class Project(BaseModel):
                 name_root=site.name_root,
                 organization=site.organization,
                 managed_by=site.managed_by,
+                platform_tags=site.platform_tags,
                 state_bucket=site.state_bucket,
                 state_key=site.state_key,
                 region=site.region,
@@ -121,6 +125,7 @@ class Project(BaseModel):
                     "config/bots.yaml tasks.images"
                 )
         if check_guardrails:
+            problems += platform_tag_problems(config.tags, settings)
             problems += guardrails.check(config, settings)
         if problems:
             raise ConfigError("; ".join(problems))
@@ -129,6 +134,7 @@ class Project(BaseModel):
             name_root=name_root,
             organization=project_organization(config, settings),
             managed_by=settings.context.managed_by,
+            platform_tags=dict(settings.context.tags),
             state_bucket=settings.state.bucket,
             state_key=settings.state_key(config.project, ENVIRONMENT),
             region=settings.state.region,
@@ -151,7 +157,9 @@ class Project(BaseModel):
     @property
     def tags(self) -> dict[str, str]:
         """The tags every resource of the project carries (docs/tagging.md)."""
-        return stamped_tags(self.config.tags, self.organization, self.managed_by)
+        return stamped_tags(
+            self.config.tags, self.organization, self.managed_by, self.platform_tags
+        )
 
     @property
     def has_components(self) -> bool:

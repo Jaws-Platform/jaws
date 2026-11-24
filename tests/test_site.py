@@ -241,3 +241,25 @@ def test_site_commands_refuse_a_research_project(settings: Settings) -> None:
     config = load_site_config(FIXTURES / "bots" / "math-prover.yaml")
     with pytest.raises(ConfigError, match="not a site"):
         Site.from_config(config, settings)
+
+
+def _with_platform_tags(settings: Settings, tags: dict[str, str]) -> Settings:
+    return settings.model_copy(
+        update={"context": settings.context.model_copy(update={"tags": tags})}
+    )
+
+
+def test_the_platform_s_tags_are_stamped_on_a_site(tmp_path: Path, settings: Settings) -> None:
+    tagged = _with_platform_tags(settings, {"Department": "web"})
+    site = Site.from_config(load_site_config(_write(tmp_path, _raw())), tagged)
+    assert site.tags["Department"] == "web"
+
+
+def test_a_site_file_cannot_state_a_platform_tag(tmp_path: Path, settings: Settings) -> None:
+    tagged = _with_platform_tags(settings, {"Department": "web"})
+    config = load_site_config(_write(tmp_path, _raw({"tags.Department": "mine"})))
+    with pytest.raises(
+        ConfigError,
+        match=r"tags\.Department is set by jaws \(context\.tags in config/tool\.yaml\); remove it",
+    ):
+        Site.from_config(config, tagged)

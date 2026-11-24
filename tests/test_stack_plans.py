@@ -91,3 +91,4 @@ def test_every_exact_terraform_version_in_a_workflow_is_the_release_pin() -> Non
 def test_the_relabelled_case_is_another_platform_s() -> None:
     relabelled = cases(_settings())["bot"]["relabelled"]
     assert relabelled["managed_by"] == relabelled["tags"]["ManagedBy"] == "ACME"
+    assert relabelled["tags"]["Department"] == "research"
