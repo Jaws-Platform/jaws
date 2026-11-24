@@ -1,7 +1,7 @@
 """The monitoring stack's secrets: what the owner sets in SSM before the stack runs.
 
 They are the Grafana admin's user and password, and each Slack channel's
-incoming-webhook URL, all SecureStrings under /jaws/monitoring/. The owner
+incoming-webhook URL, all SecureStrings under /<name_root>/monitoring/. The owner
 writes them with `jaws monitoring secrets set`; Terraform never manages them.
 The node and the watchdog report `missing secret <name>` while one is absent.
 """
@@ -9,27 +9,29 @@ The node and the watchdog report `missing secret <name>` while one is absent.
 from __future__ import annotations
 
 from .errors import ConfigError
-from .settings import MONITORING_SECRETS_PREFIX, MonitoringSection
+from .settings import MonitoringSection, monitoring_secrets_prefix
 
-#: The Grafana admin's secrets, at /jaws/monitoring/<name>.
+#: The Grafana admin's secrets, at /<name_root>/monitoring/<name>.
 GRAFANA_ADMIN_SECRETS = ("grafana-admin-user", "grafana-admin-password")
 #: `slack/<channel>` names a channel's webhook, at the parameter the channel names.
 SLACK_PREFIX = "slack/"
 
 
-def secret_parameters(section: MonitoringSection) -> dict[str, str]:
-    """Every secret the configuration implies, by name, with its SSM parameter."""
-    secrets = {name: f"{MONITORING_SECRETS_PREFIX}{name}" for name in GRAFANA_ADMIN_SECRETS}
+def secret_parameters(section: MonitoringSection, *, name_root: str) -> dict[str, str]:
+    """Every secret the configuration implies, by name, with its SSM parameter
+    (the Grafana admin's under /<name_root>/monitoring/)."""
+    prefix = monitoring_secrets_prefix(name_root)
+    secrets = {name: f"{prefix}{name}" for name in GRAFANA_ADMIN_SECRETS}
     if section.slack is not None:
         for channel, parameter in section.slack.channels.items():
             secrets[f"{SLACK_PREFIX}{channel}"] = parameter
     return secrets
 
 
-def secret_parameter(section: MonitoringSection, name: str) -> str:
+def secret_parameter(section: MonitoringSection, name: str, *, name_root: str) -> str:
     """The SSM parameter of one secret; a name the configuration does not imply
     is a ConfigError that says which ones it does."""
-    secrets = secret_parameters(section)
+    secrets = secret_parameters(section, name_root=name_root)
     if name in secrets:
         return secrets[name]
     channel = name.removeprefix(SLACK_PREFIX)

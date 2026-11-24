@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import re
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,7 @@ from jaws.settings import (
     Settings,
     load_document,
     load_settings,
+    monitoring_secrets_prefix,
     parse_duration,
 )
 from jaws.site import REQUIRED_TAGS, TOOL_TAGS, load_site_config
@@ -1237,3 +1239,32 @@ def test_a_platform_tag_value_is_one_every_service_accepts(tmp_path: Path, value
 def test_the_reserved_tags_cover_what_files_jaws_and_databricks_set() -> None:
     known = {*REQUIRED_TAGS, *TOOL_TAGS, *DATABRICKS_RESERVED_TAGS, "CostCenter", "Workspace"}
     assert known <= set(RESERVED_TAG_KEYS)
+
+
+ACME_MONITORING = {
+    "ami": "al2023-ami-2023.12.20261026.1-kernel-6.18-arm64",
+    "slack": {
+        "channels": {"platform": "/acme/monitoring/slack/platform"},
+        "routes": {"host": "platform"},
+    },
+}
+
+
+def test_the_monitoring_secrets_live_under_the_name_root() -> None:
+    assert monitoring_secrets_prefix("jaws") == "/jaws/monitoring/"
+    assert monitoring_secrets_prefix("acme") == "/acme/monitoring/"
+
+
+def test_slack_channels_live_under_the_name_root_s_secrets(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw["context"]["name_root"] = "acme"
+    raw["monitoring"] = copy.deepcopy(ACME_MONITORING)
+    raw["monitoring"]["slack"]["channels"]["platform"] = "/jaws/monitoring/slack/platform"
+    with pytest.raises(
+        ConfigError,
+        match=r"monitoring\.slack\.channels\.platform '/jaws/monitoring/slack/platform' must "
+        r"be an SSM parameter under /acme/monitoring/, such as /acme/monitoring/slack/platform",
+    ):
+        _load_raw(tmp_path, raw)
+    raw["monitoring"] = copy.deepcopy(ACME_MONITORING)
+    assert _load_raw(tmp_path, raw).monitoring is not None

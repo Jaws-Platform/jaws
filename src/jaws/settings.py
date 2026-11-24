@@ -645,9 +645,13 @@ class DatabricksSection(_Section):
         return PLACEHOLDER_UUID in (self.account_id.lower(), self.client_id.lower())
 
 
-#: Where the monitoring stack's owner-set secrets live in SSM: the Grafana admin
-#: and each Slack channel's webhook (`jaws monitoring secrets`). Never Terraform's.
-MONITORING_SECRETS_PREFIX = "/jaws/monitoring/"
+def monitoring_secrets_prefix(name_root: str) -> str:
+    """Where the monitoring stack's owner-set secrets live in SSM: the Grafana admin
+    and each Slack channel's webhook (`jaws monitoring secrets`). Never Terraform's.
+    They live under the platform's name root, `/jaws/monitoring/` for the `jaws` root."""
+    return f"/{name_root}/monitoring/"
+
+
 WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 #: The monitoring module's alert thresholds (spec 6.8) by name: True for a
 #: warning and critical pair, False for a warning alone. An override replaces
@@ -816,17 +820,11 @@ class MonitoringSlack(_Section):
     @field_validator("channels")
     @classmethod
     def _channels(cls, value: dict[str, str]) -> dict[str, str]:
-        for name, parameter in value.items():
+        for name in value:
             if not _SLACK_CHANNEL.match(name):
                 raise ValueError(
                     f"monitoring.slack.channels.{name}: a channel is named with a lowercase "
                     "letter, then lowercase letters, digits or - (at most 30)"
-                )
-            if not (parameter.startswith(MONITORING_SECRETS_PREFIX) and _SSM_NAME.match(parameter)):
-                raise ValueError(
-                    f"monitoring.slack.channels.{name} {parameter!r} must be an SSM parameter "
-                    f"under {MONITORING_SECRETS_PREFIX}, such as "
-                    f"{MONITORING_SECRETS_PREFIX}slack/{name}"
                 )
         return value
 
@@ -1115,6 +1113,18 @@ class Settings(_Section):
                         f"{other} ({other_network})"
                     )
             taken.append((f"project {name!r}", network))
+        return self
+
+    @model_validator(mode="after")
+    def _slack_channels_are_the_platform_s_secrets(self) -> Settings:
+        slack = self.monitoring.slack if self.monitoring is not None else None
+        prefix = monitoring_secrets_prefix(self.context.name_root)
+        for name, parameter in (slack.channels if slack is not None else {}).items():
+            if not (parameter.startswith(prefix) and _SSM_NAME.match(parameter)):
+                raise ValueError(
+                    f"monitoring.slack.channels.{name} {parameter!r} must be an SSM parameter "
+                    f"under {prefix}, such as {prefix}slack/{name}"
+                )
         return self
 
     @model_validator(mode="after")

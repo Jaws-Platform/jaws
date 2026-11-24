@@ -113,7 +113,7 @@ monitoring_app = typer.Typer(
     help="The monitoring and cost platform (config/monitoring.yaml).", no_args_is_help=True
 )
 monitoring_secrets_app = typer.Typer(
-    help="The monitoring stack's secrets in SSM Parameter Store, under /jaws/monitoring/ "
+    help="The monitoring stack's secrets in SSM Parameter Store, under /<name_root>/monitoring/ "
     "(values are never printed).",
     no_args_is_help=True,
 )
@@ -2259,7 +2259,9 @@ def monitoring_secrets_set(
     """Prompt for a secret (no echo) and write it as a SecureString. Run from the owner's shell."""
 
     def body(run: Run) -> None:
-        parameter = monitoring.secret_parameter(_monitoring_section(run), name)
+        parameter = monitoring.secret_parameter(
+            _monitoring_section(run), name, name_root=run.settings.context.name_root
+        )
         session = _owner_session(run)
         value = typer.prompt(f"{name}", hide_input=True)
         if not value.strip():
@@ -2280,7 +2282,9 @@ def monitoring_secrets_check(ctx: typer.Context) -> None:
     missing. Never reads a value."""
 
     def body(run: Run) -> None:
-        secrets = monitoring.secret_parameters(_monitoring_section(run))
+        secrets = monitoring.secret_parameters(
+            _monitoring_section(run), name_root=run.settings.context.name_root
+        )
         session = _owner_session(run)
         ssm = session.client("ssm")
         missing = [n for n, p in secrets.items() if not botlib.secret_exists(ssm, p)]

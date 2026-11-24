@@ -42,8 +42,8 @@ locals {
   )
 
   # The owner's secrets, outside the stack's own /<name>/ parameters (which its
-  # CI roles may write): jaws.settings.MONITORING_SECRETS_PREFIX.
-  secrets_prefix = "/jaws/monitoring/"
+  # CI roles may write): jaws.settings.monitoring_secrets_prefix.
+  secrets_prefix = "/${local.name_root}/monitoring/"
 
   # Terraform's yamldecode reads a bare `on:` or `off:` key as a YAML 1.1 boolean,
   # the keys "true" and "false"; the CLI reads YAML 1.2. Either spelling works.
