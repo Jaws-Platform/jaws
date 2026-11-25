@@ -1,9 +1,9 @@
 """The `jaws` command line.
 
-Every command loads the tool configuration (config/, baked into the image) and the site file
-(from the working directory), derives the rest, runs its preflight checks and
-then Terraform or S3. Failures map to exit codes: 1 Terraform/AWS, 2
-configuration, 3 preflight.
+Every command loads the tool configuration (config/, which a platform's image holds at
+/etc/jaws/config) and the site file (from the working directory), derives the rest, runs
+its preflight checks and then Terraform or S3. Failures map to exit codes: 1
+Terraform/AWS, 2 configuration, 3 preflight.
 """
 
 from __future__ import annotations

@@ -1247,7 +1247,7 @@ _ConfigLoader.add_implicit_resolver(
 
 
 def default_config_path() -> Path:
-    """JAWS_CONFIG, else the directory baked into the image, else ./config."""
+    """JAWS_CONFIG, else /etc/jaws/config, where a platform's image holds it, else ./config."""
     if ENV_CONFIG_PATH in os.environ:
         return Path(os.environ[ENV_CONFIG_PATH])
     if IMAGE_CONFIG_PATH.is_dir():
