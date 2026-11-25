@@ -42,6 +42,7 @@ Every commit names exactly one of this repository's scopes. They are `SCOPES` in
 | `databricks` | The Databricks account and workspace stacks |
 | `access` | `owner-access/` and `data-access/` |
 | `monitoring` | The `monitoring/` and `billing-export/` roots, `config/monitoring.yaml` and their docs |
+| `publishing` | `release-infra/`: Jaws's ECR Public repository and the role that publishes the image to it |
 | `datasets` | `datasets/`, the onboarded datasets |
 | `workflows` | The reusable workflows and composite actions in `.github/` |
 | `repo` | README, CONTRIBUTING, AGENTS, commitlint, the PR and issue templates, and repository tooling |

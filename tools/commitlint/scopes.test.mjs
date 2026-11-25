@@ -35,3 +35,7 @@ test("the scopes include deps and release, which the bots write", () => {
 test("CONTRIBUTING.md lists exactly the configured scopes, in order", () => {
   assert.deepEqual(documentedScopes(), Object.keys(SCOPES));
 });
+
+test("release-infra/ has its own scope, publishing (spec 6.12)", () => {
+  assert.match(SCOPES.publishing ?? "", /release-infra\//);
+});
