@@ -85,7 +85,7 @@ resource "aws_ecrpublic_repository" "jaws" {
 
   catalog_data {
     description       = "Jaws: the infrastructure CLI and every stack it applies, as one image with no configuration of its own."
-    usage_text        = "Pin a release by tag and digest in your platform's Dockerfile (FROM public.ecr.aws/<alias>/jaws:vX.Y.Z@sha256:...), and add your configuration, config/, at /etc/jaws/config/ and your datasets, datasets/, at /etc/jaws/datasets/."
+    usage_text        = "Pin a release by tag and digest in your platform's Dockerfile (FROM public.ecr.aws/<alias>/jaws:vX.Y.Z@sha256:...), and add your configuration, config/, at /etc/jaws/config/ and your datasets, datasets/, at /etc/jaws/datasets/. Until v1, only the newest ten release versions are kept, so pin a recent one."
     architectures     = ["x86-64"]
     operating_systems = ["Linux"]
   }
