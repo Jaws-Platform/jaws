@@ -39,7 +39,10 @@ def _semver(tag: str) -> tuple[int, int, int] | None:
 def select(
     images: list[dict[str, Any]], keep: str, published: str, log: list[str]
 ) -> list[dict[str, str]]:
-    """The image IDs to delete, oldest version first, untagged images last."""
+    """The image IDs to delete, oldest version first, untagged images last.
+
+    Each version goes by its tag: ECR removes that tag, and the image with it unless
+    another tag still names it."""
     if keep == "all":
         log.append("keeping every image (keep is all)")
         return []
@@ -52,10 +55,6 @@ def select(
     doomed = [t for t in reversed(versions) if t not in kept]
     ids: list[dict[str, str]] = []
     for tag in doomed:
-        carrier = next(i for i in images if tag in (i.get("imageTags") or []))
-        if kept & set(carrier["imageTags"]):
-            log.append(f"keeping {tag}: its image also carries a kept tag")
-            continue
         log.append(f"deleting {tag}: older than the newest {keep} release versions")
         ids.append({"imageTag": tag})
     untagged = [i for i in images if not i.get("imageTags")]

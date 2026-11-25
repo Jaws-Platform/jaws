@@ -78,10 +78,12 @@ def test_an_empty_image_tags_list_is_untagged_too() -> None:
     assert deleted == [{"imageDigest": UNTAGGED}]
 
 
-def test_an_image_that_also_carries_a_kept_tag_is_not_deleted() -> None:
+def test_a_version_whose_image_also_carries_a_kept_tag_loses_only_its_tag() -> None:
+    """Deleting by tag removes the tag (ruling 14, P4-R12): ECR keeps the image while a
+    kept tag still names it, so v0.4.0 stays."""
     images = [_image("v0.2.0"), _image("v0.3.0"), _image("v0.1.0", "v0.4.0")]
     _, deleted = _prune(images, keep="2", published="v0.3.0")
-    assert deleted == [{"imageTag": "v0.2.0"}]
+    assert deleted == [{"imageTag": "v0.1.0"}, {"imageTag": "v0.2.0"}]
 
 
 @pytest.mark.parametrize("media_type", [INDEX, LIST])
