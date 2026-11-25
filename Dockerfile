@@ -1,8 +1,14 @@
-# jaws (Jaws): the CLI, a pinned Terraform, the site and bot stacks
-# with their modules and providers vendored, and the tool configuration (config/). Only the S3 backend touches
-# the network at run time.
+# jaws (Jaws): the CLI, a pinned Terraform, and every stack (site, bot,
+# databricks-account, databricks-workspace and the platform's foundation,
+# monitoring and data-access) with their modules and providers vendored. Only
+# the S3 backend touches the network at run time. Two targets:
+#   generic  - Jaws's image, with no configuration inside (the default target).
+#   jaws-cli - generic plus this repository's config/ and datasets/.
 #
-# Build: docker build --build-arg TERRAFORM_VERSION=<terraform.version from src/jaws/product.yaml> .
+# Build the generic image:
+#   docker build --build-arg TERRAFORM_VERSION=<terraform.version from src/jaws/product.yaml> .
+# Build the jaws-cli image:
+#   docker build --target jaws-cli --build-arg TERRAFORM_VERSION=<same> .
 # The CLI refuses to run if the Terraform inside differs from src/jaws/product.yaml.
 
 ARG PYTHON_VERSION=3.13
@@ -52,18 +58,21 @@ RUN cd /opt/jaws/venv/lib/python3.13/site-packages/botocore/data \
     && find /opt/jaws/venv -type d -name __pycache__ -prune -exec rm -rf {} +
 
 COPY --from=terraform /tmp/terraform/terraform /usr/local/bin/terraform
-COPY stacks/site /opt/jaws/stacks/site
-COPY stacks/bot /opt/jaws/stacks/bot
-# The Databricks stacks are not in the image: their plan and apply workflows
-# run the CLI with `uv run` from this repository, and their providers
-# (databricks, time) would put the image over its size budget for nothing.
-# Fetch the library modules and mirror the providers so run-time init is offline.
-# Both stacks share one provider mirror (their lock files pin the same
-# provider). The unpacked copies that `init` leaves under
-# .terraform/providers are the single largest thing in the image and run time
-# never reads them, so they go. The modules stay.
-RUN for stack in site bot; do \
-      cd "/opt/jaws/stacks/$stack" \
+# Every stack ships: the project stacks (stacks/*) and the platform's own, so a
+# hub's image built FROM this one can run all of them. The .dockerignore leaves
+# out each stack's backend (a platform's runs write their own from `state`) and
+# its tests, and its lock file, so each stack's init takes the newest provider
+# its constraints allow and the mirror holds each provider once (CI checks).
+# Fetch the library modules and mirror the providers so run-time init is offline,
+# from the vendored modules and the mirror. The unpacked copies that `init`
+# leaves under .terraform/providers are the single largest thing in the image and
+# run time never reads them, so they go. The modules stay.
+COPY stacks /opt/jaws/stacks
+COPY foundation /opt/jaws/stacks/foundation
+COPY monitoring /opt/jaws/stacks/monitoring
+COPY data-access /opt/jaws/stacks/data-access
+RUN for stack in /opt/jaws/stacks/*/; do \
+      cd "$stack" \
       && terraform init -backend=false -input=false \
       && terraform providers mirror /opt/jaws/plugins \
       && rm -rf .terraform/providers \
@@ -71,12 +80,12 @@ RUN for stack in site bot; do \
       || exit 1; \
     done
 
-# --- stage 3: the runtime image --------------------------------------------------
-FROM python:${PYTHON_VERSION}-alpine
+# --- stage 3: the generic image: the runtime, with no configuration ---------------
+FROM python:${PYTHON_VERSION}-alpine AS generic
 ARG TERRAFORM_VERSION
 LABEL org.opencontainers.image.title="jaws" \
       org.opencontainers.image.source="https://github.com/Jaws-Platform/jaws" \
-      org.opencontainers.image.description="Provisions jwall.engineering infrastructure (sites, bots, research projects and Databricks workspaces) with Terraform" \
+      org.opencontainers.image.description="Jaws: the CLI, a pinned Terraform and every stack, with their modules and providers vendored. A platform's image adds the platform's configuration." \
       terraform.version="${TERRAFORM_VERSION}"
 # No git at run time: the library modules are already in the image. No pip
 # either: the virtual environment is complete and nothing installs at run time.
@@ -88,7 +97,6 @@ COPY --from=build /opt/jaws/venv /opt/jaws/venv
 COPY --from=build /usr/local/bin/terraform /usr/local/bin/terraform
 COPY --from=build /opt/jaws/stacks /opt/jaws/stacks
 COPY --from=build /opt/jaws/plugins /opt/jaws/plugins
-COPY config /etc/jaws/config
 ENV PATH="/opt/jaws/venv/bin:${PATH}" \
     TF_IN_AUTOMATION=1 \
     TF_INPUT=0 \
@@ -100,3 +108,14 @@ ENV PATH="/opt/jaws/venv/bin:${PATH}" \
 WORKDIR /work
 ENTRYPOINT ["jaws"]
 CMD ["--help"]
+
+# --- stage 4: the jaws-cli image: generic plus this repository's configuration ------
+# What today's callers run (the composite action pulls jaws-cli:<tag>). It has the
+# shape of every platform's image: generic plus the platform's configuration. It goes
+# with config/ at cleanup (spec 6.10, step 7).
+FROM generic AS jaws-cli
+COPY config /etc/jaws/config
+COPY datasets /etc/jaws/datasets
+
+# The last stage is the default target: a plain `docker build .` builds the generic image.
+FROM generic

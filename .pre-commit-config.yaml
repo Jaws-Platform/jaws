@@ -54,14 +54,14 @@ repos:
         language: system
         stages: [pre-push]
         pass_filenames: false
-        files: ^(src|tests)/.*\.py$|^(pyproject\.toml|uv\.lock)$
+        files: ^(src|tests|scripts)/.*\.py$|^(pyproject\.toml|uv\.lock)$
       - id: pytest
         name: pytest (pre-push)
         entry: uv run pytest -x
         language: system
         stages: [pre-push]
         pass_filenames: false
-        files: ^(src|tests|scripts|stacks|foundation|data-access|owner-access|monitoring|billing-export|datasets|kinds|\.github)/|^(config\.yaml|pyproject\.toml|uv\.lock|package\.json|commitlint\.config\.mjs)$
+        files: ^(src|tests|scripts|stacks|foundation|data-access|owner-access|monitoring|billing-export|release-infra|datasets|kinds|\.github)/|^(config\.yaml|pyproject\.toml|uv\.lock|package\.json|commitlint\.config\.mjs)$
       - id: terraform-test-foundation
         name: terraform test, foundation (pre-push)
         entry: bash -c 'cd foundation && terraform init -backend=false -input=false >/dev/null && terraform test'
@@ -97,6 +97,13 @@ repos:
         stages: [pre-push]
         pass_filenames: false
         files: ^billing-export/|^config/
+      - id: terraform-test-release-infra
+        name: terraform test, release-infra (pre-push)
+        entry: bash -c 'cd release-infra && terraform init -backend=false -input=false >/dev/null && terraform test'
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        files: ^release-infra/
       - id: stack-plans
         name: stack plans against mock providers (pre-push)
         entry: scripts/test-stack-plans.sh

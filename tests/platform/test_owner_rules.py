@@ -15,6 +15,7 @@ from tests.test_billing_export import RESERVED as BILLING_EXPORT
 from tests.test_bots_registry import MAX_PROJECT_KEY, MAX_RESEARCH_PROJECT_KEY
 from tests.test_monitoring_stack import RESERVED as MONITORING
 from tests.test_owner_access import RESERVED as OWNER_ACCESS
+from tests.test_release_infra import RESERVED as RELEASE_INFRA
 
 
 def _projects() -> dict[str, dict[str, Any]]:
@@ -27,7 +28,7 @@ def _projects() -> dict[str, dict[str, Any]]:
     }
 
 
-@pytest.mark.parametrize("reserved", [OWNER_ACCESS, BILLING_EXPORT, MONITORING])
+@pytest.mark.parametrize("reserved", [OWNER_ACCESS, BILLING_EXPORT, MONITORING, RELEASE_INFRA])
 def test_no_project_takes_a_reserved_key(reserved: str) -> None:
     """A reserved key is a root's state prefix and CI-role name (config/projects.yaml)."""
     if reserved in _projects():

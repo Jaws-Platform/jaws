@@ -133,8 +133,12 @@ def test_the_account_is_read_for_a_release_and_for_a_republished_tag() -> None:
 
 
 @pytest.mark.parametrize("name", ["ci.yml", "release-please.yml", "data-access.yml"])
-def test_the_tools_own_workflows_take_no_role_from_a_repository_variable(name: str) -> None:
-    """(The site workflows document a site repository's own variables of these names.)"""
+def test_the_tools_own_workflows_take_no_plan_or_apply_role_from_a_repository_variable(
+    name: str,
+) -> None:
+    """(The site workflows document a site repository's own variables of these names. The
+    one role the tool's workflows take from a variable is the public image job's
+    `vars.JAWS_PUBLISH_ROLE_ARN`, spec 6.8.)"""
     text = (WORKFLOWS / name).read_text()
     assert "vars.AWS_PLAN_ROLE_ARN" not in text and "vars.AWS_APPLY_ROLE_ARN" not in text
 

@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Re-publish the CLI image for an existing release tag (for example v0.6.0)
+        description: Re-publish the images of an existing release tag (for example v0.76.0)
         required: true
         type: string
 
@@ -176,7 +176,7 @@ jobs:
         run: terraform apply -no-color -lock-timeout=120s tfplan
 
   image:
-    name: Publish image (${{ needs.release-please.outputs.tag_name || inputs.tag }})
+    name: Publish jaws-cli (${{ needs.release-please.outputs.tag_name || inputs.tag }})
     runs-on: ubuntu-latest
     needs: [release-please, account, apply]
     # After a release's apply, or on demand for an existing tag. The apply
@@ -200,6 +200,21 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      - name: Choose the target (jaws-cli, or the only image of a tag cut before it)
+        id: target
+        # Only a tag with no generic stage falls back to the default target. With one, the
+        # default target is the generic image: pushed as the immutable jaws-cli:<tag>, with no
+        # configuration, it would break every site that runs that tag.
+        run: |
+          if grep -qx 'FROM generic AS jaws-cli' Dockerfile; then
+            echo "target=jaws-cli" >> "$GITHUB_OUTPUT"
+          elif grep -Eq '^FROM [^ ]+ AS generic$' Dockerfile; then
+            echo "::error::$TAG's Dockerfile has the generic stage but no 'FROM generic AS jaws-cli' line: refusing to push the generic image, which has no configuration, as jaws-cli:$TAG"
+            exit 1
+          else
+            echo "::notice::$TAG predates the generic image: building its only image, config/ baked in, as before"
+            echo "target=" >> "$GITHUB_OUTPUT"
+          fi
       - name: Read the Terraform version from the release (src/jaws/product.yaml, or config/terraform.yaml before it)
         id: config
         run: |
@@ -223,9 +238,149 @@ jobs:
           push: true
           platforms: linux/amd64
           provenance: false
+          target: ${{ steps.target.outputs.target }}
           tags: ${{ steps.ecr.outputs.registry }}/${{ needs.account.outputs.ecr_repository }}:${{ env.TAG }}
           build-args: TERRAFORM_VERSION=${{ steps.config.outputs.terraform_version }}
       - name: Summary
         env:
           IMAGE: ${{ steps.ecr.outputs.registry }}/${{ needs.account.outputs.ecr_repository }}:${{ env.TAG }}
         run: printf '## Image\n\n- `%s`\n' "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+
+  # Whether to publish the generic image: only once the owner has set the repository
+  # variables, only for a tag on main's history that has the stage, never over a tag
+  # already published. A job of its own, outside the `publish` environment, so that a skip
+  # needs no approval.
+  public-image-check:
+    name: Public image check
+    runs-on: ubuntu-latest
+    needs: release-please
+    # After a release, or on demand for an existing tag (release-please is then skipped).
+    if: >-
+      !cancelled() &&
+      (
+        (github.event_name == 'push' &&
+         needs.release-please.outputs.release_created == 'true') ||
+        (github.event_name == 'workflow_dispatch' && inputs.tag != '')
+      )
+    permissions:
+      contents: read
+    outputs:
+      publish: ${{ steps.decide.outputs.publish }}
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      ROLE_ARN: ${{ vars.JAWS_PUBLISH_ROLE_ARN }}
+      IMAGE: ${{ vars.JAWS_PUBLIC_IMAGE }}
+      # Checked here so that a malformed value fails before anything is pushed.
+      KEEP: ${{ vars.JAWS_PUBLIC_IMAGE_KEEP }}
+    steps:
+      # Every branch's history (origin/main among them), for the check that the tag is on main.
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ needs.release-please.outputs.tag_name || inputs.tag }}
+          fetch-depth: 0
+      - name: Decide whether to publish the public image
+        id: decide
+        env:
+          MANIFEST_TYPES: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json
+        run: |
+          publish() { echo "publish=$1" >> "$GITHUB_OUTPUT"; }
+          if [[ -z "$ROLE_ARN$IMAGE" ]]; then
+            echo "::notice::not publishing the public image: JAWS_PUBLISH_ROLE_ARN and JAWS_PUBLIC_IMAGE are not set (README.md, \"Jaws's public image\")"
+            publish false; exit 0
+          fi
+          [[ "$ROLE_ARN" =~ ^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_-]+$ ]] || { echo "::error::JAWS_PUBLISH_ROLE_ARN is not an IAM role ARN: '$ROLE_ARN'"; exit 1; }
+          [[ "$IMAGE" =~ ^public\.ecr\.aws/[a-z0-9][a-z0-9._-]*/jaws$ ]] || { echo "::error::JAWS_PUBLIC_IMAGE is not public.ecr.aws/<alias>/jaws: '$IMAGE'"; exit 1; }
+          [[ -z "$KEEP" || "$KEEP" =~ ^([1-9][0-9]*|all)$ ]] || { echo "::error::JAWS_PUBLIC_IMAGE_KEEP is neither a whole number of at least 1 nor all: '$KEEP'"; exit 1; }
+          # Anyone who can push a tag can dispatch this workflow on main with it, and the
+          # publish environment checks the dispatch's branch, not the tag. Release Please
+          # tags a commit on main, so its tags always pass.
+          git merge-base --is-ancestor "refs/tags/$TAG" origin/main || { echo "::error::$TAG is not on main's history, and a release tag must be on main: not publishing it"; exit 1; }
+          if ! grep -Eq '^FROM [^ ]+ AS generic$' Dockerfile; then
+            echo "::notice::$TAG predates the generic image: its only image bakes config/ in, and is never published"
+            publish false; exit 0
+          fi
+          repository=${IMAGE#public.ecr.aws/}
+          token=$(curl -fsS "https://public.ecr.aws/token/?service=public.ecr.aws&scope=repository:$repository:pull" | jq -r .token)
+          code=$(curl -s -o /dev/null -w '%{http_code}' -I -H "Authorization: Bearer $token" -H "Accept: $MANIFEST_TYPES" "https://public.ecr.aws/v2/$repository/manifests/$TAG")
+          case "$code" in
+            404) publish true ;;
+            200) echo "::notice::$IMAGE:$TAG is already published: a published tag is never replaced"; publish false ;;
+            *) echo "::error::could not tell whether $IMAGE:$TAG is published (HTTP $code from public.ecr.aws)"; exit 1 ;;
+          esac
+
+  public-image:
+    name: Publish the public image (${{ needs.release-please.outputs.tag_name || inputs.tag }})
+    runs-on: ubuntu-latest
+    needs: [release-please, public-image-check]
+    if: "!cancelled() && needs.public-image-check.outputs.publish == 'true'"
+    environment:
+      name: publish
+    permissions:
+      contents: read
+      id-token: write # assume the publishing role
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      IMAGE: ${{ vars.JAWS_PUBLIC_IMAGE }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      - name: Read the Terraform version from the release (src/jaws/product.yaml)
+        id: config
+        run: |
+          version=$(yq -r .terraform.version src/jaws/product.yaml)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::src/jaws/product.yaml at $TAG pins no exact terraform.version"; exit 1; }
+          echo "terraform_version=$version" >> "$GITHUB_OUTPUT"
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.JAWS_PUBLISH_ROLE_ARN }}
+          aws-region: us-east-1 # ECR Public's API is in us-east-1 only
+          role-session-name: gha-public-image-${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      - uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        id: build
+        with:
+          context: .
+          target: generic
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          tags: ${{ env.IMAGE }}:${{ env.TAG }}
+          build-args: TERRAFORM_VERSION=${{ steps.config.outputs.terraform_version }}
+      - name: Summary
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: printf '## Public image\n\n- `%s:%s@%s`\n' "$IMAGE" "$TAG" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"
+      # The prune runs with the publishing role, so its script comes from this workflow's own
+      # commit (main's), never from the tag being published. Checked out after the build, so
+      # it never enters the build context.
+      - name: Check out the prune script at the workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-tools
+          sparse-checkout: scripts
+          persist-credentials: false
+      # ECR Public has no lifecycle policies, so each publish prunes. The tag just pushed is
+      # never deleted. `all` (skipped here) is for v1, once Jaws has consumers.
+      - name: Prune the public repository to the newest release versions
+        id: prune
+        if: vars.JAWS_PUBLIC_IMAGE_KEEP != 'all'
+        env:
+          KEEP: ${{ vars.JAWS_PUBLIC_IMAGE_KEEP || '10' }}
+        # Files, not pipes: Actions runs bash -e without pipefail, so a pipe would hide the
+        # script's refusal. BatchDeleteImage answers 200 even when it deleted nothing.
+        run: |
+          aws ecr-public describe-images --region us-east-1 --repository-name jaws --output json > "$RUNNER_TEMP/images.json"
+          python3 .release-tools/scripts/prune_public_images.py --keep "$KEEP" --published "$TAG" < "$RUNNER_TEMP/images.json" > "$RUNNER_TEMP/prune.jsonl"
+          n=0
+          while read -r batch; do
+            n=$((n + 1))
+            # aws gets /dev/null as its stdin: the loop's stdin is prune.jsonl, and aws reading
+            # it would swallow the batches still to come.
+            aws ecr-public batch-delete-image --region us-east-1 --repository-name jaws --image-ids "$batch" --output json < /dev/null > "$RUNNER_TEMP/deleted-$n.json"
+            jq -e '.failures == []' "$RUNNER_TEMP/deleted-$n.json" > /dev/null || { echo "::error::BatchDeleteImage could not delete some images: $(jq -c .failures "$RUNNER_TEMP/deleted-$n.json")"; exit 1; }
+          done < "$RUNNER_TEMP/prune.jsonl"

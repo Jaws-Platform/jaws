@@ -299,6 +299,42 @@ jobs:
           tflint --init --config "$GITHUB_WORKSPACE/.tflint.hcl"
           tflint --config "$GITHUB_WORKSPACE/.tflint.hcl"
 
+  release-infra-stack:
+    # Jaws's release infrastructure (release-infra/), the owner's root in the
+    # production account: the ECR Public repository and the role that publishes
+    # to it. Validated, linted and tested against a mocked provider here; never
+    # planned or applied by CI, by design: no CI role may reach this root's state.
+    name: Release infrastructure validate, tflint, test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: release-infra
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "~1.14"
+      - name: terraform init (no backend)
+        uses: ./.github/actions/terraform-init
+        with:
+          args: -backend=false
+          working-directory: release-infra
+      - name: terraform validate
+        run: terraform validate -no-color
+      - name: terraform test (mock provider, no AWS credentials)
+        run: terraform test -no-color
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: latest
+      - name: tflint
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # plugin downloads hit the unauthenticated API limit on shared runners
+        run: |
+          tflint --init --config "$GITHUB_WORKSPACE/.tflint.hcl"
+          tflint --config "$GITHUB_WORKSPACE/.tflint.hcl"
+
   bot-stack:
     name: Bot stack validate, tflint
     runs-on: ubuntu-latest
@@ -420,7 +456,8 @@ jobs:
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::src/jaws/product.yaml pins no exact terraform.version"; exit 1; }
           echo "terraform_version=$version" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v4
-      - uses: docker/build-push-action@v7
+      - name: Build the generic image
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false
@@ -429,6 +466,33 @@ jobs:
           build-args: TERRAFORM_VERSION=${{ steps.config.outputs.terraform_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Build the jaws-cli image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: jaws-cli
+          push: false
+          load: true
+          tags: jaws:ci-cli
+          build-args: TERRAFORM_VERSION=${{ steps.config.outputs.terraform_version }}
+          cache-from: type=gha
+      - name: Smoke test (the generic image holds no configuration)
+        run: docker run --rm --network none --entrypoint sh jaws:ci -c 'test ! -e /etc/jaws'
+      - name: Smoke test (without a configuration, the CLI says where it looks)
+        run: |
+          set +e
+          out=$(docker run --rm --network none jaws:ci config show 2>&1)
+          status=$?
+          set -e
+          echo "$out"
+          [[ $status -eq 2 && "$out" == *JAWS_CONFIG* && "$out" == */etc/jaws/config* ]] || {
+            echo "::error::expected exit 2 naming JAWS_CONFIG and /etc/jaws/config, got exit $status"
+            exit 1
+          }
+      - name: Smoke test (the jaws-cli image holds the configuration and the datasets where the CLI and the stacks look)
+        run: |
+          docker run --rm --network none --entrypoint sh jaws:ci-cli -c \
+            'test -f /etc/jaws/datasets/README.md && ls /etc/jaws/config/*.yaml'
       - name: Smoke test (validate a fixture site offline, inside the image)
         run: |
           # A writable copy: the tool writes its artifacts and debug log into the workspace.
@@ -456,19 +520,55 @@ jobs:
           for service in ("s3", "sts", "cloudfront", "ssm", "ec2", "logs", "ecr", "pricing"):
               boto3.session.Session(region_name="us-east-1").client(service)
           print("boto3 clients ok")'
-      - name: Image size budget
-        env:
-          MAX_COMPRESSED_MB: "250" # what a consumer downloads; the AWS provider archive alone is ~130 MB
+      - name: Smoke test (every stack initializes offline and validates, as the CLI runs it)
         run: |
-          uncompressed=$(docker image inspect jaws:ci --format '{{.Size}}')
-          compressed=$(docker save jaws:ci | gzip -1 | wc -c)
-          u_mb=$((uncompressed / 1024 / 1024)); c_mb=$((compressed / 1024 / 1024))
-          printf '## Image size\n\n- compressed (network): %s MB (budget %s MB)\n- uncompressed: %s MB\n' "$c_mb" "$MAX_COMPRESSED_MB" "$u_mb" >> "$GITHUB_STEP_SUMMARY"
-          echo "compressed ${c_mb} MB, uncompressed ${u_mb} MB"
-          if [ "$c_mb" -gt "$MAX_COMPRESSED_MB" ]; then
-            echo "::error::the image is ${c_mb} MB compressed, over the ${MAX_COMPRESSED_MB} MB budget"
+          docker run --rm --network none --entrypoint sh jaws:ci -c '
+          for stack in /opt/jaws/stacks/*/; do
+            name=$(basename "$stack")
+            work=$(mktemp -d)
+            cp -r "$stack". "$work"
+            cd "$work"
+            terraform init -backend=false -input=false -no-color -plugin-dir=/opt/jaws/plugins >/tmp/init.log 2>&1 \
+              || { cat /tmp/init.log; echo "::error::$name does not initialize offline"; exit 1; }
+            terraform validate -no-color \
+              || { echo "::error::$name does not validate"; exit 1; }
+            echo "$name ok"
+          done'
+      - name: Smoke test (one version of each provider in the mirror)
+        run: |
+          dupes=$(docker run --rm --network none --entrypoint find jaws:ci /opt/jaws/plugins -name '*.zip' | xargs -n1 dirname | sort | uniq -d)
+          if [ -n "$dupes" ]; then
+            echo "$dupes"
+            echo "::error::the provider mirror holds more than one version in: $(echo $dupes | tr '\n' ' '); align the stacks' provider constraints"
             exit 1
           fi
+      - name: Smoke test (the generic image ships no backend, stack test or state)
+        run: |
+          found=$(docker run --rm --network none --entrypoint find jaws:ci /opt/jaws/stacks -path '*/.terraform' -prune -o \( -name backend -o -name tests -o -name '*.tftest.hcl' -o -name '*.tfstate*' \) -print)
+          if [ -n "$found" ]; then
+            echo "$found"
+            echo "::error::the generic image ships backends, stack tests or state"
+            exit 1
+          fi
+      - name: Image size budget
+        env:
+          # what a consumer downloads; the aws provider archive alone is about 170 MB, and the platform stacks add about 54 MB
+          MAX_COMPRESSED_MB: "300"
+        run: |
+          printf '## Image size\n\n' >> "$GITHUB_STEP_SUMMARY"
+          failed=0
+          for image in jaws:ci jaws:ci-cli; do
+            uncompressed=$(docker image inspect "$image" --format '{{.Size}}')
+            compressed=$(docker save "$image" | gzip -1 | wc -c)
+            u_mb=$((uncompressed / 1024 / 1024)); c_mb=$((compressed / 1024 / 1024))
+            printf -- '- %s: compressed (network) %s MB (budget %s MB), uncompressed %s MB\n' "$image" "$c_mb" "$MAX_COMPRESSED_MB" "$u_mb" >> "$GITHUB_STEP_SUMMARY"
+            echo "$image: compressed ${c_mb} MB, uncompressed ${u_mb} MB"
+            if [ "$c_mb" -gt "$MAX_COMPRESSED_MB" ]; then
+              echo "::error::$image is ${c_mb} MB compressed, over the ${MAX_COMPRESSED_MB} MB budget"
+              failed=1
+            fi
+          done
+          exit "$failed"
 
   # The account the foundation is planned for: the primary account of the registry (config/aws.yaml).
   account:

@@ -43,6 +43,7 @@ def test_the_slow_checks_run_before_a_push() -> None:
         "terraform-test-owner-access": "cd owner-access",
         "terraform-test-monitoring": "cd monitoring",
         "terraform-test-billing-export": "cd billing-export",
+        "terraform-test-release-infra": "cd release-infra",
         "stack-plans": "scripts/test-stack-plans.sh",
     }
     for hook_id, command in expected.items():

@@ -324,6 +324,8 @@ configuration change it requires.
 - Generic: no configuration inside.
 - Published by `jaws`'s release workflow to
   `public.ecr.aws/<alias>/jaws:vX.Y.Z`, with the role from section 6.8.
+- ECR Public keeps the newest `JAWS_PUBLIC_IMAGE_KEEP` versions (default 10)
+  until v1.
 - `jaws`'s CI keeps the build, offline smoke test and size budget it has
   today.
 
@@ -332,6 +334,7 @@ configuration change it requires.
 ```dockerfile
 FROM public.ecr.aws/<alias>/jaws:v0.79.0@sha256:<digest>
 COPY config/ /etc/jaws/config/
+COPY datasets/ /etc/jaws/datasets/
 ```
 
 - Labels record the Jaws release and digest it is built from, and the hub
@@ -512,7 +515,8 @@ The owner's hub:
   guards as `owner-access/`. It holds:
   - the ECR Public repository `jaws`;
   - one role, trusted only for `Jaws-Platform/jaws` release runs, that may
-    push to that repository and nothing else.
+    push to that repository and prune it, and nothing else (the owner's
+    decision of 2026-11-23).
 - Its state goes in the platform's state bucket, under its own prefix.
 - The role's ARN is a repository variable in `jaws`. No account ID appears
   in code outside this folder.

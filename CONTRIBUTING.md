@@ -42,6 +42,7 @@ Every commit names exactly one of this repository's scopes. They are `SCOPES` in
 | `databricks` | The Databricks account and workspace stacks |
 | `access` | `owner-access/` and `data-access/` |
 | `monitoring` | The `monitoring/` and `billing-export/` roots, `config/monitoring.yaml` and their docs |
+| `publishing` | `release-infra/`: Jaws's ECR Public repository and the role that publishes the image to it |
 | `datasets` | `datasets/`, the onboarded datasets |
 | `workflows` | The reusable workflows and composite actions in `.github/` |
 | `repo` | README, CONTRIBUTING, AGENTS, commitlint, the PR and issue templates, and repository tooling |
@@ -71,7 +72,7 @@ tflint --init
 cd .. && uv sync                         # the infra CLI and its dev tools
 ```
 
-The `commit-msg` hook runs commitlint on every commit; the `pre-commit` hook runs `terraform fmt`, `terraform validate`, `tflint` and ruff. The `pre-push` hook runs the slow checks CI runs: `mypy`, `pytest`, `terraform test` in `foundation/`, `data-access/` and `owner-access/`, and `scripts/test-stack-plans.sh`. Each runs only when the push changes what it covers; about 3 to 4 minutes when a push touches everything. CI is the authoritative check; the hooks exist so mistakes are caught before a pull request exists. Skip them once with `git commit --no-verify` or `git push --no-verify` if you must, and expect CI to object. An existing checkout gets the pre-push hook by running `pre-commit install` again.
+The `commit-msg` hook runs commitlint on every commit; the `pre-commit` hook runs `terraform fmt`, `terraform validate`, `tflint` and ruff. The `pre-push` hook runs the slow checks CI runs: `mypy`, `pytest`, `terraform test` in `foundation/`, `data-access/`, `owner-access/` and `release-infra/`, and `scripts/test-stack-plans.sh`. Each runs only when the push changes what it covers; about 3 to 4 minutes when a push touches everything. CI is the authoritative check; the hooks exist so mistakes are caught before a pull request exists. Skip them once with `git commit --no-verify` or `git push --no-verify` if you must, and expect CI to object. An existing checkout gets the pre-push hook by running `pre-commit install` again.
 
 ### Checks that must pass
 
@@ -86,7 +87,7 @@ A plan that touches the imported hosted zone with anything other than tags needs
 
 ## Updating the shared modules
 
-Every module comes from one of the eight Jaws module families on the public Terraform Registry, `Jaws-Platform/jaws-<family>/aws`: [`ci`](https://registry.terraform.io/modules/Jaws-Platform/jaws-ci/aws), [`databricks`](https://registry.terraform.io/modules/Jaws-Platform/jaws-databricks/aws), [`foundation`](https://registry.terraform.io/modules/Jaws-Platform/jaws-foundation/aws), [`lichess-bot`](https://registry.terraform.io/modules/Jaws-Platform/jaws-lichess-bot/aws), [`monitoring`](https://registry.terraform.io/modules/Jaws-Platform/jaws-monitoring/aws), [`network`](https://registry.terraform.io/modules/Jaws-Platform/jaws-network/aws), [`research`](https://registry.terraform.io/modules/Jaws-Platform/jaws-research/aws) and [`static-site`](https://registry.terraform.io/modules/Jaws-Platform/jaws-static-site/aws). Each family has its own version. To move to a new release of one, bump every `version` pin of that family together (all of `foundation/`, every stack under `stacks/`, `owner-access/`, `data-access/`, `monitoring/` and `billing-export/`) and its entry in `src/jaws/product.yaml` (`tests/test_versions.py` checks that every pin matches it), run `terraform init -upgrade` locally, and open a `chore(deps)` PR. Dependabot opens the same PR for the directories it watches; finish the other pins of that family in it. Review the family's changelog entry alongside the CI plan comment before merging. A change to a module's inputs or outputs belongs in the family's repository, `Jaws-Platform/terraform-aws-jaws-<family>`, not here.
+Every module comes from one of the eight Jaws module families on the public Terraform Registry, `Jaws-Platform/jaws-<family>/aws`: [`ci`](https://registry.terraform.io/modules/Jaws-Platform/jaws-ci/aws), [`databricks`](https://registry.terraform.io/modules/Jaws-Platform/jaws-databricks/aws), [`foundation`](https://registry.terraform.io/modules/Jaws-Platform/jaws-foundation/aws), [`lichess-bot`](https://registry.terraform.io/modules/Jaws-Platform/jaws-lichess-bot/aws), [`monitoring`](https://registry.terraform.io/modules/Jaws-Platform/jaws-monitoring/aws), [`network`](https://registry.terraform.io/modules/Jaws-Platform/jaws-network/aws), [`research`](https://registry.terraform.io/modules/Jaws-Platform/jaws-research/aws) and [`static-site`](https://registry.terraform.io/modules/Jaws-Platform/jaws-static-site/aws). Each family has its own version. To move to a new release of one, bump every `version` pin of that family together (all of `foundation/`, every stack under `stacks/`, `owner-access/`, `data-access/`, `monitoring/`, `billing-export/` and `release-infra/`) and its entry in `src/jaws/product.yaml` (`tests/test_versions.py` checks that every pin matches it), run `terraform init -upgrade` locally, and open a `chore(deps)` PR. Dependabot opens the same PR for the directories it watches; finish the other pins of that family in it. Review the family's changelog entry alongside the CI plan comment before merging. A change to a module's inputs or outputs belongs in the family's repository, `Jaws-Platform/terraform-aws-jaws-<family>`, not here.
 
 ## Releases
 
@@ -94,7 +95,7 @@ Release Please opens and maintains a release PR as changes land on `main`. Mergi
 
 1. tags a new version (starting at `v0.1.0`), updates `CHANGELOG.md`, and bumps the infra CLI version in `src/jaws/__init__.py` and the image tag in `.github/actions/jaws/action.yml` (the `x-release-please-version` annotations; keep them, and never add one under `.github/workflows/`, which the release bot cannot commit to);
 2. triggers the `apply` job, which checks out the tag, assumes the apply role in the `prod` environment, and runs `terraform apply`;
-3. triggers the `image` job, which builds the CLI image and pushes `jaws-cli:<tag>` to ECR. Site repositories then receive a Dependabot PR bumping their reusable workflow refs to the new tag.
+3. triggers the `image` job, which builds the CLI image and pushes `jaws-cli:<tag>` to ECR. Once publishing is set up (see README.md, "Jaws's public image"), the public image job also pushes the generic image to ECR Public, then prunes the public repository to the newest `JAWS_PUBLIC_IMAGE_KEEP` versions. Site repositories then receive a Dependabot PR bumping their reusable workflow refs to the new tag.
 
 Merging the release PR is the deliberate act that changes AWS. Merge it when the accumulated plan is what you want applied. Release PRs are authored by `jwallace145-release-bot[bot]` so that CI runs on them.
 

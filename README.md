@@ -35,11 +35,13 @@ provisions and publishes every site from one YAML file in its repository,
 bundled site stack in `stacks/site/` from that file and the tool
 configuration (`config/`), runs
 `terraform` against the shared state bucket, syncs built content and
-invalidates CloudFront. Site repositories keep no Terraform. It ships as a
-versioned image in the account's private ECR repository (`jaws-cli`),
-published by the
-release workflow, and site repositories run it through the reusable workflows
-this repository publishes. The design is in
+invalidates CloudFront. Site repositories keep no Terraform. It ships as
+two images, both built from the `Dockerfile` and pushed by each release: the
+generic image, with no configuration, public at
+`public.ecr.aws/<alias>/jaws` (see [Jaws's public image](#jawss-public-image)), and `jaws-cli`, the
+same image with this repository's `config/` and `datasets/`, in the account's
+private ECR repository. Site repositories run `jaws-cli` through the reusable
+workflows this repository publishes. The design is in
 [#26](https://github.com/Jaws-Platform/jaws/pull/26).
 
 | Command | Role it expects | What it does |
@@ -82,7 +84,8 @@ debug log go to `./.jaws/`.
 uv sync                                  # the CLI and its dev tools
 uv run jaws --help
 uv run ruff check && uv run mypy && uv run pytest
-docker build --build-arg "TERRAFORM_VERSION=$(yq -r .terraform.version src/jaws/product.yaml)" -t jaws:local .
+docker build --build-arg "TERRAFORM_VERSION=$(yq -r .terraform.version src/jaws/product.yaml)" -t jaws:local .   # the generic image
+docker build --target jaws-cli --build-arg "TERRAFORM_VERSION=$(yq -r .terraform.version src/jaws/product.yaml)" -t jaws-cli:local .
 ```
 
 ### Reusable workflows for site repositories
@@ -137,6 +140,35 @@ jobs:
       app-private-key: ${{ secrets.JAWS_APP_PRIVATE_KEY }}
     permissions: { contents: read, id-token: write, pull-requests: write }
 ```
+
+### Jaws's public image
+
+The generic image is the `generic` target of the `Dockerfile`: every stack and no
+configuration, for linux/amd64. It is published at
+`public.ecr.aws/<alias>/jaws:vX.Y.Z`, the repository variable `JAWS_PUBLIC_IMAGE`.
+
+Each release publishes it, in the `publish` environment, with the role in the
+repository variable `JAWS_PUBLISH_ROLE_ARN` (`release-infra/`). Until both variables
+are set, the release skips it with a notice. Only a tag on `main`'s history is
+published: the check fails on any other. The prune after each publish runs the
+workflow's own script, never the tag's.
+
+Pin it by tag and digest, as the job's summary prints them
+(`public.ecr.aws/<alias>/jaws:vX.Y.Z@sha256:...`). A platform's image is `FROM` that,
+plus `COPY config/ /etc/jaws/config/` and `COPY datasets/ /etc/jaws/datasets/`.
+
+ECR Public has no lifecycle policies, so until v1 each publish keeps the newest
+`JAWS_PUBLIC_IMAGE_KEEP` release versions (default 10) and deletes the rest, untagged
+images included. At today's pace a version lasts about two days, so pin a recent one.
+`all` keeps every version; the owner sets it at v1, once Jaws has consumers with
+maintenance contracts.
+
+A published tag is never replaced, and a re-publish (`workflow_dispatch` with a `tag`)
+fills in a missing one, a pruned one included. A refilled tag is a new build with a new
+digest, so a pin by the pruned version's digest stays broken until it moves to the new
+one. The same dispatch's `jaws-cli` job fails on that tag if the account's private
+repository still holds it, since its tags are immutable; the public image is published
+all the same. Tags cut before the generic image are never published.
 
 ### Bot projects
 
@@ -301,8 +333,8 @@ This stack is a consumer of the eight Jaws module families, published to the pub
 
 | Family | Modules used here | Where |
 | --- | --- | --- |
-| [`Jaws-Platform/jaws-foundation/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-foundation/aws) | `context` (the tag set applied through `default_tags`), `tfstate-bucket` (the shared state bucket), `service-linked-role`, `private-bucket` (bot records and task results), `identity-center-access` (the owner's access) | `foundation/`, `stacks/bot/`, `owner-access/`, `monitoring/`, `billing-export/` |
-| [`Jaws-Platform/jaws-ci/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-ci/aws) | `ci-plan-role`, `ci-preview-role`, `ci-apply-role`, `ci-release-role` and `ci-task-role`, each with policies from the `ci-policies` catalog | `foundation/` |
+| [`Jaws-Platform/jaws-foundation/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-foundation/aws) | `context` (the tag set applied through `default_tags`), `tfstate-bucket` (the shared state bucket), `service-linked-role`, `private-bucket` (bot records and task results), `identity-center-access` (the owner's access) | `foundation/`, `stacks/bot/`, `owner-access/`, `monitoring/`, `billing-export/`, `release-infra/` |
+| [`Jaws-Platform/jaws-ci/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-ci/aws) | `ci-plan-role`, `ci-preview-role`, `ci-apply-role`, `ci-release-role` and `ci-task-role`, each with policies from the `ci-policies` catalog, and `github-oidc-role` (the publishing role) | `foundation/`, `release-infra/` |
 | [`Jaws-Platform/jaws-static-site/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-static-site/aws) | The root module (the site stack), `site-bucket` (one S3 bucket per site, `jaws-<project>`), `hosted-zone` (the `jwall.engineering` zone, its CAA record and the GitHub Pages verification TXT record) | `stacks/site/`, `foundation/` |
 | [`Jaws-Platform/jaws-lichess-bot/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-lichess-bot/aws) | `container-instance` (the bot), `ecr-repository` (bot images, and the private repository for the `jaws` CLI image) | `stacks/bot/`, `foundation/ecr.tf` |
 | [`Jaws-Platform/jaws-research/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-research/aws) | `task-runner` (one per task profile), `dataset-bucket` | `stacks/bot/` |
@@ -326,7 +358,7 @@ module "site_bucket" {
 }
 ```
 
-Versions are pinned exactly, not with `~>`, because Terraform records provider versions in `.terraform.lock.hcl` but not module versions; an exact pin is the only way two applies of the same commit resolve the same code. Every pin of a family (in `foundation/`, the stacks under `stacks/`, `owner-access/`, `data-access/`, `monitoring/` and `billing-export/`) is always bumped together, and so is that family's entry in `src/jaws/product.yaml`.
+Versions are pinned exactly, not with `~>`, because Terraform records provider versions in `.terraform.lock.hcl` but not module versions; an exact pin is the only way two applies of the same commit resolve the same code. Every pin of a family (in `foundation/`, the stacks under `stacks/`, `owner-access/`, `data-access/`, `monitoring/`, `billing-export/` and `release-infra/`) is always bumped together, and so is that family's entry in `src/jaws/product.yaml`.
 
 **Upgrading.** When a family publishes a release, Dependabot's Terraform ecosystem opens a `chore(deps)` PR bumping its pins. The CI plan comment on that PR shows exactly what the new version changes in AWS. Read the family's changelog entry (`CHANGELOG.md` in `Jaws-Platform/terraform-aws-jaws-<family>`), check the plan, merge, and the change applies with the next release of this repo. While a family is on `0.x`, a breaking change bumps the minor version and is marked `!` in its changelog.
 
@@ -360,7 +392,7 @@ files](#the-tool-configuration-config)).
 | `docs/monitoring.md`, `docs/billing-export.md` | The monitoring stack: configuration, applies, the owner's setup, Grafana, the schedule, alerts, recovery, new providers and channels, costs; the organization's billing export |
 | `monitoring.tf` | The billing bucket, the Databricks billing job and the monitoring stack's CI roles, with `config/monitoring.yaml`'s `monitoring` section |
 | `stacks/databricks-account/`, `stacks/databricks-workspace/`, `foundation/databricks.tf` | The two stacks of a Databricks project; the metastore, audit log delivery and each Databricks project's roles (type `databricks` in `config/projects.yaml`) |
-| `Dockerfile` | The CLI image: a pinned Terraform, the stack with modules and providers vendored, `config/` (at `/etc/jaws/config`) |
+| `Dockerfile` | The CLI images: `generic`, the default target (the CLI, a pinned Terraform, every stack with modules and providers vendored: `stacks/*` and the platform's own, without backends; no configuration), and `jaws-cli`: `generic` plus `config/` at `/etc/jaws/config` and `datasets/` at `/etc/jaws/datasets` |
 | `.github/actions/terraform-init` | `terraform init` with a retry for the registry's lag after a library release |
 | `projects.tf` | The sites (type `site` in `config/projects.yaml`), each fed to the registry `site-bucket`, `ci-plan-role`, `ci-preview-role` and `ci-apply-role` modules |
 | `outputs.tf` | Values the project repos and this repo's CI consume |
@@ -372,6 +404,7 @@ files](#the-tool-configuration-config)).
 | `data-access/` (root) | The reconcile: binds and grants each agreed dataset handshake, applied by the **Data access** workflow ([guide](docs/databricks.md#datasets-and-access)) |
 | `monitoring/` (root) | The monitoring stack: the billing normalizer, the monitoring node and its watchdog, in a VPC of its own; planned on pull requests and applied by the release after the foundation ([docs/monitoring.md](docs/monitoring.md)) |
 | `billing-export/` (root) | The organization's FOCUS billing export, in the management account: applied only by the owner, never by CI ([docs/billing-export.md](docs/billing-export.md)) |
+| `release-infra/` (root) | Jaws's release infrastructure: the ECR Public repository `jaws` and the role that publishes the image to it, applied only by the owner, never by CI ([release-infra/README.md](release-infra/README.md)) |
 
 ### The tool configuration: `config/`
 
@@ -379,8 +412,9 @@ files](#the-tool-configuration-config)).
 top-level sections, and a section lives in one file only (the CLI and the
 foundation both refuse a section defined twice). One file holding every section
 is also accepted, as the tests' fixtures do. The CLI reads `./config` by
-default; `--config` and `JAWS_CONFIG` take the directory or one file, and the
-image bakes it at `/etc/jaws/config`.
+default; `--config` and `JAWS_CONFIG` take the directory or one file, and
+a platform's image holds it at `/etc/jaws/config` (`jaws-cli` holds this
+repository's; the generic image holds none).
 
 | File | Sections |
 | --- | --- |
@@ -633,7 +667,7 @@ state in a local file and then migrates it into the bucket.
 - `Terraform fmt, validate, tflint` (`foundation/`) and `Site stack validate, tflint` (`stacks/site/`)
 - `Terraform plan`: assumes the plan role through OIDC and posts the foundation plan as the branded sticky PR comment (rendered by `jaws report plan-comment`), updated on every push
 - `Python lint, types, tests`: ruff, mypy and pytest for the infra CLI
-- `Image build and smoke test`: builds the CLI image, runs `validate` inside it offline, checks its Terraform version and enforces the compressed-size budget
+- `Image build and smoke test`: builds both images, checks that the generic one holds no configuration and says where it looks for one, validates a fixture site offline inside it with the neutral fixture configuration mounted at `JAWS_CONFIG`, checks that `jaws-cli` holds the configuration and the datasets, checks the Terraform version, initializes and validates every stack inside it offline, checks the mirror holds one version of each provider and that no backend or stack test ships, and enforces the compressed-size budget (300 MiB)
 - `Bot stack validate, tflint` (`stacks/bot/`), `Databricks account stack validate, tflint` (`stacks/databricks-account/`) and `Databricks workspace stack validate, tflint` (`stacks/databricks-workspace/`)
 - `Stack plans against mock providers`: `scripts/test-stack-plans.sh` plans `stacks/bot` and both Databricks stacks with tfvars the CLI renders for the cases in `tests/stack_plans/<stack>/`; no AWS or Databricks
 - `Bot plan (<project>)`: for each bot and research project in `config/projects.yaml` (the `Bot projects` job lists them with `scripts/projects.sh bot research`), assumes the project's plan role and posts its plan as a sticky comment. Until the release that creates the project's roles, it skips with a notice instead of failing.
@@ -644,9 +678,9 @@ Every `terraform init` goes through `.github/actions/terraform-init`, which retr
 
 **Releases, applies and the image** (`.github/workflows/release-please.yml`, on push to `main`):
 
-Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`, then, with the `monitoring` section, applies `monitoring/` with `jaws-monitoring-ci-apply`; then the `image` job, also in `prod`, builds the CLI image and pushes it to the account's repository as `<repository>:<tag>` (`ecr.repository` in `config/tool.yaml`, `jaws-cli`). Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
+Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`, then, with the `monitoring` section, applies `monitoring/` with `jaws-monitoring-ci-apply`; then the `image` job, also in `prod`, builds the `jaws-cli` target (for a tag cut before it, the tag's only image) and pushes it to the account's repository as `<repository>:<tag>` (`ecr.repository` in `config/tool.yaml`, `jaws-cli`). The public image job, which needs only Release Please (not the apply), builds the `generic` target and pushes it to ECR Public in the `publish` environment ([Jaws's public image](#jawss-public-image)); it skips with a notice until the owner has set its variables. Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes both images of an existing release, `jaws-cli` and the public one ([Jaws's public image](#jawss-public-image) says what a re-publish fills in).
 
-No role ARN is a secret, and this repository needs none as a variable. The foundation's plan and apply jobs build their role (`<name_root>-infra-ci-plan` / `-ci-apply`) from the account and name root `jaws config env` reads from the tool configuration (the primary account in `config/aws.yaml`, `context.name_root` in `config/tool.yaml`), and keep their state through `backend/prod.hcl`. Bot role ARNs need no variable either: the workflows build them the same way, with the bot's name.
+No role ARN is a secret. This repository needs one as a variable, `JAWS_PUBLISH_ROLE_ARN`, the publishing role in `release-infra/`, so that no account ID appears outside that folder (spec 6.8). The foundation's plan and apply jobs build their role (`<name_root>-infra-ci-plan` / `-ci-apply`) from the account and name root `jaws config env` reads from the tool configuration (the primary account in `config/aws.yaml`, `context.name_root` in `config/tool.yaml`), and keep their state through `backend/prod.hcl`. Bot role ARNs need no variable either: the workflows build them the same way, with the bot's name.
 
 **Bot projects** (`.github/workflows/bot-apply.yml`, by hand): `workflow_dispatch` with the project's name, which must be a bot or research project in `config/projects.yaml`, applies or destroys its stack in the `prod` environment with its apply role. `.github/workflows/container-release.yml` is the reusable workflow a bot repository calls on each release ([guide](docs/lichess-bot.md#the-caller-workflow)).
 
@@ -683,6 +717,14 @@ Not automated; these need the owner's credentials or the GitHub UI.
 
 - Run the bootstrap steps above.
 - Create the GitHub `prod` environment with a deployment branch restriction to `main`.
+- For [Jaws's public image](#jawss-public-image), in this order (the commands are in [release-infra/README.md](release-infra/README.md#run-it)):
+  1. Create the GitHub `publish` environment, restricted to `main` the same way, before anything names it: a job that names a missing environment creates it unprotected, and the publishing role trusts it. Add a tag ruleset on `refs/tags/v*` that restricts creating, updating and deleting tags, with only the release bot's GitHub App (above) allowed to bypass it, so that only Release Please's tags can be published.
+  2. Apply `release-infra/` with the production account's admin profile.
+  3. Request the ECR Public registry alias `jaws` (Public registry, Settings). AWS reviews it within a few days.
+  4. Wait until the alias is approved and primary. Then refresh the state (`terraform apply -refresh-only`), read `repository_uri`, and check that it names the approved alias. Only then set the repository variables `JAWS_PUBLIC_IMAGE` (that address) and `JAWS_PUBLISH_ROLE_ARN` (`role_arn`), so that the first public address is the one that lasts. Leave `JAWS_PUBLIC_IMAGE_KEEP` unset: each publish then keeps the newest ten release versions. Until both variables are set, releases skip the public image.
+  5. Run `scripts/apply-repo-settings.sh` again, so that `Release infrastructure validate, tflint, test` is a required check.
+  6. Watch the next release: it publishes the image, its summary prints the address with the digest, and its prune keeps the newest ten. Check the image anonymously with `docker pull`. To publish sooner, run the Release workflow with the current tag.
+  7. At v1, once Jaws has consumers with maintenance contracts, set `JAWS_PUBLIC_IMAGE_KEEP` to `all`.
 - In each site's repository, set its role ARNs and bucket name as repository variables (from `terraform output projects`). This repository needs none: its workflows derive the foundation's roles from the tool configuration (`config/`). (`AWS_PLAN_ROLE_ARN` and `AWS_APPLY_ROLE_ARN`, set here before v0.47, are no longer read and can be deleted.)
 - Optional, for comments authored by the product rather than `github-actions[bot]`: create a GitHub App for the tool (the owner's is still named **JWall Engineering Infra**; the name shown beside a comment is the app's, and renaming it is the owner's; no webhook; permissions *Pull requests: read and write*; upload an avatar), generate a private key, and install it on this repo and every site repo. In each of those repos set the variable `JAWS_APP_CLIENT_ID` to the app's client ID and the secret `JAWS_APP_PRIVATE_KEY` to the full `.pem` contents, and pass them to the reusable workflows as shown above.
 - Activate cost allocation tags in Billing: `Organization`, `Project`, `Environment`, `Repository`, `ManagedBy`, `Owner`, `Component`, `Purpose`, `Profile` and `Lifecycle` (task instances carry `Purpose=ci-task`, `Profile=cpu|gpu` and `Lifecycle=spot|on-demand`, for the later tag-based cost tooling).

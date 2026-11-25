@@ -6,9 +6,10 @@
 **/*.tfstate*
 **/.terraform.lock.hcl
 node_modules
-tests
-foundation
+**/tests
+**/backend
 owner-access
+release-infra
 docs
 .jaws
 __pycache__
