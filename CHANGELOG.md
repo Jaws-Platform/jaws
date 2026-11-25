@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.81.0](https://github.com/Jaws-Platform/jaws/compare/v0.80.1...v0.81.0) (2026-11-25)
+
+
+### Features
+
+* **cli:** add white-label hooks with jaws's values as the defaults ([#324](https://github.com/Jaws-Platform/jaws/issues/324)) ([e6f7096](https://github.com/Jaws-Platform/jaws/commit/e6f709659e813147a5670bec11d5977c9baf6778))
+* **cli:** ship a generic image with every stack, and publish it to ECR Public ([#317](https://github.com/Jaws-Platform/jaws/issues/317)) ([19b2691](https://github.com/Jaws-Platform/jaws/commit/19b26916fc3e08a7829169e34da45a1745965e37))
+
 ## [0.80.1](https://github.com/Jaws-Platform/jaws/compare/v0.80.0...v0.80.1) (2026-11-23)
 
 
