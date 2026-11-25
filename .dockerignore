@@ -6,8 +6,8 @@
 **/*.tfstate*
 **/.terraform.lock.hcl
 node_modules
-tests
-foundation
+**/tests
+**/backend
 owner-access
 docs
 .jaws

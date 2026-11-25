@@ -1,6 +1,7 @@
-# jaws (Jaws): the CLI, a pinned Terraform, the site and bot stacks
-# with their modules and providers vendored. Only the S3 backend touches
-# the network at run time. Two targets:
+# jaws (Jaws): the CLI, a pinned Terraform, and every stack (site, bot,
+# databricks-account, databricks-workspace and the platform's foundation,
+# monitoring and data-access) with their modules and providers vendored. Only
+# the S3 backend touches the network at run time. Two targets:
 #   generic  - Jaws's image, with no configuration inside (the default target).
 #   jaws-cli - generic plus this repository's config/ and datasets/.
 #
@@ -57,18 +58,21 @@ RUN cd /opt/jaws/venv/lib/python3.13/site-packages/botocore/data \
     && find /opt/jaws/venv -type d -name __pycache__ -prune -exec rm -rf {} +
 
 COPY --from=terraform /tmp/terraform/terraform /usr/local/bin/terraform
-COPY stacks/site /opt/jaws/stacks/site
-COPY stacks/bot /opt/jaws/stacks/bot
-# The Databricks stacks are not in the image: their plan and apply workflows
-# run the CLI with `uv run` from this repository, and their providers
-# (databricks, time) would put the image over its size budget for nothing.
-# Fetch the library modules and mirror the providers so run-time init is offline.
-# Both stacks share one provider mirror (their lock files pin the same
-# provider). The unpacked copies that `init` leaves under
-# .terraform/providers are the single largest thing in the image and run time
-# never reads them, so they go. The modules stay.
-RUN for stack in site bot; do \
-      cd "/opt/jaws/stacks/$stack" \
+# Every stack ships: the project stacks (stacks/*) and the platform's own, so a
+# hub's image built FROM this one can run all of them. The .dockerignore leaves
+# out each stack's backend (a platform's runs write their own from `state`) and
+# its tests, and its lock file, so each stack's init takes the newest provider
+# its constraints allow and the mirror holds each provider once (CI checks).
+# Fetch the library modules and mirror the providers so run-time init is offline,
+# from the vendored modules and the mirror. The unpacked copies that `init`
+# leaves under .terraform/providers are the single largest thing in the image and
+# run time never reads them, so they go. The modules stay.
+COPY stacks /opt/jaws/stacks
+COPY foundation /opt/jaws/stacks/foundation
+COPY monitoring /opt/jaws/stacks/monitoring
+COPY data-access /opt/jaws/stacks/data-access
+RUN for stack in /opt/jaws/stacks/*/; do \
+      cd "$stack" \
       && terraform init -backend=false -input=false \
       && terraform providers mirror /opt/jaws/plugins \
       && rm -rf .terraform/providers \
