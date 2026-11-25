@@ -46,6 +46,7 @@ databricks:
   - owner@example.test
   nat_ami: al2023-ami-2023.12.20261026.1-kernel-6.18-arm64
   deployment_name_prefix: null
+  audit_bucket: acme-audit
   events_prefix: events/
   readiness_timeout: 20m
   shared_host_url: https://dbc-00000000-0000.cloud.databricks.com

@@ -4,7 +4,8 @@
 (tests/fixtures/platform/) as written, and a few states it isn't in: a ManagedBy no code
 spells, a tag of the platform's own, no task runner, the Databricks host before its URL
 is recorded, an admin role of another account, no monitoring section, a private
-monitoring node, and a second repository or a hub. Each fixture under
+monitoring node, another name root (acme) with the Databricks names left out so that they
+derive, and a second repository or a hub. Each fixture under
 `foundation/tests/fixtures/` is tests/fixtures/platform/ as one file
 (`jaws.settings.load_document`) with a few values set; this test keeps them from drifting.
 
@@ -79,11 +80,14 @@ def _private_node(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _databricks_defaults(config: dict[str, Any]) -> dict[str, Any]:
-    """Databricks without the names that follow the name root: the foundation derives
-    them as the CLI does."""
+    """Another name root, and Databricks without the names that follow it: the foundation
+    derives them as the CLI does. Moves the root, the dataset bucket keys and the Slack
+    channels to acme; the foundation and monitoring runs both use this fixture.
+    The audit bucket stays explicit (acme-audit), so a stated name must win the merge."""
     config["context"]["name_root"] = "acme"
-    for key in ("secret_parameter", "metastore_name", "audit_bucket"):
+    for key in ("secret_parameter", "metastore_name"):
         config["databricks"].pop(key)
+    config["databricks"]["audit_bucket"] = "acme-audit"
     # A dataset bucket is <name_root>-<project>-<dataset>, and the project file spells it.
     for group in config["projects"].values():
         for project in group["projects"].values():

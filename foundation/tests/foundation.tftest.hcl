@@ -231,14 +231,20 @@ run "the_databricks_names_follow_the_name_root" {
   }
 
   assert {
-    condition     = local.databricks.secret_parameter == "/acme/databricks/client-secret" && local.databricks.metastore_name == "acme-us-east-1" && local.databricks.audit_bucket == "acme-databricks-audit-logs"
-    error_message = "the Databricks names a platform leaves out follow its name root"
+    condition     = local.databricks.secret_parameter == "/acme/databricks/client-secret" && local.databricks.metastore_name == "acme-us-east-1" && local.databricks.audit_bucket == "acme-audit"
+    error_message = "the Databricks names a platform leaves out follow its name root, and one it states wins"
   }
 
   # name_prefix is <name_root>-<project>-<environment>: with the project the name root, acme-acme-prod.
   assert {
     condition     = module.context.tags["Project"] == "acme" && module.context.name_prefix == "acme-acme-prod"
     error_message = "the platform's own Project tag, and the name prefix derived from it, are the name root's"
+  }
+
+  # The stack's own name_prefix (foundation/context.tf), which the zone's Name tag uses (dns.tf).
+  assert {
+    condition     = local.name_prefix == "acme"
+    error_message = "the name prefix the foundation's stacks use is the name root"
   }
 }
 
