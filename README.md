@@ -304,8 +304,8 @@ This stack is a consumer of the eight Jaws module families, published to the pub
 
 | Family | Modules used here | Where |
 | --- | --- | --- |
-| [`Jaws-Platform/jaws-foundation/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-foundation/aws) | `context` (the tag set applied through `default_tags`), `tfstate-bucket` (the shared state bucket), `service-linked-role`, `private-bucket` (bot records and task results), `identity-center-access` (the owner's access) | `foundation/`, `stacks/bot/`, `owner-access/`, `monitoring/`, `billing-export/` |
-| [`Jaws-Platform/jaws-ci/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-ci/aws) | `ci-plan-role`, `ci-preview-role`, `ci-apply-role`, `ci-release-role` and `ci-task-role`, each with policies from the `ci-policies` catalog | `foundation/` |
+| [`Jaws-Platform/jaws-foundation/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-foundation/aws) | `context` (the tag set applied through `default_tags`), `tfstate-bucket` (the shared state bucket), `service-linked-role`, `private-bucket` (bot records and task results), `identity-center-access` (the owner's access) | `foundation/`, `stacks/bot/`, `owner-access/`, `monitoring/`, `billing-export/`, `release-infra/` |
+| [`Jaws-Platform/jaws-ci/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-ci/aws) | `ci-plan-role`, `ci-preview-role`, `ci-apply-role`, `ci-release-role` and `ci-task-role`, each with policies from the `ci-policies` catalog, and `github-oidc-role` (the publishing role) | `foundation/`, `release-infra/` |
 | [`Jaws-Platform/jaws-static-site/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-static-site/aws) | The root module (the site stack), `site-bucket` (one S3 bucket per site, `jaws-<project>`), `hosted-zone` (the `jwall.engineering` zone, its CAA record and the GitHub Pages verification TXT record) | `stacks/site/`, `foundation/` |
 | [`Jaws-Platform/jaws-lichess-bot/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-lichess-bot/aws) | `container-instance` (the bot), `ecr-repository` (bot images, and the private repository for the `jaws` CLI image) | `stacks/bot/`, `foundation/ecr.tf` |
 | [`Jaws-Platform/jaws-research/aws`](https://registry.terraform.io/modules/Jaws-Platform/jaws-research/aws) | `task-runner` (one per task profile), `dataset-bucket` | `stacks/bot/` |
@@ -329,7 +329,7 @@ module "site_bucket" {
 }
 ```
 
-Versions are pinned exactly, not with `~>`, because Terraform records provider versions in `.terraform.lock.hcl` but not module versions; an exact pin is the only way two applies of the same commit resolve the same code. Every pin of a family (in `foundation/`, the stacks under `stacks/`, `owner-access/`, `data-access/`, `monitoring/` and `billing-export/`) is always bumped together, and so is that family's entry in `src/jaws/product.yaml`.
+Versions are pinned exactly, not with `~>`, because Terraform records provider versions in `.terraform.lock.hcl` but not module versions; an exact pin is the only way two applies of the same commit resolve the same code. Every pin of a family (in `foundation/`, the stacks under `stacks/`, `owner-access/`, `data-access/`, `monitoring/`, `billing-export/` and `release-infra/`) is always bumped together, and so is that family's entry in `src/jaws/product.yaml`.
 
 **Upgrading.** When a family publishes a release, Dependabot's Terraform ecosystem opens a `chore(deps)` PR bumping its pins. The CI plan comment on that PR shows exactly what the new version changes in AWS. Read the family's changelog entry (`CHANGELOG.md` in `Jaws-Platform/terraform-aws-jaws-<family>`), check the plan, merge, and the change applies with the next release of this repo. While a family is on `0.x`, a breaking change bumps the minor version and is marked `!` in its changelog.
 
@@ -375,6 +375,7 @@ files](#the-tool-configuration-config)).
 | `data-access/` (root) | The reconcile: binds and grants each agreed dataset handshake, applied by the **Data access** workflow ([guide](docs/databricks.md#datasets-and-access)) |
 | `monitoring/` (root) | The monitoring stack: the billing normalizer, the monitoring node and its watchdog, in a VPC of its own; planned on pull requests and applied by the release after the foundation ([docs/monitoring.md](docs/monitoring.md)) |
 | `billing-export/` (root) | The organization's FOCUS billing export, in the management account: applied only by the owner, never by CI ([docs/billing-export.md](docs/billing-export.md)) |
+| `release-infra/` (root) | Jaws's release infrastructure: the ECR Public repository `jaws` and the role that publishes the image to it, applied only by the owner, never by CI ([release-infra/README.md](release-infra/README.md)) |
 
 ### The tool configuration: `config/`
 

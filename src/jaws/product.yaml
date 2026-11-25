@@ -2,8 +2,8 @@
 # vendors the modules of every stack it ships, stacks/* and the platform's
 # foundation/, monitoring/ and data-access/, so a platform's configuration
 # cannot change them. tests/test_versions.py checks that every pin
-# of a family in foundation/, stacks/, owner-access/, data-access/, monitoring/
-# and billing-export/ carries its version here.
+# of a family in foundation/, stacks/, owner-access/, data-access/, monitoring/,
+# billing-export/ and release-infra/ carries its version here.
 terraform:
   version: 1.14.7
 library:

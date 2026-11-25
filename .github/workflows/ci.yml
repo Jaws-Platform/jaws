@@ -299,6 +299,42 @@ jobs:
           tflint --init --config "$GITHUB_WORKSPACE/.tflint.hcl"
           tflint --config "$GITHUB_WORKSPACE/.tflint.hcl"
 
+  release-infra-stack:
+    # Jaws's release infrastructure (release-infra/), the owner's root in the
+    # production account: the ECR Public repository and the role that publishes
+    # to it. Validated, linted and tested against a mocked provider here; never
+    # planned or applied by CI, by design: no CI role may reach this root's state.
+    name: Release infrastructure validate, tflint, test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: release-infra
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "~1.14"
+      - name: terraform init (no backend)
+        uses: ./.github/actions/terraform-init
+        with:
+          args: -backend=false
+          working-directory: release-infra
+      - name: terraform validate
+        run: terraform validate -no-color
+      - name: terraform test (mock provider, no AWS credentials)
+        run: terraform test -no-color
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: latest
+      - name: tflint
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # plugin downloads hit the unauthenticated API limit on shared runners
+        run: |
+          tflint --init --config "$GITHUB_WORKSPACE/.tflint.hcl"
+          tflint --config "$GITHUB_WORKSPACE/.tflint.hcl"
+
   bot-stack:
     name: Bot stack validate, tflint
     runs-on: ubuntu-latest

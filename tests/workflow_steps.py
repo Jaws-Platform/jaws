@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import stat
 import subprocess
 from collections.abc import Mapping
@@ -64,3 +65,42 @@ def run_step(
         check=False,
     )
     return result, output.read_text()
+
+
+def hcl_values(path: Path) -> dict[str, str]:
+    """A backend file's `key = "value"` lines."""
+    return {
+        key.strip(): value.strip().strip('"')
+        for key, value in (
+            line.split("=", 1) for line in path.read_text().splitlines() if "=" in line
+        )
+    }
+
+
+def required_checks() -> set[str]:
+    """The contexts scripts/apply-repo-settings.sh requires of a pull request."""
+    script = (REPO_ROOT / "scripts" / "apply-repo-settings.sh").read_text()
+    return set(re.findall(r'\{ "context": "([^"]+)" \}', script))
+
+
+def workflows_that_only_check(root: str) -> list[str]:
+    """The sorted names of the workflows that name `root`, if none of its jobs can reach AWS.
+
+    Fails when a job naming `root` holds `id-token`, uses `configure-aws-credentials` or
+    runs `terraform plan|apply|destroy`.
+    """
+    names = sorted(w.name for w in WORKFLOWS.glob("*.yml") if root in w.read_text())
+    for name in names:
+        parsed = yaml.safe_load((WORKFLOWS / name).read_text())
+        for job_name, found in parsed["jobs"].items():
+            if root not in yaml.safe_dump(found):
+                continue
+            assert "id-token" not in found.get("permissions", {}), f"{name}: {job_name}"
+            for step in found["steps"]:
+                assert "configure-aws-credentials" not in step.get("uses", ""), (
+                    f"{name}: {job_name}"
+                )
+                assert not re.search(r"terraform (plan|apply|destroy)", step.get("run", "")), (
+                    f"{name}: {job_name}"
+                )
+    return names

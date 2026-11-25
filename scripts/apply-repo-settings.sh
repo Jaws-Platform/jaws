@@ -68,6 +68,7 @@ ruleset='{
           { "context": "Data access plan" },
           { "context": "Monitoring stack validate, tflint, test" },
           { "context": "Billing export validate, tflint, test" },
+          { "context": "Release infrastructure validate, tflint, test" },
           { "context": "Monitoring plan" }
         ]
       }

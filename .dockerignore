@@ -9,6 +9,7 @@ node_modules
 **/tests
 **/backend
 owner-access
+release-infra
 docs
 .jaws
 __pycache__
