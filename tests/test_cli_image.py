@@ -2,7 +2,8 @@
 
 `generic` is Jaws's image, with no configuration inside (spec 6.3). `jaws-cli` adds
 `config/` and `datasets/` where the CLI and the platform stacks look. The release builds
-`jaws-cli` for a tag that has the stage; a tag cut before it gets its only image.
+`jaws-cli` for a tag that has the stage, and a tag cut before the generic image gets its
+only image. A tag with the generic stage but not jaws-cli's fails.
 """
 
 from __future__ import annotations
@@ -82,6 +83,25 @@ def test_the_jaws_cli_job_builds_jaws_cli_or_an_old_tag_s_only_image(
     assert output.splitlines() == [f"target={target}"]
     build = uses(job("release-please.yml", "image"), "docker/build-push-action")
     assert build["with"]["target"] == "${{ steps.target.outputs.target }}"
+
+
+@pytest.mark.parametrize(
+    "stage", ["", "FROM generic as jaws-cli\n"], ids=["no jaws-cli stage", "not the exact line"]
+)
+def test_the_jaws_cli_job_refuses_a_tag_with_the_generic_stage_but_no_jaws_cli_stage(
+    tmp_path: Path, stage: str
+) -> None:
+    """Its default target is the generic image, with no configuration: pushed as the
+    immutable jaws-cli:<tag>, it would break every site that runs that tag."""
+    text = DOCKERFILE.read_text()
+    assert "\nFROM generic AS jaws-cli\n" in text
+    (tmp_path / "Dockerfile").write_text(text.replace("FROM generic AS jaws-cli\n", stage))
+    result, output = run_step(
+        "release-please.yml", "image", "target", cwd=tmp_path, env={"TAG": "v0.81.0"}
+    )
+    assert result.returncode != 0
+    assert "::error::v0.81.0" in result.stdout and "jaws-cli" in result.stdout
+    assert output == ""
 
 
 #: The platform's own stacks, at the repository root; the project stacks are stacks/*.

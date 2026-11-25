@@ -149,7 +149,9 @@ configuration, for linux/amd64. It is published at
 
 Each release publishes it, in the `publish` environment, with the role in the
 repository variable `JAWS_PUBLISH_ROLE_ARN` (`release-infra/`). Until both variables
-are set, the release skips it with a notice.
+are set, the release skips it with a notice. Only a tag on `main`'s history is
+published: the check fails on any other. The prune after each publish runs the
+workflow's own script, never the tag's.
 
 Pin it by tag and digest, as the job's summary prints them
 (`public.ecr.aws/<alias>/jaws:vX.Y.Z@sha256:...`). A platform's image is `FROM` that,

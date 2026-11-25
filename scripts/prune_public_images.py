@@ -7,10 +7,11 @@ selects goes to stderr.
 
     python3 scripts/prune_public_images.py --keep <N|all> --published <tag> < images.json
 
-The release runs this file from the tag being published, with the arguments of the
-workflow that dispatched it, so the arguments stay backward compatible. It runs with the
-runner's system python3 (3.12 on ubuntu-latest): Python 3.12 syntax and the standard
-library only.
+The release runs this file from its workflow's own commit (`github.workflow_sha`, checked
+out at .release-tools/), never from the tag being published, since it runs with the
+publishing role. So the file and the workflow that calls it are always of one commit. It
+runs with the runner's system python3 (3.12 on ubuntu-latest): Python 3.12 syntax and the
+standard library only.
 """
 
 from __future__ import annotations

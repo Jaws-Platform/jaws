@@ -1,11 +1,13 @@
 """The generic image goes to ECR Public with the publishing role, only from the `publish`
-environment, never for a tag cut before it, never over a tag already published, and not at
-all until the owner has set the two variables.
+environment, only for a tag on main's history, never for a tag cut before it, never over a
+tag already published, and not at all until the owner has set the two variables. What runs
+with the role is the workflow's own commit's code, never the tag's.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -39,19 +41,57 @@ CHECK = "public-image-check"
 PUBLIC = "public-image"
 
 
+def _checkout(root: Path, dockerfile: str, tag: str, *, on_main: bool) -> None:
+    """A repository as the check job's checkout leaves it (`fetch-depth: 0`): `tag` checked
+    out, and `origin/main` one commit past the release. The tag is on main's history, as
+    Release Please's are, or on a branch main never merged."""
+    env = {
+        **os.environ,
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+    }
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=root, env=env, check=True, capture_output=True)
+
+    git("init", "-q", "-b", "main")
+    (root / "Dockerfile").write_text(dockerfile)
+    git("add", "Dockerfile")
+    git("commit", "-q", "-m", "the release")
+    if not on_main:
+        git("checkout", "-q", "-b", "never-merged")
+        git("commit", "-q", "--allow-empty", "-m", "pushed, never reviewed")
+    git("tag", tag)
+    git("checkout", "-q", "main")
+    git("commit", "-q", "--allow-empty", "-m", "after the release")
+    git("update-ref", "refs/remotes/origin/main", "main")
+    git("checkout", "-q", f"refs/tags/{tag}")
+
+
 def _decide(
     tmp_path: Path, dockerfile: str, code: str = "404", **env: str
 ) -> tuple[subprocess.CompletedProcess[str], str, str]:
-    """Run the check job's decide step in a checkout holding `dockerfile`; the result,
-    what it wrote to GITHUB_OUTPUT, and the curl calls it made."""
-    (tmp_path / "Dockerfile").write_text(dockerfile)
-    log = tmp_path / "curl.log"
+    """Run the check job's decide step in a checkout of a tag on main's history holding
+    `dockerfile`; the result, what it wrote to GITHUB_OUTPUT, and the curl calls it made."""
+    _checkout(tmp_path, dockerfile, {**NEUTRAL, **env}["TAG"], on_main=True)
+    return _run_decide(tmp_path, code, **env)
+
+
+def _run_decide(
+    root: Path, code: str = "404", **env: str
+) -> tuple[subprocess.CompletedProcess[str], str, str]:
+    """Run the check job's decide step in the checkout at `root`, as `_decide` does."""
+    log = root / "curl.log"
     log.write_text("")
     result, output = run_step(
         RELEASE,
         CHECK,
         "decide",
-        cwd=tmp_path,
+        cwd=root,
         env={**NEUTRAL, **env, "FAKE_LOG": str(log), "FAKE_HTTP_CODE": code},
         fakes={"curl": FAKE_CURL},
     )
@@ -65,6 +105,28 @@ def test_a_new_tag_is_published(tmp_path: Path) -> None:
     assert output.splitlines() == ["publish=true"]
     assert "scope=repository:example-alias/jaws:pull" in calls
     assert "https://public.ecr.aws/v2/example-alias/jaws/manifests/v0.81.0" in calls
+
+
+@needs_yq
+def test_a_tag_on_main_s_history_is_published(tmp_path: Path) -> None:
+    """A Release Please tag: a commit on main, which main has moved past since. The
+    checkout fetches every branch, so origin/main is there to compare with."""
+    assert uses(job(RELEASE, CHECK), "actions/checkout")["with"]["fetch-depth"] == 0
+    _checkout(tmp_path, DOCKERFILE.read_text(), NEUTRAL["TAG"], on_main=True)
+    result, output, _ = _run_decide(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert output.splitlines() == ["publish=true"]
+
+
+@needs_yq
+def test_a_tag_off_main_s_history_fails_before_the_registry_is_asked(tmp_path: Path) -> None:
+    """Anyone who can push a tag can dispatch the release with it, and `publish` checks
+    the dispatch's branch, not the tag (P4-R14)."""
+    _checkout(tmp_path, DOCKERFILE.read_text(), NEUTRAL["TAG"], on_main=False)
+    result, output, calls = _run_decide(tmp_path)
+    assert result.returncode != 0
+    assert "::error::v0.81.0 " in result.stdout and "must be on main" in result.stdout
+    assert output == "" and calls == ""
 
 
 @needs_yq
@@ -176,6 +238,8 @@ def test_only_the_public_image_job_enters_publish_or_takes_the_publishing_role()
     )
 
 
+#: Where the public job checks out its own commit's scripts/, after the build.
+TOOLS = ".release-tools"
 #: Stands in for aws: logs each call, answers describe-images with FAKE_IMAGES, and
 #: answers batch-delete-image with 200 and FAKE_FAILURES (a JSON list; AWS reports what it
 #: could not delete there, not as an error).
@@ -192,8 +256,15 @@ esac
 def _prune_step(
     tmp_path: Path, keep: str = "10", failures: str = "[]", count: int = 12
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
-    """Run the prune step on a repository of `count` versions; the result and the aws calls."""
-    shutil.copytree(REPO_ROOT / "scripts", tmp_path / "scripts")
+    """Run the prune step on a repository of `count` versions; the result and the aws calls.
+
+    The workspace is the job's: the tag checked out at its root, whose copy of the script
+    refuses to run here, and the workflow's own scripts/ at .release-tools/."""
+    shutil.copytree(REPO_ROOT / "scripts", tmp_path / TOOLS / "scripts")
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "prune_public_images.py").write_text(
+        'raise SystemExit("the tag\'s own copy of the script ran")\n'
+    )
     runner = tmp_path / "runner"
     runner.mkdir()
     fixture = tmp_path / "fixture.json"
@@ -233,6 +304,28 @@ def test_each_publish_prunes_the_repository_with_the_push_role() -> None:
         s for s in steps if s.get("uses", "").startswith("aws-actions/configure-aws-credentials")
     ]
     assert len(roles) == 1, "the push role, and no other"
+
+
+def test_the_prune_runs_the_workflow_s_own_script_never_the_tag_s() -> None:
+    """The prune runs with the publishing role, so its code comes from the workflow's own
+    commit, main's, not from the tag being published (P4-R14). It is checked out after the
+    build, so it never enters the build context."""
+    steps = job(RELEASE, PUBLIC)["steps"]
+    ids = [step.get("id") for step in steps]
+    prune = ids.index("prune")
+    tools = steps[prune - 1]
+    assert tools["uses"] == steps[0]["uses"], "the job's checkout, at the same version"
+    assert str(tools["uses"]).startswith("actions/checkout@")
+    assert tools["with"] == {
+        "ref": "${{ github.workflow_sha }}",
+        "path": TOOLS,
+        "sparse-checkout": "scripts",
+        "persist-credentials": False,
+    }
+    assert ids.index("build") < prune - 1
+    run = steps[prune]["run"]
+    assert f"python3 {TOOLS}/scripts/prune_public_images.py " in run
+    assert run.count("scripts/") == run.count(f"{TOOLS}/scripts/"), "no script of the tag's"
 
 
 def test_the_prune_step_deletes_what_the_script_selects(tmp_path: Path) -> None:
