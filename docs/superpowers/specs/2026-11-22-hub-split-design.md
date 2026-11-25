@@ -334,6 +334,7 @@ configuration change it requires.
 ```dockerfile
 FROM public.ecr.aws/<alias>/jaws:v0.79.0@sha256:<digest>
 COPY config/ /etc/jaws/config/
+COPY datasets/ /etc/jaws/datasets/
 ```
 
 - Labels record the Jaws release and digest it is built from, and the hub
