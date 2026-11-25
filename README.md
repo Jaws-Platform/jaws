@@ -38,7 +38,7 @@ configuration (`config/`), runs
 invalidates CloudFront. Site repositories keep no Terraform. It ships as a
 two images, both built from the `Dockerfile` and pushed by each release: the
 generic image, with no configuration, public at
-`public.ecr.aws/<alias>/jaws` (see Jaws's public image), and `jaws-cli`, the
+`public.ecr.aws/<alias>/jaws` (see [Jaws's public image](#jawss-public-image)), and `jaws-cli`, the
 same image with this repository's `config/` and `datasets/`, in the account's
 private ECR repository. Site repositories run `jaws-cli` through the reusable
 workflows this repository publishes. The design is in
@@ -140,6 +140,23 @@ jobs:
       app-private-key: ${{ secrets.JAWS_APP_PRIVATE_KEY }}
     permissions: { contents: read, id-token: write, pull-requests: write }
 ```
+
+### Jaws's public image
+
+The generic image is the `generic` target of the `Dockerfile`: every stack and no
+configuration, for linux/amd64. It is published at
+`public.ecr.aws/<alias>/jaws:vX.Y.Z`, the repository variable `JAWS_PUBLIC_IMAGE`.
+
+Each release publishes it, in the `publish` environment, with the role in the
+repository variable `JAWS_PUBLISH_ROLE_ARN` (`release-infra/`). Until both variables
+are set, the release skips it with a notice.
+
+Pin it by tag and digest, as the job's summary prints them
+(`public.ecr.aws/<alias>/jaws:vX.Y.Z@sha256:...`). A platform's image is `FROM` that,
+plus `COPY config/ /etc/jaws/config/` and `COPY datasets/ /etc/jaws/datasets/`.
+
+A published tag is never replaced, and a re-publish (`workflow_dispatch` with a `tag`)
+fills in a missing one. Tags cut before the generic image are never published.
 
 ### Bot projects
 
@@ -383,7 +400,7 @@ files](#the-tool-configuration-config)).
 top-level sections, and a section lives in one file only (the CLI and the
 foundation both refuse a section defined twice). One file holding every section
 is also accepted, as the tests' fixtures do. The CLI reads `./config` by
-default; `--config` and `JAWS_CONFIG` take the directory or one file, and the
+default; `--config` and `JAWS_CONFIG` take the directory or one file, and
 a platform's image holds it at `/etc/jaws/config` (`jaws-cli` holds this
 repository's; the generic image holds none).
 
@@ -649,9 +666,9 @@ Every `terraform init` goes through `.github/actions/terraform-init`, which retr
 
 **Releases, applies and the image** (`.github/workflows/release-please.yml`, on push to `main`):
 
-Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`, then, with the `monitoring` section, applies `monitoring/` with `jaws-monitoring-ci-apply`; then the `image` job, also in `prod`, builds the `jaws-cli` target (for a tag cut before it, the tag's only image) and pushes it to the account's repository as `<repository>:<tag>` (`ecr.repository` in `config/tool.yaml`, `jaws-cli`). Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
+Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`, then, with the `monitoring` section, applies `monitoring/` with `jaws-monitoring-ci-apply`; then the `image` job, also in `prod`, builds the `jaws-cli` target (for a tag cut before it, the tag's only image) and pushes it to the account's repository as `<repository>:<tag>` (`ecr.repository` in `config/tool.yaml`, `jaws-cli`). The public image job, which needs only Release Please (not the apply), builds the `generic` target and pushes it to ECR Public in the `publish` environment ([Jaws's public image](#jawss-public-image)); it skips with a notice until the owner has set its variables. Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
 
-No role ARN is a secret, and this repository needs none as a variable. The foundation's plan and apply jobs build their role (`<name_root>-infra-ci-plan` / `-ci-apply`) from the account and name root `jaws config env` reads from the tool configuration (the primary account in `config/aws.yaml`, `context.name_root` in `config/tool.yaml`), and keep their state through `backend/prod.hcl`. Bot role ARNs need no variable either: the workflows build them the same way, with the bot's name.
+No role ARN is a secret. This repository needs one as a variable, `JAWS_PUBLISH_ROLE_ARN`, the publishing role in `release-infra/`, so that no account ID appears outside that folder (spec 6.8). The foundation's plan and apply jobs build their role (`<name_root>-infra-ci-plan` / `-ci-apply`) from the account and name root `jaws config env` reads from the tool configuration (the primary account in `config/aws.yaml`, `context.name_root` in `config/tool.yaml`), and keep their state through `backend/prod.hcl`. Bot role ARNs need no variable either: the workflows build them the same way, with the bot's name.
 
 **Bot projects** (`.github/workflows/bot-apply.yml`, by hand): `workflow_dispatch` with the project's name, which must be a bot or research project in `config/projects.yaml`, applies or destroys its stack in the `prod` environment with its apply role. `.github/workflows/container-release.yml` is the reusable workflow a bot repository calls on each release ([guide](docs/lichess-bot.md#the-caller-workflow)).
 
@@ -688,6 +705,8 @@ Not automated; these need the owner's credentials or the GitHub UI.
 
 - Run the bootstrap steps above.
 - Create the GitHub `prod` environment with a deployment branch restriction to `main`.
+- Create the GitHub `publish` environment, restricted to `main` the same way.
+- Apply `release-infra/` and set the repository variables it prints, `JAWS_PUBLISH_ROLE_ARN` and `JAWS_PUBLIC_IMAGE` (and optionally `JAWS_PUBLIC_IMAGE_KEEP`): [release-infra/README.md](release-infra/README.md). Until they are set, releases skip the public image.
 - In each site's repository, set its role ARNs and bucket name as repository variables (from `terraform output projects`). This repository needs none: its workflows derive the foundation's roles from the tool configuration (`config/`). (`AWS_PLAN_ROLE_ARN` and `AWS_APPLY_ROLE_ARN`, set here before v0.47, are no longer read and can be deleted.)
 - Optional, for comments authored by the product rather than `github-actions[bot]`: create a GitHub App for the tool (the owner's is still named **JWall Engineering Infra**; the name shown beside a comment is the app's, and renaming it is the owner's; no webhook; permissions *Pull requests: read and write*; upload an avatar), generate a private key, and install it on this repo and every site repo. In each of those repos set the variable `JAWS_APP_CLIENT_ID` to the app's client ID and the secret `JAWS_APP_PRIVATE_KEY` to the full `.pem` contents, and pass them to the reusable workflows as shown above.
 - Activate cost allocation tags in Billing: `Organization`, `Project`, `Environment`, `Repository`, `ManagedBy`, `Owner`, `Component`, `Purpose`, `Profile` and `Lifecycle` (task instances carry `Purpose=ci-task`, `Profile=cpu|gpu` and `Lifecycle=spot|on-demand`, for the later tag-based cost tooling).

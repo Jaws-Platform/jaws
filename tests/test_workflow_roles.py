@@ -1,7 +1,9 @@
 """Every workflow builds its roles from the tool's reading of its configuration (config/).
 
 No workflow reads the account or the organization itself: each role step runs
-`jaws config env`, so a role ARN can never name an account the tool does not.
+`jaws config env`, so a role ARN can never name an account the tool does not. The one
+exception is the public image job's `vars.JAWS_PUBLISH_ROLE_ARN` (spec 6.8): the publishing
+role is in an account no configuration names.
 """
 
 from __future__ import annotations

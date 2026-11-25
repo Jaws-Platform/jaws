@@ -239,3 +239,105 @@ jobs:
         env:
           IMAGE: ${{ steps.ecr.outputs.registry }}/${{ needs.account.outputs.ecr_repository }}:${{ env.TAG }}
         run: printf '## Image\n\n- `%s`\n' "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+
+  # Whether to publish the generic image: only once the owner has set the repository
+  # variables, only for a tag that has the stage, never over a tag already published.
+  # A job of its own, outside the `publish` environment, so that a skip needs no approval.
+  public-image-check:
+    name: Public image check
+    runs-on: ubuntu-latest
+    needs: release-please
+    # After a release, or on demand for an existing tag (release-please is then skipped).
+    if: >-
+      !cancelled() &&
+      (
+        (github.event_name == 'push' &&
+         needs.release-please.outputs.release_created == 'true') ||
+        (github.event_name == 'workflow_dispatch' && inputs.tag != '')
+      )
+    permissions:
+      contents: read
+    outputs:
+      publish: ${{ steps.decide.outputs.publish }}
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      ROLE_ARN: ${{ vars.JAWS_PUBLISH_ROLE_ARN }}
+      IMAGE: ${{ vars.JAWS_PUBLIC_IMAGE }}
+      # Checked here so that a malformed value fails before anything is pushed.
+      KEEP: ${{ vars.JAWS_PUBLIC_IMAGE_KEEP }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      - name: Decide whether to publish the public image
+        id: decide
+        env:
+          MANIFEST_TYPES: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json
+        run: |
+          publish() { echo "publish=$1" >> "$GITHUB_OUTPUT"; }
+          if [[ -z "$ROLE_ARN$IMAGE" ]]; then
+            echo "::notice::not publishing the public image: JAWS_PUBLISH_ROLE_ARN and JAWS_PUBLIC_IMAGE are not set (README.md, \"Jaws's public image\")"
+            publish false; exit 0
+          fi
+          [[ "$ROLE_ARN" =~ ^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_-]+$ ]] || { echo "::error::JAWS_PUBLISH_ROLE_ARN is not an IAM role ARN: '$ROLE_ARN'"; exit 1; }
+          [[ "$IMAGE" =~ ^public\.ecr\.aws/[a-z0-9][a-z0-9._-]*/jaws$ ]] || { echo "::error::JAWS_PUBLIC_IMAGE is not public.ecr.aws/<alias>/jaws: '$IMAGE'"; exit 1; }
+          [[ -z "$KEEP" || "$KEEP" =~ ^([1-9][0-9]*|all)$ ]] || { echo "::error::JAWS_PUBLIC_IMAGE_KEEP is neither a whole number of at least 1 nor all: '$KEEP'"; exit 1; }
+          if ! grep -Eq '^FROM [^ ]+ AS generic$' Dockerfile; then
+            echo "::notice::$TAG predates the generic image: its only image bakes config/ in, and is never published"
+            publish false; exit 0
+          fi
+          repository=${IMAGE#public.ecr.aws/}
+          token=$(curl -fsS "https://public.ecr.aws/token/?service=public.ecr.aws&scope=repository:$repository:pull" | jq -r .token)
+          code=$(curl -s -o /dev/null -w '%{http_code}' -I -H "Authorization: Bearer $token" -H "Accept: $MANIFEST_TYPES" "https://public.ecr.aws/v2/$repository/manifests/$TAG")
+          case "$code" in
+            404) publish true ;;
+            200) echo "::notice::$IMAGE:$TAG is already published: a published tag is never replaced"; publish false ;;
+            *) echo "::error::could not tell whether $IMAGE:$TAG is published (HTTP $code from public.ecr.aws)"; exit 1 ;;
+          esac
+
+  public-image:
+    name: Publish the public image (${{ needs.release-please.outputs.tag_name || inputs.tag }})
+    runs-on: ubuntu-latest
+    needs: [release-please, public-image-check]
+    if: "!cancelled() && needs.public-image-check.outputs.publish == 'true'"
+    environment:
+      name: publish
+    permissions:
+      contents: read
+      id-token: write # assume the publishing role
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      IMAGE: ${{ vars.JAWS_PUBLIC_IMAGE }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      - name: Read the Terraform version from the release (src/jaws/product.yaml)
+        id: config
+        run: |
+          version=$(yq -r .terraform.version src/jaws/product.yaml)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::src/jaws/product.yaml at $TAG pins no exact terraform.version"; exit 1; }
+          echo "terraform_version=$version" >> "$GITHUB_OUTPUT"
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.JAWS_PUBLISH_ROLE_ARN }}
+          aws-region: us-east-1 # ECR Public's API is in us-east-1 only
+          role-session-name: gha-public-image-${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      - uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        id: build
+        with:
+          context: .
+          target: generic
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          tags: ${{ env.IMAGE }}:${{ env.TAG }}
+          build-args: TERRAFORM_VERSION=${{ steps.config.outputs.terraform_version }}
+      - name: Summary
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: printf '## Public image\n\n- `%s:%s@%s`\n' "$IMAGE" "$TAG" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"
