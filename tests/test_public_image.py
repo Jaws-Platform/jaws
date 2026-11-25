@@ -328,6 +328,7 @@ def test_the_prune_runs_the_workflow_s_own_script_never_the_tag_s() -> None:
     assert run.count("scripts/") == run.count(f"{TOOLS}/scripts/"), "no script of the tag's"
 
 
+@needs_yq
 def test_the_prune_step_deletes_what_the_script_selects(tmp_path: Path) -> None:
     result, calls = _prune_step(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -339,6 +340,7 @@ def test_the_prune_step_deletes_what_the_script_selects(tmp_path: Path) -> None:
     assert '"v0.1.0"' in deletes[0] and '"v0.2.0"' in deletes[0] and "v0.3.0" not in deletes[0]
 
 
+@needs_yq
 def test_the_prune_step_fails_when_a_delete_reports_a_failure(tmp_path: Path) -> None:
     """BatchDeleteImage answers 200 even when it deleted nothing."""
     failure = '[{"failureCode": "ImageNotFound", "failureReason": "gone"}]'
