@@ -1229,6 +1229,15 @@ def test_a_platform_tag_cannot_shadow_a_tag_jaws_sets(tmp_path: Path, key: str) 
         _load_raw(tmp_path, raw)
 
 
+@pytest.mark.parametrize("key", ["environment", "PROJECT", "Team"])
+def test_a_platform_tag_key_is_compared_without_case(tmp_path: Path, key: str) -> None:
+    """IAM treats tag keys without case: a resource may not carry both spellings."""
+    raw = fixture_config()
+    raw["context"]["tags"] = {"Team": "a", "team": "b"} if key == "Team" else {key: "x"}
+    with pytest.raises(ConfigError, match=re.escape(key)):
+        _load_raw(tmp_path, raw)
+
+
 @pytest.mark.parametrize("value", ["", "   ", "a" * 257, "café", "a;b"])
 def test_a_platform_tag_value_is_one_every_service_accepts(tmp_path: Path, value: str) -> None:
     raw = fixture_config()

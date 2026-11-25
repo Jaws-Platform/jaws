@@ -11,8 +11,8 @@ place: nothing is renamed or replaced, and no access is granted or revoked.
 | Tag | Value | Source | Set by |
 | --- | --- | --- | --- |
 | `Organization` | The GitHub organization or user that owns the project's repository, spelled as GitHub spells it, e.g. `Braveheart-Chess` or `jwallace145`. For jaws's own stacks it is `Jaws-Platform`. | For a project, the owner it is registered under in `config/projects.yaml`. For jaws's own stacks, `context.organization` in `config/tool.yaml`. | the tool |
-| `ManagedBy` | `JAWS` | `context.managed_by` in `config/tool.yaml` | the tool |
-| `Project` | The project's key, e.g. `braveheart-bot`. the name root (`jaws`) for the foundation. | the project file, cross-checked against `project` | the project file |
+| `ManagedBy` | `JAWS` by default | `context.managed_by` in `config/tool.yaml` | the tool |
+| `Project` | The project's key, e.g. `braveheart-bot`. The name root (`jaws`) for the foundation. | the project file, cross-checked against `project` | the project file |
 | `Environment` | `prod` | the project file, cross-checked | the project file |
 | `Repository` | The project's `owner/repo` | the project file, cross-checked against `repository` | the project file |
 | `Owner` | The person responsible, e.g. `jwallace145` | the project file | the project file |
@@ -65,27 +65,28 @@ the keys Databricks reserves for itself.
 - **Project stacks** (`site`, `bot`, `databricks-account`,
   `databricks-workspace`):
   - The CLI renders `tags` from the project file's four tags plus
-    `Organization` and `ManagedBy`, and passes the name root as its own
-    `name_root` variable.
+    `Organization` and `ManagedBy`, and the platform's `context.tags`, and
+    passes the name root as its own `name_root` variable.
   - The stacks apply `tags` through the provider's `default_tags`.
   - The stacks refuse any missing tag, and any `ManagedBy` other than their
     `managed_by` variable, which the CLI renders from `context.managed_by`.
 - **Task instances:** `RunInstances` does not inherit `default_tags`, so a
-  task is launched with the same six tags. It also gets `Component`,
+  task is launched with the same six tags and the platform's `context.tags`.
+  It also gets `Component`,
   `Purpose`, `Profile`, `Lifecycle`, `Name` and the run's own tags
   (`Workflow`, `RunId`, `TaskId` and so on).
 - **The foundation:**
   - Its tags come from the library's `context` module: `Organization`
-    `Jaws-Platform`, `Project`, the name root, `Repository` `Jaws-Platform/jaws`,
-    `ManagedBy` `JAWS`.
+    `Jaws-Platform`, `Project` (the name root, `jaws`), `Repository` `Jaws-Platform/jaws`,
+    `ManagedBy` `JAWS` by default, and the platform's `context.tags`.
   - The resources it creates for projects (their CI roles, dataset buckets
     and Databricks objects) are the foundation's and carry its tags.
   - The shared Databricks workspace's `CostCenter` is the name root, `jaws`.
 - **Owner access:**
   - `Organization` is `Jaws-Platform` and `ManagedBy` is `JAWS`, like every
     jaws stack.
-  - `Project` is `jaws`, as the foundation's, and `Repository` is
-    `Jaws-Platform/jaws`, the repository that manages it. Its names keep the
+  - `Project` is `jaws`, which is the foundation's only under the default name
+    root `jaws`, and `Repository` is `Jaws-Platform/jaws`, the repository that manages it. Its names keep the
     values it was first applied with.
   - Only the owner applies it, so its retag waits for their next apply.
 
@@ -106,7 +107,9 @@ department or a cost pool.
   remove` included: drop the key, then run the remove again.
 - **Which keys:** a key may not be one jaws, a module, Databricks or a task
   sets itself (`RESERVED_TAG_KEYS` in `src/jaws/settings.py`), and may not
-  start with `aws:`. Keys and values use the characters that every AWS service
+  start with `aws:`. Keys are compared without case, as IAM compares them, so
+  `environment` is refused like `Environment`, and two keys that differ only in
+  case are refused. Keys and values use the characters that every AWS service
   accepts.
 
 ## Moving to derived tags

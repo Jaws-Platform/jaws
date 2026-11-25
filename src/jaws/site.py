@@ -282,10 +282,11 @@ def stamped_tags(
 
 def platform_tag_problems(tags: Mapping[str, str], settings: Settings) -> list[str]:
     """One problem per platform tag that a project file states."""
+    platform = {key.casefold() for key in settings.context.tags}
     return [
         f"tags.{key} is set by jaws (context.tags in config/tool.yaml); remove it"
-        for key in settings.context.tags
-        if key in tags
+        for key in tags
+        if key.casefold() in platform
     ]
 
 

@@ -263,3 +263,12 @@ def test_a_site_file_cannot_state_a_platform_tag(tmp_path: Path, settings: Setti
         match=r"tags\.Department is set by jaws \(context\.tags in config/tool\.yaml\); remove it",
     ):
         Site.from_config(config, tagged)
+
+
+def test_a_site_file_cannot_state_a_platform_tag_in_another_case(
+    tmp_path: Path, settings: Settings
+) -> None:
+    tagged = _with_platform_tags(settings, {"Department": "web"})
+    config = load_site_config(_write(tmp_path, _raw({"tags.department": "mine"})))
+    with pytest.raises(ConfigError, match=r"tags\.department is set by jaws"):
+        Site.from_config(config, tagged)

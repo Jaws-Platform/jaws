@@ -238,8 +238,17 @@ class ContextSection(_Section):
     @classmethod
     def _tags_are_ones_every_service_accepts(cls, value: dict[str, str]) -> dict[str, str]:
         problems: list[str] = []
+        reserved = {key.casefold() for key in RESERVED_TAG_KEYS}
+        spellings: dict[str, list[str]] = {}
+        for key in value:
+            spellings.setdefault(key.casefold(), []).append(key)
+        # IAM compares tag keys without case, and refuses a role with both spellings.
+        for keys in spellings.values():
+            if len(keys) > 1:
+                names = ", ".join(f"context.tags.{key}" for key in keys)
+                problems.append(f"{names}: tag keys are compared without case; keep one")
         for key, tag_value in value.items():
-            if key in RESERVED_TAG_KEYS:
+            if key.casefold() in reserved:
                 problems.append(f"context.tags.{key}: jaws or a stack sets this tag itself")
             elif key.lower().startswith("aws:"):
                 problems.append(f"context.tags.{key}: AWS reserves keys that start with aws:")
@@ -268,7 +277,9 @@ class BrandSection(_Section):
     #: `https://` image URL. None shows the name alone. A brand that sets its `name`
     #: and not its `mark` gets None, never the shark.
     mark: str | None = "🦈"
-    #: The first word of the project-facing workflows' job names (`<prefix> / plan`).
+    #: The first word of the project-facing workflows' job names (`<prefix> plan`,
+    #: `<prefix> release`, `<prefix> preview deploy`, `<prefix> preview remove`).
+    #: Nothing reads it yet: plan 05's workflows will.
     check_prefix: str = Field(
         default="jaws", max_length=30, pattern=r"^[A-Za-z0-9]+(?:[ ._-][A-Za-z0-9]+)*$"
     )
