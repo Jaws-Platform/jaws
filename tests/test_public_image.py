@@ -5,13 +5,16 @@ all until the owner has set the two variables.
 
 from __future__ import annotations
 
+import json
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 import yaml
 
+from tests.conftest import REPO_ROOT
 from tests.test_cli_image import DOCKERFILE, OLD_DOCKERFILE
 from tests.test_databricks_workflows import needs_yq
 from tests.workflow_steps import WORKFLOWS, job, run_step, uses
@@ -171,3 +174,86 @@ def test_only_the_public_image_job_enters_publish_or_takes_the_publishing_role()
         r"JAWS_PUBLISH_ROLE_ARN",
         "".join(p.read_text() for p in WORKFLOWS.glob("*.yml") if p.name != RELEASE),
     )
+
+
+#: Stands in for aws: logs each call, answers describe-images with FAKE_IMAGES, and
+#: answers batch-delete-image with 200 and FAKE_FAILURES (a JSON list; AWS reports what it
+#: could not delete there, not as an error).
+FAKE_AWS = """#!/usr/bin/env bash
+echo "aws $*" >> "$FAKE_LOG"
+case "$2" in
+  describe-images) cat "$FAKE_IMAGES" ;;
+  batch-delete-image) echo "{\\"imageIds\\": [], \\"failures\\": ${FAKE_FAILURES:-[]}}" ;;
+  *) echo "unexpected: aws $*" >&2; exit 2 ;;
+esac
+"""
+
+
+def _prune_step(
+    tmp_path: Path, keep: str = "10", failures: str = "[]", count: int = 12
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """Run the prune step on a repository of `count` versions; the result and the aws calls."""
+    shutil.copytree(REPO_ROOT / "scripts", tmp_path / "scripts")
+    runner = tmp_path / "runner"
+    runner.mkdir()
+    fixture = tmp_path / "fixture.json"
+    details = [
+        {"imageDigest": f"sha256:{minor:064x}", "imageTags": [f"v0.{minor}.0"]}
+        for minor in range(1, count + 1)
+    ]
+    fixture.write_text(json.dumps({"imageDetails": details}))
+    log = tmp_path / "aws.log"
+    log.write_text("")
+    result, _ = run_step(
+        RELEASE,
+        PUBLIC,
+        "prune",
+        cwd=tmp_path,
+        env={
+            "KEEP": keep,
+            "TAG": f"v0.{count}.0",
+            "RUNNER_TEMP": str(runner),
+            "FAKE_LOG": str(log),
+            "FAKE_IMAGES": str(fixture),
+            "FAKE_FAILURES": failures,
+        },
+        fakes={"aws": FAKE_AWS},
+    )
+    return result, log.read_text().splitlines()
+
+
+def test_each_publish_prunes_the_repository_with_the_push_role() -> None:
+    steps = job(RELEASE, PUBLIC)["steps"]
+    ids = [step.get("id") for step in steps]
+    prune = steps[ids.index("prune")]
+    assert ids[-1] == "prune" and ids.index("build") < ids.index("prune")
+    assert prune["if"] == "vars.JAWS_PUBLIC_IMAGE_KEEP != 'all'", "all skips the prune"
+    assert prune["env"] == {"KEEP": "${{ vars.JAWS_PUBLIC_IMAGE_KEEP || '10' }}"}
+    roles = [
+        s for s in steps if s.get("uses", "").startswith("aws-actions/configure-aws-credentials")
+    ]
+    assert len(roles) == 1, "the push role, and no other"
+
+
+def test_the_prune_step_deletes_what_the_script_selects(tmp_path: Path) -> None:
+    result, calls = _prune_step(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    describe, *deletes = calls
+    assert describe == (
+        "aws ecr-public describe-images --region us-east-1 --repository-name jaws --output json"
+    )
+    assert len(deletes) == 1 and "--repository-name jaws" in deletes[0]
+    assert '"v0.1.0"' in deletes[0] and '"v0.2.0"' in deletes[0] and "v0.3.0" not in deletes[0]
+
+
+def test_the_prune_step_fails_when_a_delete_reports_a_failure(tmp_path: Path) -> None:
+    """BatchDeleteImage answers 200 even when it deleted nothing."""
+    failure = '[{"failureCode": "ImageNotFound", "failureReason": "gone"}]'
+    result, _ = _prune_step(tmp_path, failures=failure)
+    assert result.returncode != 0 and "::error::" in result.stdout + result.stderr
+
+
+def test_the_prune_step_deletes_nothing_for_a_malformed_keep(tmp_path: Path) -> None:
+    result, calls = _prune_step(tmp_path, keep="ten")
+    assert result.returncode != 0
+    assert not [c for c in calls if "batch-delete-image" in c]

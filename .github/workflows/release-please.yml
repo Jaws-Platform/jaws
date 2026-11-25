@@ -341,3 +341,21 @@ jobs:
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: printf '## Public image\n\n- `%s:%s@%s`\n' "$IMAGE" "$TAG" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"
+      # ECR Public has no lifecycle policies, so each publish prunes. The tag just pushed is
+      # never deleted. `all` (skipped here) is for v1, once Jaws has consumers.
+      - name: Prune the public repository to the newest release versions
+        id: prune
+        if: vars.JAWS_PUBLIC_IMAGE_KEEP != 'all'
+        env:
+          KEEP: ${{ vars.JAWS_PUBLIC_IMAGE_KEEP || '10' }}
+        # Files, not pipes: Actions runs bash -e without pipefail, so a pipe would hide the
+        # script's refusal. BatchDeleteImage answers 200 even when it deleted nothing.
+        run: |
+          aws ecr-public describe-images --region us-east-1 --repository-name jaws --output json > "$RUNNER_TEMP/images.json"
+          python3 scripts/prune_public_images.py --keep "$KEEP" --published "$TAG" < "$RUNNER_TEMP/images.json" > "$RUNNER_TEMP/prune.jsonl"
+          n=0
+          while read -r batch; do
+            n=$((n + 1))
+            aws ecr-public batch-delete-image --region us-east-1 --repository-name jaws --image-ids "$batch" --output json < /dev/null > "$RUNNER_TEMP/deleted-$n.json"
+            jq -e '.failures == []' "$RUNNER_TEMP/deleted-$n.json" > /dev/null || { echo "::error::BatchDeleteImage could not delete some images: $(jq -c .failures "$RUNNER_TEMP/deleted-$n.json")"; exit 1; }
+          done < "$RUNNER_TEMP/prune.jsonl"

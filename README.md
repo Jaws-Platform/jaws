@@ -35,7 +35,7 @@ provisions and publishes every site from one YAML file in its repository,
 bundled site stack in `stacks/site/` from that file and the tool
 configuration (`config/`), runs
 `terraform` against the shared state bucket, syncs built content and
-invalidates CloudFront. Site repositories keep no Terraform. It ships as a
+invalidates CloudFront. Site repositories keep no Terraform. It ships as
 two images, both built from the `Dockerfile` and pushed by each release: the
 generic image, with no configuration, public at
 `public.ecr.aws/<alias>/jaws` (see [Jaws's public image](#jawss-public-image)), and `jaws-cli`, the
@@ -154,6 +154,12 @@ are set, the release skips it with a notice.
 Pin it by tag and digest, as the job's summary prints them
 (`public.ecr.aws/<alias>/jaws:vX.Y.Z@sha256:...`). A platform's image is `FROM` that,
 plus `COPY config/ /etc/jaws/config/` and `COPY datasets/ /etc/jaws/datasets/`.
+
+ECR Public has no lifecycle policies, so until v1 each publish keeps the newest
+`JAWS_PUBLIC_IMAGE_KEEP` release versions (default 10) and deletes the rest, untagged
+images included. At today's pace a version lasts about two days, so pin a recent one.
+`all` keeps every version; the owner sets it at v1, once Jaws has consumers with
+maintenance contracts.
 
 A published tag is never replaced, and a re-publish (`workflow_dispatch` with a `tag`)
 fills in a missing one. Tags cut before the generic image are never published.

@@ -49,7 +49,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "N", "W", "RUF"]
 [tool.mypy]
 python_version = "3.13"
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
 
 [[tool.mypy.overrides]]
 module = ["moto", "moto.*"]

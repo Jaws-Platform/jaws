@@ -95,7 +95,7 @@ Release Please opens and maintains a release PR as changes land on `main`. Mergi
 
 1. tags a new version (starting at `v0.1.0`), updates `CHANGELOG.md`, and bumps the infra CLI version in `src/jaws/__init__.py` and the image tag in `.github/actions/jaws/action.yml` (the `x-release-please-version` annotations; keep them, and never add one under `.github/workflows/`, which the release bot cannot commit to);
 2. triggers the `apply` job, which checks out the tag, assumes the apply role in the `prod` environment, and runs `terraform apply`;
-3. triggers the `image` job, which builds the CLI image and pushes `jaws-cli:<tag>` to ECR. Once publishing is set up (see README.md, "Jaws's public image"), the public image job also pushes the generic image to ECR Public. Site repositories then receive a Dependabot PR bumping their reusable workflow refs to the new tag.
+3. triggers the `image` job, which builds the CLI image and pushes `jaws-cli:<tag>` to ECR. Once publishing is set up (see README.md, "Jaws's public image"), the public image job also pushes the generic image to ECR Public, then prunes the public repository to the newest `JAWS_PUBLIC_IMAGE_KEEP` versions. Site repositories then receive a Dependabot PR bumping their reusable workflow refs to the new tag.
 
 Merging the release PR is the deliberate act that changes AWS. Merge it when the accumulated plan is what you want applied. Release PRs are authored by `jwallace145-release-bot[bot]` so that CI runs on them.
 

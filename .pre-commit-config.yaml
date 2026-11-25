@@ -54,7 +54,7 @@ repos:
         language: system
         stages: [pre-push]
         pass_filenames: false
-        files: ^(src|tests)/.*\.py$|^(pyproject\.toml|uv\.lock)$
+        files: ^(src|tests|scripts)/.*\.py$|^(pyproject\.toml|uv\.lock)$
       - id: pytest
         name: pytest (pre-push)
         entry: uv run pytest -x
