@@ -43,8 +43,10 @@ A platform that adopts Jaws sets its own `brand` in `tool.yaml`, next to
   `https://` image URL, such as one the organization's branding repository
   publishes. `null` means none, and a brand that sets its `name` gets none
   unless it states one.
-- `check_prefix` (default `jaws`) is the first word of the project-facing
-  workflows' job names; `jaws config env --brand` prints it.
+- `check_prefix` (default `jaws`) will be the first word of the project-facing
+  workflows' job names (`<prefix> plan`, `<prefix> release`, and so on).
+  `jaws config env --brand` prints it; plan 05's workflows will read it, and
+  nothing reads it yet.
 
 Comments keep a small "Built with Jaws vX.Y.Z" line in the footer.
 

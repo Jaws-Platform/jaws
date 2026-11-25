@@ -992,7 +992,7 @@ def config_env(
         typer.Option(
             "--brand",
             help="Also print `check_prefix=<brand.check_prefix>`, the first word of the "
-            "workflows' job names.",
+            "workflows' job names. Plan 05's workflows will read it; nothing does yet.",
         ),
     ] = False,
 ) -> None:

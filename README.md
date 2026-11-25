@@ -410,7 +410,7 @@ Every AWS resource this tool manages carries the same six tags, plus the platfor
 | `Project` | the project's kebab-case name, e.g. `braveheart`; the name root (`jaws`) for the foundation stack | the project that owns it (the CI roles' IAM policies also key on it) |
 | `Environment` | `prod` | the deployment environment |
 | `Repository` | the project's `owner/repo` | the repository whose code it serves |
-| `ManagedBy` | `JAWS` | this tool, which provisions and changes it |
+| `ManagedBy` | `JAWS` by default | this tool, which provisions and changes it |
 | `Owner` | `jwallace145` | the person responsible for it |
 
 Project files state `Project`, `Environment`, `Repository` and `Owner`; the CLI cross-checks the first three against the rest of the file and adds `Organization` and `ManagedBy` itself (a file that states either is refused). Names come from `context.name_root` (`jaws`), never from a tag. The foundation stack gets the same set from the library's `context` module. Components add `Component`, `Purpose` and `Lifecycle` where they apply. These tags are the cost allocation tags `cost report` groups by; [docs/costs.md](docs/costs.md) lists which must be active.
