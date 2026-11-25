@@ -221,7 +221,8 @@ _TAG_VALUE = re.compile(r"^(?=.*\S)[A-Za-z0-9 +\-=._:/@]{1,256}$")
 
 class ContextSection(_Section):
     #: The root of every name the tool gives (`<name_root>-<project>-...`, the
-    #: `<name_root>-infra-ci-*` roles). A name only, never a tag value.
+    #: `<name_root>-infra-ci-*` roles). Names never come from tags; the platform's
+    #: own stacks take their `Project` tag from it.
     name_root: str = Field(pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")
     #: The Organization tag of the tool's own stacks: the GitHub owner of this
     #: repository. A project's resources carry its own owner (`projects`).

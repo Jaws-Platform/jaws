@@ -51,3 +51,10 @@ def test_the_stack_reads_the_task_records_where_the_cli_writes_them() -> None:
 
 def test_the_stack_is_named_for_the_name_root() -> None:
     assert re.search(r'name\s*=\s*"\$\{local\.name_root\}-monitoring"', _main())
+
+
+def test_the_platform_s_own_project_is_its_name_root() -> None:
+    """The foundation's Project tag, and the shared host's usage, are the name root's."""
+    context = (REPO_ROOT / "foundation" / "context.tf").read_text()
+    assert re.search(r"^\s+project\s+= local\.account\.context\.name_root$", context, re.MULTILINE)
+    assert '{ "${local.name_root}-shared" = local.name_root }' in _main()

@@ -12,7 +12,7 @@ place: nothing is renamed or replaced, and no access is granted or revoked.
 | --- | --- | --- | --- |
 | `Organization` | The GitHub organization or user that owns the project's repository, spelled as GitHub spells it, e.g. `Braveheart-Chess` or `jwallace145`. For jaws's own stacks it is `Jaws-Platform`. | For a project, the owner it is registered under in `config/projects.yaml`. For jaws's own stacks, `context.organization` in `config/tool.yaml`. | the tool |
 | `ManagedBy` | `JAWS` | `context.managed_by` in `config/tool.yaml` | the tool |
-| `Project` | The project's key, e.g. `braveheart-bot`. `jaws` for the foundation. | the project file, cross-checked against `project` | the project file |
+| `Project` | The project's key, e.g. `braveheart-bot`. the name root (`jaws`) for the foundation. | the project file, cross-checked against `project` | the project file |
 | `Environment` | `prod` | the project file, cross-checked | the project file |
 | `Repository` | The project's `owner/repo` | the project file, cross-checked against `repository` | the project file |
 | `Owner` | The person responsible, e.g. `jwallace145` | the project file | the project file |
@@ -49,7 +49,8 @@ the keys Databricks reserves for itself.
 2. **Names never come from tags.** Every name is built from
    `context.name_root` (`jaws`): `jaws-<project>-records`,
    `jaws-<project>-ci-apply`, `jaws-infra-ci-plan`, `/jaws/<project>/...` in
-   SSM. A name is a name only; no tag carries it.
+   SSM. No name is read from a tag. The platform's own stacks take their
+   `Project` tag from the name root, so the root is the one value both share.
 3. **Access never comes from `Organization` or `ManagedBy`.** The CI roles'
    IAM conditions key only on `Project`, `Component` and `Purpose`
    (`aws:ResourceTag` and `aws:RequestTag`). The apply roles may change tags
@@ -75,7 +76,7 @@ the keys Databricks reserves for itself.
   (`Workflow`, `RunId`, `TaskId` and so on).
 - **The foundation:**
   - Its tags come from the library's `context` module: `Organization`
-    `Jaws-Platform`, `Project` `jaws`, `Repository` `Jaws-Platform/jaws`,
+    `Jaws-Platform`, `Project`, the name root, `Repository` `Jaws-Platform/jaws`,
     `ManagedBy` `JAWS`.
   - The resources it creates for projects (their CI roles, dataset buckets
     and Databricks objects) are the foundation's and carry its tags.

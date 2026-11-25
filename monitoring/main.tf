@@ -78,13 +78,13 @@ locals {
     bucket_name = local.cost_config.bucket
     aws         = try(local.cost_config.aws, true) ? { delivery_prefix = "${local.aws_export.prefix}/${local.aws_export.name}" } : null
     # Usage that carries no Project tag takes its workspace's: the shared host
-    # is the platform's (the foundation's Project tag, jaws), and each
+    # is the platform's (the foundation's Project tag, the name root), and each
     # Databricks project's workspace, <project>-prod, its project's. By name:
     # matched once the names are known (the job's include_workspaces, or the
     # normalizer's workspace_names).
     databricks = !local.databricks_billing ? null : {
       workspace_projects = merge(
-        { "${local.name_root}-shared" = "jaws" },
+        { "${local.name_root}-shared" = local.name_root },
         { for key, project in local.registry : "${key}-prod" => key if project.type == "databricks" },
       )
     }

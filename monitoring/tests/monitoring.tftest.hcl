@@ -298,3 +298,22 @@ run "takes_its_identity_from_the_configuration" {
     error_message = "the tags are the configuration's: the first platform repository, context.owner and context.managed_by"
   }
 }
+
+run "the_shared_host_and_secrets_follow_the_name_root" {
+  command = plan
+
+  # The acme platform (foundation/tests/fixtures/databricks-defaults.yaml).
+  variables {
+    config_path = "../foundation/tests/fixtures/databricks-defaults.yaml"
+  }
+
+  assert {
+    condition     = local.cost.databricks.workspace_projects["acme-shared"] == "acme"
+    error_message = "the shared host's untagged usage is the platform's project, its name root"
+  }
+
+  assert {
+    condition     = local.node.grafana_admin.user_parameter == "/acme/monitoring/grafana-admin-user"
+    error_message = "the Grafana admin secret is under the name root"
+  }
+}

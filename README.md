@@ -407,7 +407,7 @@ Every AWS resource this tool manages carries the same six tags, plus the platfor
 | Tag | Value | Links the resource to |
 | --- | --- | --- |
 | `Organization` | the GitHub organization or user that owns the project's repository, as registered in `config/projects.yaml`, e.g. `Braveheart-Chess`; `Jaws-Platform` for jaws's own stacks | whose project it is |
-| `Project` | the project's kebab-case name, e.g. `braveheart`; `jaws` for the foundation stack | the project that owns it (the CI roles' IAM policies also key on it) |
+| `Project` | the project's kebab-case name, e.g. `braveheart`; the name root (`jaws`) for the foundation stack | the project that owns it (the CI roles' IAM policies also key on it) |
 | `Environment` | `prod` | the deployment environment |
 | `Repository` | the project's `owner/repo` | the repository whose code it serves |
 | `ManagedBy` | `JAWS` | this tool, which provisions and changes it |
