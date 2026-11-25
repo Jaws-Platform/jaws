@@ -42,8 +42,8 @@ locals {
   )
 
   # The owner's secrets, outside the stack's own /<name>/ parameters (which its
-  # CI roles may write): jaws.settings.MONITORING_SECRETS_PREFIX.
-  secrets_prefix = "/jaws/monitoring/"
+  # CI roles may write): jaws.settings.monitoring_secrets_prefix.
+  secrets_prefix = "/${local.name_root}/monitoring/"
 
   # Terraform's yamldecode reads a bare `on:` or `off:` key as a YAML 1.1 boolean,
   # the keys "true" and "false"; the CLI reads YAML 1.2. Either spelling works.
@@ -78,13 +78,13 @@ locals {
     bucket_name = local.cost_config.bucket
     aws         = try(local.cost_config.aws, true) ? { delivery_prefix = "${local.aws_export.prefix}/${local.aws_export.name}" } : null
     # Usage that carries no Project tag takes its workspace's: the shared host
-    # is the platform's (the foundation's Project tag, jaws), and each
+    # is the platform's (the foundation's Project tag, the name root), and each
     # Databricks project's workspace, <project>-prod, its project's. By name:
     # matched once the names are known (the job's include_workspaces, or the
     # normalizer's workspace_names).
     databricks = !local.databricks_billing ? null : {
       workspace_projects = merge(
-        { "${local.name_root}-shared" = "jaws" },
+        { "${local.name_root}-shared" = local.name_root },
         { for key, project in local.registry : "${key}-prod" => key if project.type == "databricks" },
       )
     }

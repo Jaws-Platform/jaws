@@ -69,7 +69,7 @@ this repository publishes. The design is in
 | `cost report [--project NAME [--by workflow\|profile]] [--months N]` | the owner's shell | Monthly spend from Cost Explorer: one project by component (task spend split by workflow or profile), or every project plus the untagged spend by service ([docs/costs.md](docs/costs.md)) |
 | `databricks doctor [--stage config\|live\|between\|after]` | `ci-plan` or `ci-apply` | Databricks projects: run the read-only checks against the live project and print the table ([docs/databricks.md](docs/databricks.md#doctor)) |
 | `databricks credentials set\|check` | the owner's shell | Write (no echo) or check the Databricks service principal's client secret in SSM |
-| `monitoring secrets set NAME`, `monitoring secrets check` | the owner's shell | Write (no echo) one of the monitoring stack's SecureStrings under `/jaws/monitoring/` (`grafana-admin-user`, `grafana-admin-password`, `slack/<channel>`), or list the missing ones ([docs/monitoring.md](docs/monitoring.md#secrets)) |
+| `monitoring secrets set NAME`, `monitoring secrets check` | the owner's shell | Write (no echo) one of the monitoring stack's SecureStrings under `/<name_root>/monitoring/` (`grafana-admin-user`, `grafana-admin-password`, `slack/<channel>`), or list the missing ones ([docs/monitoring.md](docs/monitoring.md#secrets)) |
 | Databricks projects: `validate`, `plan`, `apply`, `destroy --yes`, `outputs` | none, `ci-plan`, `ci-apply`, `ci-apply`, `ci-plan` | Run across the account and workspace stacks: config and live checks, a deferred or stale workspace plan, apply with a readiness wait and after checks, destroy that empties the catalog bucket first, both stacks' outputs merged |
 
 Every command checks that the credentials are the role it expects, that the
@@ -263,8 +263,9 @@ project is built in the primary account.
 Two tags are the tool's, never the project file's: every stack the tool
 renders and every task instance it launches gets `Organization` (the GitHub
 organization or user the project is registered under in `config/projects.yaml`;
-`Jaws-Platform` for jaws's own stacks) and `ManagedBy` (`JAWS`). A project
-file may not state either ([docs/tagging.md](docs/tagging.md)).
+`Jaws-Platform` for jaws's own stacks) and `ManagedBy` (`context.managed_by`,
+`JAWS` by default). A project file may not state either, nor any of the
+platform's own tags ([docs/tagging.md](docs/tagging.md)).
 
 Credentials must belong to the primary account, even where the role check
 is skipped (`JAWS_SKIP_ROLE_CHECK`), so a secret or a stack is never written
@@ -401,15 +402,15 @@ schedule's `on` and `off` under either name.
 
 ## Tags
 
-Every AWS resource this tool manages carries the same six tags, through the provider's `default_tags` (and set explicitly on task instances, which `RunInstances` does not tag by default). [docs/tagging.md](docs/tagging.md) is the tagging strategy: where each tag comes from, and why names and access never depend on `Organization` or `ManagedBy`.
+Every AWS resource this tool manages carries the same six tags, plus the platform's own (`context.tags`), through the provider's `default_tags` (and set explicitly on task instances, which `RunInstances` does not tag by default). [docs/tagging.md](docs/tagging.md) is the tagging strategy: where each tag comes from, and why names and access never depend on `Organization` or `ManagedBy`.
 
 | Tag | Value | Links the resource to |
 | --- | --- | --- |
 | `Organization` | the GitHub organization or user that owns the project's repository, as registered in `config/projects.yaml`, e.g. `Braveheart-Chess`; `Jaws-Platform` for jaws's own stacks | whose project it is |
-| `Project` | the project's kebab-case name, e.g. `braveheart`; `jaws` for the foundation stack | the project that owns it (the CI roles' IAM policies also key on it) |
+| `Project` | the project's kebab-case name, e.g. `braveheart`; the name root (`jaws`) for the foundation stack | the project that owns it (the CI roles' IAM policies also key on it) |
 | `Environment` | `prod` | the deployment environment |
 | `Repository` | the project's `owner/repo` | the repository whose code it serves |
-| `ManagedBy` | `JAWS` | this tool, which provisions and changes it |
+| `ManagedBy` | `JAWS` by default | this tool, which provisions and changes it |
 | `Owner` | `jwallace145` | the person responsible for it |
 
 Project files state `Project`, `Environment`, `Repository` and `Owner`; the CLI cross-checks the first three against the rest of the file and adds `Organization` and `ManagedBy` itself (a file that states either is refused). Names come from `context.name_root` (`jaws`), never from a tag. The foundation stack gets the same set from the library's `context` module. Components add `Component`, `Purpose` and `Lifecycle` where they apply. These tags are the cost allocation tags `cost report` groups by; [docs/costs.md](docs/costs.md) lists which must be active.

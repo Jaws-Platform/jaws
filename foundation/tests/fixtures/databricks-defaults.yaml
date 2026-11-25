@@ -1,0 +1,274 @@
+# Generated from tests/fixtures/platform/ by tests/test_foundation_fixtures.py: do not edit.
+aws:
+  primary: production
+  accounts:
+    management:
+      type: management
+      account_id: '111111111111'
+      description: AWS Organizations, IAM Identity Center, and owner-access and its
+        state
+    production:
+      type: production
+      account_id: '222222222222'
+      admin_role_arn: arn:aws:iam::222222222222:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_0123456789abcdef
+      description: Everything jaws builds
+    development:
+      type: development
+      account_id: '333333333333'
+      description: Console and CLI access for the owner, such as asking for EC2 quotas
+bot:
+  asset_wait: 30m
+  records_prefix: records/
+  availability_zones:
+  - us-east-1a
+  - us-east-1b
+  - us-east-1c
+  - us-east-1d
+  - us-east-1f
+  amis:
+    x86_64: al2023-ami-2023.12.20261026.1-kernel-6.18-x86_64
+tasks:
+  rust_toolchain: 1.99.1
+  poll_seconds: 5
+  images:
+    deep-learning-gpu: Deep Learning Base OSS Nvidia Driver GPU AMI (Amazon Linux
+      2023) 20261027
+  limits:
+    max_hours: 6
+    max_vcpus: 256
+    root_volume_gb: 200
+  max_run_cost_usd: 50
+databricks:
+  enabled: true
+  account_id: 00000000-0000-4000-8000-000000000001
+  client_id: 00000000-0000-4000-8000-000000000002
+  metastore_admins:
+  - owner@example.test
+  nat_ami: al2023-ami-2023.12.20261026.1-kernel-6.18-arm64
+  deployment_name_prefix: null
+  audit_bucket: acme-audit
+  events_prefix: events/
+  readiness_timeout: 20m
+  shared_host_url: https://dbc-00000000-0000.cloud.databricks.com
+  compute_policies:
+    small-interactive:
+      description: Small interactive clusters on cheap Graviton spot nodes
+      definition:
+        num_workers:
+          type: range
+          maxValue: 2
+        autotermination_minutes:
+          type: fixed
+          value: 30
+          hidden: false
+        node_type_id:
+          type: allowlist
+          values:
+          - m7g.large
+          - m7g.xlarge
+        aws_attributes.availability:
+          type: fixed
+          value: SPOT_WITH_FALLBACK
+    jobs:
+      description: Job clusters, up to four workers
+      definition:
+        cluster_type:
+          type: fixed
+          value: job
+        num_workers:
+          type: range
+          maxValue: 4
+        autotermination_minutes:
+          type: fixed
+          value: 30
+          hidden: true
+        node_type_id:
+          type: allowlist
+          values:
+          - m7g.large
+          - m7g.xlarge
+        aws_attributes.availability:
+          type: fixed
+          value: SPOT_WITH_FALLBACK
+monitoring:
+  instance_type: t9g.medium
+  ami: al2023-ami-2023.12.20261026.1-kernel-6.18-arm64
+  domain: grafana.example.com
+  snapshots: true
+  schedule:
+    timezone: America/Denver
+    days:
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
+    - sat
+    - sun
+    'on': 08:00
+    'off': '24:00'
+  cost:
+    bucket: jaws-billing-222222222222
+    protect_raw: false
+    aws: true
+    databricks: true
+    budgets:
+      total: 100
+    anomaly_floor_usd: 2
+  slack:
+    channels:
+      platform: /acme/monitoring/slack/platform
+      costs: /acme/monitoring/slack/costs
+    routes:
+      host: platform
+      pipeline: platform
+      cost: costs
+platform:
+  repositories:
+  - repository: Jaws-Platform/jaws
+    owner_id: '10000001'
+    repository_id: '20000001'
+projects:
+  example-owner:
+    owner_id: '10000002'
+    projects:
+      main-site:
+        description: The personal site at example.com, built with Astro
+        type: site
+        repository: site
+        repository_id: '20000002'
+        domain: example.com
+      cs-survival-guide:
+        description: A field guide to computer science fundamentals
+        type: site
+        repository: cs-survival-guide
+        repository_id: '20000003'
+        domain: survival-guide.example.com
+      guitar-knowledge-base:
+        description: A guitar theory and study knowledge base, built with Zensical
+        type: site
+        repository: guitar-knowledge-base
+        repository_id: '20000004'
+        domain: guitar.example.com
+  Braveheart-Chess:
+    owner_id: '10000003'
+    projects:
+      braveheart:
+        description: The Braveheart UCI chess engine, measured by SPRT and match tasks
+        type: research
+        repository: braveheart
+        repository_id: '20000005'
+        instance_types:
+        - c8a.xlarge
+        - c8a.8xlarge
+        - c8a.16xlarge
+        task_profiles:
+        - cpu
+        - sprt
+        - match
+      braveheart-bot:
+        description: Braveheart's Lichess bot, playing a pinned release of the engine
+        type: bot
+        repository: braveheart-lichess-bot
+        repository_id: '20000006'
+      braveheart-selfplay:
+        description: Braveheart's self-play dataset and the datagen and relabel pipeline
+          that grows it
+        type: research
+        repository: braveheart-selfplay
+        repository_id: '20000007'
+        instance_types:
+        - c8a.xlarge
+        - c8a.8xlarge
+        - c8a.16xlarge
+        task_profiles:
+        - cpu
+        - datagen
+        - relabel
+        datasets:
+          acme-braveheart-selfplay-positions:
+            prefix: data/
+            versioning: true
+      braveheart-trainer:
+        description: The trainer for Braveheart's NNUE nets, with bullet on GPU instances
+        type: research
+        repository: braveheart-trainer
+        repository_id: '20000008'
+        instance_types:
+        - c8a.xlarge
+        - g6.xlarge
+        - g6.2xlarge
+        - g6e.xlarge
+        task_profiles:
+        - cpu
+        - gpu
+        datasets:
+          acme-braveheart-trainer-nets:
+            prefix: data/
+            versioning: true
+      braveheart-databricks:
+        description: Braveheart's Databricks workspace, for its NNUE training data
+        type: databricks
+        repository: braveheart-databricks
+        repository_id: '20000009'
+        databricks:
+          compute_policies:
+          - small-interactive
+          - jobs
+          cost_center: braveheart
+          vpc_cidr: 10.48.0.0/16
+          admins:
+          - owner@example.com
+  Pi-Mathematical-Reasoning:
+    owner_id: '10000004'
+    projects:
+      pi-benchmarks:
+        description: Pi's benchmark files, mirrored in a private dataset bucket
+        type: research
+        repository: pi-benchmarks
+        repository_id: '20000010'
+        datasets:
+          acme-pi-benchmarks-problems:
+            prefix: data/
+            versioning: true
+      pi-prover:
+        description: Pi, local-first mathematical reasoning with proofs checked by
+          Lean 4
+        type: research
+        repository: pi
+        repository_id: '20000011'
+        datasets:
+          acme-pi-prover-artifacts:
+            prefix: data/
+            versioning: true
+  Prog-Strength:
+    owner_id: '10000005'
+    projects:
+      prog-strength-archive:
+        description: The cold archive of Prog Strength, retired in November 2026
+        type: research
+        repository: prog-strength-archive
+        repository_id: '20000012'
+        datasets:
+          acme-prog-strength-archive-backups:
+            prefix: data/
+            versioning: true
+dns:
+  zone: example.com
+  zone_id: Z0000000000EXAMPLE
+  txt_records:
+    _example-challenge-1:
+    - example-token-1-1
+state:
+  bucket: jaws-terraform-state-222222222222
+  region: us-east-1
+  key_template: project={project}/env={environment}/{project}-{environment}.tfstate
+context:
+  name_root: acme
+  organization: Example-Platform
+  owner: example-owner
+  managed_by: JAWS
+ecr:
+  repository: jaws-cli
+  keep_release_images: 20
+  expire_untagged_after_days: 7

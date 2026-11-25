@@ -2,11 +2,12 @@
 
 `foundation/tests/foundation.tftest.hcl` plans the platform configuration
 (tests/fixtures/platform/) as written, and a few states it isn't in: a ManagedBy no code
-spells, no task runner, the Databricks host before its URL is recorded, an admin role of
-another account, no monitoring section, a private monitoring node, and a second
-repository or a hub. Each fixture under `foundation/tests/fixtures/` is
-tests/fixtures/platform/ as one file (`jaws.settings.load_document`) with a few
-values set; this test keeps them from drifting.
+spells, a tag of the platform's own, no task runner, the Databricks host before its URL
+is recorded, an admin role of another account, no monitoring section, a private
+monitoring node, another name root (acme) with the Databricks names left out so that they
+derive, and a second repository or a hub. Each fixture under
+`foundation/tests/fixtures/` is tests/fixtures/platform/ as one file
+(`jaws.settings.load_document`) with a few values set; this test keeps them from drifting.
 
 Regenerate after changing the fixture:
 
@@ -34,6 +35,12 @@ def _relabelled(config: dict[str, Any]) -> dict[str, Any]:
     config["platform"]["repositories"][0]["repository"] = "Example-Org/platform"
     config["dns"]["zone"] = "example.com"
     config["dns"]["txt_records"] = {"_example-challenge": ["example-token"]}
+    return config
+
+
+def _platform_tags(config: dict[str, Any]) -> dict[str, Any]:
+    """A tag of the platform's own: the platform's stacks stamp it from the file."""
+    config["context"]["tags"] = {"Department": "platform"}
     return config
 
 
@@ -69,6 +76,30 @@ def _no_monitoring(config: dict[str, Any]) -> dict[str, Any]:
 def _private_node(config: dict[str, Any]) -> dict[str, Any]:
     """A private monitoring node: no domain, so no record and no off-hours page."""
     config["monitoring"].pop("domain")
+    return config
+
+
+def _databricks_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    """Another name root, and Databricks without the names that follow it: the foundation
+    derives them as the CLI does. Moves the root, the dataset bucket keys and the Slack
+    channels to acme; the foundation and monitoring runs both use this fixture.
+    The audit bucket stays explicit (acme-audit), so a stated name must win the merge."""
+    config["context"]["name_root"] = "acme"
+    for key in ("secret_parameter", "metastore_name"):
+        config["databricks"].pop(key)
+    config["databricks"]["audit_bucket"] = "acme-audit"
+    # A dataset bucket is <name_root>-<project>-<dataset>, and the project file spells it.
+    for group in config["projects"].values():
+        for project in group["projects"].values():
+            if "datasets" in project:
+                project["datasets"] = {
+                    name.replace("jaws-", "acme-", 1): dataset
+                    for name, dataset in project["datasets"].items()
+                }
+    # The CLI refuses Slack channels outside /<name_root>/monitoring/.
+    channels = config["monitoring"]["slack"]["channels"]
+    for name, parameter in channels.items():
+        channels[name] = parameter.replace("/jaws/monitoring/", "/acme/monitoring/", 1)
     return config
 
 
@@ -125,11 +156,13 @@ def _hub_image_is_a_project_repository(config: dict[str, Any]) -> dict[str, Any]
 
 FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "relabelled.yaml": _relabelled,
+    "platform-tags.yaml": _platform_tags,
     "no-task-runners.yaml": _no_task_runners,
     "awaiting-host.yaml": _awaiting_host,
     "foreign-admin.yaml": _foreign_admin,
     "no-monitoring.yaml": _no_monitoring,
     "private-node.yaml": _private_node,
+    "databricks-defaults.yaml": _databricks_defaults,
     "two-repositories.yaml": _two_repositories,
     "hub.yaml": _hub,
     "hub-not-trusted.yaml": _hub_not_trusted,

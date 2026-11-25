@@ -9,7 +9,6 @@ import yaml
 from jaws.errors import ConfigError
 from jaws.settings import Settings
 from jaws.site import (
-    MANAGED_BY,
     REQUIRED_TAGS,
     TOOL_TAGS,
     Site,
@@ -95,10 +94,16 @@ def test_cross_checked_tags(tmp_path: Path, tag: str, value: str) -> None:
         load_site_config(_write(tmp_path, _raw({f"tags.{tag}": value})))
 
 
-@pytest.mark.parametrize("stated", [MANAGED_BY, "jaws", "hand"])
+@pytest.mark.parametrize("stated", ["JAWS", "jaws", "hand"])
 def test_a_stated_managed_by_is_refused(tmp_path: Path, stated: str) -> None:
     """The tool sets ManagedBy; a file may not state it, even with the tool's value."""
-    with pytest.raises(ConfigError, match=r"tags\.ManagedBy is set by jaws \(JAWS\); remove it"):
+    with pytest.raises(
+        ConfigError,
+        match=(
+            r"tags\.ManagedBy is set by jaws "
+            r"\(context\.managed_by in config/tool\.yaml\); remove it"
+        ),
+    ):
         load_site_config(_write(tmp_path, _raw({"tags.ManagedBy": stated})))
 
 
@@ -236,3 +241,34 @@ def test_site_commands_refuse_a_research_project(settings: Settings) -> None:
     config = load_site_config(FIXTURES / "bots" / "math-prover.yaml")
     with pytest.raises(ConfigError, match="not a site"):
         Site.from_config(config, settings)
+
+
+def _with_platform_tags(settings: Settings, tags: dict[str, str]) -> Settings:
+    return settings.model_copy(
+        update={"context": settings.context.model_copy(update={"tags": tags})}
+    )
+
+
+def test_the_platform_s_tags_are_stamped_on_a_site(tmp_path: Path, settings: Settings) -> None:
+    tagged = _with_platform_tags(settings, {"Department": "web"})
+    site = Site.from_config(load_site_config(_write(tmp_path, _raw())), tagged)
+    assert site.tags["Department"] == "web"
+
+
+def test_a_site_file_cannot_state_a_platform_tag(tmp_path: Path, settings: Settings) -> None:
+    tagged = _with_platform_tags(settings, {"Department": "web"})
+    config = load_site_config(_write(tmp_path, _raw({"tags.Department": "mine"})))
+    with pytest.raises(
+        ConfigError,
+        match=r"tags\.Department is set by jaws \(context\.tags in config/tool\.yaml\); remove it",
+    ):
+        Site.from_config(config, tagged)
+
+
+def test_a_site_file_cannot_state_a_platform_tag_in_another_case(
+    tmp_path: Path, settings: Settings
+) -> None:
+    tagged = _with_platform_tags(settings, {"Department": "web"})
+    config = load_site_config(_write(tmp_path, _raw({"tags.department": "mine"})))
+    with pytest.raises(ConfigError, match=r"tags\.department is set by jaws"):
+        Site.from_config(config, tagged)

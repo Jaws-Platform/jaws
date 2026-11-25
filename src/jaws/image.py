@@ -117,6 +117,12 @@ def prepare_context(
     return workdir
 
 
+def label_namespace(zone: str) -> str:
+    """The zone's labels reversed (`example.com` is `com.example`), the prefix
+    of the image labels the platform owns."""
+    return ".".join(reversed(zone.split(".")))
+
+
 def build(
     context: Path,
     project: Project,
@@ -124,9 +130,12 @@ def build(
     logger: Logger,
     docker: str = "docker",
     engine_version: str | None = None,
+    *,
+    label_namespace: str,
 ) -> str:
     """`engine_version` is the engine release inside the image; it defaults to
-    `tag`, which is the release itself unless the bot is pinned."""
+    `tag`, which is the release itself unless the bot is pinned. The engine's
+    two labels go under `label_namespace`, the platform's reversed zone."""
     name = local_tag(project, tag)
     _docker(
         [
@@ -143,6 +152,10 @@ def build(
             f"ENGINE_REPOSITORY=https://github.com/{project.release_repository}",
             "--build-arg",
             f"SOURCE_REPOSITORY=https://github.com/{project.config.repository}",
+            "--label",
+            f"{label_namespace}.engine.version={engine_version or tag}",
+            "--label",
+            f"{label_namespace}.engine.source=https://github.com/{project.release_repository}",
             "--tag",
             name,
             str(context),

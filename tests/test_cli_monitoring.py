@@ -15,7 +15,8 @@ import pytest
 from moto import mock_aws
 from typer.testing import CliRunner
 
-from jaws import cli
+from jaws import cli, monitoring
+from jaws.settings import MonitoringSection
 from tests.conftest import read_config, repo_config, write_config
 
 runner = CliRunner()
@@ -159,3 +160,25 @@ def test_without_monitoring_there_are_no_secrets(platform: Path, command: list[s
         result = runner.invoke(cli.app, ["monitoring", "secrets", *command], input="x\n")
     assert result.exit_code == 2, result.output
     assert "config/monitoring.yaml" in result.output
+
+
+ACME_MONITORING = {
+    "ami": "al2023-ami-2023.12.20261026.1-kernel-6.18-arm64",
+    "slack": {
+        "channels": {"platform": "/acme/monitoring/slack/platform"},
+        "routes": {"host": "platform"},
+    },
+}
+
+
+def test_the_secrets_follow_the_name_root() -> None:
+    section = MonitoringSection.model_validate(ACME_MONITORING)
+    assert monitoring.secret_parameters(section, name_root="acme") == {
+        "grafana-admin-user": "/acme/monitoring/grafana-admin-user",
+        "grafana-admin-password": "/acme/monitoring/grafana-admin-password",
+        "slack/platform": "/acme/monitoring/slack/platform",
+    }
+    assert (
+        monitoring.secret_parameter(section, "grafana-admin-user", name_root="acme")
+        == "/acme/monitoring/grafana-admin-user"
+    )

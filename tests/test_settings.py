@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import re
 from pathlib import Path
 from typing import Any
@@ -8,16 +9,20 @@ import pytest
 import yaml
 
 from jaws.errors import ConfigError
+from jaws.project import DATABRICKS_RESERVED_TAGS
 from jaws.settings import (
+    RESERVED_TAG_KEYS,
     PlatformHub,
     PlatformRepository,
     ProjectGuardrails,
     Settings,
+    databricks_defaults,
     load_document,
     load_settings,
+    monitoring_secrets_prefix,
     parse_duration,
 )
-from jaws.site import load_site_config
+from jaws.site import REQUIRED_TAGS, TOOL_TAGS, load_site_config
 from tests.conftest import (
     CONFIG_DIR,
     FIXTURES,
@@ -1170,3 +1175,144 @@ def test_the_zone_apex_takes_a_txt_record(tmp_path: Path) -> None:
     raw = fixture_config()
     raw["dns"]["txt_records"] = {"@": ["v=spf1 -all"]}
     assert _load_raw(tmp_path, raw).dns.txt_records == {"@": ("v=spf1 -all",)}
+
+
+def test_the_brand_is_jaws_s_unless_the_platform_sets_one(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw.pop("brand", None)
+    brand = _load_raw(tmp_path, raw).brand
+    assert (brand.name, brand.mark, brand.check_prefix) == ("Jaws", "🦈", "jaws")
+
+
+def test_a_brand_that_names_itself_does_not_inherit_the_shark(tmp_path: Path) -> None:
+    brand = _load_raw(tmp_path, {**fixture_config(), "brand": {"name": "Acme Platform"}}).brand
+    assert (brand.name, brand.mark, brand.check_prefix) == ("Acme Platform", None, "jaws")
+
+
+@pytest.mark.parametrize(
+    ("brand", "key"),
+    [
+        ({"name": ""}, "brand.name"),
+        ({"name": " Acme"}, "brand.name"),
+        ({"name": "A" * 41}, "brand.name"),
+        ({"mark": "http://example.com/mark.png"}, "brand.mark"),
+        ({"mark": "two words"}, "brand.mark"),
+        ({"mark": "123456789"}, "brand.mark"),
+        ({"check_prefix": "acme/ci"}, "brand.check_prefix"),
+        ({"check_prefix": "-acme"}, "brand.check_prefix"),
+        ({"check_prefix": "a" * 31}, "brand.check_prefix"),
+        ({"colour": "teal"}, "brand.colour"),
+    ],
+)
+def test_a_bad_brand_names_its_key(tmp_path: Path, brand: dict[str, str], key: str) -> None:
+    with pytest.raises(ConfigError, match=re.escape(key)):
+        _load_raw(tmp_path, {**fixture_config(), "brand": brand})
+
+
+def test_a_platform_stamps_no_tags_of_its_own_by_default(settings: Settings) -> None:
+    assert settings.context.tags == {}
+
+
+def test_a_platform_s_own_tags_load(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw["context"]["tags"] = {"Department": "platform", "cost-pool": "shared/2026"}
+    assert _load_raw(tmp_path, raw).context.tags == raw["context"]["tags"]
+
+
+@pytest.mark.parametrize(
+    "key", [*RESERVED_TAG_KEYS, "aws:createdBy", "AWS:Team", "", "a" * 129, "Team!"]
+)
+def test_a_platform_tag_cannot_shadow_a_tag_jaws_sets(tmp_path: Path, key: str) -> None:
+    raw = fixture_config()
+    raw["context"]["tags"] = {key: "x"}
+    with pytest.raises(ConfigError, match=r"context\.tags"):
+        _load_raw(tmp_path, raw)
+
+
+@pytest.mark.parametrize("key", ["environment", "PROJECT", "Team"])
+def test_a_platform_tag_key_is_compared_without_case(tmp_path: Path, key: str) -> None:
+    """IAM treats tag keys without case: a resource may not carry both spellings."""
+    raw = fixture_config()
+    raw["context"]["tags"] = {"Team": "a", "team": "b"} if key == "Team" else {key: "x"}
+    with pytest.raises(ConfigError, match=re.escape(key)):
+        _load_raw(tmp_path, raw)
+
+
+@pytest.mark.parametrize("value", ["", "   ", "a" * 257, "café", "a;b"])
+def test_a_platform_tag_value_is_one_every_service_accepts(tmp_path: Path, value: str) -> None:
+    raw = fixture_config()
+    raw["context"]["tags"] = {"Department": value}
+    with pytest.raises(ConfigError, match=r"context\.tags"):
+        _load_raw(tmp_path, raw)
+
+
+def test_the_reserved_tags_cover_what_files_jaws_and_databricks_set() -> None:
+    known = {*REQUIRED_TAGS, *TOOL_TAGS, *DATABRICKS_RESERVED_TAGS, "CostCenter", "Workspace"}
+    assert known <= set(RESERVED_TAG_KEYS)
+
+
+ACME_MONITORING = {
+    "ami": "al2023-ami-2023.12.20261026.1-kernel-6.18-arm64",
+    "slack": {
+        "channels": {"platform": "/acme/monitoring/slack/platform"},
+        "routes": {"host": "platform"},
+    },
+}
+
+
+def test_the_monitoring_secrets_live_under_the_name_root() -> None:
+    assert monitoring_secrets_prefix("jaws") == "/jaws/monitoring/"
+    assert monitoring_secrets_prefix("acme") == "/acme/monitoring/"
+
+
+def test_slack_channels_live_under_the_name_root_s_secrets(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw["context"]["name_root"] = "acme"
+    raw["monitoring"] = copy.deepcopy(ACME_MONITORING)
+    raw["monitoring"]["slack"]["channels"]["platform"] = "/jaws/monitoring/slack/platform"
+    with pytest.raises(
+        ConfigError,
+        match=r"monitoring\.slack\.channels\.platform '/jaws/monitoring/slack/platform' must "
+        r"be an SSM parameter under /acme/monitoring/, such as /acme/monitoring/slack/platform",
+    ):
+        _load_raw(tmp_path, raw)
+    raw["monitoring"] = copy.deepcopy(ACME_MONITORING)
+    assert _load_raw(tmp_path, raw).monitoring is not None
+
+
+def test_the_databricks_defaults_are_today_s_names_for_the_jaws_root() -> None:
+    assert databricks_defaults("jaws") == {
+        "secret_parameter": "/jaws/databricks/client-secret",
+        "metastore_name": "jaws-us-east-1",
+        "audit_bucket": "jaws-databricks-audit-logs",
+    }
+
+
+@pytest.mark.parametrize("name_root", ["jaws", "acme"])
+def test_the_databricks_names_a_platform_leaves_out_follow_its_name_root(
+    tmp_path: Path, name_root: str
+) -> None:
+    raw = fixture_config()
+    raw["context"]["name_root"] = name_root
+    raw.pop("monitoring", None)  # its Slack channels live under /jaws/monitoring/
+    for key in ("secret_parameter", "metastore_name", "audit_bucket"):
+        raw["databricks"].pop(key, None)
+    section = _load_raw(tmp_path, raw).databricks
+    assert section is not None
+    assert (section.secret_parameter, section.metastore_name, section.audit_bucket) == (
+        f"/{name_root}/databricks/client-secret",
+        f"{name_root}-us-east-1",
+        f"{name_root}-databricks-audit-logs",
+    )
+
+
+def test_a_databricks_name_the_platform_sets_wins(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw["context"]["name_root"] = "acme"
+    raw.pop("monitoring", None)
+    raw["databricks"].pop("secret_parameter", None)
+    raw["databricks"]["audit_bucket"] = "acme-audit"
+    section = _load_raw(tmp_path, raw).databricks
+    assert section is not None
+    assert section.audit_bucket == "acme-audit"
+    assert section.secret_parameter == "/acme/databricks/client-secret"

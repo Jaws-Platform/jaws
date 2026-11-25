@@ -1,19 +1,29 @@
 from __future__ import annotations
 
+import pytest
+
 from jaws.report import (
     MAX_RESOURCE_ROWS,
     PRODUCT,
     Provenance,
+    StackSection,
     parse_plan,
     plan_comment,
     plan_result_name,
     preview_comment,
     preview_removed_comment,
+    stacks_plan_comment,
     sync_summary,
     truncate_tail,
 )
+from jaws.settings import BrandSection
 from jaws.stack import PLAN_CHANGES, PLAN_ERROR, PLAN_NO_CHANGES
 from jaws.sync import SyncResult
+
+JAWS = BrandSection()
+ACME = BrandSection(name="Acme Platform", mark="🔧")
+IMAGE = "https://raw.githubusercontent.com/Example-Org/example-branding/main/mark.png"
+KINDS = ["plan", "stacks", "preview", "removed"]
 
 PROVENANCE = Provenance(
     version="0.9.1",
@@ -136,14 +146,18 @@ def test_parse_plan_garbage() -> None:
 
 
 def test_plan_comment_is_branded() -> None:
-    comment = plan_comment(PLAN_NO_CHANGES, PLAN_NO_CHANGES_TEXT, 60000, "a.example", PROVENANCE)
+    comment = plan_comment(
+        PLAN_NO_CHANGES, PLAN_NO_CHANGES_TEXT, 60000, "a.example", PROVENANCE, brand=JAWS
+    )
     assert PRODUCT in comment
     assert "Terraform plan" in comment
     assert "a.example" in comment
 
 
 def test_plan_comment_no_changes_is_a_note() -> None:
-    comment = plan_comment(PLAN_NO_CHANGES, PLAN_NO_CHANGES_TEXT, 60000, "a.example", PROVENANCE)
+    comment = plan_comment(
+        PLAN_NO_CHANGES, PLAN_NO_CHANGES_TEXT, 60000, "a.example", PROVENANCE, brand=JAWS
+    )
     assert "> [!NOTE]" in comment
     assert "No changes" in comment
     assert "[!WARNING]" not in comment and "[!CAUTION]" not in comment
@@ -152,7 +166,7 @@ def test_plan_comment_no_changes_is_a_note() -> None:
 
 
 def test_plan_comment_add_only_is_a_warning() -> None:
-    comment = plan_comment(PLAN_CHANGES, PLAN_ADD_ONLY, 60000, "a.example", PROVENANCE)
+    comment = plan_comment(PLAN_CHANGES, PLAN_ADD_ONLY, 60000, "a.example", PROVENANCE, brand=JAWS)
     assert "> [!WARNING]" in comment
     assert "Changes pending" in comment
     assert "[!CAUTION]" not in comment
@@ -160,7 +174,9 @@ def test_plan_comment_add_only_is_a_warning() -> None:
 
 
 def test_plan_comment_changes_has_counts_and_resources() -> None:
-    comment = plan_comment(PLAN_CHANGES, PLAN_WITH_CHANGES, 60000, "a.example", PROVENANCE)
+    comment = plan_comment(
+        PLAN_CHANGES, PLAN_WITH_CHANGES, 60000, "a.example", PROVENANCE, brand=JAWS
+    )
     assert "changes pending" in comment.lower()
     assert "| **2** | **1** | **1** |" in comment
     assert "`module.site.aws_s3_bucket.this`" in comment
@@ -171,26 +187,32 @@ def test_plan_comment_changes_has_counts_and_resources() -> None:
 
 
 def test_plan_comment_destroy_is_a_caution() -> None:
-    comment = plan_comment(PLAN_CHANGES, PLAN_WITH_DESTROY, 60000, "a.example", PROVENANCE)
+    comment = plan_comment(
+        PLAN_CHANGES, PLAN_WITH_DESTROY, 60000, "a.example", PROVENANCE, brand=JAWS
+    )
     assert "> [!CAUTION]" in comment
     assert "destroy" in comment.lower()
     assert "[!WARNING]" not in comment
 
 
 def test_plan_comment_replace_counts_as_destructive() -> None:
-    comment = plan_comment(PLAN_CHANGES, PLAN_WITH_CHANGES, 60000, "a.example", PROVENANCE)
+    comment = plan_comment(
+        PLAN_CHANGES, PLAN_WITH_CHANGES, 60000, "a.example", PROVENANCE, brand=JAWS
+    )
     assert "> [!CAUTION]" in comment
 
 
 def test_plan_comment_outputs_only() -> None:
-    comment = plan_comment(PLAN_CHANGES, PLAN_OUTPUTS_ONLY, 60000, "a.example", PROVENANCE)
+    comment = plan_comment(
+        PLAN_CHANGES, PLAN_OUTPUTS_ONLY, 60000, "a.example", PROVENANCE, brand=JAWS
+    )
     assert "> [!WARNING]" in comment
     assert "outputs" in comment.lower()
     assert "| **" not in comment  # no counts table without a Plan: line
 
 
 def test_plan_comment_failed_is_a_caution_with_open_details() -> None:
-    comment = plan_comment(PLAN_ERROR, "Error: boom\n", 60000, "a.example", PROVENANCE)
+    comment = plan_comment(PLAN_ERROR, "Error: boom\n", 60000, "a.example", PROVENANCE, brand=JAWS)
     assert "> [!CAUTION]" in comment
     assert "Plan failed" in comment
     assert "<details open>" in comment
@@ -198,7 +220,9 @@ def test_plan_comment_failed_is_a_caution_with_open_details() -> None:
 
 
 def test_plan_comment_footer_has_provenance() -> None:
-    comment = plan_comment(PLAN_NO_CHANGES, PLAN_NO_CHANGES_TEXT, 60000, "a.example", PROVENANCE)
+    comment = plan_comment(
+        PLAN_NO_CHANGES, PLAN_NO_CHANGES_TEXT, 60000, "a.example", PROVENANCE, brand=JAWS
+    )
     assert f"<b>{PRODUCT}</b> v0.9.1" in comment
     assert (
         '<a href="https://github.com/o/r/commit/193fcc3deadbeef0000000000000000000000000">'
@@ -209,7 +233,12 @@ def test_plan_comment_footer_has_provenance() -> None:
 
 def test_plan_comment_footer_without_github_context() -> None:
     comment = plan_comment(
-        PLAN_NO_CHANGES, PLAN_NO_CHANGES_TEXT, 60000, "a.example", Provenance(version="1.0")
+        PLAN_NO_CHANGES,
+        PLAN_NO_CHANGES_TEXT,
+        60000,
+        "a.example",
+        Provenance(version="1.0"),
+        brand=JAWS,
     )
     assert "v1.0" in comment
     assert "Commit" not in comment
@@ -223,6 +252,7 @@ def test_plan_comment_short_sha_without_commit_url_is_plain() -> None:
         60000,
         "a.example",
         Provenance(version="1.0", sha="193fcc3deadbeef0000000000000000000000000"),
+        brand=JAWS,
     )
     assert "<code>193fcc3deadbeef0000000000000000000000000</code>" in comment
     assert "<a href" not in comment.split("<sub>")[1]
@@ -230,7 +260,7 @@ def test_plan_comment_short_sha_without_commit_url_is_plain() -> None:
 
 def test_plan_comment_fits_the_byte_budget() -> None:
     text = "head\n" + "x" * 5000 + "\nPlan: 2 to add, 0 to change, 0 to destroy."
-    comment = plan_comment(PLAN_CHANGES, text, 2500, "a.example", PROVENANCE)
+    comment = plan_comment(PLAN_CHANGES, text, 2500, "a.example", PROVENANCE, brand=JAWS)
     assert len(comment.encode("utf-8")) <= 2500
     assert "truncated" in comment
     assert "Plan: 2 to add" in comment
@@ -242,7 +272,7 @@ def test_plan_comment_caps_the_resource_table() -> None:
     text = (
         "\n".join(lines) + f"\n\nPlan: {MAX_RESOURCE_ROWS + 5} to add, 0 to change, 0 to destroy.\n"
     )
-    comment = plan_comment(PLAN_CHANGES, text, 60000, "a.example", PROVENANCE)
+    comment = plan_comment(PLAN_CHANGES, text, 60000, "a.example", PROVENANCE, brand=JAWS)
     assert f"`aws_thing.r{MAX_RESOURCE_ROWS - 1}`" in comment
     assert f"`aws_thing.r{MAX_RESOURCE_ROWS}`" not in comment
     assert "5 more" in comment
@@ -256,7 +286,9 @@ def test_truncate_tail_keeps_small_text() -> None:
 
 
 def test_preview_comment() -> None:
-    comment = preview_comment("https://pr-3.preview.a.example/", 3, "a.example", PROVENANCE)
+    comment = preview_comment(
+        "https://pr-3.preview.a.example/", 3, "a.example", PROVENANCE, brand=JAWS
+    )
     assert PRODUCT in comment
     assert "Preview" in comment and "#3" in comment
     assert "> [!TIP]" in comment
@@ -267,7 +299,7 @@ def test_preview_comment() -> None:
 
 
 def test_preview_removed_comment() -> None:
-    comment = preview_removed_comment(3, "a.example", PROVENANCE)
+    comment = preview_removed_comment(3, "a.example", PROVENANCE, brand=JAWS)
     assert PRODUCT in comment
     assert "> [!NOTE]" in comment
     assert "removed" in comment.lower()
@@ -287,7 +319,13 @@ def test_sync_summary() -> None:
 
 def test_bot_plan_comment_names_the_manual_apply_when_destructive() -> None:
     comment = plan_comment(
-        PLAN_CHANGES, PLAN_WITH_DESTROY, 60000, "braveheart", PROVENANCE, applied_by="Bot apply"
+        PLAN_CHANGES,
+        PLAN_WITH_DESTROY,
+        60000,
+        "braveheart",
+        PROVENANCE,
+        applied_by="Bot apply",
+        brand=JAWS,
     )
     assert "Merging this pull request will" not in comment
     assert "The next **Bot apply** would destroy or replace" in comment
@@ -296,7 +334,13 @@ def test_bot_plan_comment_names_the_manual_apply_when_destructive() -> None:
 
 def test_bot_plan_comment_names_the_manual_apply_for_changes() -> None:
     comment = plan_comment(
-        PLAN_CHANGES, PLAN_ADD_ONLY, 60000, "braveheart", PROVENANCE, applied_by="Bot apply"
+        PLAN_CHANGES,
+        PLAN_ADD_ONLY,
+        60000,
+        "braveheart",
+        PROVENANCE,
+        applied_by="Bot apply",
+        brand=JAWS,
     )
     assert "Merging this pull request will" not in comment
     assert "The next **Bot apply** would change" in comment
@@ -310,11 +354,82 @@ def test_bot_plan_comment_no_changes() -> None:
         "braveheart",
         PROVENANCE,
         applied_by="Bot apply",
+        brand=JAWS,
     )
     assert "Merging will not touch AWS" not in comment
     assert "A **Bot apply** would not touch AWS" in comment
 
 
 def test_site_plan_comment_wording_is_unchanged() -> None:
-    comment = plan_comment(PLAN_CHANGES, PLAN_WITH_DESTROY, 60000, "a.example", PROVENANCE)
+    comment = plan_comment(
+        PLAN_CHANGES, PLAN_WITH_DESTROY, 60000, "a.example", PROVENANCE, brand=JAWS
+    )
     assert "Merging this pull request will destroy or replace" in comment
+
+
+# -- the platform's brand -----------------------------------------------------
+
+
+def _comments(brand: BrandSection) -> dict[str, str]:
+    """Every kind of comment the tool posts, for `brand`."""
+    account = StackSection("Account stack", PLAN_CHANGES, PLAN_WITH_CHANGES)
+    return {
+        "plan": plan_comment(
+            PLAN_CHANGES, PLAN_WITH_CHANGES, 60000, "a.example", PROVENANCE, brand=brand
+        ),
+        "stacks": stacks_plan_comment([account], None, 60000, "dbx", PROVENANCE, brand=brand),
+        "preview": preview_comment(
+            "https://pr-3.preview.a.example/", 3, "a.example", PROVENANCE, brand=brand
+        ),
+        "removed": preview_removed_comment(3, "a.example", PROVENANCE, brand=brand),
+    }
+
+
+def _footer(comment: str) -> str:
+    return next(line for line in comment.splitlines() if line.startswith('<p align="center"><sub>'))
+
+
+def _header(brand: BrandSection) -> str:
+    return _comments(brand)["removed"].splitlines()[0]
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_jaws_s_brand_keeps_today_s_header_and_footer(kind: str) -> None:
+    comment = _comments(JAWS)[kind]
+    assert comment.splitlines()[0] == '<h2 align="center">🦈 Jaws</h2>'
+    assert _footer(comment).startswith('<p align="center"><sub><b>Jaws</b> v0.9.1 &nbsp;·&nbsp; ')
+
+
+def test_the_plan_comment_s_footer_is_today_s_to_the_byte() -> None:
+    assert _footer(_comments(JAWS)["plan"]) == (
+        '<p align="center"><sub><b>Jaws</b> v0.9.1 &nbsp;·&nbsp; Commit '
+        '<a href="https://github.com/o/r/commit/193fcc3deadbeef0000000000000000000000000">'
+        "<code>193fcc3</code></a> &nbsp;·&nbsp; "
+        '<a href="https://github.com/o/r/actions/runs/1">Workflow run</a> &nbsp;·&nbsp; '
+        "Updated on every push</sub></p>"
+    )
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_a_platform_s_brand_heads_every_comment(kind: str) -> None:
+    comment = _comments(ACME)[kind]
+    assert comment.splitlines()[0] == '<h2 align="center">🔧 Acme Platform</h2>'
+    assert "🦈" not in comment
+    assert _footer(comment).startswith('<p align="center"><sub>Built with <b>Jaws</b> v0.9.1')
+
+
+def test_an_image_mark_is_an_img_tag() -> None:
+    assert _header(BrandSection(name="Acme Platform", mark=IMAGE)) == (
+        f'<h2 align="center"><img src="{IMAGE}" alt="" height="28"> Acme Platform</h2>'
+    )
+
+
+def test_a_brand_without_a_mark_shows_its_name_alone() -> None:
+    assert _header(BrandSection(name="Acme Platform")) == '<h2 align="center">Acme Platform</h2>'
+
+
+def test_the_brand_s_text_is_escaped() -> None:
+    assert _header(BrandSection(name="Smith & Jones", mark=f"{IMAGE}?v=1&s=2")) == (
+        f'<h2 align="center"><img src="{IMAGE}?v=1&amp;s=2" alt="" height="28"> '
+        "Smith &amp; Jones</h2>"
+    )

@@ -121,7 +121,8 @@ with the key named:
   starts and stops out of 01:00 to 03:00, when daylight saving changes: one
   there can be skipped or doubled once a year.
 - **Slack:** every route names a channel, `routes.host` is set, and every
-  channel's parameter is under `/jaws/monitoring/`.
+  channel's parameter is under `/<name_root>/monitoring/` (`/jaws/monitoring/` for
+  the `jaws` root).
 - **Cost:** budgets above 0, an anomaly floor of at least 0, at least one
   provider on, and a valid bucket name.
 - **The node:** `ami` is an AL2023 arm64 image name (not an ID),
@@ -510,7 +511,8 @@ The module family holds the mapper; Jaws turns it on.
 2. **In a pull request,** add the channel under `monitoring.slack.channels`
    with its parameter, and route an area to it. A channel is named with a
    lowercase letter, then lowercase letters, digits or `-` (at most 30), and
-   its parameter is under `/jaws/monitoring/`:
+   its parameter is under `/<name_root>/monitoring/` (`/jaws/monitoring/` for the
+   `jaws` root):
 
    ```yaml
    slack:

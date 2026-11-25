@@ -15,6 +15,7 @@ from moto import mock_aws
 from jaws import tasks
 from jaws.errors import ConfigError, PreflightError
 from jaws.project import Project
+from jaws.settings import RESERVED_TAG_KEYS
 
 REGION = "us-east-1"
 LOG = logging.getLogger("test")
@@ -122,6 +123,16 @@ def test_task_tags(bot: Project) -> None:
         "Lifecycle": "spot",
         "PullRequest": "84",
     }
+
+
+def test_a_task_carries_the_platform_s_tags(bot: Project) -> None:
+    tagged = bot.model_copy(update={"platform_tags": {"Department": "research"}})
+    assert tasks.task_tags(_spec(tagged), "spot")["Department"] == "research"
+
+
+def test_a_task_s_own_tags_are_reserved_from_the_platform(bot: Project) -> None:
+    tags = tasks.task_tags(_spec(bot, pull_request="84", campaign="nnue-v2"), "spot")
+    assert set(tags) - set(bot.config.tags) <= set(RESERVED_TAG_KEYS)
 
 
 def test_task_tags_carry_the_profile(bot: Project) -> None:

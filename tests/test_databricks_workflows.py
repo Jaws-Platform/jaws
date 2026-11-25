@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 import yaml
 
-from tests.conftest import CONFIG_DIR, REPO_ROOT, fixture_root, repo_config
+from tests.conftest import CONFIG_DIR, REPO_ROOT, fixture_config, fixture_root, repo_config
 
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 CREDENTIALS_SCRIPT = REPO_ROOT / "scripts" / "databricks-credentials.sh"
@@ -50,10 +50,9 @@ def _write_databricks(root: Path, *, enabled: bool) -> None:
     (root / "config" / "databricks.yaml").write_text(yaml.safe_dump({"databricks": databricks}))
 
 
-def _run_credentials(tmp_path: Path, *, enabled: bool) -> tuple[str, Path, Path]:
+def _source_credentials(tmp_path: Path, config: str = "config") -> tuple[str, Path, Path]:
     """Source the script in a step-like shell (`bash -e`) with a fake `aws` that returns
     SENTINEL, then print the environment the step's terraform would see."""
-    _write_databricks(tmp_path, enabled=enabled)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     calls = tmp_path / "aws-calls"
@@ -63,7 +62,7 @@ def _run_credentials(tmp_path: Path, *, enabled: bool) -> tuple[str, Path, Path]
     github_env = tmp_path / "github-env"
     github_env.touch()
     result = subprocess.run(
-        ["bash", "-e", "-c", f'source "{CREDENTIALS_SCRIPT}" config\necho ---\nenv'],
+        ["bash", "-e", "-c", f'source "{CREDENTIALS_SCRIPT}" {config}\necho ---\nenv'],
         cwd=tmp_path,
         env={
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
@@ -77,6 +76,28 @@ def _run_credentials(tmp_path: Path, *, enabled: bool) -> tuple[str, Path, Path]
         check=True,
     )
     return result.stdout, calls, github_env
+
+
+def _run_credentials(tmp_path: Path, *, enabled: bool) -> tuple[str, Path, Path]:
+    _write_databricks(tmp_path, enabled=enabled)
+    return _source_credentials(tmp_path)
+
+
+@needs_yq
+@pytest.mark.parametrize("single_file", [False, True])
+def test_a_left_out_parameter_follows_the_name_root(tmp_path: Path, single_file: bool) -> None:
+    databricks = {**fixture_config()["databricks"], "enabled": True}
+    databricks.pop("secret_parameter", None)
+    sections = {"databricks": databricks, "context": {"name_root": "acme"}}
+    if single_file:
+        (tmp_path / "all.yaml").write_text(yaml.safe_dump(sections))
+    else:
+        (tmp_path / "config").mkdir()
+        for name, file in (("databricks", "databricks.yaml"), ("context", "tool.yaml")):
+            (tmp_path / "config" / file).write_text(yaml.safe_dump({name: sections[name]}))
+    out, calls, _ = _source_credentials(tmp_path, "all.yaml" if single_file else "config")
+    assert "--name /acme/databricks/client-secret" in calls.read_text()
+    assert "_dbx_" not in out.split("---\n", 1)[1]
 
 
 @needs_yq

@@ -42,10 +42,15 @@ locals {
       account_id     = local.primary_account.account_id
       admin_role_arn = local.primary_account.admin_role_arn
     }
-    context    = local.tool_config.context
-    state      = local.tool_config.state
-    ecr        = local.tool_config.ecr
-    databricks = local.tool_config.databricks
+    context = local.tool_config.context
+    state   = local.tool_config.state
+    ecr     = local.tool_config.ecr
+    # The names a platform leaves out follow its name root, as jaws.settings.databricks_defaults derives them
+    databricks = merge({
+      secret_parameter = "/${local.tool_config.context.name_root}/databricks/client-secret"
+      metastore_name   = "${local.tool_config.context.name_root}-us-east-1"
+      audit_bucket     = "${local.tool_config.context.name_root}-databricks-audit-logs"
+    }, local.tool_config.databricks)
   }
 
   # Every onboarded project by its key, whichever GitHub owner it is under, with

@@ -529,6 +529,7 @@ class DatabricksDeployment:
             self.project.project,
             github.provenance(self._version),
             applied_by=APPLIED_BY,
+            brand=self.settings.brand,
         )
         (self.run.artifacts / "plan-comment.md").write_text(comment)
         codes = [s.exit_code for s in sections if s.exit_code is not None]

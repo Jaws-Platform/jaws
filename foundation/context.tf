@@ -17,8 +17,8 @@ locals {
     # owner of this repository (docs/tagging.md).
     name_root    = local.account.context.name_root
     organization = local.account.context.organization
-    # Project tag value, and the prefix of this stack's Name tags.
-    project     = "jaws"
+    # Project tag value (the name root, like every name), and the prefix of this stack's Name tags.
+    project     = local.account.context.name_root
     environment = "prod"
 
     # The `Repository` tag: the repository that manages this stack.
@@ -43,4 +43,5 @@ module "context" {
   organization = local.context.organization
   name_root    = local.context.name_root
   managed_by   = local.account.context.managed_by
+  extra_tags   = try(local.account.context.tags, {})
 }

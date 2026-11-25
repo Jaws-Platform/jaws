@@ -272,6 +272,19 @@ run "reads_its_configuration_from_the_repository_outside_the_image" {
   }
 }
 
+run "stamps_the_platform_s_own_tags" {
+  command = plan
+
+  variables {
+    config_path = "../foundation/tests/fixtures/platform-tags.yaml"
+  }
+
+  assert {
+    condition     = module.context.tags["Department"] == "platform"
+    error_message = "a tag in context.tags is stamped on the monitoring stack's resources"
+  }
+}
+
 run "takes_its_identity_from_the_configuration" {
   command = plan
 
@@ -283,5 +296,24 @@ run "takes_its_identity_from_the_configuration" {
   assert {
     condition     = module.context.tags["Repository"] == "Example-Org/platform" && module.context.tags["Owner"] == "example-owner" && module.context.tags["ManagedBy"] == "jaws-relabelled"
     error_message = "the tags are the configuration's: the first platform repository, context.owner and context.managed_by"
+  }
+}
+
+run "the_shared_host_and_secrets_follow_the_name_root" {
+  command = plan
+
+  # The acme platform (foundation/tests/fixtures/databricks-defaults.yaml).
+  variables {
+    config_path = "../foundation/tests/fixtures/databricks-defaults.yaml"
+  }
+
+  assert {
+    condition     = local.cost.databricks.workspace_projects["acme-shared"] == "acme"
+    error_message = "the shared host's untagged usage is the platform's project, its name root"
+  }
+
+  assert {
+    condition     = local.node.grafana_admin.user_parameter == "/acme/monitoring/grafana-admin-user"
+    error_message = "the Grafana admin secret is under the name root"
   }
 }

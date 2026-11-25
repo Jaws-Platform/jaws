@@ -184,9 +184,45 @@ class AwsSection(_Section):
         return {n: a for n, a in self.accounts.items() if a.type == account_type}
 
 
+#: The tag keys that a project file, jaws, the modules, Databricks or a task set
+#: themselves, so `context.tags` may not use them. The sources, which this module
+#: cannot import: `site.REQUIRED_TAGS` and `site.TOOL_TAGS`,
+#: `project.DATABRICKS_RESERVED_TAGS`, and `tasks.task_tags`.
+RESERVED_TAG_KEYS = (
+    "Project",
+    "Environment",
+    "Repository",
+    "Owner",
+    "Organization",
+    "ManagedBy",
+    "Name",
+    "Component",
+    "Purpose",
+    "Profile",
+    "Lifecycle",
+    "CostCenter",
+    "Workspace",
+    "Vendor",
+    "Creator",
+    "ClusterName",
+    "ClusterId",
+    "Workflow",
+    "RunId",
+    "TaskId",
+    "MaxLifetimeHours",
+    "PullRequest",
+    "Campaign",
+)
+
+#: What RunInstances and Databricks accept in a tag (the set `tasks._TAG_VALUE_UNSAFE` keeps).
+_TAG_KEY = re.compile(r"^[A-Za-z0-9 +\-=._:/@]{1,128}$")
+_TAG_VALUE = re.compile(r"^(?=.*\S)[A-Za-z0-9 +\-=._:/@]{1,256}$")
+
+
 class ContextSection(_Section):
     #: The root of every name the tool gives (`<name_root>-<project>-...`, the
-    #: `<name_root>-infra-ci-*` roles). A name only, never a tag value.
+    #: `<name_root>-infra-ci-*` roles). Names never come from tags; the platform's
+    #: own stacks take their `Project` tag from it.
     name_root: str = Field(pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")
     #: The Organization tag of the tool's own stacks: the GitHub owner of this
     #: repository. A project's resources carry its own owner (`projects`).
@@ -194,6 +230,85 @@ class ContextSection(_Section):
     owner: str = Field(pattern=_GITHUB_OWNER.pattern)
     #: The ManagedBy tag the tool stamps on everything it builds.
     managed_by: str = Field(default="JAWS", pattern=r"^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$")
+    #: The platform's own tags, stamped on every resource after a project file's.
+    #: A project file may not state them, and no key may be one jaws sets itself.
+    tags: dict[str, str] = {}
+
+    @field_validator("tags")
+    @classmethod
+    def _tags_are_ones_every_service_accepts(cls, value: dict[str, str]) -> dict[str, str]:
+        problems: list[str] = []
+        reserved = {key.casefold() for key in RESERVED_TAG_KEYS}
+        spellings: dict[str, list[str]] = {}
+        for key in value:
+            spellings.setdefault(key.casefold(), []).append(key)
+        # IAM compares tag keys without case, and refuses a role with both spellings.
+        for keys in spellings.values():
+            if len(keys) > 1:
+                names = ", ".join(f"context.tags.{key}" for key in keys)
+                problems.append(f"{names}: tag keys are compared without case; keep one")
+        for key, tag_value in value.items():
+            if key.casefold() in reserved:
+                problems.append(f"context.tags.{key}: jaws or a stack sets this tag itself")
+            elif key.lower().startswith("aws:"):
+                problems.append(f"context.tags.{key}: AWS reserves keys that start with aws:")
+            elif not _TAG_KEY.fullmatch(key):
+                problems.append(
+                    f"context.tags.{key}: a key is 1 to 128 letters, digits, spaces "
+                    "or + - = . _ : / @"
+                )
+            elif not _TAG_VALUE.fullmatch(tag_value):
+                problems.append(
+                    f"context.tags.{key}: a value is 1 to 256 letters, digits, spaces or "
+                    "+ - = . _ : / @, and not blank"
+                )
+        if problems:
+            raise ValueError("; ".join(problems))
+        return value
+
+
+class BrandSection(_Section):
+    """How the platform presents itself where people read the tool's output."""
+
+    #: The name in the header of every PR comment and the title of CLI annotations.
+    #: The footer keeps "Built with Jaws".
+    name: str = Field(default="Jaws", pattern=r"^\S(?:.{0,38}\S)?$")
+    #: Shown before the name in the comment header: an emoji, short text, or an
+    #: `https://` image URL. None shows the name alone. A brand that sets its `name`
+    #: and not its `mark` gets None, never the shark.
+    mark: str | None = "🦈"
+    #: The first word of the project-facing workflows' job names (`<prefix> plan`,
+    #: `<prefix> release`, `<prefix> preview deploy`, `<prefix> preview remove`).
+    #: Nothing reads it yet: plan 05's workflows will.
+    check_prefix: str = Field(
+        default="jaws", max_length=30, pattern=r"^[A-Za-z0-9]+(?:[ ._-][A-Za-z0-9]+)*$"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_inherited_mark(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "name" in data and "mark" not in data:
+            return {**data, "mark": None}
+        return data
+
+    @field_validator("mark")
+    @classmethod
+    def _mark_is_short_text_or_an_image(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if value.startswith("https://"):
+            ok = len(value) <= 512 and re.fullmatch(r"https://[^\s\"'<>]+", value) is not None
+        else:
+            ok = (
+                1 <= len(value) <= 8
+                and not re.search(r"\s", value)
+                and not value.startswith("http")
+            )
+        if not ok:
+            raise ValueError(
+                "an emoji or text of at most 8 characters, or an https:// image URL; null for none"
+            )
+        return value
 
 
 class PlatformRepository(_Section):
@@ -455,15 +570,19 @@ class DatabricksSection(_Section):
     enabled: bool
     account_id: str = Field(pattern=_UUID)
     client_id: str = Field(pattern=_UUID)
-    secret_parameter: str = "/jaws/databricks/client-secret"
-    metastore_name: str = "jaws-us-east-1"
+    #: The SSM parameter holding the service principal's client secret. When the platform
+    #: leaves it out, `/<name_root>/databricks/client-secret` (`databricks_defaults`).
+    secret_parameter: str
+    #: The account's metastore. When left out, `<name_root>-us-east-1`.
+    metastore_name: str
     metastore_admins: tuple[str, ...] = Field(min_length=1)
     #: The pinned Amazon Linux 2023 arm64 image name of the NAT instance.
     nat_ami: str
     #: The deployment-name prefix Databricks configured for this account, if any. With
     #: one, a workspace's URL is `<prefix>-<project>`; without, Databricks picks the URL.
     deployment_name_prefix: str | None = Field(default=None, pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")
-    audit_bucket: str = "jaws-databricks-audit-logs"
+    #: The audit-log bucket. When left out, `<name_root>-databricks-audit-logs`.
+    audit_bucket: str
     events_prefix: str = Field(default="events/", pattern=r"^([a-z0-9][a-z0-9-]*/)+$")
     compute_policies: dict[str, DatabricksPolicy] = {}
     readiness_timeout: str = "20m"
@@ -542,9 +661,25 @@ class DatabricksSection(_Section):
         return PLACEHOLDER_UUID in (self.account_id.lower(), self.client_id.lower())
 
 
-#: Where the monitoring stack's owner-set secrets live in SSM: the Grafana admin
-#: and each Slack channel's webhook (`jaws monitoring secrets`). Never Terraform's.
-MONITORING_SECRETS_PREFIX = "/jaws/monitoring/"
+def monitoring_secrets_prefix(name_root: str) -> str:
+    """Where the monitoring stack's owner-set secrets live in SSM: the Grafana admin
+    and each Slack channel's webhook (`jaws monitoring secrets`). Never Terraform's.
+    They live under the platform's name root, `/jaws/monitoring/` for the `jaws` root."""
+    return f"/{name_root}/monitoring/"
+
+
+def databricks_defaults(name_root: str) -> dict[str, str]:
+    """The Databricks names a platform that leaves them out gets: they follow its name root.
+    The foundation and scripts/databricks-credentials.sh derive the same names."""
+    # The region is the product constant (databricks_names.REGION), spelled here to keep
+    # this module free of the import.
+    return {
+        "secret_parameter": f"/{name_root}/databricks/client-secret",
+        "metastore_name": f"{name_root}-us-east-1",
+        "audit_bucket": f"{name_root}-databricks-audit-logs",
+    }
+
+
 WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 #: The monitoring module's alert thresholds (spec 6.8) by name: True for a
 #: warning and critical pair, False for a warning alone. An override replaces
@@ -713,17 +848,11 @@ class MonitoringSlack(_Section):
     @field_validator("channels")
     @classmethod
     def _channels(cls, value: dict[str, str]) -> dict[str, str]:
-        for name, parameter in value.items():
+        for name in value:
             if not _SLACK_CHANNEL.match(name):
                 raise ValueError(
                     f"monitoring.slack.channels.{name}: a channel is named with a lowercase "
                     "letter, then lowercase letters, digits or - (at most 30)"
-                )
-            if not (parameter.startswith(MONITORING_SECRETS_PREFIX) and _SSM_NAME.match(parameter)):
-                raise ValueError(
-                    f"monitoring.slack.channels.{name} {parameter!r} must be an SSM parameter "
-                    f"under {MONITORING_SECRETS_PREFIX}, such as "
-                    f"{MONITORING_SECRETS_PREFIX}slack/{name}"
                 )
         return value
 
@@ -928,6 +1057,8 @@ class Settings(_Section):
     state: StateSection
     aws: AwsSection
     context: ContextSection
+    #: The platform's brand (config/tool.yaml); Jaws's own unless a platform sets one.
+    brand: BrandSection = BrandSection()
     dns: DnsSection
     platform: PlatformSection
     ecr: EcrSection
@@ -1010,6 +1141,31 @@ class Settings(_Section):
                         f"{other} ({other_network})"
                     )
             taken.append((f"project {name!r}", network))
+        return self
+
+    @model_validator(mode="before")
+    @classmethod
+    def _databricks_names_follow_the_name_root(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        section, context = data.get("databricks"), data.get("context")
+        if not isinstance(section, dict) or not isinstance(context, dict):
+            return data
+        name_root = context.get("name_root")
+        if not isinstance(name_root, str):
+            return data
+        return {**data, "databricks": {**databricks_defaults(name_root), **section}}
+
+    @model_validator(mode="after")
+    def _slack_channels_are_the_platform_s_secrets(self) -> Settings:
+        slack = self.monitoring.slack if self.monitoring is not None else None
+        prefix = monitoring_secrets_prefix(self.context.name_root)
+        for name, parameter in (slack.channels if slack is not None else {}).items():
+            if not (parameter.startswith(prefix) and _SSM_NAME.match(parameter)):
+                raise ValueError(
+                    f"monitoring.slack.channels.{name} {parameter!r} must be an SSM parameter "
+                    f"under {prefix}, such as {prefix}slack/{name}"
+                )
         return self
 
     @model_validator(mode="after")

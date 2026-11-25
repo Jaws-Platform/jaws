@@ -35,6 +35,16 @@ variable "name_root" {
   }
 }
 
+variable "managed_by" {
+  description = "The ManagedBy tag the platform stamps on everything (config/tool.yaml `context.managed_by`, `JAWS` unless the platform sets another). tags.ManagedBy must equal it."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$", var.managed_by))
+    error_message = "managed_by must be letters, digits and single hyphens, such as JAWS."
+  }
+}
+
 variable "repository" {
   description = "GitHub repository of the project, as `owner/repo`. Must match `tags.Repository`."
   type        = string
@@ -62,9 +72,9 @@ variable "tags" {
       lookup(var.tags, "Project", null) == var.project &&
       lookup(var.tags, "Repository", null) == var.repository &&
       lookup(var.tags, "Environment", null) == var.environment &&
-      lookup(var.tags, "ManagedBy", "") == "JAWS"
+      lookup(var.tags, "ManagedBy", "") == var.managed_by
     )
-    error_message = "tags.Project, tags.Repository and tags.Environment must equal project, repository and environment, and tags.ManagedBy must be `JAWS` (stamped by the CLI)."
+    error_message = "tags.Project, tags.Repository and tags.Environment must equal project, repository and environment, and tags.ManagedBy must equal managed_by (context.managed_by, stamped by the CLI)."
   }
 }
 

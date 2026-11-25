@@ -59,3 +59,13 @@ run "plans_the_catalog_and_workspace_config" {
     error_message = "the project's two compute policies reach the module"
   }
 }
+
+run "refuses_a_managed_by_the_platform_did_not_stamp" {
+  command = plan
+
+  variables {
+    managed_by = "ACME"
+  }
+
+  expect_failures = [var.tags]
+}
