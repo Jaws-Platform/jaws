@@ -201,6 +201,41 @@ run "the_reconcile_reaches_its_state" {
   }
 }
 
+run "the_databricks_names_follow_the_name_root" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/databricks-defaults.yaml"
+  }
+
+  # The file-level overrides spell the jaws root's bucket ARNs; this run's root is acme.
+  override_module {
+    target = module.site_bucket["main-site"]
+    outputs = {
+      arn = "arn:aws:s3:::acme-main-site"
+    }
+  }
+
+  override_module {
+    target = module.site_bucket["cs-survival-guide"]
+    outputs = {
+      arn = "arn:aws:s3:::acme-cs-survival-guide"
+    }
+  }
+
+  override_module {
+    target = module.site_bucket["guitar-knowledge-base"]
+    outputs = {
+      arn = "arn:aws:s3:::acme-guitar-knowledge-base"
+    }
+  }
+
+  assert {
+    condition     = local.databricks.secret_parameter == "/acme/databricks/client-secret" && local.databricks.metastore_name == "acme-us-east-1" && local.databricks.audit_bucket == "acme-databricks-audit-logs"
+    error_message = "the Databricks names a platform leaves out follow its name root"
+  }
+}
+
 run "databricks_is_built_and_onboards_the_registry" {
   command = plan
 

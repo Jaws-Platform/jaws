@@ -558,15 +558,19 @@ class DatabricksSection(_Section):
     enabled: bool
     account_id: str = Field(pattern=_UUID)
     client_id: str = Field(pattern=_UUID)
-    secret_parameter: str = "/jaws/databricks/client-secret"
-    metastore_name: str = "jaws-us-east-1"
+    #: The SSM parameter holding the service principal's client secret. When the platform
+    #: leaves it out, `/<name_root>/databricks/client-secret` (`databricks_defaults`).
+    secret_parameter: str
+    #: The account's metastore. When left out, `<name_root>-us-east-1`.
+    metastore_name: str
     metastore_admins: tuple[str, ...] = Field(min_length=1)
     #: The pinned Amazon Linux 2023 arm64 image name of the NAT instance.
     nat_ami: str
     #: The deployment-name prefix Databricks configured for this account, if any. With
     #: one, a workspace's URL is `<prefix>-<project>`; without, Databricks picks the URL.
     deployment_name_prefix: str | None = Field(default=None, pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")
-    audit_bucket: str = "jaws-databricks-audit-logs"
+    #: The audit-log bucket. When left out, `<name_root>-databricks-audit-logs`.
+    audit_bucket: str
     events_prefix: str = Field(default="events/", pattern=r"^([a-z0-9][a-z0-9-]*/)+$")
     compute_policies: dict[str, DatabricksPolicy] = {}
     readiness_timeout: str = "20m"
@@ -650,6 +654,18 @@ def monitoring_secrets_prefix(name_root: str) -> str:
     and each Slack channel's webhook (`jaws monitoring secrets`). Never Terraform's.
     They live under the platform's name root, `/jaws/monitoring/` for the `jaws` root."""
     return f"/{name_root}/monitoring/"
+
+
+def databricks_defaults(name_root: str) -> dict[str, str]:
+    """The Databricks names a platform that leaves them out gets: they follow its name root.
+    The foundation and scripts/databricks-credentials.sh derive the same names."""
+    # The region is the product constant (databricks_names.REGION), spelled here to keep
+    # this module free of the import.
+    return {
+        "secret_parameter": f"/{name_root}/databricks/client-secret",
+        "metastore_name": f"{name_root}-us-east-1",
+        "audit_bucket": f"{name_root}-databricks-audit-logs",
+    }
 
 
 WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
@@ -1114,6 +1130,19 @@ class Settings(_Section):
                     )
             taken.append((f"project {name!r}", network))
         return self
+
+    @model_validator(mode="before")
+    @classmethod
+    def _databricks_names_follow_the_name_root(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        section, context = data.get("databricks"), data.get("context")
+        if not isinstance(section, dict) or not isinstance(context, dict):
+            return data
+        name_root = context.get("name_root")
+        if not isinstance(name_root, str):
+            return data
+        return {**data, "databricks": {**databricks_defaults(name_root), **section}}
 
     @model_validator(mode="after")
     def _slack_channels_are_the_platform_s_secrets(self) -> Settings:

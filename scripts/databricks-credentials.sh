@@ -5,7 +5,14 @@
 #   source ../scripts/databricks-credentials.sh ../config
 #
 # The argument is the tool configuration: the config/ directory (its
-# databricks.yaml is read), or one file holding every section.
+# databricks.yaml is read, and its tool.yaml when the secret parameter is left
+# out), or one file holding every section.
+#
+# It reads context.name_root itself because a platform may leave
+# databricks.secret_parameter out, and the name then follows its name root
+# (/<name_root>/databricks/client-secret), as jaws.settings.databricks_defaults
+# derives it. The CLI is not installed yet at the steps that source this, so
+# the script cannot ask it.
 #
 # When databricks.enabled is true it reads the service principal's client
 # secret from SSM (with the AWS role already assumed), masks it, and exports
@@ -14,17 +21,24 @@
 # never writes to the step's environment or output files, so no other step (and
 # no third-party action) sees the secret. While databricks.enabled is false it
 # does nothing.
-_dbx_config=${1:-config}
-if [ -d "$_dbx_config" ]; then
-  _dbx_config=$_dbx_config/databricks.yaml
+_dbx_source=${1:-config}
+_dbx_config=$_dbx_source
+_dbx_context=$_dbx_source
+if [ -d "$_dbx_source" ]; then
+  _dbx_config=$_dbx_source/databricks.yaml
+  _dbx_context=$_dbx_source/tool.yaml
 fi
 _dbx_enabled=$(yq -r .databricks.enabled "$_dbx_config") || return 1
 if [ "$_dbx_enabled" != "true" ]; then
   echo "databricks.enabled is $_dbx_enabled in $_dbx_config: no Databricks credential is needed"
-  unset _dbx_config _dbx_enabled
+  unset _dbx_source _dbx_config _dbx_context _dbx_enabled
   return 0
 fi
-_dbx_parameter=$(yq -r .databricks.secret_parameter "$_dbx_config") || return 1
+_dbx_parameter=$(yq -r '.databricks.secret_parameter // ""' "$_dbx_config") || return 1
+if [ -z "$_dbx_parameter" ]; then
+  _dbx_root=$(yq -r .context.name_root "$_dbx_context") || return 1
+  _dbx_parameter=/$_dbx_root/databricks/client-secret
+fi
 _dbx_secret=$(aws ssm get-parameter --with-decryption --name "$_dbx_parameter" \
   --query Parameter.Value --output text) || return 1
 # A mask covers one line; refuse anything else without printing it.
@@ -44,4 +58,4 @@ DATABRICKS_CLIENT_ID=$(yq -r .databricks.client_id "$_dbx_config") || return 1
 DATABRICKS_CLIENT_SECRET=$_dbx_secret
 export DATABRICKS_ACCOUNT_ID DATABRICKS_CLIENT_ID DATABRICKS_CLIENT_SECRET
 echo "Databricks credential for account $DATABRICKS_ACCOUNT_ID loaded for this step (masked)"
-unset _dbx_config _dbx_enabled _dbx_parameter _dbx_secret
+unset _dbx_source _dbx_config _dbx_context _dbx_enabled _dbx_parameter _dbx_root _dbx_secret

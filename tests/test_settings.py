@@ -16,6 +16,7 @@ from jaws.settings import (
     PlatformRepository,
     ProjectGuardrails,
     Settings,
+    databricks_defaults,
     load_document,
     load_settings,
     monitoring_secrets_prefix,
@@ -1268,3 +1269,41 @@ def test_slack_channels_live_under_the_name_root_s_secrets(tmp_path: Path) -> No
         _load_raw(tmp_path, raw)
     raw["monitoring"] = copy.deepcopy(ACME_MONITORING)
     assert _load_raw(tmp_path, raw).monitoring is not None
+
+
+def test_the_databricks_defaults_are_today_s_names_for_the_jaws_root() -> None:
+    assert databricks_defaults("jaws") == {
+        "secret_parameter": "/jaws/databricks/client-secret",
+        "metastore_name": "jaws-us-east-1",
+        "audit_bucket": "jaws-databricks-audit-logs",
+    }
+
+
+@pytest.mark.parametrize("name_root", ["jaws", "acme"])
+def test_the_databricks_names_a_platform_leaves_out_follow_its_name_root(
+    tmp_path: Path, name_root: str
+) -> None:
+    raw = fixture_config()
+    raw["context"]["name_root"] = name_root
+    raw.pop("monitoring", None)  # its Slack channels live under /jaws/monitoring/
+    for key in ("secret_parameter", "metastore_name", "audit_bucket"):
+        raw["databricks"].pop(key, None)
+    section = _load_raw(tmp_path, raw).databricks
+    assert section is not None
+    assert (section.secret_parameter, section.metastore_name, section.audit_bucket) == (
+        f"/{name_root}/databricks/client-secret",
+        f"{name_root}-us-east-1",
+        f"{name_root}-databricks-audit-logs",
+    )
+
+
+def test_a_databricks_name_the_platform_sets_wins(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw["context"]["name_root"] = "acme"
+    raw.pop("monitoring", None)
+    raw["databricks"].pop("secret_parameter", None)
+    raw["databricks"]["audit_bucket"] = "acme-audit"
+    section = _load_raw(tmp_path, raw).databricks
+    assert section is not None
+    assert section.audit_bucket == "acme-audit"
+    assert section.secret_parameter == "/acme/databricks/client-secret"

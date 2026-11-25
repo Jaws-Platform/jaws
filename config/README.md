@@ -21,7 +21,7 @@ section defined twice, and a `.yml` file instead of skipping it.
 
 Which file holds a section is organisation only. Workflows and scripts read a
 few sections from their file with `yq` (`aws`, `projects`, `ecr`,
-`databricks`), so move a section only with its readers;
+`databricks`, and `context` in `tool.yaml`), so move a section only with its readers;
 `tests/platform/test_config_layout.py` pins the layout.
 
 The Terraform version and the module family versions are the release's

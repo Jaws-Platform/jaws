@@ -78,6 +78,27 @@ def _private_node(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
+def _databricks_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    """Databricks without the names that follow the name root: the foundation derives
+    them as the CLI does."""
+    config["context"]["name_root"] = "acme"
+    for key in ("secret_parameter", "metastore_name", "audit_bucket"):
+        config["databricks"].pop(key)
+    # A dataset bucket is <name_root>-<project>-<dataset>, and the project file spells it.
+    for group in config["projects"].values():
+        for project in group["projects"].values():
+            if "datasets" in project:
+                project["datasets"] = {
+                    name.replace("jaws-", "acme-", 1): dataset
+                    for name, dataset in project["datasets"].items()
+                }
+    # The CLI refuses Slack channels outside /<name_root>/monitoring/.
+    channels = config["monitoring"]["slack"]["channels"]
+    for name, parameter in channels.items():
+        channels[name] = parameter.replace("/jaws/monitoring/", "/acme/monitoring/", 1)
+    return config
+
+
 HUB_REPOSITORY = {
     "repository": "Example-Hub/platform",
     "owner_id": "10000099",
@@ -137,6 +158,7 @@ FIXTURES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "foreign-admin.yaml": _foreign_admin,
     "no-monitoring.yaml": _no_monitoring,
     "private-node.yaml": _private_node,
+    "databricks-defaults.yaml": _databricks_defaults,
     "two-repositories.yaml": _two_repositories,
     "hub.yaml": _hub,
     "hub-not-trusted.yaml": _hub_not_trusted,
