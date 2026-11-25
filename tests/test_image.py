@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import base64
 import logging
+import re
+import shlex
 import stat
+from importlib import resources
 from pathlib import Path
 
 import boto3
@@ -89,7 +92,9 @@ def test_build_command_line(
     bot: Project, binary: Path, bot_workspace: Path, fake_docker: Path
 ) -> None:
     context = image.prepare_context(bot, "v0.14.0", binary, bot_workspace / "ctx", bot_workspace)
-    tag = image.build(context, bot, "v0.14.0", logging.getLogger("t"))
+    tag = image.build(
+        context, bot, "v0.14.0", logging.getLogger("t"), label_namespace="com.example"
+    )
     assert tag == "jaws-braveheart:v0.14.0"
     line = fake_docker.read_text().splitlines()[0]
     assert line.startswith("build ")
@@ -100,6 +105,8 @@ def test_build_command_line(
         "--build-arg ENGINE_VERSION=v0.14.0",
         "--build-arg ENGINE_REPOSITORY=https://github.com/Braveheart-Chess/braveheart",
         "--build-arg SOURCE_REPOSITORY=https://github.com/Braveheart-Chess/braveheart",
+        "--label com.example.engine.version=v0.14.0",
+        "--label com.example.engine.source=https://github.com/Braveheart-Chess/braveheart",
         "--tag jaws-braveheart:v0.14.0",
     ):
         assert part in line, part
@@ -236,7 +243,33 @@ def test_build_passes_the_engine_version_separately(
     context = image.prepare_context(
         bot, "v0.13.0-abcd1234", binary, bot_workspace / "c", bot_workspace
     )
-    image.build(context, bot, "v0.13.0-abcd1234", logging.getLogger("t"), engine_version="v0.13.0")
+    image.build(
+        context,
+        bot,
+        "v0.13.0-abcd1234",
+        logging.getLogger("t"),
+        engine_version="v0.13.0",
+        label_namespace="com.example",
+    )
     line = fake_docker.read_text().splitlines()[0]
     assert "--build-arg VERSION=v0.13.0-abcd1234" in line
     assert "--build-arg ENGINE_VERSION=v0.13.0" in line
+    assert "--label com.example.engine.version=v0.13.0" in line
+
+
+def test_the_label_namespace_is_the_zone_reversed() -> None:
+    assert image.label_namespace("example.com") == "com.example"
+    assert image.label_namespace("platform.example.co.uk") == "uk.co.example.platform"
+
+
+def test_the_bot_dockerfile_labels_only_the_image() -> None:
+    """The engine's labels are the CLI's, under the platform's own namespace."""
+    text = resources.files(image.KIND_PACKAGE).joinpath("Dockerfile").read_text()
+    instructions = re.sub(r"\\\n", " ", text).splitlines()
+    keys = [
+        pair.split("=", 1)[0]
+        for line in instructions
+        if line.startswith("LABEL ")
+        for pair in shlex.split(line)[1:]
+    ]
+    assert keys and all(key.startswith("org.opencontainers.image.") for key in keys)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from contextlib import AbstractContextManager
 from pathlib import Path
@@ -573,6 +574,9 @@ def test_bot_build_verifies_and_smoke_tests(
     assert len(record["sha256"]) == 64
     verbs = [line.split()[0] for line in fake_docker.read_text().splitlines()]
     assert verbs == ["build", "run"]
+    assert re.search(
+        r"--label [a-z0-9.-]+\.engine\.version=v0\.14\.0 ", fake_docker.read_text().splitlines()[0]
+    )
 
 
 def test_bot_build_rejects_bad_checksum(

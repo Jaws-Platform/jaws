@@ -1359,7 +1359,14 @@ def _build(run: Run, project: Project, version: str) -> str:
         # the file's own directory, wherever the command runs from.
         consumer_root = run.site_file.resolve().parent
         context = image.prepare_context(project, tag, binary, work / "context", consumer_root)
-        name = image.build(context, project, tag, run.logger, engine_version=version)
+        name = image.build(
+            context,
+            project,
+            tag,
+            run.logger,
+            engine_version=version,
+            label_namespace=image.label_namespace(run.settings.dns.zone),
+        )
     with phase("smoke test"):
         nodes = image.smoke_test(name, project, run.logger)
     record = {"tag": tag, "version": version, "image": name, "sha256": digest, "nodes": nodes}
