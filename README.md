@@ -164,7 +164,11 @@ images included. At today's pace a version lasts about two days, so pin a recent
 maintenance contracts.
 
 A published tag is never replaced, and a re-publish (`workflow_dispatch` with a `tag`)
-fills in a missing one. Tags cut before the generic image are never published.
+fills in a missing one, a pruned one included. A refilled tag is a new build with a new
+digest, so a pin by the pruned version's digest stays broken until it moves to the new
+one. The same dispatch's `jaws-cli` job fails on that tag if the account's private
+repository still holds it, since its tags are immutable; the public image is published
+all the same. Tags cut before the generic image are never published.
 
 ### Bot projects
 
@@ -674,7 +678,7 @@ Every `terraform init` goes through `.github/actions/terraform-init`, which retr
 
 **Releases, applies and the image** (`.github/workflows/release-please.yml`, on push to `main`):
 
-Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`, then, with the `monitoring` section, applies `monitoring/` with `jaws-monitoring-ci-apply`; then the `image` job, also in `prod`, builds the `jaws-cli` target (for a tag cut before it, the tag's only image) and pushes it to the account's repository as `<repository>:<tag>` (`ecr.repository` in `config/tool.yaml`, `jaws-cli`). The public image job, which needs only Release Please (not the apply), builds the `generic` target and pushes it to ECR Public in the `publish` environment ([Jaws's public image](#jawss-public-image)); it skips with a notice until the owner has set its variables. Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes the image for an existing release.
+Merges to `main` accumulate in a Release Please PR. Merging that PR creates a tag; the `apply` job checks out the tag, assumes the apply role in the `prod` GitHub environment and runs `terraform apply`, then, with the `monitoring` section, applies `monitoring/` with `jaws-monitoring-ci-apply`; then the `image` job, also in `prod`, builds the `jaws-cli` target (for a tag cut before it, the tag's only image) and pushes it to the account's repository as `<repository>:<tag>` (`ecr.repository` in `config/tool.yaml`, `jaws-cli`). The public image job, which needs only Release Please (not the apply), builds the `generic` target and pushes it to ECR Public in the `publish` environment ([Jaws's public image](#jawss-public-image)); it skips with a notice until the owner has set its variables. Nothing is applied to AWS without that human merge. The release bumps the package version in `src/jaws/__init__.py` and the image tag the composite action runs (`.github/actions/jaws/action.yml`); the reusable workflows carry no version, since they use the action from their own commit. `workflow_dispatch` with a `tag` re-publishes both images of an existing release, `jaws-cli` and the public one ([Jaws's public image](#jawss-public-image) says what a re-publish fills in).
 
 No role ARN is a secret. This repository needs one as a variable, `JAWS_PUBLISH_ROLE_ARN`, the publishing role in `release-infra/`, so that no account ID appears outside that folder (spec 6.8). The foundation's plan and apply jobs build their role (`<name_root>-infra-ci-plan` / `-ci-apply`) from the account and name root `jaws config env` reads from the tool configuration (the primary account in `config/aws.yaml`, `context.name_root` in `config/tool.yaml`), and keep their state through `backend/prod.hcl`. Bot role ARNs need no variable either: the workflows build them the same way, with the bot's name.
 
