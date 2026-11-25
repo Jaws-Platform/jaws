@@ -27,31 +27,44 @@ Agents never plan it against that state.
 
 ## Run it
 
-The owner's hand-off steps for the first apply are in the release plan: create
-the `publish` environment first (the role trusts it), then:
+The owner's hand-off for the first apply is in the release plan,
+[plan 04's "Owner hand-off"](../docs/superpowers/plans/2026-11-23-hub-split-04-images.md#owner-hand-off-after-the-pr-merges)
+(and in README.md's "Owner hand-off"). In this order:
 
-```sh
-aws sso login --profile jaws-prod
-export AWS_PROFILE=jaws-prod
-cd release-infra
-terraform init -backend-config=backend/prod.hcl
-terraform plan -out=tfplan    # 3 to add: the repository jaws, the role, its inline policy
-terraform apply tfplan
-```
+1. Create the `publish` environment first, with its deployment branches set to
+   `main` only: the role trusts it. Add a tag ruleset on `refs/tags/v*` that
+   restricts creating, updating and deleting tags, with only the release bot's
+   GitHub App allowed to bypass it. The release already refuses a tag that is
+   not on `main`'s history; the ruleset also stops a tag pushed at an older
+   commit of `main`, or one moved, so that only Release Please's tags are
+   published.
+2. Apply it:
 
-Then request the registry alias `jaws` in the ECR Public console (Public
-registry, Settings). Once it is approved and primary, refresh and read the
-outputs:
+   ```sh
+   aws sso login --profile jaws-prod
+   export AWS_PROFILE=jaws-prod
+   cd release-infra
+   terraform init -backend-config=backend/prod.hcl
+   terraform plan -out=tfplan    # 3 to add: the repository jaws, the role, its inline policy
+   terraform apply tfplan
+   ```
 
-```sh
-terraform apply -refresh-only
-terraform output -raw repository_uri   # public.ecr.aws/<alias>/jaws: JAWS_PUBLIC_IMAGE
-terraform output -raw role_arn         # JAWS_PUBLISH_ROLE_ARN
-```
+3. Request the registry alias `jaws` in the ECR Public console (Public
+   registry, Settings).
+4. Once it is approved and primary, refresh and read the outputs:
 
-and set them as the repository variables `JAWS_PUBLIC_IMAGE` and
-`JAWS_PUBLISH_ROLE_ARN`. Check that the address names the approved alias before
-setting the first.
+   ```sh
+   terraform apply -refresh-only
+   terraform output -raw repository_uri   # public.ecr.aws/<alias>/jaws: JAWS_PUBLIC_IMAGE
+   terraform output -raw role_arn         # JAWS_PUBLISH_ROLE_ARN
+   ```
+
+   and set them as the repository variables `JAWS_PUBLIC_IMAGE` and
+   `JAWS_PUBLISH_ROLE_ARN`. Check that the address names the approved alias
+   before setting the first.
+5. From the repository root, run `scripts/apply-repo-settings.sh` again, so that
+   this folder's check, `Release infrastructure validate, tflint, test`, is
+   required.
 
 ## Changing it
 
