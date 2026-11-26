@@ -1008,7 +1008,8 @@ def config_env(
         typer.Option(
             "--brand",
             help="Also print `check_prefix=<brand.check_prefix>`, the first word of the "
-            "workflows' job names. Plan 05's workflows will read it; nothing does yet.",
+            "workflows' job names. The site workflows take it as their `check-prefix` input, "
+            "and `jaws platform check` holds each hub caller's to it.",
         ),
     ] = False,
     platform: Annotated[
@@ -2467,3 +2468,23 @@ def platform_apply(ctx: typer.Context, name: PlatformStackName) -> None:
     run: Run = ctx.obj
     with databricks.redacting(run.logger, secrets):
         _command(body)(ctx)
+
+
+@platform_app.command("check")
+def platform_check(
+    ctx: typer.Context,
+    root: Annotated[
+        Path, typer.Option("--root", help="The hub's checkout: its Dockerfile and workflows.")
+    ] = Path("."),
+) -> None:
+    """Check that the hub's pins and identity agree with its configuration and this image."""
+    run: Run = ctx.obj
+    version = tool_version()
+    problems = platform.check_hub(root, run.settings, version, os.environ.get("GITHUB_REPOSITORY"))
+    for problem in problems:
+        message = f"{problem.path}: {problem.message}"
+        run.logger.error("%s", message)
+        annotate_error(message, title=run.settings.brand.name)
+    if problems:
+        raise typer.Exit(1)
+    typer.echo(f"the hub's pins and identity agree: Jaws v{version}")

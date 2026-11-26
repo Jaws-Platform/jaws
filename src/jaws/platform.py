@@ -13,12 +13,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from logging import Logger
 from pathlib import Path
 from typing import Any, Literal
+
+import yaml
 
 from . import github, report
 from .diagnose import _redact
@@ -255,3 +258,163 @@ def apply(terraform: PlatformTerraform, version: str, sweep_summary: str | None 
         f"**Sweep: {result}**\n\n{sweep_summary.rstrip()}\n\n"
         f"### Applied state\n\n```json\n{state}\n```\n"
     )
+
+
+# -- the hub's check ------------------------------------------------------------------
+
+#: The workflows that run a project as the platform, so take its identity as inputs.
+IDENTITY_WORKFLOWS = frozenset(
+    {
+        "site-plan.yml",
+        "site-preview.yml",
+        "site-deploy.yml",
+        "remote-task.yml",
+        "container-release.yml",
+        "platform-release.yml",
+        "platform-rollback.yml",
+        "platform-bot-apply.yml",
+        "platform-databricks-apply.yml",
+        "platform-sweep.yml",
+    }
+)
+#: The workflows that also name their checks with the brand's `check_prefix`.
+CHECK_PREFIX_WORKFLOWS = frozenset({"site-plan.yml", "site-preview.yml", "site-deploy.yml"})
+#: A hub Dockerfile's one FROM. `platform-base` holds it verbatim, so the check and the
+#: build read one FROM alike.
+FROM_PATTERN = r"^FROM ([^ @]+):(v[0-9]+\.[0-9]+\.[0-9]+)@(sha256:[0-9a-f]{64})$"
+_CALL = re.compile(r"^Jaws-Platform/jaws/\.github/workflows/([^@/]+)@(.+)$")
+_WORKFLOWS = Path(".github/workflows")
+
+
+@dataclass(frozen=True)
+class HubProblem:
+    """One way a hub's pins or identity disagree: `path` is relative to the hub's root."""
+
+    path: str
+    message: str
+
+
+def _identity_keys(file: str) -> tuple[str, ...]:
+    keys = ("platform-image", "account-id", "name-root")
+    return (*keys, "check-prefix") if file in CHECK_PREFIX_WORKFLOWS else keys
+
+
+def _check_key(job: str, key: str, value: object, expected: str | None) -> str | None:
+    """What is wrong with the literal `value` of input `key`, or None."""
+    if not isinstance(value, str):
+        return f"job {job} passes {key} as {value!r}: pass {key} as a quoted string"
+    if "${{" in value:
+        return (
+            f"job {job} passes {key} as an expression: a project's run needs the "
+            "platform's identity before it can read anything, so it is a literal"
+        )
+    if expected is not None and value != expected:
+        return f"job {job} passes {key}: {value!r}, but the configuration says {expected!r}"
+    return None
+
+
+def _check_workflow(
+    path: str, document: object, tag: str | None, expected: Mapping[str, str | None]
+) -> tuple[list[HubProblem], int]:
+    """The problems in one workflow's calls of Jaws's, and how many calls it makes."""
+    jobs = document.get("jobs") if isinstance(document, dict) else None
+    problems: list[HubProblem] = []
+    calls = 0
+    for job, spec in jobs.items() if isinstance(jobs, dict) else ():
+        called = _CALL.match(str(spec.get("uses", ""))) if isinstance(spec, dict) else None
+        if called is None:
+            continue
+        calls += 1
+        file, ref = called.groups()
+        if tag is not None and ref != tag:
+            problems.append(
+                HubProblem(
+                    path,
+                    f"job {job} calls Jaws-Platform/jaws at {ref}, but the Dockerfile pins "
+                    f"{tag}: one pull request bumps every pin",
+                )
+            )
+        passed = spec.get("with")
+        passed = passed if isinstance(passed, dict) else {}
+        if file not in IDENTITY_WORKFLOWS:
+            continue
+        for key in _identity_keys(file):
+            if key not in passed:
+                message: str | None = (
+                    f"job {job} calls {file} without {key}: it would run as one of "
+                    "Jaws's own projects, not this platform's"
+                )
+            else:
+                message = _check_key(str(job), key, passed[key], expected[key])
+            if message is not None:
+                problems.append(HubProblem(path, message))
+    return problems, calls
+
+
+def check_hub(
+    root: Path, settings: Settings, version: str, repository: str | None
+) -> list[HubProblem]:
+    """Where the hub at `root` disagrees with its configuration and the image running this.
+
+    `version` is the Jaws the image runs; `repository` is where the check runs. Nothing
+    comes back when the hub agrees."""
+    problems: list[HubProblem] = []
+    dockerfile = root / "Dockerfile"
+    froms = (
+        [line for line in dockerfile.read_text().splitlines() if line.startswith("FROM ")]
+        if dockerfile.is_file()
+        else []
+    )
+    matched = re.match(FROM_PATTERN, froms[0]) if len(froms) == 1 else None
+    tag = matched.group(2) if matched else None
+    if matched is None:
+        line = froms[0] if len(froms) == 1 else ("\n".join(froms) if froms else "")
+        problems.append(
+            HubProblem(
+                "Dockerfile",
+                "FROM must pin the Jaws image by tag and digest "
+                f"(FROM public.ecr.aws/<alias>/jaws:vX.Y.Z@sha256:…), not {line!r}",
+            )
+        )
+    elif tag != f"v{version}":
+        problems.append(
+            HubProblem(
+                "Dockerfile",
+                f"the Dockerfile pins {tag}, but the image it built runs Jaws v{version}: "
+                "its digest is another release's",
+            )
+        )
+
+    hub = settings.platform.hub
+    expected: dict[str, str | None] = {
+        "platform-image": hub.image if hub else None,
+        "account-id": settings.aws.account_id,
+        "name-root": settings.context.name_root,
+        "check-prefix": settings.brand.check_prefix,
+    }
+    calls = 0
+    directory = root / _WORKFLOWS
+    files = (
+        sorted([*directory.glob("*.yml"), *directory.glob("*.yaml")]) if directory.is_dir() else []
+    )
+    for file in files:
+        found, count = _check_workflow(
+            file.relative_to(root).as_posix(), yaml.safe_load(file.read_text()), tag, expected
+        )
+        problems += found
+        calls += count
+    if calls == 0:
+        problems.append(
+            HubProblem(_WORKFLOWS.as_posix(), "no job calls a Jaws-Platform/jaws workflow")
+        )
+
+    if hub is None:
+        problems.append(HubProblem("config", "platform.hub is not set (config/platform.yaml)"))
+    elif repository is not None and hub.repository != repository:
+        problems.append(
+            HubProblem(
+                "config",
+                f"platform.hub.repository is {hub.repository}, but this check runs in {repository}",
+            )
+        )
+    return problems
