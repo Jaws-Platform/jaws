@@ -6,8 +6,9 @@ job builds the release commit and pushes it as `sha-<commit>`, a tag that never 
 re-run finds its own build. The foundation, then monitoring, are applied with that build, by
 its digest, never with whatever `current` names. `current` moves once the foundation's apply
 succeeds, without waiting for monitoring's (ruling 7), and `live` follows, moved by the hub's
-mover App, never the release App (ruling 8). A rollback moves both to a kept build, `live` by
-force, and applies nothing (ruling 9).
+mover App, never the release App (ruling 8). A re-run of an older release's job, once a newer
+release is live, stops before it changes anything. A rollback moves both to a kept build,
+`live` by force, and applies nothing (ruling 9).
 
 `platform-move`'s scripts, the steps that look a build up, and the checks on the `image`
 job's outputs run here as Actions runs them, with stand-ins for `aws`, `gh`, `docker` and
@@ -111,8 +112,9 @@ esac
 """
 #: Stands in for gh: logs each call, and answers only the token FAKE_TOKEN, as GitHub answers
 #: only a valid one. A PATCH fails with FAKE_PATCH_ERROR and a POST with FAKE_POST_ERROR when
-#: set, as gh fails: GitHub's answer on stdout, its message on stderr, exit 1. A compare
-#: prints FAKE_STATUS, its answer's `--jq .status`, or fails with FAKE_COMPARE_ERROR.
+#: set, as gh fails: GitHub's answer on stdout, its message on stderr, exit 1. A compare, asked
+#: for its answer's `--jq .status`, prints FAKE_STATUS, or fails with FAKE_COMPARE_ERROR, as
+#: HTTP FAKE_COMPARE_CODE (404 when unset).
 FAKE_GH = """#!/usr/bin/env bash
 echo "gh $*" >> "$FAKE_LOG"
 fail() {
@@ -130,8 +132,8 @@ case "$*" in
     [[ -z "${FAKE_POST_ERROR:-}" ]] || fail "$FAKE_POST_ERROR" 422
     echo '{"ref": "refs/heads/live"}'
     ;;
-  "api repos/"*"/compare/"*)
-    [[ -z "${FAKE_COMPARE_ERROR:-}" ]] || fail "$FAKE_COMPARE_ERROR" 404
+  "api repos/"*"/compare/"*" --jq .status")
+    [[ -z "${FAKE_COMPARE_ERROR:-}" ]] || fail "$FAKE_COMPARE_ERROR" "${FAKE_COMPARE_CODE:-404}"
     echo "$FAKE_STATUS"
     ;;
   *) echo "unexpected: gh $*" >&2; exit 2 ;;
@@ -840,6 +842,127 @@ def test_a_release_or_rollback_is_never_cancelled() -> None:
     assert "concurrency" not in job(RELEASE, "release-please"), "a push takes no turn"
     for workflow in (RELEASE, ROLLBACK):
         assert "concurrency" not in _workflow(workflow), workflow
+
+
+# -- a stale re-run -------------------------------------------------------------------
+
+#: The jobs that apply or move the release's build. Each first checks that no newer release is
+#: live, so a re-run of an older release's failed job stops before it changes anything.
+GUARDED = ["apply", "current", "monitoring-apply"]
+#: The check's environment: the release commit, and the job's own token, which reads live.
+NEWEST = {"COMMIT": BUILD_COMMIT, "GH_TOKEN": "${{ github.token }}"}
+#: The check's one call: GitHub's comparison of the release commit with live.
+COMPARE = f"gh api repos/{HUB_NAME}/compare/{COMMIT}...live --jq .status"
+
+
+def _newest(tmp_path: Path, name: str, **env: str) -> Ran:
+    """Run job `name`'s check for COMMIT, with the job's own token; `env` sets what GitHub's
+    comparison of COMMIT with live answers."""
+    return _step(
+        tmp_path,
+        RELEASE,
+        name,
+        "newest",
+        **{"COMMIT": COMMIT, "GH_TOKEN": JOB_TOKEN, "FAKE_TOKEN": JOB_TOKEN, **env},
+    )
+
+
+def test_each_job_that_applies_or_moves_first_checks_no_newer_release_is_live() -> None:
+    """Once a newer release is live, a re-run of an older release's failed job would apply the
+    older configuration, or move current back to the older build while live keeps the newer
+    workflow files: the pair ruling 7 rules out. So the check comes before anything the job
+    changes. A rollback moves back on purpose, and doesn't check."""
+    guards = {
+        name: step
+        for name in _jobs(RELEASE)
+        for step in _steps(RELEASE, name)
+        if step.get("id") == "newest"
+    }
+    assert list(guards) == GUARDED
+    for name in GUARDED:
+        guard = guards[name]
+        assert guard == guards["apply"], f"{name}: every job checks alike"
+        assert guard["env"] == NEWEST, name
+        steps = _steps(RELEASE, name)
+        assert steps.index(_by_id(RELEASE, name, "release-build")) < steps.index(guard), name
+        changing = [
+            *_using(RELEASE, name, CREDENTIALS),
+            *_using(RELEASE, name, IMAGE),
+            *_using(RELEASE, name, MOVE),
+            *_using(RELEASE, name, JAWS),
+        ]
+        assert changing, name
+        assert all(steps.index(guard) < steps.index(s) for s in changing), name
+    assert "...live" not in (WORKFLOWS / ROLLBACK).read_text(), "a rollback moves back"
+
+
+@pytest.mark.parametrize("name", GUARDED)
+@pytest.mark.parametrize(
+    "env",
+    [{"FAKE_STATUS": "behind"}, {"FAKE_STATUS": "identical"}, {"FAKE_COMPARE_ERROR": "Not Found"}],
+    ids=["live-is-older", "live-is-this-release", "no-live-yet"],
+)
+def test_a_release_no_older_than_live_goes_on(
+    tmp_path: Path, name: str, env: dict[str, str]
+) -> None:
+    """live is behind the release commit; or at it, as on a re-run once this release has moved
+    it; or doesn't exist yet, before the hub's first release, and GitHub can't find it."""
+    ran = _newest(tmp_path, name, **env)
+    assert ran.result.returncode == 0, ran.result.stdout + ran.result.stderr
+    assert ran.calls == [COMPARE]
+    assert _errors(ran) == []
+    assert ran.output == ""
+
+
+@pytest.mark.parametrize("name", GUARDED)
+def test_a_re_run_once_a_newer_release_is_live_stops(tmp_path: Path, name: str) -> None:
+    """live holds commits the release lacks: a newer release is live. The way back to this
+    release is the rollback, which moves live and current together."""
+    ran = _newest(tmp_path, name, FAKE_STATUS="ahead")
+    assert ran.result.returncode != 0
+    (error,) = _errors(ran)
+    assert error.startswith("::error::a newer release is live"), error
+    assert COMMIT in error and "rollback" in error, error
+    assert ran.calls == [COMPARE]
+
+
+@pytest.mark.parametrize("name", GUARDED)
+@pytest.mark.parametrize(
+    ("env", "named"),
+    [
+        ({"FAKE_STATUS": "diverged"}, "'diverged'"),
+        (
+            {"FAKE_COMPARE_ERROR": "Server Error", "FAKE_COMPARE_CODE": "500"},
+            "Server Error (HTTP 500)",
+        ),
+        ({"GH_TOKEN": "another-token"}, "Bad credentials (HTTP 401)"),
+    ],
+    ids=["diverged", "a-server-error", "a-refused-token"],
+)
+def test_any_other_answer_stops_the_job_naming_it(
+    tmp_path: Path, name: str, env: dict[str, str], named: str
+) -> None:
+    ran = _newest(tmp_path, name, **env)
+    assert ran.result.returncode != 0
+    (error,) = _errors(ran)
+    assert named in error and COMMIT in error, error
+    assert ran.calls == [COMPARE]
+
+
+@pytest.mark.parametrize("name", GUARDED)
+@pytest.mark.parametrize(
+    "commit", ["", COMMIT.upper(), "main"], ids=["empty", "not-lowercase", "a-branch"]
+)
+def test_the_check_compares_the_release_commit_only(
+    tmp_path: Path, name: str, commit: str
+) -> None:
+    """An empty commit would compare `...live`, which GitHub can't find: a 404 that must never
+    pass for a first release."""
+    ran = _newest(tmp_path, name, FAKE_STATUS="behind", COMMIT=commit)
+    assert ran.result.returncode != 0
+    (error,) = _errors(ran)
+    assert error.startswith("::error::needs.image.outputs.commit "), error
+    assert ran.calls == [], "nothing reaches GitHub"
 
 
 # -- platform-move --------------------------------------------------------------------

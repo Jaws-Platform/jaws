@@ -422,6 +422,18 @@ moves, so a second push would fail. Don't re-run all the jobs: Release Please
 would run again, find nothing left to release, and every later job would be
 skipped.
 
+A re-run never takes the hub back. Once a newer release is live, re-running an
+older release's job would apply the older configuration, or move `current` back
+to its build while `live` keeps the newer workflow files: the pair ruling 7
+rules out. So `apply`, `current` and `monitoring-apply` each first compare the
+release commit with `live`, with the job's own token, before they change
+anything. They go on while `live` is behind the release commit or at it, or
+doesn't exist yet, before the hub's first release. When `live` is ahead, the
+job stops with "a newer release is live". Any other answer, such as histories
+that have diverged or an error from GitHub, stops it too, naming the answer. To
+go back to an older release, run [the rollback](#rolling-back), which moves
+both on purpose.
+
 The jobs that change something each hold the concurrency group
 `platform-release`, as the rollback's job does, and never cancel one in
 progress. GitHub runs one job of a group at a time and keeps one pending, so

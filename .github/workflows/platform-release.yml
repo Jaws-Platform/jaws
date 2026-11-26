@@ -41,7 +41,10 @@ name: Platform release
 # job would run Release Please again, which then releases nothing, so the rest would skip.
 # Each later job reads the build by the digest ECR has for sha-<commit>, which the image job
 # outputs, and a re-run of the image job finds the build its first attempt pushed, so every
-# attempt runs and moves the one build.
+# attempt runs and moves the one build. A stale re-run stops: apply, current and
+# monitoring-apply each first compare the release commit with live, and stop before they
+# change anything when live is ahead of it, as it is once a newer release is live. The way
+# back to an older release is the rollback.
 #
 # The caller grants contents: read and id-token: write, holds no platform-release group, and
 # passes the identity, the mover App's client ID (live-app-client-id), Release Please's
@@ -291,6 +294,42 @@ jobs:
             echo "::error::needs.image.outputs.digest is empty: the image job named no build, and this job runs the release's own only"
             exit 1
           fi
+      - name: Check no newer release is live (a stale re-run stops here)
+        id: newest
+        env:
+          COMMIT: ${{ needs.image.outputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Once a newer release is live, a re-run of this release's job would apply the older
+          # configuration, or move current back to the older build while live keeps the newer
+          # workflow files: the pair ruling 7 rules out. So the job goes on only while live,
+          # the release commit projects run, is this release's or an older one's.
+          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::needs.image.outputs.commit must be the release commit, 40 lowercase hex digits, got '$COMMIT'"
+            exit 1
+          fi
+          # gh prints the status, or on a failure GitHub's answer and its message: both kept.
+          if status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$COMMIT...live" --jq .status 2>&1); then
+            case "$status" in
+              behind) echo "live is behind $COMMIT: this release is newer" ;;
+              identical) echo "live is at $COMMIT, this release" ;;
+              ahead)
+                echo "::error::a newer release is live: live is ahead of this release's commit $COMMIT, and this job would take the hub back; to go back to this release, run the rollback"
+                exit 1
+                ;;
+              *)
+                echo "::error::GitHub compares live with this release's commit $COMMIT as '$status': this job goes on only while live is behind it or at it"
+                exit 1
+                ;;
+            esac
+          elif [[ "$status" == *"HTTP 404"* ]]; then
+            # live doesn't exist yet: this is the hub's first release, whose live job creates it.
+            echo "live doesn't exist yet: this is the hub's first release"
+          else
+            echo "$status" >&2
+            echo "::error::could not compare this release's commit $COMMIT with live: $(tail -n 1 <<<"$status")"
+            exit 1
+          fi
       - name: Check out jaws at this workflow's own commit
         uses: actions/checkout@v7
         with:
@@ -371,6 +410,42 @@ jobs:
           fi
           if [[ -z "$COMMIT" ]]; then
             echo "::error::needs.image.outputs.commit is empty: the image job named no release commit, and current and live move to the release's own only"
+            exit 1
+          fi
+      - name: Check no newer release is live (a stale re-run stops here)
+        id: newest
+        env:
+          COMMIT: ${{ needs.image.outputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Once a newer release is live, a re-run of this release's job would apply the older
+          # configuration, or move current back to the older build while live keeps the newer
+          # workflow files: the pair ruling 7 rules out. So the job goes on only while live,
+          # the release commit projects run, is this release's or an older one's.
+          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::needs.image.outputs.commit must be the release commit, 40 lowercase hex digits, got '$COMMIT'"
+            exit 1
+          fi
+          # gh prints the status, or on a failure GitHub's answer and its message: both kept.
+          if status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$COMMIT...live" --jq .status 2>&1); then
+            case "$status" in
+              behind) echo "live is behind $COMMIT: this release is newer" ;;
+              identical) echo "live is at $COMMIT, this release" ;;
+              ahead)
+                echo "::error::a newer release is live: live is ahead of this release's commit $COMMIT, and this job would take the hub back; to go back to this release, run the rollback"
+                exit 1
+                ;;
+              *)
+                echo "::error::GitHub compares live with this release's commit $COMMIT as '$status': this job goes on only while live is behind it or at it"
+                exit 1
+                ;;
+            esac
+          elif [[ "$status" == *"HTTP 404"* ]]; then
+            # live doesn't exist yet: this is the hub's first release, whose live job creates it.
+            echo "live doesn't exist yet: this is the hub's first release"
+          else
+            echo "$status" >&2
+            echo "::error::could not compare this release's commit $COMMIT with live: $(tail -n 1 <<<"$status")"
             exit 1
           fi
       - name: Check out jaws at this workflow's own commit
@@ -506,6 +581,42 @@ jobs:
           # whatever current names now, not this release's build.
           if [[ -z "$DIGEST" ]]; then
             echo "::error::needs.image.outputs.digest is empty: the image job named no build, and this job runs the release's own only"
+            exit 1
+          fi
+      - name: Check no newer release is live (a stale re-run stops here)
+        id: newest
+        env:
+          COMMIT: ${{ needs.image.outputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Once a newer release is live, a re-run of this release's job would apply the older
+          # configuration, or move current back to the older build while live keeps the newer
+          # workflow files: the pair ruling 7 rules out. So the job goes on only while live,
+          # the release commit projects run, is this release's or an older one's.
+          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::needs.image.outputs.commit must be the release commit, 40 lowercase hex digits, got '$COMMIT'"
+            exit 1
+          fi
+          # gh prints the status, or on a failure GitHub's answer and its message: both kept.
+          if status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$COMMIT...live" --jq .status 2>&1); then
+            case "$status" in
+              behind) echo "live is behind $COMMIT: this release is newer" ;;
+              identical) echo "live is at $COMMIT, this release" ;;
+              ahead)
+                echo "::error::a newer release is live: live is ahead of this release's commit $COMMIT, and this job would take the hub back; to go back to this release, run the rollback"
+                exit 1
+                ;;
+              *)
+                echo "::error::GitHub compares live with this release's commit $COMMIT as '$status': this job goes on only while live is behind it or at it"
+                exit 1
+                ;;
+            esac
+          elif [[ "$status" == *"HTTP 404"* ]]; then
+            # live doesn't exist yet: this is the hub's first release, whose live job creates it.
+            echo "live doesn't exist yet: this is the hub's first release"
+          else
+            echo "$status" >&2
+            echo "::error::could not compare this release's commit $COMMIT with live: $(tail -n 1 <<<"$status")"
             exit 1
           fi
       - name: Check out jaws at this workflow's own commit
