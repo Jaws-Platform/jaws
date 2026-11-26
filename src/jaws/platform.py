@@ -11,13 +11,14 @@ environment and nothing else.
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from logging import Logger
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from . import github, report
 from .diagnose import _redact
@@ -97,7 +98,8 @@ class PlatformTerraform(Terraform):
 
     `Terraform.__init__` is not called: it takes a site or a project, reads its state
     key and picks stacks/site for anything but a project. This sets what the commands
-    use instead. The tfvars are empty, and `extra_env` (the stack's variables and any
+    use instead. The tfvars are empty unless given (data access's are rendered), `files`
+    are written into the working copy, and `extra_env` (the stack's variables and any
     credential) reaches only the Terraform process.
     """
 
@@ -107,6 +109,8 @@ class PlatformTerraform(Terraform):
         settings: Settings,
         logger: Logger,
         extra_env: Mapping[str, str] = {},  # copied, never mutated
+        tfvars: Mapping[str, Any] = {},
+        files: Mapping[str, str] = {},
     ) -> None:
         self.platform_stack = stack
         self.settings = settings
@@ -117,7 +121,15 @@ class PlatformTerraform(Terraform):
         self.binary = "terraform"
         self.workdir = None
         self._extra_env = dict(extra_env)
-        self.tfvars_override = {}
+        self.tfvars_override = dict(tfvars)
+        self.files = dict(files)
+
+    def prepare(self) -> Path:
+        """As `Terraform.prepare`, then `files` (name to text) beside the stack's."""
+        workdir = super().prepare()
+        for name, text in self.files.items():
+            (workdir / name).write_text(text)
+        return workdir
 
     def backend(self) -> str:
         return platform_backend(self.settings, self.platform_stack)
@@ -151,11 +163,16 @@ def _working_copy(terraform: Terraform) -> Iterator[Path]:
 
 
 def plan(
-    terraform: PlatformTerraform, artifacts: Path, version: str, secrets: Sequence[str]
+    terraform: PlatformTerraform,
+    artifacts: Path,
+    version: str,
+    secrets: Sequence[str],
+    comment_suffix: str = "",
 ) -> None:
     """Plan the stack, then write .jaws/plan.txt, the plan comment, the outputs `result`
     and `changes`, and the step summary. A failed plan is written and commented, then
-    raised. `secrets` are masked in the plan text."""
+    raised. `secrets` are masked in the plan text. `comment_suffix` follows the comment,
+    after a blank line."""
     settings = terraform.settings
     subject = platform_subject(settings, terraform.platform_stack)
     exit_code = PLAN_ERROR
@@ -181,6 +198,8 @@ def plan(
             github.provenance(version),
             brand=settings.brand,
         )
+        if comment_suffix:
+            comment += "\n" + comment_suffix
         (artifacts / "plan-comment.md").write_text(comment)
         github.write_output("result", report.plan_result_name(exit_code))
         github.write_output("changes", "true" if exit_code == PLAN_CHANGES else "false")
@@ -192,9 +211,16 @@ def plan(
     )
 
 
-def apply(terraform: PlatformTerraform, version: str) -> None:
+#: The outputs of data access's applied state that its step summary shows.
+SWEEP_OUTPUTS = ("edges", "awaiting_onboarding", "missing_workspaces")
+
+
+def apply(terraform: PlatformTerraform, version: str, sweep_summary: str | None = None) -> None:
     """Plan the stack, and apply the saved plan only when it has changes: the sweep's
-    rule. Then write the output `result`, `no-changes` or `applied`, and the step summary."""
+    rule. Then write the output `result`, `no-changes` or `applied`, and the step summary.
+
+    Given `sweep_summary` (data access's access summary), the step summary is the sweep's
+    instead: the result, that summary and the applied state's outputs."""
     subject = platform_subject(terraform.settings, terraform.platform_stack)
     with _working_copy(terraform) as workdir:
         with phase("init"):
@@ -209,7 +235,15 @@ def apply(terraform: PlatformTerraform, version: str) -> None:
         else:
             terraform.logger.info("%s has no changes: nothing to apply", subject)
             result = "no-changes"
+        applied = terraform.outputs() if sweep_summary is not None else {}
     github.write_output("result", result)
+    if sweep_summary is None:
+        github.append_summary(
+            report.run_summary(f"Terraform apply: {result}", {"stack": subject, "tool": version})
+        )
+        return
+    state = json.dumps({name: applied.get(name) for name in SWEEP_OUTPUTS}, indent=2)
     github.append_summary(
-        report.run_summary(f"Terraform apply: {result}", {"stack": subject, "tool": version})
+        f"**Sweep: {result}**\n\n{sweep_summary.rstrip()}\n\n"
+        f"### Applied state\n\n```json\n{state}\n```\n"
     )

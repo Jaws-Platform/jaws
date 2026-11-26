@@ -24,7 +24,7 @@ from jaws import cli
 from jaws.databricks_auth import load_secret as real_load_secret  # `_no_aws` patches the module's
 from jaws.platform import PlatformTerraform, platform_backend, platform_stack
 from jaws.settings import load_settings
-from tests.conftest import CONFIG_DIR
+from tests.conftest import CONFIG_DIR, FIXTURES
 
 runner = CliRunner()
 #: The platform's stacks, each a root module the image holds.
@@ -61,11 +61,19 @@ def _no_aws(monkeypatch: pytest.MonkeyPatch) -> Iterator[MagicMock]:
 
 @pytest.fixture
 def work(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_terraform: Path) -> Path:
-    """Where the CLI runs: the neutral configuration as config/, with the datasets beside
-    it (JAWS_INFRA_ROOT). The stacks are under JAWS_STACKS_ROOT, and GITHUB_OUTPUT and the
-    step summary are files beside this directory."""
+    """Where the CLI runs: the neutral configuration as config/, with the onboarded datasets
+    beside it (JAWS_INFRA_ROOT) and the two project files that agree one handshake
+    (JAWS_PROJECT_FILES_DIR), which data access reads. The stacks are under JAWS_STACKS_ROOT,
+    and GITHUB_OUTPUT and the step summary are files beside this directory."""
     root = tmp_path / "work"
     shutil.copytree(CONFIG_DIR, root / "config")
+    shutil.copytree(FIXTURES / "datasets", root / "datasets")
+    files = tmp_path / "project-files"
+    files.mkdir()
+    for name in ("braveheart-selfplay", "braveheart-databricks"):
+        shutil.copy(FIXTURES / "registry" / f"{name}.yaml", files / f"{name}.yaml")
+    monkeypatch.setenv("JAWS_PROJECT_FILES_DIR", str(files))
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     for name in STACKS:
         directory = tmp_path / "stacks" / name
         directory.mkdir(parents=True)
@@ -403,3 +411,133 @@ def test_the_working_copy_holds_the_stack_and_its_backend(
     finally:
         terraform.cleanup(failed=False)
     assert not workdir.exists()
+
+
+# -- data access: the render, then the stack --------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("command", "role"),
+    [("plan", "jaws-data-access-ci-plan"), ("apply", "jaws-data-access-ci-apply")],
+)
+@pytest.mark.parametrize(
+    ("document", "state"),
+    [({"enabled": False}, "disabled"), ({"shared_host_url": None}, "awaiting-host")],
+)
+def test_data_access_waits_for_databricks(
+    work: Path,
+    fake_terraform: Path,
+    _no_aws: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+    command: str,
+    role: str,
+    document: dict[str, Any],
+    state: str,
+) -> None:
+    section = work / "config" / "databricks.yaml"
+    config = yaml.safe_load(section.read_text())
+    config["databricks"].update(document)
+    section.write_text(yaml.safe_dump(config))
+    # No role is assumed: a platform without Databricks never calls AWS.
+    result = _platform(work, command, "data-access")
+    assert result.exit_code == 0, result.output
+    assert f"Databricks is {state}: nothing to reconcile" in result.output
+    assert _outputs(work) == ["result=skipped"]
+    assert not (work / ".jaws" / "plan-comment.md").exists()
+    assert _summary(work) == ""
+    assert not fake_terraform.exists(), "terraform must not run"
+    assert not _no_aws.called
+
+
+def test_the_data_access_plan_renders_against_the_base_registry(
+    work: Path,
+    fake_terraform: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    rendered = tmp_path / "rendered.tfvars.json"  # the fake copies the working copy's at init
+    out = tmp_path / "access-out"
+    runner.invoke(
+        cli.app, ["--config", str(work / "config"), "access", "render", "--out", str(out)]
+    )
+    expected = json.loads((out / "terraform.tfvars.json").read_text())
+    assert expected["datasets"], "the registry fixture onboards a dataset"
+    base = tmp_path / "base-datasets"
+    shutil.copytree(FIXTURES / "datasets", base)
+    monkeypatch.setenv("FAKE_TF_PLAN_EXIT", "2")
+    with _as_role("jaws-data-access-ci-plan"):
+        result = _platform(work, "plan", "data-access", "--base-registry", str(base))
+    assert result.exit_code == 0, result.output
+    assert json.loads(rendered.read_text()) == expected
+    summary = (out / "access-summary.md").read_text()
+    comment = (work / ".jaws" / "plan-comment.md").read_text()
+    assert comment.endswith("\n" + summary), "the plan comment, a blank line, the access summary"
+    assert "<code>jaws/data-access</code>" in comment.splitlines()[1]
+    assert _outputs(work) == ["result=changes", "changes=true"]
+    assert [c.split()[0] for c in _calls(fake_terraform)] == ["init", "plan"]
+
+
+def test_the_data_access_plan_refuses_an_offboarding_a_handshake_still_names(
+    work: Path,
+    fake_terraform: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "infra"
+    shutil.copytree(FIXTURES / "datasets", root / "datasets")
+    monkeypatch.setenv("JAWS_INFRA_ROOT", str(root))
+    base = tmp_path / "base-datasets"
+    shutil.copytree(root / "datasets", base)
+    shutil.rmtree(root / "datasets" / "braveheart-selfplay")  # dropped, still named
+    with _as_role("jaws-data-access-ci-plan"):
+        result = _platform(work, "plan", "data-access", "--base-registry", str(base))
+    assert result.exit_code == 2, result.output
+    assert "offboarding braveheart-selfplay/positions" in (work / ".jaws" / "jaws.log").read_text()
+    assert not fake_terraform.exists(), "no plan runs"
+    assert not (work / ".jaws" / "plan-comment.md").exists()
+
+
+def test_the_data_access_render_refuses_a_missing_registry(
+    work: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("JAWS_INFRA_ROOT", str(tmp_path))  # no datasets/ here
+    with _as_role("jaws-data-access-ci-apply"):
+        result = _platform(work, "apply", "data-access")
+    assert result.exit_code == 2, result.output
+    assert "revoked" in "".join(result.output.split())
+    assert not fake_terraform.exists()
+
+
+def test_the_sweep_summarizes_what_it_applied(
+    work: Path,
+    fake_terraform: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    outputs = tmp_path / "sweep-outputs.json"
+    outputs.write_text(
+        json.dumps(
+            {
+                "edges": {"value": ["braveheart-databricks reads braveheart-selfplay/positions"]},
+                "awaiting_onboarding": {"value": []},
+                "missing_workspaces": {"value": []},
+                "fingerprint": {"value": "not shown"},
+            }
+        )
+    )
+    monkeypatch.setenv("FAKE_TF_OUTPUTS", str(outputs))
+    monkeypatch.setenv("FAKE_TF_PLAN_EXIT", "2")
+    with _as_role("jaws-data-access-ci-apply"):
+        result = _platform(work, "apply", "data-access")
+    assert result.exit_code == 0, result.output
+    assert [c.split()[0] for c in _calls(fake_terraform)][:3] == ["init", "plan", "apply"]
+    assert _outputs(work) == ["result=applied"]
+    summary = _summary(work)
+    assert summary.startswith("**Sweep: applied**\n\n")
+    assert "braveheart-databricks" in summary
+    _, _, state = summary.partition("### Applied state\n\n```json\n")
+    assert json.loads(state.split("```")[0]) == {
+        "edges": ["braveheart-databricks reads braveheart-selfplay/positions"],
+        "awaiting_onboarding": [],
+        "missing_workspaces": [],
+    }

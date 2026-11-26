@@ -976,6 +976,14 @@ def outputs(ctx: typer.Context) -> None:
     _command(body)(ctx)
 
 
+def _databricks_state(settings: Settings) -> str:
+    """`ready`, `awaiting-host` or `disabled`: whether Databricks has anything to reconcile."""
+    dbx = settings.databricks
+    if dbx is None or not dbx.enabled:
+        return "disabled"
+    return "ready" if dbx.shared_host_url else "awaiting-host"
+
+
 @config_app.command("env")
 def config_env(
     ctx: typer.Context,
@@ -1023,11 +1031,7 @@ def config_env(
         ("ecr_repository", settings.ecr.repository),
     ]
     if databricks:
-        dbx = settings.databricks
-        if dbx is None or not dbx.enabled:
-            lines.append(("databricks", "disabled"))
-        else:
-            lines.append(("databricks", "ready" if dbx.shared_host_url else "awaiting-host"))
+        lines.append(("databricks", _databricks_state(settings)))
     if monitoring:
         lines.append(("monitoring", "absent" if settings.monitoring is None else "configured"))
     if brand:
@@ -1111,42 +1115,15 @@ def access_render(
     """
 
     def body(run: Run) -> None:
-        root = access.infra_root()
-        registry = access.load_registry(root / "datasets")
-        base = access.load_registry(base_registry) if base_registry is not None else ()
-        workspaces = {name for name, g in run.settings.projects.items() if g.databricks is not None}
-        files, unregistered = access.platform_files(
-            registry,
-            workspaces | {d.owner for d in base},
-            access.project_files_from_env(run.settings),
+        tfvars, summary = access.render_access(
+            run.settings, access.infra_root(), base_registry, run.logger
         )
-        access.check_offboarding(base, registry, files)
-        handshakes = access.compute_access(registry, files, unregistered)
-        tfvars = access.data_access_tfvars(handshakes, registry, run.settings)
-        summary = access.access_summary(handshakes)
-        for edge in handshakes.edges:
-            run.logger.info(
-                "handshake: %s reads %s (%s)", edge.consumer, edge.dataset.id, edge.purpose
-            )
-        for pending in handshakes.pending:
-            run.logger.info(
-                "handshake pending: %s for %s: %s",
-                pending.dataset,
-                pending.consumer,
-                pending.reason,
-            )
         out.mkdir(parents=True, exist_ok=True)
         (out / "terraform.tfvars.json").write_text(
             json.dumps(tfvars, indent=2, sort_keys=True) + "\n"
         )
         (out / "access-summary.md").write_text(summary)
-        run.logger.info(
-            "rendered %d onboarded datasets and %d edges into %s (fingerprint %s)",
-            len(registry),
-            len(handshakes.edges),
-            out,
-            tfvars["fingerprint"],
-        )
+        run.logger.info("wrote the variables and the summary into %s", out)
 
     _command(body)(ctx)
 
@@ -2409,16 +2386,55 @@ def _platform_terraform(
     return platform.PlatformTerraform(target, settings, run.logger, extra_env=env)
 
 
+def _data_access_waits(run: Run) -> bool:
+    """Whether data access has nothing to reconcile yet: Databricks is not `ready`. Then
+    it logs why and writes `result=skipped`, before any role is taken on or AWS called."""
+    state = _databricks_state(run.settings)
+    if state == "ready":
+        return False
+    run.logger.info("Databricks is %s: nothing to reconcile", state)
+    github.write_output("result", "skipped")
+    return True
+
+
+def _render_data_access(
+    run: Run, terraform: platform.PlatformTerraform, base_registry: Path | None
+) -> str:
+    """Render data access's variables into `terraform`'s working copy, with the access
+    summary beside them. Returns the summary."""
+    tfvars, summary = access.render_access(
+        run.settings, access.infra_root(), base_registry, run.logger
+    )
+    terraform.tfvars_override = tfvars
+    terraform.files = {"access-summary.md": summary}
+    return summary
+
+
 @platform_app.command("plan")
-def platform_plan(ctx: typer.Context, name: PlatformStackName) -> None:
+def platform_plan(
+    ctx: typer.Context,
+    name: PlatformStackName,
+    base_registry: Annotated[
+        Path | None,
+        typer.Option(
+            "--base-registry",
+            help="data-access only: the base branch's datasets/, so that a dataset it onboards "
+            "that this branch drops must have no half of a handshake left.",
+        ),
+    ] = None,
+) -> None:
     """Plan one of the platform's stacks as its plan role and write the plan comment."""
     # Filled once the secret is loaded: everything the logger writes from then on
     # (Terraform's output, the final error) is masked, as in `databricks doctor`.
     secrets: list[str] = []
 
     def body(run: Run) -> None:
+        data_access = name == "data-access"
+        if data_access and _data_access_waits(run):
+            return
         terraform = _platform_terraform(run, name, "plan", secrets)
-        platform.plan(terraform, run.artifacts, tool_version(), secrets)
+        summary = _render_data_access(run, terraform, base_registry) if data_access else ""
+        platform.plan(terraform, run.artifacts, tool_version(), secrets, comment_suffix=summary)
 
     run: Run = ctx.obj
     with databricks.redacting(run.logger, secrets):
@@ -2427,11 +2443,18 @@ def platform_plan(ctx: typer.Context, name: PlatformStackName) -> None:
 
 @platform_app.command("apply")
 def platform_apply(ctx: typer.Context, name: PlatformStackName) -> None:
-    """Plan one of the platform's stacks as its apply role, and apply the plan if it has changes."""
+    """Plan one of the platform's stacks as its apply role, and apply the plan if it has changes.
+
+    data-access is the sweep: it renders first, and its step summary says what it applied."""
     secrets: list[str] = []  # masked as in `platform plan`
 
     def body(run: Run) -> None:
-        platform.apply(_platform_terraform(run, name, "apply", secrets), tool_version())
+        data_access = name == "data-access"
+        if data_access and _data_access_waits(run):
+            return
+        terraform = _platform_terraform(run, name, "apply", secrets)
+        summary = _render_data_access(run, terraform, None) if data_access else None
+        platform.apply(terraform, tool_version(), sweep_summary=summary)
 
     run: Run = ctx.obj
     with databricks.redacting(run.logger, secrets):

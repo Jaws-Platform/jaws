@@ -139,6 +139,13 @@ def test_infra_root_is_the_env_override_else_the_configs_directory(
     assert infra_root() == tmp_path / "elsewhere"
 
 
+def test_an_empty_infra_root_is_unset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A workflow outside a hub passes JAWS_INFRA_ROOT empty: that is no override, not ."""
+    monkeypatch.setenv("JAWS_INFRA_ROOT", "")
+    monkeypatch.setenv("JAWS_CONFIG", str(tmp_path / "elsewhere" / "config.yaml"))
+    assert infra_root() == tmp_path / "elsewhere"
+
+
 def test_python_and_terraform_derive_the_same_registry() -> None:
     """foundation/registry's terraform test asserts the same file for the same fixtures."""
     expected = json.loads((FIXTURES / "datasets-expected.json").read_text())

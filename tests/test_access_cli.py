@@ -80,3 +80,20 @@ def test_plan_logs_the_projects_pending_handshakes(
     assert "the consumer does not read the dataset" in log
     rendered = json.loads((fake_terraform.parent / "rendered.tfvars.json").read_text())
     assert POSITIONS_ROLE not in rendered["datasets"][0]["readers"]
+
+
+def test_render_refuses_a_registry_without_its_readme(
+    selfplay_workspace: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A render without the registry would revoke every grant: an empty directory is
+    refused, not read as a registry with no datasets."""
+    empty = tmp_path / "empty-root"
+    empty.mkdir()
+    monkeypatch.setenv("JAWS_INFRA_ROOT", str(empty))
+    out = tmp_path / "out"
+    result = runner.invoke(cli.app, ["access", "render", "--out", str(out)])
+    assert result.exit_code == 2, result.output
+    squashed = "".join(result.output.split())  # the console wraps long lines
+    assert f"{empty}/datasets" in squashed
+    assert "revoked" in squashed
+    assert not out.exists()
