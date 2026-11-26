@@ -34,7 +34,7 @@ locals {
 
 module "sites_image" {
   source  = "Jaws-Platform/jaws-lichess-bot/aws//modules/ecr-repository"
-  version = "0.1.4"
+  version = "0.2.0"
 
   name                       = local.account.ecr.repository
   keep_release_images        = local.account.ecr.keep_release_images
@@ -53,7 +53,7 @@ check "sites_image_repository_arn_matches" {
 module "hub_image" {
   count   = local.hub == null ? 0 : 1
   source  = "Jaws-Platform/jaws-lichess-bot/aws//modules/ecr-repository"
-  version = "0.1.4"
+  version = "0.2.0"
 
   name = local.hub.image
 
