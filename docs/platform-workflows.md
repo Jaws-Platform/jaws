@@ -317,3 +317,217 @@ jobs:
 ```
 
 Its `@vX.Y.Z` is one of the pins the check holds to the `Dockerfile`'s tag.
+
+## Releases, current and live
+
+### `platform-release.yml`: the jobs
+
+The hub's release caller calls `platform-release.yml` on each push to `main`.
+A release stays gated, as `jaws`'s is
+([spec 6.4](superpowers/specs/2026-11-22-hub-split-design.md#64-workflows)):
+merges to `main` collect in a Release Please PR, and merging that PR is the
+deliberate, reviewed act that releases. Every other push runs Release Please
+alone. A release runs these jobs, each reported as `<caller job> / <name>`,
+where `<tag>` is the release's tag:
+
+| Job | Name | Needs | What it does |
+|---|---|---|---|
+| `release-please` | `Release Please` | | opens or updates the release PR with the release App's token, and releases when it merges |
+| `image` | `Build the platform image (<tag>)` | `release-please` | builds the release commit and pushes it as `sha-<commit>`, as the `infra` apply role |
+| `apply` | `Terraform apply (<tag>)` | `image` | applies the foundation with that build, as the `infra` apply role |
+| `monitoring-apply` | `Monitoring apply (<tag>)` | `image`, `apply` | applies monitoring with it, once the configuration has a monitoring section, as the `monitoring` apply role |
+| `current` | `Move current to <tag>` | `image`, `apply` | moves the hub image's `current` tag to the build, as the `infra` apply role |
+| `live` | `Move live to <tag>` | `image`, `current` | moves the `live` branch to the release commit, with the mover App's token |
+
+Every job but `release-please` and `live` runs in the hub's `prod`
+environment. `live` takes no AWS role, so it enters none.
+
+### The build and its tags
+
+The `image` job checks out the release's tag and builds its `Dockerfile` as a
+pull request's candidate is built. `platform-base` reads the pinned Jaws base
+and checks that ECR Public still has it, and `platform-build` builds it with
+the labels that name the base and the release commit. The job pushes the build
+as `<account-id>.dkr.ecr.us-east-1.amazonaws.com/<platform-image>:sha-<commit>`,
+a tag that never moves ([the tags](#the-images-tags-and-one-build-per-run)). It
+also loads the build on the runner, to read offline whether its configuration
+has a monitoring section (`config env --monitoring`), which `monitoring-apply`
+waits for.
+
+Every later job takes the build by the digest the `image` job outputs, never
+by a tag. `apply` and `monitoring-apply` pass it to `platform-image` as
+`digest`, so they apply the release's configuration while `current` still
+names the last release's build. `platform-image` takes `current` when it's
+given no digest, so each job that runs or moves the build first stops if the
+`image` job's `digest` came out empty, naming the output. The two moves check
+its `commit` the same way.
+
+### When `current` and `live` move
+
+`current` moves once the foundation's apply succeeds, without waiting for
+monitoring's (ruling 7). The spec's reason for the timing is "the moment the
+foundation has created any roles the new configuration names", and a failed
+monitoring apply holds nothing else back, as it holds back nothing of `jaws`'s
+own release. A failed foundation apply moves nothing: `monitoring-apply`,
+`current` and `live` are skipped.
+
+`current` moves first, then `live`. In the seconds between, a project runs the
+new build with the old workflow files, never the reverse. `platform-move`
+moves both:
+
+- **`current`.** It reads the build's manifest with `aws ecr batch-get-image`,
+  then puts it back under the tag `current` with `aws ecr put-image`, by digest.
+  When `current` already names the build, as on a re-run, nothing moves and the
+  job passes. The step summary says what `current` names:
+  "`current` is `<repository>@<digest>` (`sha-<commit>`)".
+- **`live`.** It updates the `live` branch through the Git refs API with the
+  mover App's token, as a fast-forward only, and the hub's first release
+  creates it. A move GitHub refuses, such as one that isn't a fast-forward,
+  stops the job, naming `live` and the commit.
+
+### The `live` ruleset and the mover App
+
+Projects call the hub's workflows at `@live`, so `live` decides which workflow
+files they run. The hub protects it with a ruleset that restricts updates and
+deletions and blocks force pushes. Its only bypass actor is the hub's mover App
+(ruling 8): an App with *Contents* and *Workflows* write and *Metadata* read,
+installed only on the hub. With *Workflows* write, a move is never refused
+across commits that change `.github/workflows/`.
+
+The release App is no bypass actor. It opens the release PR and releases, and
+never moves `live`. The `live` job mints the mover App's token from
+`live-app-client-id` and the secret `live-app-private-key`, and from nothing
+else, and `platform-move` reads the token from its `token` input only.
+
+### When to release
+
+Merge the release PR while the monitoring node runs. With the schedule in
+[monitoring](monitoring.md#the-schedule), that is between 08:00 and 24:00 MT.
+The node is stopped from 00:00 to 08:00, and a release in that window replaces
+it: its monitoring apply reads the stopped node's released public address as a
+change.
+
+### Re-running a failed job
+
+A failed job is re-run from the run's page, with "Re-run failed jobs". The
+later jobs keep the `image` job's outputs, so a re-run applies and moves the
+same build. A re-run of the `image` job finds the build its first attempt
+pushed, `sha-<commit>`, and pulls it in place of a second build: the tag never
+moves, so a second push would fail. Don't re-run all the jobs: Release Please
+would run again, find nothing left to release, and every later job would be
+skipped.
+
+The jobs that change something each hold the concurrency group
+`platform-release`, as the rollback's job does, and never cancel one in
+progress. GitHub keeps one pending job per group, though: when a release and a
+rollback, or two releases, overlap, a waiting job can be cancelled rather than
+failed. Re-run it the same way, or run the rollback again. A job holding the
+group also waits for the one in progress, so `current` can wait for
+`monitoring-apply` to finish, though never for it to succeed.
+
+### The caller
+
+`platform-release.yml` takes the identity (`platform-image`, `account-id` and
+`name-root`) and `live-app-client-id`, the mover App's client ID, all required.
+Its secrets, all required, are `RELEASE_BOT_CLIENT_ID` and
+`RELEASE_BOT_PRIVATE_KEY`, the release App's, for Release Please, and
+`live-app-private-key`, the mover App's. The caller grants `contents: read` and
+`id-token: write`. The release App's token does Release Please's writes, and a
+called job can't ask for more than its caller grants.
+
+The caller holds no `platform-release` group: a caller holding the group of a
+job it calls would be cancelled as a deadlock. Neither workflow sets a group
+at its top either. Every push to `main` runs the release for Release Please, so
+a group there would let a push cancel a pending release or rollback.
+
+A hub's caller, with placeholder values:
+
+```yaml
+name: Release
+on:
+  push:
+    branches: [main]
+permissions: {}
+jobs:
+  release:
+    permissions:
+      contents: read
+      id-token: write
+    uses: Jaws-Platform/jaws/.github/workflows/platform-release.yml@vX.Y.Z
+    with:
+      platform-image: jaws-platform
+      account-id: "123456789012"
+      name-root: jaws
+      live-app-client-id: Iv23liEXAMPLE0000001
+    secrets:
+      RELEASE_BOT_CLIENT_ID: ${{ secrets.RELEASE_BOT_CLIENT_ID }}
+      RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+      live-app-private-key: ${{ secrets.DEPLOYMENTS_APP_PRIVATE_KEY }}
+```
+
+## Rolling back
+
+### `platform-rollback.yml`
+
+Roll back when a release broke something and its fix can't follow quickly.
+The hub's caller runs `platform-rollback.yml` by hand, with the release commit
+to go back to. Its one job, `rollback` (`Roll back to <commit>`), runs in `prod`
+as the `infra` apply role, and holds the `platform-release` group, so it never
+runs beside a release's job.
+
+It moves both, together (ruling 9):
+
+- `current`, to that commit's kept build;
+- `live`, to the commit, by force, since it moves back. The hub's workflow files
+  and its image then stay at one Jaws release
+  ([spec 6.4](superpowers/specs/2026-11-22-hub-split-design.md#64-workflows):
+  "the hub's workflow files and its image change together").
+
+It applies nothing. The foundation and monitoring stay as the release being
+rolled back applied them. The runs that take `current`, such as the sweep and
+the by-hand applies, and every project's next run at `@live`, run the older
+build from their next start. To undo what a release applied, release a fix: the
+next release moves `current` and `live` forward again, and `live` by a
+fast-forward from the rolled-back commit.
+
+Before it moves anything, the job stops on:
+
+- a `commit` that isn't a full SHA, 40 lowercase hex digits;
+- a commit that isn't on `main`: "`<commit>` is not on main";
+- a commit whose build is gone. The hub image keeps the newest ten `sha-`
+  builds, so a rollback reaches the last ten releases: "no build of `<commit>`
+  is kept: the newest ten are; roll back to one of them, or release a fix".
+
+### The caller
+
+`platform-rollback.yml` takes the identity, `commit` and `live-app-client-id`,
+all required, and the secret `live-app-private-key` only: no release App
+secret. Its caller grants the same as the release's, `contents: read` and
+`id-token: write`, and holds no `platform-release` group either. A hub's
+caller, with placeholder values:
+
+```yaml
+name: Roll back
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: The release commit to roll back to, its full SHA
+        required: true
+        type: string
+permissions: {}
+jobs:
+  rollback:
+    permissions:
+      contents: read
+      id-token: write
+    uses: Jaws-Platform/jaws/.github/workflows/platform-rollback.yml@vX.Y.Z
+    with:
+      platform-image: jaws-platform
+      account-id: "123456789012"
+      name-root: jaws
+      commit: ${{ inputs.commit }}
+      live-app-client-id: Iv23liEXAMPLE0000001
+    secrets:
+      live-app-private-key: ${{ secrets.DEPLOYMENTS_APP_PRIVATE_KEY }}
+```

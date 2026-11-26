@@ -1,0 +1,159 @@
+name: platform-move
+description: >-
+  Moves what a hub's projects run to a release: the hub image's current tag, the
+  one tag that moves, or the hub's live branch, which projects call the hub's
+  workflows at. current is put on a build by its manifest digest, with aws ecr
+  batch-get-image and put-image. live is moved to a commit through the Git refs
+  API with the token of the hub's mover App, live's only ruleset bypass actor: a
+  release fast-forwards it, and creates it the first time; a rollback moves it by
+  force. From the job it needs, for current, a role in the platform's account that
+  may push to the hub image's repository (the infra apply role); for live, the
+  mover App's token, and nothing else. platform-release.yml and
+  platform-rollback.yml both move with it.
+
+inputs:
+  move:
+    description: What to move, `current` (the hub image's tag) or `live` (the hub's branch).
+    required: true
+  repository:
+    description: For `current`, the hub image's private ECR repository, for example `jaws-platform`.
+    required: false
+    default: ""
+  digest:
+    description: For `current`, the manifest digest of the build it moves to, `sha256:` and 64 hex digits.
+    required: false
+    default: ""
+  commit:
+    description: >-
+      The release commit, 40 lowercase hex digits. `live` moves to it, and
+      `current`'s summary names the build's tag, `sha-<commit>`.
+    required: false
+    default: ""
+  token:
+    description: >-
+      For `live`, the token of the hub's mover App, live's only ruleset bypass
+      actor. The move reads it from here only: never from the job's own token,
+      nor from the release App.
+    required: false
+    default: ""
+  force:
+    description: >-
+      For `live`, "true" moves it even where that isn't a fast-forward, as a
+      rollback moves it back. "false" only fast-forwards it, as a release does.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Check what to move
+      id: check
+      shell: bash
+      env:
+        MOVE: ${{ inputs.move }}
+      run: |
+        # Each move runs on its own condition: one this didn't know would skip both, and pass.
+        case "$MOVE" in
+          current | live) ;;
+          *)
+            echo "::error::move must be current or live, got '$MOVE'"
+            exit 1
+            ;;
+        esac
+    - name: Move current to the build
+      id: current
+      if: inputs.move == 'current'
+      shell: bash
+      env:
+        REPOSITORY: ${{ inputs.repository }}
+        DIGEST: ${{ inputs.digest }}
+        COMMIT: ${{ inputs.commit }}
+      run: |
+        if [[ -z "$REPOSITORY" ]]; then
+          echo "::error::repository is empty: name the hub image's repository, which holds the build"
+          exit 1
+        fi
+        if ! [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+          echo "::error::digest must be a manifest digest, sha256: and 64 hex digits, got '$DIGEST'"
+          exit 1
+        fi
+        if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "::error::commit must be the release commit, 40 lowercase hex digits, got '$COMMIT'"
+          exit 1
+        fi
+        build="$REPOSITORY@$DIGEST"
+        # The build's manifest as it was pushed: put-image tags exactly those bytes, and
+        # --image-digest has ECR refuse any others.
+        found=$(aws ecr batch-get-image --repository-name "$REPOSITORY" --image-ids "imageDigest=$DIGEST" \
+          --accepted-media-types application/vnd.oci.image.manifest.v1+json \
+          application/vnd.docker.distribution.manifest.v2+json --output json)
+        count=$(jq '.images | length' <<<"$found")
+        if [[ "$count" == 0 ]]; then
+          code=$(jq -r '.failures[0].failureCode // "ImageNotFound"' <<<"$found")
+          if [[ "$code" != ImageNotFound ]]; then
+            reason=$(jq -r '.failures[0].failureReason // ""' <<<"$found")
+            echo "::error::$build could not be read: $code ($reason)"
+            exit 1
+          fi
+          echo "::error::$build does not exist"
+          exit 1
+        fi
+        manifest=$(jq -r '.images[0].imageManifest' <<<"$found")
+        media_type=$(jq -r '.images[0].imageManifestMediaType // ""' <<<"$found")
+        put=(--repository-name "$REPOSITORY" --image-tag current --image-digest "$DIGEST" --image-manifest "$manifest")
+        if [[ -n "$media_type" ]]; then
+          put+=(--image-manifest-media-type "$media_type")
+        fi
+        # ImageAlreadyExistsException: current names this build already, as on a re-run.
+        if ! error=$(aws ecr put-image "${put[@]}" --output json 2>&1 > /dev/null); then
+          if [[ "$error" != *ImageAlreadyExistsException* ]]; then
+            echo "$error" >&2
+            echo "::error::current could not be moved to $build (sha-$COMMIT)"
+            exit 1
+          fi
+          echo "current already names $build"
+        fi
+        echo "current is $build (sha-$COMMIT)"
+        echo "\`current\` is \`$build\` (\`sha-$COMMIT\`)" >> "$GITHUB_STEP_SUMMARY"
+    - name: Move live to the commit
+      id: live
+      if: inputs.move == 'live'
+      shell: bash
+      env:
+        COMMIT: ${{ inputs.commit }}
+        FORCE: ${{ inputs.force }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "::error::commit must be the release commit, 40 lowercase hex digits, got '$COMMIT'"
+          exit 1
+        fi
+        case "$FORCE" in
+          true | false) ;;
+          *)
+            echo "::error::force must be true or false, got '$FORCE'"
+            exit 1
+            ;;
+        esac
+        if [[ -z "$GH_TOKEN" ]]; then
+          echo "::error::token is empty: live moves only with the mover App's token, live's only ruleset bypass actor"
+          exit 1
+        fi
+        refs="repos/$GITHUB_REPOSITORY/git/refs"
+        # gh prints GitHub's answer, and on a failure its message: both kept for the log.
+        if answer=$(gh api --method PATCH "$refs/heads/live" -f "sha=$COMMIT" -F "force=$FORCE" 2>&1); then
+          echo "live is at $COMMIT"
+        elif [[ "$answer" == *"Reference does not exist"* ]]; then
+          # The hub's first release: live doesn't exist yet.
+          if ! answer=$(gh api --method POST "$refs" -f ref=refs/heads/live -f "sha=$COMMIT" 2>&1); then
+            echo "$answer" >&2
+            echo "::error::live could not be created at $COMMIT"
+            exit 1
+          fi
+          echo "live is created at $COMMIT"
+        else
+          echo "$answer" >&2
+          echo "::error::live could not be moved to $COMMIT"
+          exit 1
+        fi
+        echo "\`live\` is at \`$COMMIT\`" >> "$GITHUB_STEP_SUMMARY"
