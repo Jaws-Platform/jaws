@@ -25,7 +25,7 @@ dev = [
   "moto[ec2,ecr,logs,s3,ssm,sts]>=5.2.5",
   "mypy>=1.17",
   "pytest>=8.4",
-  "ruff>=0.17.5",
+  "ruff>=0.17.6",
   "types-pyyaml>=6.0.12.20261113",
 ]
 
