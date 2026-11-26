@@ -39,7 +39,8 @@ def load_secret(ssm: Any, parameter: str) -> str:
 
     `ssm` is a boto3 SSM client. A missing, empty or unreadable parameter is a
     preflight failure pointing at the runbook, and so is a value of several lines,
-    which a runner's mask cannot cover. No message carries the value.
+    which a runner's mask cannot cover. One line break at the end, `\\n` or `\\r\\n`,
+    is no part of the secret and is dropped first. No message carries the value.
     """
     try:
         response = ssm.get_parameter(Name=parameter, WithDecryption=True)
@@ -59,6 +60,10 @@ def load_secret(ssm: Any, parameter: str) -> str:
             f"({type(exc).__name__}); check the AWS credentials and network, see {RUNBOOK}"
         ) from None
     value = str(response.get("Parameter", {}).get("Value", ""))
+    # The line break a value stored from a file or `echo` ends on, as the script this replaced
+    # dropped it with `$(...)`. Exactly one: any other line break is refused below, so the
+    # mask covers the whole value.
+    value = value[:-2] if value.endswith("\r\n") else value.removesuffix("\n")
     if not value.strip():
         raise PreflightError(
             f"the Databricks client secret {parameter} in SSM is empty; see {RUNBOOK}"
