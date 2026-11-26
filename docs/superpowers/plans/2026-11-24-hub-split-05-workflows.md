@@ -933,6 +933,14 @@ git commit -m "feat(bots): run remote tasks and bot releases with a hub's config
   - `platform plan` (Tasks 4–5), and `platform check`, `FROM_PATTERN` and rule 1's message (Task 7);
   - Task 8's actions.
 - Produces `.github/actions/platform-base`. Its step, `id: base`, matches the `Dockerfile`'s one `FROM` with `FROM_PATTERN`, refuses anything else with rule 1's message, and writes the outputs `base-name`, `base-tag` and `base-digest`. A job that builds runs it first, and so does the upgrade (Task 14).
+  - A second step, `id: present` (skipped by the upgrade), asks ECR Public anonymously whether the pinned digest still exists. It uses plan 04's token and `HEAD /v2/<repository>/manifests/<digest>` calls, with the same `Accept` types.
+    - A 404 fails the job with the following message, naming the base by tag and digest: `::error::the Dockerfile's Jaws base <base-name>:<base-tag>@<base-digest> is no longer in ECR Public, which keeps only the newest versions until v1: merge the open upgrade PR, or move the FROM line to a recent Jaws release`.
+    - Any other status than 200 or 404 fails with `::error::could not tell whether the Jaws base is still published (HTTP <code> from public.ecr.aws)`.
+    - The owner confirmed (2026-11-24) that during development they bump the pin by hand when this fires, so the message must say exactly what to do.
+  - Its tests, with a fake `curl`:
+    - `test_a_pruned_base_fails_naming_the_fix`: a 404 exits nonzero, and the message names the tag, the digest and "merge the open upgrade PR".
+    - `test_a_published_base_passes`: a 200 exits 0.
+    - `test_a_registry_error_names_the_status`: a 503 exits nonzero naming `503`.
 - Produces `.github/actions/platform-build`.
   - Inputs: `load` and `push` (each `"true"` or `"false"`, independent: buildx loads and pushes one build), `tags` (for a push), `revision` (the hub commit), and `base-name`, `base-tag` and `base-digest`.
   - Its steps: `setup-buildx`, then `build-push-action` (`id: build`):
