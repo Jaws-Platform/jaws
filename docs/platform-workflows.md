@@ -607,3 +607,111 @@ jobs:
       name-root: jaws
       project: ${{ inputs.project }}
 ```
+
+## Upgrades
+
+### `platform-upgrade.yml`
+
+A hub moves to a new Jaws release with one pull request that bumps every pin
+(ruling 12). The hub's workflow files and its image name one release
+([spec 6.4](superpowers/specs/2026-11-22-hub-split-design.md#64-workflows)),
+and the check fails a pull request where they disagree, so an upgrade bumps
+them together. Dependabot would split the image and workflow bumps into
+separate pull requests, and each would fail the check. The upgrade's pull
+request changes:
+
+- the `Dockerfile`'s `FROM` line, to the release's tag and the digest ECR
+  Public names for it;
+- every call of a Jaws workflow,
+  `Jaws-Platform/jaws/.github/workflows/<name>.yml@vX.Y.Z`, in
+  `.github/workflows/*.yml` and `*.yaml`, to the release. The upgrade's own
+  caller is one of them. Another repository's workflows are left as they are.
+
+The hub schedules the upgrade hourly. Its one job, `upgrade` (`Upgrade Jaws`),
+reads the `Dockerfile`'s base with `platform-base`, without asking whether the
+pin is still published: the upgrade replaces the pin, and is the fix when ECR
+Public has pruned it. It then reads the newest release from ECR Public's tags,
+anonymously and by semver, so `v0.10.0` is newer than `v0.9.0`. Only `vX.Y.Z`
+tags count, never `latest` or a pre-release, and a GitHub release whose image
+isn't published yet is never picked. When that release is no newer than the
+pin, the job ends with the notice "Jaws `<pin>` is the newest release". A base
+outside ECR Public, or a registry error, stops the job.
+
+A newer release is committed on the branch `jaws-upgrade`, as the App's bot,
+`<app-slug>[bot]`, with the message `chore(deps): upgrade jaws to <tag>`. The
+commit holds the bumped files only. It never holds the tool's checkout,
+`.jaws-tool/`, even in a hub whose `.gitignore` leaves it out. The job then
+opens the pull request against `main`, or updates the open one. Its title is
+the commit's, and its body names both releases and links Jaws's changes
+between them, `https://github.com/Jaws-Platform/jaws/compare/<pin>...<tag>`.
+
+There is one upgrade pull request at a time, updated in place. While the open
+one's title names the newest release, or `jaws-upgrade` already holds the same
+files, a run pushes nothing and edits nothing, with the notice "the upgrade to
+`<tag>` is open". So the hub's CI runs once for each release rather than every
+hour, and a fix pushed onto the branch stays. A newer release force-pushes
+`jaws-upgrade`, and edits the pull request's title and body.
+
+The hourly schedule keeps the pin inside what ECR Public holds. Until v1, it
+keeps only the newest ten Jaws versions, about two days of releases, and
+prunes the rest. Once a hub's pin is pruned, the hub's CI fails, naming the
+fix: merge the open upgrade pull request.
+
+### A red upgrade
+
+The upgrade's plans run with the candidate for every stack and project
+([spec 6.5](superpowers/specs/2026-11-22-hub-split-design.md#65-upgrades-and-rollout)),
+so they show what the release changes everywhere before it merges. When one
+fails:
+
+1. Read the failing plan, and the release notes: Jaws's releases between the
+   two versions, which the body's compare link spans.
+2. Fix the configuration on `jaws-upgrade`, in the same pull request. The
+   upgrade and its fix are then one hub pull request, as spec 6.5 asks.
+3. Merge it once its checks pass. Like any merge to `main`, it then goes out
+   with the hub's next release.
+
+While the fix is pending, keep the pull request's title naming the release: a
+run leaves the branch alone while the title names the newest release. A newer
+Jaws release replaces the branch with a fresh bump, so a fix that hasn't
+merged by then goes onto the new bump again.
+
+### The App
+
+The writes are the upgrade App's, never `GITHUB_TOKEN`'s. A push that changes
+`.github/workflows/` needs the *Workflows* permission, which `GITHUB_TOKEN`
+never has, and a pull request that `GITHUB_TOKEN` opens runs no CI. So the job
+mints the App's token with no fallback, and stops without it. The App has
+*Contents: read and write*, *Pull requests: read and write* and *Workflows:
+read and write*, and is installed on the hub only (ruling 12). For the owner's
+hub it is **JWall Engineering Upgrades** (`jwall-engineering-upgrades`): one
+App for this purpose, rather than *Workflows* added to an App installed on
+every repository.
+
+### The caller
+
+`platform-upgrade.yml` takes the input `app-client-id` and the secret
+`app-private-key`, both required. The client ID isn't secret: the caller
+spells it as a literal or a `vars.` value, since a call's `with:` can't read
+`secrets`. Only the App's key is a secret. The caller grants `contents: read`,
+since the App's token does the writes. A hub's caller, with placeholder values:
+
+```yaml
+name: Upgrade Jaws
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+permissions: {}
+jobs:
+  upgrade:
+    permissions:
+      contents: read
+    uses: Jaws-Platform/jaws/.github/workflows/platform-upgrade.yml@vX.Y.Z
+    with:
+      app-client-id: Iv23liEXAMPLE0000002
+    secrets:
+      app-private-key: ${{ secrets.UPGRADES_APP_PRIVATE_KEY }}
+```
+
+Its `@vX.Y.Z` is a pin like the others: the upgrade bumps it too.
