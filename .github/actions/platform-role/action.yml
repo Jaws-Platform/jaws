@@ -1,0 +1,107 @@
+name: platform-role
+description: >-
+  Builds the role ARN a hub's job assumes from the platform's identity, with no
+  AWS call: arn:aws:iam::<account-id>:role/<name-root>-<project>-ci-<role>, with
+  the project given or read from the project's file, or the role-arn override,
+  which must be in account-id. It needs nothing from the job but the project's
+  file in the workspace when no project is given, and runs before the job has
+  any credentials. It keeps spec 6.4's rule that a run builds its role ARN from
+  the account ID and the name root before it can pull anything: half an
+  identity, such as an account and a name root with no platform image, stops
+  the job here, naming the input, before anything reaches AWS.
+
+inputs:
+  platform-image:
+    description: The hub image's private ECR repository, for example `jaws-platform`. Empty is half an identity, and stops the job.
+    required: true
+  account-id:
+    description: The platform account, 12 digits, which holds the hub image and every CI role.
+    required: true
+  name-root:
+    description: The platform's name root (`context.name_root`), lowercase kebab-case, for example `jaws`.
+    required: true
+  role:
+    description: The CI role, one of `plan`, `preview`, `apply`, `release` and `task`.
+    required: true
+  project:
+    description: The project the role is for. Empty reads it from `project-file`.
+    required: false
+    default: ""
+  project-file:
+    description: The project's file, whose `project` names it when `project` is empty.
+    required: false
+    default: jaws.yaml
+  role-arn:
+    description: An override, assumed in place of the role the identity names. It must be a role in `account-id`.
+    required: false
+    default: ""
+
+outputs:
+  arn:
+    description: The role ARN, for `aws-actions/configure-aws-credentials`.
+    value: ${{ steps.arn.outputs.arn }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build the role from the platform's identity
+      id: arn
+      shell: bash
+      env:
+        PLATFORM_IMAGE: ${{ inputs.platform-image }}
+        ACCOUNT_ID: ${{ inputs.account-id }}
+        NAME_ROOT: ${{ inputs.name-root }}
+        ROLE: ${{ inputs.role }}
+        PROJECT: ${{ inputs.project }}
+        PROJECT_FILE: ${{ inputs.project-file }}
+        ROLE_ARN: ${{ inputs.role-arn }}
+      run: |
+        # The identity comes whole: a job given an account and a name root but no
+        # image would assume a hub's role, then run without the hub's image.
+        kebab='^[a-z0-9]+(-[a-z0-9]+)*$'
+        if [[ -z "$PLATFORM_IMAGE" ]]; then
+          echo "::error::platform-image is empty: a hub's run passes platform-image, account-id and name-root together, so half an identity stops here, before any AWS call"
+          exit 1
+        fi
+        if ! [[ "$ACCOUNT_ID" =~ ^[0-9]{12}$ ]]; then
+          echo "::error::account-id must be 12 digits, got '$ACCOUNT_ID'"
+          exit 1
+        fi
+        if ! [[ "$NAME_ROOT" =~ $kebab ]]; then
+          echo "::error::name-root must be lowercase kebab-case, got '$NAME_ROOT'"
+          exit 1
+        fi
+        case "$ROLE" in
+          plan | preview | apply | release | task) ;;
+          *)
+            echo "::error::role must be one of plan, preview, apply, release and task, got '$ROLE'"
+            exit 1
+            ;;
+        esac
+        if [[ -n "$PROJECT" && ! "$PROJECT" =~ $kebab ]]; then
+          echo "::error::project must be lowercase kebab-case, got '$PROJECT'"
+          exit 1
+        fi
+        if [[ -n "$ROLE_ARN" ]]; then
+          in_account="^arn:aws:iam::${ACCOUNT_ID}:role/[A-Za-z0-9+=,.@_/-]+\$"
+          if ! [[ "$ROLE_ARN" =~ $in_account ]]; then
+            echo "::error::role-arn must be a role in account-id $ACCOUNT_ID, got '$ROLE_ARN'"
+            exit 1
+          fi
+          arn=$ROLE_ARN
+        else
+          project=$PROJECT
+          if [[ -z "$project" ]]; then
+            if [[ ! -f "$PROJECT_FILE" ]]; then
+              echo "::error::project-file $PROJECT_FILE does not exist, and no project is given"
+              exit 1
+            fi
+            project=$(yq -r '.project // ""' "$PROJECT_FILE")
+            if ! [[ "$project" =~ $kebab ]]; then
+              echo "::error::project-file $PROJECT_FILE names the project '$project', which is not lowercase kebab-case"
+              exit 1
+            fi
+          fi
+          arn="arn:aws:iam::${ACCOUNT_ID}:role/${NAME_ROOT}-${project}-ci-${ROLE}"
+        fi
+        echo "arn=$arn" >> "$GITHUB_OUTPUT"

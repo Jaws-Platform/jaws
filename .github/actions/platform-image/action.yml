@@ -1,0 +1,279 @@
+name: platform-image
+description: >-
+  Gives the job one build of a hub's image, and the image ID every later step
+  runs it by. From the registry, it checks that the job's role is in
+  account-id, resolves the tag (current by default), or a digest another job of
+  the run resolved, to one manifest with aws ecr batch-get-image, then loads
+  that build from the Actions cache or pulls it and caches it, so each
+  repository pulls a build once. A pull request's candidate comes instead from
+  this run's artifact, and reaches no registry. It can copy the build's
+  configuration out (extract), and outputs the build's labels for the comments'
+  footer. From the job it needs, for the registry, a role already assumed in
+  account-id that may pull the repository; for an artifact, nothing. It keeps
+  spec 6.3's rule: a run resolves current to a digest once, at its start, and
+  uses that digest for every step, so a merge mid-run can't mix two
+  configurations.
+
+inputs:
+  account-id:
+    description: The platform account, which holds the repository. The job's role must be in it. Needed unless `artifact` is given.
+    required: false
+    default: ""
+  repository:
+    description: The hub image's private ECR repository, for example `jaws-platform`. Needed unless `artifact` is given.
+    required: false
+    default: ""
+  tag:
+    description: The tag to resolve when no `digest` is given.
+    required: false
+    default: current
+  digest:
+    description: A manifest digest another job of the run resolved (this action's `digest` output), used as given in place of `tag`.
+    required: false
+    default: ""
+  artifact:
+    description: >-
+      The name of this run's artifact that holds a pull request's candidate as
+      `platform-image.tar` (`docker save`), loaded in place of a build from the
+      registry. It needs `image-id`.
+    required: false
+    default: ""
+  image-id:
+    description: With `artifact`, the candidate's image ID, which the loaded build must have.
+    required: false
+    default: ""
+  extract:
+    description: >-
+      A directory to copy the build's `/etc/jaws/config` and `/etc/jaws/datasets`
+      into, as `<extract>/config` and `<extract>/datasets`. It must hold neither.
+    required: false
+    default: ""
+
+outputs:
+  image-id:
+    description: >-
+      The build's image ID, as the runner reports it (`docker image inspect`):
+      its config digest with Docker's classic image store, its manifest digest
+      with the containerd store. Run the build by it.
+    value: ${{ steps.load.outputs.image-id || inputs.image-id }}
+  digest:
+    description: The build's manifest digest, for a later job's `digest`. Empty for an artifact.
+    value: ${{ steps.resolve.outputs.digest }}
+  reference:
+    description: The build as `<registry>/<repository>@<digest>`. Empty for an artifact.
+    value: ${{ steps.resolve.outputs.reference }}
+  platform-commit:
+    description: The hub commit the build was made from (its `org.opencontainers.image.revision` label), for the `jaws` action's `platform-commit`.
+    value: ${{ steps.labels.outputs.platform-commit }}
+  platform-source:
+    description: The hub repository's URL (its `org.opencontainers.image.source` label), for the `jaws` action's `platform-source`.
+    value: ${{ steps.labels.outputs.platform-source }}
+  config:
+    description: With `extract`, `<extract>/config`, the build's configuration.
+    value: ${{ steps.extract.outputs.config }}
+  infra-root:
+    description: With `extract`, `<extract>`, which holds the build's `config` and `datasets`.
+    value: ${{ steps.extract.outputs.infra-root }}
+
+runs:
+  using: composite
+  steps:
+    - name: Log in to the platform's registry
+      id: ecr
+      if: inputs.artifact == ''
+      uses: aws-actions/amazon-ecr-login@v2
+    - name: Check the role is in the platform's account
+      id: account
+      if: inputs.artifact == ''
+      shell: bash
+      env:
+        ACCOUNT_ID: ${{ inputs.account-id }}
+      run: |
+        if ! [[ "$ACCOUNT_ID" =~ ^[0-9]{12}$ ]]; then
+          echo "::error::account-id must be 12 digits, got '$ACCOUNT_ID'"
+          exit 1
+        fi
+        account=$(aws sts get-caller-identity --query Account --output text)
+        if [[ "$account" != "$ACCOUNT_ID" ]]; then
+          echo "::error::the job's role is in account $account, not the platform's account $ACCOUNT_ID (account-id): nothing is pulled from another account"
+          exit 1
+        fi
+    - name: Resolve the build
+      id: resolve
+      if: inputs.artifact == ''
+      shell: bash
+      env:
+        REGISTRY: ${{ steps.ecr.outputs.registry }}
+        REPOSITORY: ${{ inputs.repository }}
+        TAG: ${{ inputs.tag }}
+        DIGEST: ${{ inputs.digest }}
+      run: |
+        if [[ -z "$REPOSITORY" ]]; then
+          echo "::error::repository is empty: name the hub image's repository, or give an artifact"
+          exit 1
+        fi
+        if [[ -n "$DIGEST" ]]; then
+          if ! [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::digest must be a manifest digest, sha256: and 64 hex digits, got '$DIGEST'"
+            exit 1
+          fi
+          wanted="imageDigest=$DIGEST"
+          named="$REPOSITORY@$DIGEST"
+        elif [[ "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]]; then
+          wanted="imageTag=$TAG"
+          named="$REPOSITORY:$TAG"
+        else
+          echo "::error::tag must be an image tag, got '$TAG'"
+          exit 1
+        fi
+        # The role's pull grant allows batch-get-image, not DescribeImages. An image it
+        # can't find is a failure in its answer, not an error.
+        found=$(aws ecr batch-get-image --repository-name "$REPOSITORY" --image-ids "$wanted" \
+          --accepted-media-types application/vnd.oci.image.manifest.v1+json \
+          application/vnd.docker.distribution.manifest.v2+json --output json)
+        count=$(jq '.images | length' <<<"$found")
+        if [[ "$count" == 0 ]]; then
+          code=$(jq -r '.failures[0].failureCode // "ImageNotFound"' <<<"$found")
+          if [[ "$code" != ImageNotFound ]]; then
+            reason=$(jq -r '.failures[0].failureReason // ""' <<<"$found")
+            echo "::error::$named could not be read: $code ($reason)"
+            exit 1
+          fi
+          message="$named does not exist"
+          if [[ -z "$DIGEST" && "$TAG" == current ]]; then
+            message="$message: the hub's first release tags its build current"
+          fi
+          echo "::error::$message"
+          exit 1
+        fi
+        digest=$(jq -r '.images[0].imageId.imageDigest' <<<"$found")
+        config_digest=$(jq -r '.images[0].imageManifest | fromjson | .config.digest // ""' <<<"$found")
+        if ! [[ "$config_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+          echo "::error::$named is not one build: its manifest names no config digest"
+          exit 1
+        fi
+        echo "$named is $REPOSITORY@$digest, with the config $config_digest"
+        {
+          echo "digest=$digest"
+          echo "config-digest=$config_digest"
+          echo "reference=$REGISTRY/$REPOSITORY@$digest"
+        } >> "$GITHUB_OUTPUT"
+    - name: Download this run's candidate
+      id: download
+      if: inputs.artifact != ''
+      uses: actions/download-artifact@v8
+      with:
+        name: ${{ inputs.artifact }}
+        path: ${{ runner.temp }}/platform-image
+    - name: Load this run's candidate
+      id: artifact
+      if: inputs.artifact != ''
+      shell: bash
+      env:
+        ARTIFACT: ${{ inputs.artifact }}
+        IMAGE_ID: ${{ inputs.image-id }}
+        TARBALL: ${{ runner.temp }}/platform-image/platform-image.tar
+      run: |
+        if [[ -z "$IMAGE_ID" ]]; then
+          echo "::error::image-id is empty: an artifact's candidate is checked against its image ID"
+          exit 1
+        fi
+        loaded=$(docker load --quiet --input "$TARBALL" | sed -nE 's/^Loaded image( ID)?: //p')
+        loaded=$(docker image inspect --format '{{.Id}}' "$loaded")
+        if [[ "$loaded" != "$IMAGE_ID" ]]; then
+          echo "::error::the $ARTIFACT artifact holds $loaded, not the candidate $IMAGE_ID"
+          exit 1
+        fi
+        echo "the candidate from the $ARTIFACT artifact: image ID $loaded"
+    - name: Restore the build from the cache
+      id: cache
+      if: inputs.artifact == ''
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}/platform-image/platform-image.tar
+        key: platform-image-${{ steps.resolve.outputs.config-digest }}
+        restore-keys: platform-image-${{ steps.resolve.outputs.digest }}
+    - name: Load or pull the build
+      id: load
+      if: inputs.artifact == ''
+      shell: bash
+      env:
+        TARBALL: ${{ runner.temp }}/platform-image/platform-image.tar
+        REFERENCE: ${{ steps.resolve.outputs.reference }}
+        DIGEST: ${{ steps.resolve.outputs.digest }}
+        CONFIG_DIGEST: ${{ steps.resolve.outputs.config-digest }}
+      run: |
+        # Docker's classic image store reports a build's config digest as its image ID,
+        # and the containerd store its manifest digest: either one is this build.
+        id=""
+        if [[ -f "$TARBALL" ]]; then
+          loaded=$(docker load --quiet --input "$TARBALL" | sed -nE 's/^Loaded image( ID)?: //p')
+          id=$(docker image inspect --format '{{.Id}}' "$loaded")
+          if [[ "$id" != "$CONFIG_DIGEST" && "$id" != "$DIGEST" ]]; then
+            echo "the cached build is $id, not this one: pulling it"
+            id=""
+          fi
+        fi
+        if [[ -z "$id" ]]; then
+          docker pull --quiet "$REFERENCE"
+          id=$(docker image inspect --format '{{.Id}}' "$REFERENCE")
+          mkdir -p "$(dirname "$TARBALL")"
+          docker save --output "$TARBALL" "$id"
+          echo "pulled=true" >> "$GITHUB_OUTPUT"
+        fi
+        case "$id" in
+          "$CONFIG_DIGEST") store="its config digest: Docker's classic image store" ;;
+          "$DIGEST") store="its manifest digest: the containerd image store" ;;
+          *)
+            store="neither digest"
+            echo "::warning::the runner reports the image ID $id, neither the build's manifest digest nor its config digest, so the cache never restores it"
+            ;;
+        esac
+        echo "image ID $id, $store (manifest digest $DIGEST, config digest $CONFIG_DIGEST)"
+        echo "image-id=$id" >> "$GITHUB_OUTPUT"
+    - name: Save the build in the cache
+      id: save
+      if: inputs.artifact == '' && steps.load.outputs.pulled == 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.temp }}/platform-image/platform-image.tar
+        key: platform-image-${{ steps.load.outputs.image-id }}
+    - name: Copy the configuration out of the build
+      id: extract
+      if: inputs.extract != ''
+      shell: bash
+      env:
+        IMAGE_ID: ${{ steps.load.outputs.image-id || inputs.image-id }}
+        EXTRACT: ${{ inputs.extract }}
+      run: |
+        # docker cp copies a directory into a destination that exists, beside what is
+        # there, so the CLI would read the old copy.
+        for dir in config datasets; do
+          if [[ -e "$EXTRACT/$dir" ]]; then
+            echo "::error::extract names $EXTRACT, which already holds $dir: give platform-image a directory of its own"
+            exit 1
+          fi
+        done
+        mkdir -p "$EXTRACT"
+        container=$(docker create "$IMAGE_ID")
+        trap 'docker rm "$container" > /dev/null' EXIT
+        docker cp "$container:/etc/jaws/config" "$EXTRACT/config"
+        docker cp "$container:/etc/jaws/datasets" "$EXTRACT/datasets"
+        {
+          echo "config=$EXTRACT/config"
+          echo "infra-root=$EXTRACT"
+        } >> "$GITHUB_OUTPUT"
+    - name: Read the build's labels
+      id: labels
+      shell: bash
+      env:
+        IMAGE_ID: ${{ steps.load.outputs.image-id || inputs.image-id }}
+      run: |
+        labels=$(docker image inspect --format '{{json .Config.Labels}}' "$IMAGE_ID")
+        commit=$(jq -r '.["org.opencontainers.image.revision"] // ""' <<<"$labels")
+        source_url=$(jq -r '.["org.opencontainers.image.source"] // ""' <<<"$labels")
+        echo "the build of the hub commit ${commit:-(none)}, from ${source_url:-(no source)}"
+        {
+          echo "platform-commit=$commit"
+          echo "platform-source=$source_url"
+        } >> "$GITHUB_OUTPUT"

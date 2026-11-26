@@ -1,4 +1,5 @@
-"""Helpers to read a workflow and run one of its steps' scripts the way Actions does."""
+"""Helpers to read a workflow or a composite action and run one of its steps' scripts the way
+Actions does."""
 
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ import yaml
 from tests.conftest import REPO_ROOT
 
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
+ACTIONS = REPO_ROOT / ".github" / "actions"
 
 
 def job(workflow: str, name: str) -> dict[str, Any]:
@@ -32,6 +34,15 @@ def uses(job: Mapping[str, Any], action: str) -> dict[str, Any]:
     return found
 
 
+def action_step(action: str, step_id: str) -> dict[str, Any]:
+    """The one step `step_id` of the composite action `.github/actions/<action>`."""
+    parsed: dict[str, Any] = yaml.safe_load((ACTIONS / action / "action.yml").read_text())
+    steps = [s for s in parsed["runs"]["steps"] if s.get("id") == step_id]
+    assert len(steps) == 1, f"{action} has no single step with id {step_id}"
+    found: dict[str, Any] = steps[0]
+    return found
+
+
 def run_step(
     workflow: str,
     job_name: str,
@@ -43,6 +54,33 @@ def run_step(
 ) -> tuple[subprocess.CompletedProcess[str], str]:
     """Run step `step_id`'s script with `bash -e -c` in `cwd`; the result and GITHUB_OUTPUT."""
     step = next(s for s in job(workflow, job_name)["steps"] if s.get("id") == step_id)
+    return _run_script(["bash", "-e", "-c", step["run"]], cwd=cwd, env=env, fakes=fakes)
+
+
+def run_action_step(
+    action: str,
+    step_id: str,
+    *,
+    cwd: Path,
+    env: Mapping[str, str],
+    fakes: Mapping[str, str] | None = None,
+) -> tuple[subprocess.CompletedProcess[str], str]:
+    """Run the composite action `action`'s step `step_id` in `cwd` as Actions runs a composite
+    `shell: bash` step, `bash --noprofile --norc -eo pipefail -c`; the result and GITHUB_OUTPUT."""
+    step = action_step(action, step_id)
+    assert step.get("shell") == "bash", f"{action}: step {step_id} is not a bash step"
+    command = ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", step["run"]]
+    return _run_script(command, cwd=cwd, env=env, fakes=fakes)
+
+
+def _run_script(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: Mapping[str, str],
+    fakes: Mapping[str, str] | None,
+) -> tuple[subprocess.CompletedProcess[str], str]:
+    """Run `command` in `cwd` with `fakes` first on PATH; the result and GITHUB_OUTPUT."""
     bin_dir = cwd / ".bin"
     bin_dir.mkdir(exist_ok=True)
     for name, script in (fakes or {}).items():
@@ -52,7 +90,7 @@ def run_step(
     output = cwd / ".github_output"
     output.write_text("")
     result = subprocess.run(
-        ["bash", "-e", "-c", step["run"]],
+        command,
         capture_output=True,
         text=True,
         cwd=cwd,
