@@ -33,8 +33,9 @@ Plans 01–05 are written so far.
   a few days, so request it as soon as the repository exists.
 - **Before plan 06:**
   - create the GitHub organization `JWall-Engineering`;
-  - create its release bot `jwall-engineering-release-bot` and its
-    comments App `jwall-engineering-comments`;
+  - create its release App `jwall-engineering-releases` (plan 05's ruling 8,
+    in place of spec 7's `jwall-engineering-release-bot`) and its comments
+    App `jwall-engineering-comments`;
   - provide the branding artwork.
 - **Before plan 05's releases (plan 05, hand-off 1):** keep the old pins' image
   alive. Every project's pin, `@v0.76.0`, pulls `jaws-cli:v0.76.0`, and
@@ -42,7 +43,7 @@ Plans 01–05 are written so far.
   at about four releases a day it expires before plan 07's switches. Raise
   `ecr.keep_release_images` in `config/tool.yaml` (a config change still allowed
   before the freeze), or merge the projects' Dependabot bumps to a recent tag.
-- **With plan 06 (plan 05, hand-off 3):** the Apps and rulings the hub needs, in
+- **With plan 06 (plan 05, hand-off 3):** the Apps and rulesets the hub needs, in
   [the plan](2026-11-24-hub-split-05-workflows.md): the comments App
   `jwall-engineering-comments`, the upgrade App `jwall-engineering-upgrades` if
   ruling 12 is confirmed, the mover App `jwall-engineering-deployments`, the
