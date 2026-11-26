@@ -54,6 +54,11 @@ def test_no_workflow_reads_the_account_or_the_name_root_itself(name: str) -> Non
             assert key not in step["run"], f"{name} job {job}: reads {key} with yq"
 
 
+def test_the_credential_script_does_not_read_the_name_root_itself() -> None:
+    script = (WORKFLOWS_DIR.parent.parent / "scripts" / "databricks-credentials.sh").read_text()
+    assert ".context.name_root" not in script
+
+
 @pytest.mark.parametrize("name", ROLE_WORKFLOWS)
 def test_every_role_is_built_from_the_account_the_tool_resolves(name: str) -> None:
     steps = _role_steps(name)

@@ -121,12 +121,16 @@ jobs:
       # Databricks credential: each terraform step sources it into its own shell
       # (never GITHUB_ENV); it does nothing while databricks.enabled is false.
       - name: terraform plan
+        env:
+          NAME_ROOT: ${{ needs.account.outputs.name_root }}
         run: |
-          source ../scripts/databricks-credentials.sh ../config
+          source ../scripts/databricks-credentials.sh ../config "$NAME_ROOT"
           terraform plan -no-color -lock-timeout=120s -out=tfplan
       - name: terraform apply
+        env:
+          NAME_ROOT: ${{ needs.account.outputs.name_root }}
         run: |
-          source ../scripts/databricks-credentials.sh ../config
+          source ../scripts/databricks-credentials.sh ../config "$NAME_ROOT"
           terraform apply -no-color -lock-timeout=120s tfplan
 
   # The monitoring stack (monitoring/), after the foundation: its apply has just

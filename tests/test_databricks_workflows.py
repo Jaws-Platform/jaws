@@ -50,7 +50,9 @@ def _write_databricks(root: Path, *, enabled: bool) -> None:
     (root / "config" / "databricks.yaml").write_text(yaml.safe_dump({"databricks": databricks}))
 
 
-def _source_credentials(tmp_path: Path, config: str = "config") -> tuple[str, Path, Path]:
+def _source_credentials(
+    tmp_path: Path, config: str = "config", name_root: str = ""
+) -> tuple[str, Path, Path]:
     """Source the script in a step-like shell (`bash -e`) with a fake `aws` that returns
     SENTINEL, then print the environment the step's terraform would see."""
     bin_dir = tmp_path / "bin"
@@ -62,7 +64,7 @@ def _source_credentials(tmp_path: Path, config: str = "config") -> tuple[str, Pa
     github_env = tmp_path / "github-env"
     github_env.touch()
     result = subprocess.run(
-        ["bash", "-e", "-c", f'source "{CREDENTIALS_SCRIPT}" {config}\necho ---\nenv'],
+        ["bash", "-e", "-c", f'source "{CREDENTIALS_SCRIPT}" {config} {name_root}\necho ---\nenv'],
         cwd=tmp_path,
         env={
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
@@ -88,16 +90,34 @@ def _run_credentials(tmp_path: Path, *, enabled: bool) -> tuple[str, Path, Path]
 def test_a_left_out_parameter_follows_the_name_root(tmp_path: Path, single_file: bool) -> None:
     databricks = {**fixture_config()["databricks"], "enabled": True}
     databricks.pop("secret_parameter", None)
-    sections = {"databricks": databricks, "context": {"name_root": "acme"}}
     if single_file:
-        (tmp_path / "all.yaml").write_text(yaml.safe_dump(sections))
+        (tmp_path / "all.yaml").write_text(yaml.safe_dump({"databricks": databricks}))
     else:
         (tmp_path / "config").mkdir()
-        for name, file in (("databricks", "databricks.yaml"), ("context", "tool.yaml")):
-            (tmp_path / "config" / file).write_text(yaml.safe_dump({name: sections[name]}))
-    out, calls, _ = _source_credentials(tmp_path, "all.yaml" if single_file else "config")
+        (tmp_path / "config" / "databricks.yaml").write_text(
+            yaml.safe_dump({"databricks": databricks})
+        )
+    out, calls, _ = _source_credentials(
+        tmp_path, "all.yaml" if single_file else "config", name_root="acme"
+    )
     assert "--name /acme/databricks/client-secret" in calls.read_text()
     assert "_dbx_" not in out.split("---\n", 1)[1]
+
+
+@needs_yq
+def test_without_a_parameter_or_a_root_the_credential_is_refused(tmp_path: Path) -> None:
+    databricks = {**fixture_config()["databricks"], "enabled": True}
+    databricks.pop("secret_parameter", None)
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "databricks.yaml").write_text(yaml.safe_dump({"databricks": databricks}))
+    with pytest.raises(subprocess.CalledProcessError) as refused:
+        _source_credentials(tmp_path)
+    assert refused.value.returncode == 1
+    assert (
+        "::error::databricks.secret_parameter is not set and no name root was passed: "
+        "source databricks-credentials.sh <config> <name_root>"
+    ) in refused.value.stdout + refused.value.stderr
+    assert not (tmp_path / "aws-calls").exists()
 
 
 @needs_yq
@@ -154,18 +174,22 @@ def test_a_multiline_secret_fails_the_step_without_printing_it(tmp_path: Path) -
     assert SENTINEL not in result.stdout + result.stderr
 
 
-_SOURCE = "source ../scripts/databricks-credentials.sh ../config"
+_SOURCE = 'source ../scripts/databricks-credentials.sh ../config "$NAME_ROOT"'
+_ACCOUNT_ROOT = "${{ needs.account.outputs.name_root }}"
+_ROLE_ROOT = "${{ steps.role.outputs.name_root }}"
 
 
 @pytest.mark.parametrize(
-    ("workflow", "job", "terraform_steps"),
+    ("workflow", "job", "terraform_steps", "name_root"),
     [
-        ("ci.yml", "terraform-plan", {"terraform plan"}),
-        ("release-please.yml", "apply", {"terraform plan", "terraform apply"}),
+        ("ci.yml", "terraform-plan", {"terraform plan"}, _ACCOUNT_ROOT),
+        ("release-please.yml", "apply", {"terraform plan", "terraform apply"}, _ACCOUNT_ROOT),
+        ("data-access.yml", "plan", {"terraform plan"}, _ROLE_ROOT),
+        ("data-access.yml", "apply", {"Sweep (plan, then apply what changed)"}, _ROLE_ROOT),
     ],
 )
 def test_only_the_terraform_steps_get_the_credential(
-    workflow: str, job: str, terraform_steps: set[str]
+    workflow: str, job: str, terraform_steps: set[str], name_root: str
 ) -> None:
     data = _yaml(WORKFLOWS / workflow)["jobs"][job]
     steps: list[dict[str, Any]] = data["steps"]
@@ -176,13 +200,21 @@ def test_only_the_terraform_steps_get_the_credential(
             run = step["run"]
             # Sourced first, in the step's own shell, before terraform runs.
             assert run.splitlines()[0] == _SOURCE
+            assert step["env"]["NAME_ROOT"] == name_root
         text = json.dumps(step)
         assert "GITHUB_ENV" not in text or "DATABRICKS" not in text
         assert "DATABRICKS_CLIENT_SECRET" not in json.dumps(step.get("env", {}))
     assert "DATABRICKS" not in json.dumps(data.get("env", {}))
     aws = _index(steps, lambda s: "configure-aws-credentials" in s.get("uses", ""))
-    plan = _index(steps, lambda s: s.get("name") == "terraform plan")
-    assert aws < plan
+    first = _index(steps, lambda s: s.get("name") in terraform_steps)
+    assert aws < first
+
+
+@pytest.mark.parametrize("job", ["plan", "apply"])
+def test_data_access_roles_output_the_name_root(job: str) -> None:
+    steps = _steps("data-access.yml", job)
+    role = steps[_index(steps, lambda s: s.get("id") == "role")]
+    assert 'echo "name_root=$name_root"' in role["run"]
 
 
 def test_no_workflow_exports_a_databricks_secret() -> None:

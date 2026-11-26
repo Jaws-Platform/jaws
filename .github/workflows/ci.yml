@@ -625,8 +625,10 @@ jobs:
       # (never GITHUB_ENV); it does nothing while databricks.enabled is false.
       - name: terraform plan
         id: plan
+        env:
+          NAME_ROOT: ${{ needs.account.outputs.name_root }}
         run: |
-          source ../scripts/databricks-credentials.sh ../config
+          source ../scripts/databricks-credentials.sh ../config "$NAME_ROOT"
           set +e
           terraform plan -no-color -lock-timeout=60s -out=tfplan -detailed-exitcode > plan.log 2>&1
           code=$?

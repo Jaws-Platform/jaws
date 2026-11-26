@@ -87,6 +87,7 @@ jobs:
           [[ "$account" =~ ^[0-9]{12}$ && -n "$name_root" ]] || { echo "::error::jaws config env named no account or name root"; exit 1; }
           {
             echo "arn=arn:aws:iam::${account}:role/${name_root}-data-access-ci-plan"
+            echo "name_root=$name_root"
             echo "state_bucket=$(sed -n 's/^state_bucket=//p' <<<"$resolved")"
           } >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6
@@ -113,8 +114,10 @@ jobs:
       - name: terraform plan
         id: plan
         if: steps.role.outputs.databricks == 'ready'
+        env:
+          NAME_ROOT: ${{ steps.role.outputs.name_root }}
         run: |
-          source ../scripts/databricks-credentials.sh ../config
+          source ../scripts/databricks-credentials.sh ../config "$NAME_ROOT"
           set +e
           terraform plan -no-color -lock-timeout=60s -out=tfplan -detailed-exitcode > plan.log 2>&1
           code=$?
@@ -195,6 +198,7 @@ jobs:
           [[ "$account" =~ ^[0-9]{12}$ && -n "$name_root" ]] || { echo "::error::jaws config env named no account or name root"; exit 1; }
           {
             echo "arn=arn:aws:iam::${account}:role/${name_root}-data-access-ci-apply"
+            echo "name_root=$name_root"
             echo "state_bucket=$(sed -n 's/^state_bucket=//p' <<<"$resolved")"
           } >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6
@@ -221,8 +225,10 @@ jobs:
       - name: Sweep (plan, then apply what changed)
         id: sweep
         if: steps.role.outputs.databricks == 'ready'
+        env:
+          NAME_ROOT: ${{ steps.role.outputs.name_root }}
         run: |
-          source ../scripts/databricks-credentials.sh ../config
+          source ../scripts/databricks-credentials.sh ../config "$NAME_ROOT"
           ../scripts/data-access-sweep.sh
       - name: Summary (who reads what, what is pending, what waits)
         if: always() && steps.sweep.outcome != 'skipped' && steps.role.outputs.databricks == 'ready'
