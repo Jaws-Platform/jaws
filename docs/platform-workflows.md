@@ -326,7 +326,9 @@ A release stays gated, as `jaws`'s is
 ([spec 6.4](superpowers/specs/2026-11-22-hub-split-design.md#64-workflows)):
 merges to `main` collect in a Release Please PR, and merging that PR is the
 deliberate, reviewed act that releases. Every other push runs Release Please
-alone. A release runs these jobs, each reported as `<caller job> / <name>`,
+alone. Release Please reads its two files from the hub, so the hub holds both
+at its root: `release-please-config.json` and `.release-please-manifest.json`.
+A release runs these jobs, each reported as `<caller job> / <name>`,
 where `<tag>` is the release's tag:
 
 | Job | Name | Needs | What it does |
@@ -510,12 +512,14 @@ or a ruleset that refuses the App stops the job before `current` moves.
 Whatever stops it after `live` has moved leaves that same safe pair: run the
 rollback again.
 
-It applies nothing. The foundation and monitoring stay as the release being
-rolled back applied them. The runs that take `current`, such as the sweep and
-the by-hand applies, and every project's next run at `@live`, run the older
-build from their next start. To undo what a release applied, release a fix: the
-next release moves `current` and `live` forward again, and `live` by a
-fast-forward from the rolled-back commit.
+It applies nothing itself, so the foundation and monitoring stay as the release
+being rolled back applied them. Data access doesn't stay: the sweep runs the
+build `current` names, so after a rollback the next sweep re-applies the older
+build's data access, and revokes any grant that only the newer configuration
+made. The by-hand applies, and every project's next run at `@live`, run the
+older build from their next start too. To undo what a release applied to the
+foundation or monitoring, release a fix: the next release moves `current` and
+`live` forward again, and `live` by a fast-forward from the rolled-back commit.
 
 Before it moves anything, the job stops on:
 
