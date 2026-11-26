@@ -162,7 +162,7 @@ The owner's rule is "don't spend any money in the cloud". Plan 06's D5 costs sta
 
 | | What | Starts | Estimate |
 |---|---|---|---|
-| C1 | The hub image's storage in private ECR | the hub's first release (O5) | At most ten builds, about 2.8 GB: at most about $0.28 a month at $0.10 a GB-month (plan 05 ruling 6). Less where builds share their Jaws base |
+| C1 | The hub image's storage in private ECR | the hub's first release (O5) | At most eleven builds: the newest ten, plus `current`'s when it is older, since the lifecycle keeps it (plan 05 ruling 6, as built). About 3.1 GB: at most about $0.31 a month at $0.10 a GB-month. Less where builds share their Jaws base |
 | C2 | Pulls of the hub image to GitHub's runners, billed as data transfer out | O5 | Free within the account's 100 GB a month of data transfer out, then $0.09 a GB. See below |
 | C3 | The AWS requests of the hub's PR plans: state reads, lock writes, SSM and KMS | the enabling release (O2) | A few cents a month at most. Until O5 they come on top of `jaws`'s own; from O5 they replace them |
 
@@ -244,7 +244,7 @@ The agent does none of these. Each says what to check before and after.
     3. check that no `Data access apply` run is in progress in `jaws`, then merge Task 5's PR: the hub gains its appliers, and its `release.yml` opens a release PR;
     4. merge that release PR at once. Until it has run, the hub's sweeps stop at `current` (ruling 4).
   - **After:**
-    - the release's jobs pass in order: the build `sha-<commit>`, then `Terraform apply` (`No changes.` through the filter), then the move of `current`, then the move of `live`. `Monitoring apply` runs beside the moves (plan 05, ruling 7) and also passes;
+    - the release's jobs pass in order: the build `sha-<commit>`, then `Terraform apply` (`No changes.` through the filter), then the move of `current`, then the move of `live`, then `Monitoring apply`, which also passes. Plan 05 as built applies monitoring last, so the moves never wait for it (its rulings 7 and P5-R29);
     - `live` exists, at the release commit;
     - the next sweep reads `Sweep: no-changes`.
   - **From now on:**
