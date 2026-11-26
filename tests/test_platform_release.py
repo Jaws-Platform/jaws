@@ -953,9 +953,7 @@ def test_any_other_answer_stops_the_job_naming_it(
 @pytest.mark.parametrize(
     "commit", ["", COMMIT.upper(), "main"], ids=["empty", "not-lowercase", "a-branch"]
 )
-def test_the_check_compares_the_release_commit_only(
-    tmp_path: Path, name: str, commit: str
-) -> None:
+def test_the_check_compares_the_release_commit_only(tmp_path: Path, name: str, commit: str) -> None:
     """An empty commit would compare `...live`, which GitHub can't find: a 404 that must never
     pass for a first release."""
     ran = _newest(tmp_path, name, FAKE_STATUS="behind", COMMIT=commit)
