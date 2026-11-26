@@ -62,6 +62,8 @@ class Provenance:
     sha: str | None = None
     commit_url: str | None = None
     run_url: str | None = None
+    platform_sha: str | None = None
+    platform_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -143,6 +145,12 @@ def _alert(kind: str, *lines: str) -> list[str]:
 def _footer(provenance: Provenance, brand: BrandSection, note: str | None = None) -> list[str]:
     product = f"<b>{PRODUCT}</b> v{provenance.version}"
     parts = [product if brand.name == PRODUCT else f"Built with {product}"]
+    if provenance.platform_sha:
+        short = f"<code>{html.escape(provenance.platform_sha[:7])}</code>"
+        if provenance.platform_url:
+            parts.append(f'Platform <a href="{html.escape(provenance.platform_url)}">{short}</a>')
+        else:
+            parts.append(f"Platform {short}")
     if provenance.sha:
         short = f"<code>{provenance.sha[:7]}</code>"
         if provenance.commit_url:
