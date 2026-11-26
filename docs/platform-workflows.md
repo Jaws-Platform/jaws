@@ -155,6 +155,22 @@ jobs:
       app-private-key: ${{ secrets.app-private-key }}
 ```
 
+### `remote-task.yml` and `container-release.yml`
+
+Both take the same three inputs, `platform-image`, `account-id` and `name-root`,
+default `""`. With an identity, a job builds its role with `platform-role` (`task`
+or `release`), assumes it, resolves the hub's image with `platform-image` and
+extracts its configuration to `.jaws-platform`, which the CLI then reads
+(`--config .jaws-platform/config`, with the image's infra root and commit).
+Without one, a job runs as it does at a pin from before hubs: the role from
+`config env`, and `config/` from the tool checkout.
+
+They run the CLI from source, with `uv` from the workflow's own commit, not
+from the image (ruling 14): `remote-task` needs the CLI itself to take the
+cancel signal and terminate the instance, and `container-release` needs Docker
+on the runner for its build. The configuration comes from the image; the code,
+from the checkout.
+
 ### The check names
 
 A job's check name is `<caller job> / <check-prefix> <job>`: `jaws plan`,

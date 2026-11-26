@@ -344,6 +344,11 @@ release role's ARN from this tool's configuration (the primary account's
 only that repository's `v*` tags. A `release-role-arn` input can override the
 derived role.
 
+In a hub, call the hub's copy of the workflow at `@live`, which spells the
+platform's identity (`platform-image`, `account-id` and `name-root`) for you:
+the release then assumes the role that identity names and reads the
+configuration from the hub's image. Without an identity, it runs as above.
+
 ## Costs
 
 On-demand us-east-1 list prices, rounded:

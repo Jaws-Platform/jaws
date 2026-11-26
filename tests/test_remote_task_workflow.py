@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 import yaml
 
 from tests.conftest import REPO_ROOT
+from tests.test_databricks_workflows import needs_yq
+from tests.workflow_steps import run_step
 
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "remote-task.yml"
 
@@ -31,6 +34,7 @@ def test_it_is_reusable_with_the_planned_inputs() -> None:
     assert set(call["inputs"]) == {
         "project", "script", "args", "profile", "instance-type", "market", "max-hours",
         "task-id", "artifact", "artifact-path", "debug", "campaign",
+        "platform-image", "account-id", "name-root",
     }  # fmt: skip
     assert call["inputs"]["project"]["required"] and call["inputs"]["script"]["required"]
     assert call["inputs"]["args"]["default"] == "[]"
@@ -61,7 +65,7 @@ def test_the_first_step_refuses_forks_and_other_events() -> None:
 
 def test_the_role_is_built_from_config_with_a_long_enough_session() -> None:
     role = _steps()[_index(lambda s: s.get("id") == "role")]
-    assert 'jaws --config "$CONFIG" config env' in role["run"]
+    assert 'jaws --config "$JAWS_TOOL_CONFIG" config env' in role["run"]
     assert '-${PROJECT}-ci-task"' in role["run"]
     assert "3600" in role["run"]
     creds = _steps()[_index(lambda s: "configure-aws-credentials" in s.get("uses", ""))]
@@ -105,7 +109,13 @@ def test_upload_and_cleanup_always_run() -> None:
 def test_runs_the_cli_from_this_workflow_commit() -> None:
     text = WORKFLOW.read_text()
     assert "ref: ${{ job.workflow_sha }}" in text
-    assert "--config .jaws-tool/config " in text
+    assert '--config "$JAWS_TOOL_CONFIG"' in text
+    assert "--config .jaws-tool/config" not in text
+    env = _workflow()["jobs"]["task"]["env"]
+    assert env["JAWS_TOOL_CONFIG"] == (
+        "${{ inputs.platform-image != '' && '.jaws-platform/config' || '.jaws-tool/config' }}"
+    )
+    assert "CLI" not in env
 
 
 def test_outcome_and_interruption_are_outputs() -> None:
@@ -148,3 +158,114 @@ def test_the_task_step_passes_a_campaign_only_when_named() -> None:
     assert step["env"]["CAMPAIGN"] == "${{ inputs.campaign }}"
     assert 'if [ -n "$CAMPAIGN" ]; then flags+=(--campaign "$CAMPAIGN"); fi' in step["run"]
     assert "inputs.campaign" not in str(step["run"])  # through the environment, never inlined
+
+
+IDENTITY_IF = "inputs.platform-image != '' || inputs.account-id != '' || inputs.name-root != ''"
+FIXTURE = "account_id=222222222222\nname_root=jaws\n"
+
+
+def test_the_cleanup_terminates_with_the_job_s_configuration(tmp_path: Path) -> None:
+    """A job's env can't read env, so the cleanup spells the quoted config itself."""
+    cleanup = _steps()[_index(lambda s: s.get("id") == "terminate")]
+    assert cleanup["if"].startswith("always()")
+    jaws = tmp_path / ".jaws-tool" / ".venv" / "bin" / "jaws"
+    jaws.parent.mkdir(parents=True)
+    jaws.write_text('#!/bin/bash\necho "$@" > args.log\n')
+    jaws.chmod(0o755)
+    result, _ = run_step(
+        "remote-task.yml",
+        "task",
+        "terminate",
+        cwd=tmp_path,
+        env={"JAWS_TOOL_CONFIG": ".jaws-platform/config", "RUN_ID": "1-1", "TASK_ID": "t"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "args.log").read_text().strip() == (
+        "--config .jaws-platform/config task terminate --run-id 1-1 --task-id t"
+    )
+
+
+def test_in_a_hub_the_task_role_comes_from_the_platform_s_identity() -> None:
+    steps = _steps()
+    platform = steps[_index(lambda s: s.get("id") == "platform")]
+    assert platform["if"] == IDENTITY_IF
+    assert platform["uses"] == "./.jaws-tool/.github/actions/platform-role"
+    assert platform["with"] == {
+        "platform-image": "${{ inputs.platform-image }}",
+        "account-id": "${{ inputs.account-id }}",
+        "name-root": "${{ inputs.name-root }}",
+        "role": "task",
+        "project": "${{ inputs.project }}",
+    }
+    role = steps[_index(lambda s: s.get("id") == "role")]
+    assert role["env"]["PLATFORM_ARN"] == "${{ steps.platform.outputs.arn }}"
+    assert 'if [ -n "$PLATFORM_ARN" ]' in role["run"]
+    assert role["run"].count("--config") == 1
+    assert _index(lambda s: s.get("id") == "platform") < _index(lambda s: s.get("id") == "role")
+    creds = steps[_index(lambda s: "configure-aws-credentials" in s.get("uses", ""))]
+    assert creds["with"]["role-duration-seconds"] == "${{ steps.role.outputs.duration }}"
+
+
+def test_in_a_hub_the_cli_reads_the_platform_image_s_configuration() -> None:
+    steps = _steps()
+    credentials = _index(lambda s: "configure-aws-credentials" in s.get("uses", ""))
+    image = _index(lambda s: s.get("id") == "image")
+    task = _index(lambda s: s.get("id") == "task")
+    assert credentials < image < task
+    assert steps[image]["if"] == "steps.platform.outputs.arn != ''"
+    assert steps[image]["uses"] == "./.jaws-tool/.github/actions/platform-image"
+    assert steps[image]["with"]["extract"] == ".jaws-platform"
+    assert steps[task]["env"]["JAWS_INFRA_ROOT"] == "${{ steps.image.outputs.infra-root }}"
+    assert steps[task]["env"]["JAWS_PLATFORM_COMMIT"] == (
+        "${{ steps.image.outputs.platform-commit }}"
+    )
+    assert steps[task]["env"]["JAWS_PLATFORM_SOURCE"] == (
+        "${{ steps.image.outputs.platform-source }}"
+    )
+
+
+@needs_yq
+def test_without_a_platform_image_a_task_runs_as_today(tmp_path: Path) -> None:
+    fake_uv = (
+        "#!/bin/bash\n"
+        '[ "$1 $2 $3 $4 $5 $6" = "run --no-dev --project .jaws-tool jaws --config" ] || exit 9\n'
+        '[ "$8" = config ] && [ "$9" = env ] || exit 9\n'
+        f"printf '{FIXTURE}'\n"
+    )
+    result, output = run_step(
+        "remote-task.yml",
+        "task",
+        "role",
+        cwd=tmp_path,
+        env={
+            "PLATFORM_ARN": "",
+            "PROJECT": "braveheart",
+            "PROFILE": "cpu",
+            "MAX_HOURS": "1",
+            "JAWS_TOOL_CONFIG": ".jaws-tool/config",
+        },
+        fakes={"uv": fake_uv},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "arn=arn:aws:iam::222222222222:role/jaws-braveheart-ci-task\n" in output
+    assert "duration=7200\n" in output
+
+
+def test_in_a_hub_the_role_step_does_not_read_the_configuration(tmp_path: Path) -> None:
+    arn = "arn:aws:iam::123456789012:role/jaws-braveheart-ci-task"
+    result, output = run_step(
+        "remote-task.yml",
+        "task",
+        "role",
+        cwd=tmp_path,
+        env={
+            "PLATFORM_ARN": arn,
+            "PROJECT": "braveheart",
+            "PROFILE": "cpu",
+            "MAX_HOURS": "1",
+            "JAWS_TOOL_CONFIG": ".jaws-platform/config",
+        },
+        fakes={"uv": "#!/bin/bash\nexit 9\n"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert f"arn={arn}\n" in output and "duration=7200\n" in output

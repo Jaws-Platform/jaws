@@ -100,6 +100,13 @@ jobs:
       - run: echo "outcome ${{ needs.play.outputs.outcome }}"
 ```
 
+**In a hub.** A project that a hub runs calls the hub's copy of the workflow at
+`@live`, which spells the platform's identity (`platform-image`, `account-id` and
+`name-root`) for it. The job then builds its task role from that identity and
+runs with the configuration in the hub's image. The project passes none of
+them. At a Jaws pin, with no identity, it runs as before, from this tool's own
+`config/`.
+
 **Inputs.** `project` and `script` are required. The rest are optional:
 
 | Input | Default |
