@@ -404,6 +404,8 @@ files](#the-tool-configuration-config)).
 | `stacks/databricks-account/`, `stacks/databricks-workspace/`, `foundation/databricks.tf` | The two stacks of a Databricks project; the metastore, audit log delivery and each Databricks project's roles (type `databricks` in `config/projects.yaml`) |
 | `Dockerfile` | The CLI images: `generic`, the default target (the CLI, a pinned Terraform, every stack with modules and providers vendored: `stacks/*` and the platform's own, without backends; no configuration), and `jaws-cli`: `generic` plus `config/` at `/etc/jaws/config` and `datasets/` at `/etc/jaws/datasets` |
 | `.github/actions/terraform-init` | `terraform init` with a retry for the registry's lag after a library release |
+| `.github/workflows/platform-*.yml` | A hub's workflows: its pull requests, its release, rollback, by-hand applies, the data access sweep and the upgrade PR ([docs/platform-workflows.md](docs/platform-workflows.md)) |
+| `.github/actions/platform-*` | Shared steps of a hub's runs: the role, one build per run, the base and the build, the project file, and the moves of `current` and `live` |
 | `projects.tf` | The sites (type `site` in `config/projects.yaml`), each fed to the registry `site-bucket`, `ci-plan-role`, `ci-preview-role` and `ci-apply-role` modules |
 | `outputs.tf` | Values the project repos and this repo's CI consume |
 | `registry/` | Derives the onboarded datasets from `datasets/` (each platform name, bucket and URL), tested against the CLI's derivation |
