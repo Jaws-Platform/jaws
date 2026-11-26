@@ -67,14 +67,17 @@ def run_step(
     return result, output.read_text()
 
 
-def hcl_values(path: Path) -> dict[str, str]:
-    """A backend file's `key = "value"` lines."""
+def hcl_text_values(text: str) -> dict[str, str]:
+    """A backend file's `key = "value"` lines, from its text."""
     return {
         key.strip(): value.strip().strip('"')
-        for key, value in (
-            line.split("=", 1) for line in path.read_text().splitlines() if "=" in line
-        )
+        for key, value in (line.split("=", 1) for line in text.splitlines() if "=" in line)
     }
+
+
+def hcl_values(path: Path) -> dict[str, str]:
+    """A backend file's `key = "value"` lines."""
+    return hcl_text_values(path.read_text())
 
 
 def required_checks() -> set[str]:

@@ -35,6 +35,7 @@ from . import (
     github,
     image,
     monitoring,
+    platform,
     releases,
     report,
     rollout,
@@ -117,6 +118,11 @@ monitoring_secrets_app = typer.Typer(
     "(values are never printed).",
     no_args_is_help=True,
 )
+platform_app = typer.Typer(
+    help="The platform's own stacks (foundation, monitoring and data-access), run from the "
+    "image as a hub's workflows run them.",
+    no_args_is_help=True,
+)
 bot_app.add_typer(secrets_app, name="secrets")
 app.add_typer(task_app, name="task")
 app.add_typer(bot_app, name="bot")
@@ -129,6 +135,7 @@ app.add_typer(access_app, name="access")
 databricks_app.add_typer(credentials_app, name="credentials")
 app.add_typer(monitoring_app, name="monitoring")
 monitoring_app.add_typer(monitoring_secrets_app, name="secrets")
+app.add_typer(platform_app, name="platform")
 
 LOG_FILE = "jaws.log"
 
@@ -2357,3 +2364,72 @@ def monitoring_secrets_check(ctx: typer.Context) -> None:
         run.logger.info("all %d monitoring secrets are set", len(secrets))
 
     _command(body)(ctx)
+
+
+# -- the platform's own stacks ----------------------------------------------------
+
+PlatformStackName = Annotated[
+    str, typer.Argument(metavar="STACK", help="foundation, monitoring or data-access.")
+]
+
+
+def _platform_terraform(
+    run: Run, name: str, role: Literal["plan", "apply"], secrets: list[str]
+) -> platform.PlatformTerraform:
+    """Terraform for the platform's stack `name`, once the credentials are its `role` role.
+
+    Its environment holds the stack's variables, with the configuration's path and the
+    datasets beside it made absolute, since Terraform runs in a working copy elsewhere.
+    A stack that needs Databricks gets its credential too while `databricks.enabled`: the
+    secret is read from `databricks.secret_parameter` and added to `secrets`.
+    """
+    settings = run.settings
+    target = platform.platform_stack(name)
+    session = boto3.session.Session(region_name=settings.state.region)
+    with phase("preflight"):
+        aws.check_role(
+            session.client("sts"),
+            platform.platform_role(settings, target, role),
+            run.logger,
+            account_id=settings.aws.account_id,
+        )
+    env = platform.stack_variables(
+        target,
+        (run.config_path or default_config_path()).resolve(),
+        (access.infra_root() / "datasets").resolve(),
+    )
+    section = settings.databricks
+    if target.databricks and section is not None and section.enabled:
+        secret = _load_databricks_secret(session.client("ssm"), section.secret_parameter)
+        secrets.append(secret)
+        env.update(databricks_auth.terraform_env(settings, secret))
+    return platform.PlatformTerraform(target, settings, run.logger, extra_env=env)
+
+
+@platform_app.command("plan")
+def platform_plan(ctx: typer.Context, name: PlatformStackName) -> None:
+    """Plan one of the platform's stacks as its plan role and write the plan comment."""
+    # Filled once the secret is loaded: everything the logger writes from then on
+    # (Terraform's output, the final error) is masked, as in `databricks doctor`.
+    secrets: list[str] = []
+
+    def body(run: Run) -> None:
+        terraform = _platform_terraform(run, name, "plan", secrets)
+        platform.plan(terraform, run.artifacts, tool_version(), secrets)
+
+    run: Run = ctx.obj
+    with databricks.redacting(run.logger, secrets):
+        _command(body)(ctx)
+
+
+@platform_app.command("apply")
+def platform_apply(ctx: typer.Context, name: PlatformStackName) -> None:
+    """Plan one of the platform's stacks as its apply role, and apply the plan if it has changes."""
+    secrets: list[str] = []  # masked as in `platform plan`
+
+    def body(run: Run) -> None:
+        platform.apply(_platform_terraform(run, name, "apply", secrets), tool_version())
+
+    run: Run = ctx.obj
+    with databricks.redacting(run.logger, secrets):
+        _command(body)(ctx)
