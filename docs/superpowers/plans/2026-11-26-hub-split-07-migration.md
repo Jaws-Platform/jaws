@@ -1151,7 +1151,15 @@ UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 ACCOUNT_ID = re.compile(r"(?<![0-9A-Za-z])[0-9]{12}(?![0-9A-Za-z])")
 #: The examples the tests and docs use, `000000000000`, the SDK for pandas layer's account (AWS's own, as the 2026-11-21 monitoring record spells it; copy it into the set from there), and Databricks's own AWS account (its Unity Catalog role).
 NEUTRAL_ACCOUNTS = frozenset(
-    {"000000000000", "111111111111", "222222222222", "333333333333", "123456789012", "111122223333", "414351767826"}
+    {
+        "000000000000",
+        "111111111111",
+        "222222222222",
+        "333333333333",
+        "123456789012",
+        "111122223333",
+        "414351767826",
+    }
 )
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}")
 PLACEHOLDER_EMAIL = re.compile(r"(?i).+@(example\.(com|org|net)|[\w.-]+\.test)")
@@ -1274,7 +1282,14 @@ Expected CI: every check passes. No platform plan runs in `jaws` any more (rulin
 
 ```python
 #: The release's history, its design records, the maintainer's login (ruling 8), Jaws's own release infrastructure, generated files.
-EXEMPT = ("release-infra/", "CHANGELOG.md", "docs/superpowers/", ".github/CODEOWNERS", "uv.lock", "package-lock.json")
+EXEMPT = (
+    "release-infra/",
+    "CHANGELOG.md",
+    "docs/superpowers/",
+    ".github/CODEOWNERS",
+    "uv.lock",
+    "package-lock.json",
+)
 
 
 def _release_files() -> list[str]:
