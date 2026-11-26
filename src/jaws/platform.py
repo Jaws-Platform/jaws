@@ -215,6 +215,14 @@ def plan(
 SWEEP_OUTPUTS = ("edges", "awaiting_onboarding", "missing_workspaces")
 
 
+def sweep_failed(access_summary: str | None) -> None:
+    """Write the sweep's step summary for a failed run: no result and no applied state."""
+    text = "**Sweep: failed**\n"
+    if access_summary is not None:
+        text += f"\n{access_summary}"
+    github.append_summary(text)
+
+
 def apply(terraform: PlatformTerraform, version: str, sweep_summary: str | None = None) -> None:
     """Plan the stack, and apply the saved plan only when it has changes: the sweep's
     rule. Then write the output `result`, `no-changes` or `applied`, and the step summary.

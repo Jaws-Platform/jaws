@@ -2453,8 +2453,16 @@ def platform_apply(ctx: typer.Context, name: PlatformStackName) -> None:
         if data_access and _data_access_waits(run):
             return
         terraform = _platform_terraform(run, name, "apply", secrets)
-        summary = _render_data_access(run, terraform, None) if data_access else None
-        platform.apply(terraform, tool_version(), sweep_summary=summary)
+        if not data_access:
+            platform.apply(terraform, tool_version())
+            return
+        summary: str | None = None  # not rendered yet: a failed render has none to show
+        try:
+            summary = _render_data_access(run, terraform, None)
+            platform.apply(terraform, tool_version(), sweep_summary=summary)
+        except Exception:
+            platform.sweep_failed(summary)  # as data-access.yml's always() summary did
+            raise
 
     run: Run = ctx.obj
     with databricks.redacting(run.logger, secrets):

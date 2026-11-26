@@ -541,3 +541,17 @@ def test_the_sweep_summarizes_what_it_applied(
         "awaiting_onboarding": [],
         "missing_workspaces": [],
     }
+
+
+def test_a_failed_sweep_says_so_in_its_summary(
+    work: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_TF_LOCKED", "1")  # the plan fails
+    with _as_role("jaws-data-access-ci-apply"):
+        result = _platform(work, "apply", "data-access")
+    assert result.exit_code == 1, result.output
+    summary = _summary(work)
+    assert summary.startswith("**Sweep: failed**\n")
+    assert "braveheart-databricks" in summary, "the access summary, as the render got that far"
+    assert "Applied state" not in summary
+    assert not any(line.startswith("result=") for line in _outputs(work))
