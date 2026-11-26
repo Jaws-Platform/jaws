@@ -646,16 +646,21 @@ the commit's, and its body names both releases and links Jaws's changes
 between them, `https://github.com/Jaws-Platform/jaws/compare/<pin>...<tag>`.
 
 There is one upgrade pull request at a time, on one branch, updated in place
-(ruling 12). While one is open whose title names the newest release, or whose
-branch, `jaws-upgrade`, already holds the same files, a run pushes nothing and
-edits nothing, with the notice "the upgrade to `<tag>` is open". So the hub's
-CI runs once for each release rather than every hour, and a fix pushed onto the
-branch stays. When `jaws-upgrade` holds the same files but no pull request is
-open, as when an earlier run's push landed but its pull request wasn't opened,
-a run opens the pull request without pushing, with a notice that says so.
-Closing the upgrade's pull request therefore doesn't skip its release: the next
-run opens it again. A newer release force-pushes `jaws-upgrade`, then edits the
-pull request's title and body, or opens one.
+(ruling 12). Only the hub's own pull request from `jaws-upgrade` counts. GitHub
+also lists a fork's pull request from a branch of that name, and anyone can
+open one, so a run ignores pull requests from forks: a fork's can't hold the
+upgrade back, and is never retitled as the upgrade. While the hub's is open
+with a title that names the newest release ([A red upgrade](#a-red-upgrade)
+says when a title names it), or while its branch, `jaws-upgrade`, already holds
+the same files, a run pushes nothing and edits nothing, with the notice "the
+upgrade to `<tag>` is open". So the hub's CI runs once for each release rather
+than every hour, and a fix pushed onto the branch stays. When `jaws-upgrade`
+holds the same files but no pull request is open, as when an earlier run's push
+landed but its pull request wasn't opened, a run opens the pull request without
+pushing, with a notice that says so. Closing the upgrade's pull request
+therefore doesn't skip its release: the next run opens it again. A newer
+release force-pushes `jaws-upgrade`, then edits the pull request's title and
+body, or opens one.
 
 The hourly schedule keeps the pin inside what ECR Public holds. Until v1, it
 keeps only the newest ten Jaws versions, about two days of releases, and
@@ -676,10 +681,14 @@ fails:
 3. Merge it once its checks pass. Like any merge to `main`, it then goes out
    with the hub's next release.
 
-While the fix is pending, keep the pull request's title naming the release: a
-run leaves the branch alone while the title names the newest release. A newer
-Jaws release replaces the branch with a fresh bump, so a fix that hasn't
-merged by then goes onto the new bump again.
+While the fix is pending, keep the release's tag in the pull request's title:
+a run leaves the branch alone while the title names the newest release. The
+title names it when the tag stands as a whole version, with no letter, digit
+or `.` just before it, and no digit, nor a `.` and a digit, just after it. So
+`chore(deps): upgrade jaws to v0.10.0, fix sites` and `Upgrade Jaws (v0.10.0)`
+name `v0.10.0`, and `v0.10.01` and `v0.10.0.1` don't. A newer Jaws release
+replaces the branch with a fresh bump, so a fix that hasn't merged by then goes
+onto the new bump again.
 
 ### The App
 

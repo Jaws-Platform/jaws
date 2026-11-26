@@ -24,11 +24,13 @@ name: Platform upgrade
 #                 Jaws workflow to the release.
 #   pull-request  commits only the files rewrite bumped, on jaws-upgrade, as the App's bot,
 #                 and opens the pull request against main, or updates the open one: one pull
-#                 request, on one branch (ruling 12). While one is open whose title names the
-#                 release, or whose branch holds the same tree, it pushes nothing and edits
-#                 nothing: the hub's CI runs once per release, not hourly, and a fix pushed
-#                 onto the branch stays. A branch that holds the same tree with no pull
-#                 request open gets its pull request, with no push.
+#                 request, on one branch (ruling 12). Only the hub's own pull request from
+#                 jaws-upgrade counts, never a fork's from a branch of the same name. While
+#                 it is open with a title that names the release, or with a branch that holds
+#                 the same tree, it pushes nothing and edits nothing: the hub's CI runs once
+#                 per release, not hourly, and a fix pushed onto the branch stays. A branch
+#                 that holds the same tree with no pull request open gets its pull request,
+#                 with no push.
 #
 # The App's token does every write. GITHUB_TOKEN can't: a push that changes
 # .github/workflows/ needs the Workflows permission, which GITHUB_TOKEN never has, and a pull
@@ -228,16 +230,28 @@ jobs:
           git add --update -- Dockerfile .github/workflows
           GIT_AUTHOR_NAME="$bot" GIT_AUTHOR_EMAIL="$email" GIT_COMMITTER_NAME="$bot" GIT_COMMITTER_EMAIL="$email" \
             git commit --message "$message"
-          # One pull request, from jaws-upgrade. While one is open whose title names this
-          # release, or whose branch holds this tree already, nothing is pushed or edited: a
-          # push would run the hub's whole CI again every hour, and drop a fix pushed onto the
+          # One pull request, from the hub's own jaws-upgrade. gh lists every open pull request
+          # whose branch is named jaws-upgrade, a fork's too, and anyone can open one from a
+          # fork: only the hub's own counts, so a fork's never holds the upgrade back, nor is
+          # retitled as it. While the hub's is open with a title that names this release, or
+          # with a branch that holds this tree already, nothing is pushed or edited: a push
+          # would run the hub's whole CI again every hour, and drop a fix pushed onto the
           # branch.
-          prs=$(gh pr list --head jaws-upgrade --state open --json number,title)
+          prs=$(gh pr list --head jaws-upgrade --state open --json number,title,isCrossRepository \
+            --jq 'map(select(.isCrossRepository == false))')
           number=$(jq -r '.[0].number // empty' <<<"$prs")
           title=$(jq -r '.[0].title // empty' <<<"$prs")
           tree=$(git rev-parse 'HEAD^{tree}')
           pushed=$(git rev-parse --verify --quiet 'refs/remotes/origin/jaws-upgrade^{tree}' || true)
-          if [[ -n "$number" && ( "$pushed" == "$tree" || " $title " == *" $TAG "* ) ]]; then
+          # The title names the release when it holds the tag as a whole version: with no
+          # letter, digit or dot just before it, and no digit, nor a dot and a digit, just
+          # after. So "v0.10.0, fix sites" and "(v0.10.0)" name v0.10.0, and v0.10.01 and
+          # v0.10.0.1 don't.
+          named=false
+          if [[ " $title " =~ [^0-9A-Za-z.]"$TAG"([^0-9.]|\.[^0-9]) ]]; then
+            named=true
+          fi
+          if [[ -n "$number" && ( "$pushed" == "$tree" || "$named" == true ) ]]; then
             echo "::notice::the upgrade to $TAG is open"
             exit 0
           fi

@@ -6,7 +6,8 @@ digest, and every call of a Jaws workflow. Dependabot would split the image and 
 into separate pull requests. The newest release is read from ECR Public's tags, anonymously and
 by semver, so a GitHub release whose image isn't published yet is never picked (ruling 12). The
 pull request stays on one branch, `jaws-upgrade`, and is left alone while it is open for the
-newest release, so the hub's CI runs once per release rather than every hour.
+newest release, so the hub's CI runs once per release rather than every hour. Only the hub's
+own pull request from that branch counts, never a fork's from a branch of the same name.
 
 The upgrade App's token does every write: `GITHUB_TOKEN` can't change `.github/workflows/`, and
 its pull requests run no CI. The steps' scripts run here as Actions runs them: `newest` with a
@@ -55,6 +56,12 @@ ANONYMOUS = (
     "https://public.ecr.aws/token/?service=public.ecr.aws&scope=repository:example-alias/jaws:pull"
 )
 MESSAGE = f"chore(deps): upgrade jaws to {TAG}"
+#: How the step lists the open pull requests from jaws-upgrade: the hub's own only, never a
+#: fork's from a branch of the same name.
+LISTED = (
+    "gh pr list --head jaws-upgrade --state open --json number,title,isCrossRepository "
+    "--jq map(select(.isCrossRepository == false))"
+)
 
 #: The upgrade App, as create-github-app-token names it, and its bot, the commit's author.
 APP_SLUG = "example-upgrades"
@@ -168,8 +175,10 @@ fi
 exec "$REAL_GIT" "$@"
 """
 #: Stands in for gh: logs each call, and answers only the upgrade App's token, FAKE_TOKEN, as
-#: GitHub answers only a valid one. It knows the App's bot, lists the open pull requests in the
-#: JSON file FAKE_PRS, and keeps the body a pull request is created or edited with in FAKE_BODY.
+#: GitHub answers only a valid one. It knows the App's bot, and keeps the body a pull request is
+#: created or edited with in FAKE_BODY. It lists the open pull requests in the JSON file
+#: FAKE_PRS as GitHub lists those from a branch named jaws-upgrade, a fork's among them: with
+#: only the fields --json names, then filtered by --jq, as gh filters them.
 FAKE_GH = """#!/usr/bin/env bash
 echo "gh $*" >> "$FAKE_LOG"
 fail() {
@@ -181,7 +190,28 @@ fail() {
 case "$1 $2" in
   "api users/example-upgrades[bot]") echo '{"login": "example-upgrades[bot]", "id": 12345}' ;;
   "api "*) fail "Not Found" 404 ;;
-  "pr list") cat "$FAKE_PRS" ;;
+  "pr list")
+    shift 2
+    head="" state="" fields="" filter="."
+    while [[ $# -gt 0 ]]; do
+      [[ $# -ge 2 ]] || { echo "unexpected: gh pr list ... $1" >&2; exit 2; }
+      case "$1" in
+        --head) head=$2 ;;
+        --state) state=$2 ;;
+        --json) fields=$2 ;;
+        --jq) filter=$2 ;;
+        *) echo "unexpected: gh pr list ... $1" >&2; exit 2 ;;
+      esac
+      shift 2
+    done
+    if [[ "$head" != jaws-upgrade || "$state" != open || -z "$fields" ]]; then
+      echo "unexpected: gh pr list --head $head --state $state --json $fields" >&2
+      exit 2
+    fi
+    jq -c --arg fields "$fields" \\
+      '[.[] | with_entries(select(.key as $k | $fields | split(",") | index($k)))]' "$FAKE_PRS" \\
+      | jq -c "$filter"
+    ;;
   "pr create" | "pr edit")
     while [[ $# -gt 0 ]]; do
       if [[ "$1" == --body-file ]]; then cp "$2" "$FAKE_BODY"; fi
@@ -340,9 +370,15 @@ def _bumped(tmp_path: Path) -> Path:
     return repo
 
 
+def _open(number: int, title: str, *, fork: bool = False) -> dict[str, Any]:
+    """An open pull request from a branch named jaws-upgrade, as gh lists it: the hub's own, or
+    a fork's, which any GitHub user can open."""
+    return {"number": number, "title": title, "isCrossRepository": fork}
+
+
 def _pull_request(repo: Path, prs: list[dict[str, Any]], *, tag: str = TAG) -> Ran:
     """Run `pull-request` in the hub `repo`, bumped from PIN to `tag`, while `prs` are the open
-    pull requests from jaws-upgrade."""
+    pull requests from a branch named jaws-upgrade, newest first: the hub's own, and forks'."""
     state = _state(repo)
     log, listed, body = state / "calls.log", state / "prs.json", state / "body.md"
     log.write_text("")
@@ -381,6 +417,15 @@ def _landed(repo: Path) -> None:
     checkout is as the next run's checkout finds it."""
     _git(repo, "update-ref", "refs/remotes/origin/jaws-upgrade", "jaws-upgrade")
     _git(repo, "switch", "-q", "main")
+
+
+def _main_moves_on(repo: Path) -> None:
+    """A merge to main after the upgrade's push: the next run's bump holds another tree than
+    jaws-upgrade's."""
+    (repo / "docs").mkdir()
+    (repo / "docs" / "hub.md").write_text("The platform's hub.\n")
+    _git(repo, "add", "docs/hub.md")
+    _git(repo, "commit", "-q", "-m", "docs: describe the hub")
 
 
 # -- the newest release ------------------------------------------------------------------
@@ -534,7 +579,7 @@ def test_the_pull_request_is_opened_once_and_updated_after(tmp_path: Path) -> No
     opened = _pull_request(repo, [])
     assert opened.result.returncode == 0, opened.result.stdout + opened.result.stderr
     assert f"gh api users/{BOT}" in opened.calls, "the commit's author, the App's bot"
-    assert "gh pr list --head jaws-upgrade --state open --json number,title" in opened.calls
+    assert LISTED in opened.calls
     assert _writes(opened) == [
         "git push --force origin jaws-upgrade",
         f"gh pr create --base main --head jaws-upgrade --title {MESSAGE} --body-file <body>",
@@ -549,7 +594,7 @@ def test_the_pull_request_is_opened_once_and_updated_after(tmp_path: Path) -> No
     # A later release, while that pull request is open: main still pins PIN.
     _landed(repo)
     assert _rewrite(repo, tag=LATER, digest=LATER_DIGEST).returncode == 0
-    updated = _pull_request(repo, [{"number": 7, "title": MESSAGE}], tag=LATER)
+    updated = _pull_request(repo, [_open(7, MESSAGE)], tag=LATER)
     assert updated.result.returncode == 0, updated.result.stdout + updated.result.stderr
     assert _writes(updated) == [
         "git push --force origin jaws-upgrade",
@@ -569,14 +614,11 @@ def test_an_open_upgrade_to_the_same_release_is_left_alone(tmp_path: Path, left:
     _landed(repo)
     title = MESSAGE
     if left == "named":
-        (repo / "docs").mkdir()
-        (repo / "docs" / "hub.md").write_text("The platform's hub.\n")
-        _git(repo, "add", "docs/hub.md")
-        _git(repo, "commit", "-q", "-m", "docs: describe the hub")
+        _main_moves_on(repo)
     else:
         title = "Upgrade Jaws, after reading its plans"
     assert _rewrite(repo).returncode == 0
-    again = _pull_request(repo, [{"number": 7, "title": title}])
+    again = _pull_request(repo, [_open(7, title)])
     assert again.result.returncode == 0, again.result.stdout + again.result.stderr
     assert _writes(again) == [], "it pushes nothing and edits nothing"
     assert _notices(again) == [f"::notice::the upgrade to {TAG} is open"]
@@ -606,6 +648,78 @@ def test_the_pull_request_is_opened_for_a_branch_already_pushed(tmp_path: Path) 
     assert f"https://github.com/Jaws-Platform/jaws/compare/{PIN}...{TAG}" in again.body
     branches = ("jaws-upgrade", "origin/jaws-upgrade")
     assert len({_git(repo, "rev-parse", f"{branch}^{{tree}}") for branch in branches}) == 1
+
+
+@needs_jq
+@pytest.mark.parametrize("title", [MESSAGE, "Add a feature"], ids=["names-the-release", "other"])
+def test_a_fork_s_pull_request_from_a_branch_of_that_name_is_never_the_upgrade(
+    tmp_path: Path, title: str
+) -> None:
+    """gh lists every open pull request whose branch is named jaws-upgrade, a fork's too, and
+    any GitHub user can open one. A fork's never holds the upgrade back, and is never retitled
+    as the upgrade: the hub's own pull request is opened."""
+    repo = _bumped(tmp_path)
+    ran = _pull_request(repo, [_open(9, title, fork=True)])
+    assert ran.result.returncode == 0, ran.result.stdout + ran.result.stderr
+    assert _writes(ran) == [
+        "git push --force origin jaws-upgrade",
+        f"gh pr create --base main --head jaws-upgrade --title {MESSAGE} --body-file <body>",
+    ], "the fork's pull request is never edited"
+    assert _notices(ran) == []
+    assert LISTED in ran.calls
+
+
+@needs_jq
+def test_the_hub_s_own_pull_request_is_updated_beside_a_fork_s(tmp_path: Path) -> None:
+    """The fork's pull request is the newest, so gh lists it first, and its title names the
+    later release: the later release still updates the hub's own."""
+    repo = _bumped(tmp_path)
+    assert _pull_request(repo, []).result.returncode == 0
+    _landed(repo)
+    assert _rewrite(repo, tag=LATER, digest=LATER_DIGEST).returncode == 0
+    later = f"chore(deps): upgrade jaws to {LATER}"
+    updated = _pull_request(repo, [_open(9, later, fork=True), _open(7, MESSAGE)], tag=LATER)
+    assert updated.result.returncode == 0, updated.result.stdout + updated.result.stderr
+    assert _writes(updated) == [
+        "git push --force origin jaws-upgrade",
+        f"gh pr edit 7 --title {later} --body-file <body>",
+    ]
+
+
+@needs_jq
+@pytest.mark.parametrize(
+    ("title", "named"),
+    [
+        (f"{MESSAGE}, fix sites", True),
+        (f"Upgrade Jaws ({TAG})", True),
+        (f"Upgrade Jaws to {TAG}.", True),
+        (f"chore(deps): upgrade jaws to {TAG}1", False),
+        (f"chore(deps): upgrade jaws to {TAG}.1", False),
+    ],
+    ids=["then-a-comma", "in-brackets", "then-a-full-stop", "a-longer-patch", "a-fourth-part"],
+)
+def test_a_title_names_the_release_only_as_a_whole_version(
+    tmp_path: Path, title: str, named: bool
+) -> None:
+    """A maintainer who retitles the pull request while fixing it keeps the release's tag in
+    the title, and the run leaves the branch, with the fix, alone. "v0.10.0, fix sites" and
+    "(v0.10.0)" name v0.10.0; v0.10.01 and v0.10.0.1 are other versions, and don't."""
+    repo = _bumped(tmp_path)
+    assert _pull_request(repo, []).result.returncode == 0
+    _landed(repo)
+    _main_moves_on(repo)
+    assert _rewrite(repo).returncode == 0
+    again = _pull_request(repo, [_open(7, title)])
+    assert again.result.returncode == 0, again.result.stdout + again.result.stderr
+    if named:
+        assert _writes(again) == [], "it pushes nothing and edits nothing"
+        assert _notices(again) == [f"::notice::the upgrade to {TAG} is open"]
+    else:
+        assert _writes(again) == [
+            "git push --force origin jaws-upgrade",
+            f"gh pr edit 7 --title {MESSAGE} --body-file <body>",
+        ]
+        assert _notices(again) == []
 
 
 # -- the job -----------------------------------------------------------------------------
