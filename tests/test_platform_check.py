@@ -131,6 +131,21 @@ def test_a_caller_without_its_identity_fails_the_check(tmp_path: Path) -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("content", "reason"),
+    [
+        (b"jobs:\n  a: b: c\n", "mapping values are not allowed here (line 2, column 7)"),
+        (b"\xff\xfe\x00bad", "not UTF-8"),
+    ],
+)
+def test_a_workflow_that_isn_t_yaml_is_reported_not_raised(
+    tmp_path: Path, content: bytes, reason: str
+) -> None:
+    root = _hub(tmp_path / "hub")
+    (root / ".github" / "workflows" / "broken.yml").write_bytes(content)
+    assert _problems(root) == [(".github/workflows/broken.yml", f"not valid YAML: {reason}")]
+
+
 def test_a_hub_with_no_caller_fails_the_check(tmp_path: Path) -> None:
     root = _hub(tmp_path / "hub")
     (root / WORKFLOW).write_text("on: push\njobs:\n  x:\n    runs-on: ubuntu-latest\n")

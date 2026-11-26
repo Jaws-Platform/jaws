@@ -398,9 +398,19 @@ def check_hub(
         sorted([*directory.glob("*.yml"), *directory.glob("*.yaml")]) if directory.is_dir() else []
     )
     for file in files:
-        found, count = _check_workflow(
-            file.relative_to(root).as_posix(), yaml.safe_load(file.read_text()), tag, expected
-        )
+        path = file.relative_to(root).as_posix()
+        try:
+            document = yaml.safe_load(file.read_text())
+        except UnicodeDecodeError:
+            problems.append(HubProblem(path, "not valid YAML: not UTF-8"))
+            continue
+        except yaml.YAMLError as exc:
+            mark = getattr(exc, "problem_mark", None)
+            reason = str(getattr(exc, "problem", None) or "syntax error")
+            where = f" (line {mark.line + 1}, column {mark.column + 1})" if mark else ""
+            problems.append(HubProblem(path, f"not valid YAML: {reason}{where}"))
+            continue
+        found, count = _check_workflow(path, document, tag, expected)
         problems += found
         calls += count
     if calls == 0:
