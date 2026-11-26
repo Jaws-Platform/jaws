@@ -96,9 +96,15 @@ runs:
               echo "::error::project-file $PROJECT_FILE does not exist, and no project is given"
               exit 1
             fi
+            # A pull request can change this file, and its project becomes part of the role
+            # ARN: refuse anything but kebab-case, and never print the value.
             project=$(yq -r '.project // ""' "$PROJECT_FILE")
+            if [[ -z "$project" ]]; then
+              echo "::error::project-file $PROJECT_FILE names no project"
+              exit 1
+            fi
             if ! [[ "$project" =~ $kebab ]]; then
-              echo "::error::project-file $PROJECT_FILE names the project '$project', which is not lowercase kebab-case"
+              echo "::error::project-file $PROJECT_FILE names a project that is not lowercase kebab-case"
               exit 1
             fi
           fi

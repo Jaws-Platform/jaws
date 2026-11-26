@@ -74,8 +74,9 @@ reaches no registry.
 
 A repository pulls each build once. `platform-image` keeps the build's
 `docker save` in the Actions cache, keyed by the image ID the runner reports,
-and checks the ID of what it loads from there: a build with another ID is
-pulled again.
+and checks the ID of what it loads from there. An entry that holds another
+build, or doesn't load, never fails the run: the build is pulled again, with a
+warning that names the entry's key.
 
 The image ID depends on the runner's image store. Docker's classic store
 reports a build's config digest, and the containerd store, Docker 29's default

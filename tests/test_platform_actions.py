@@ -13,7 +13,6 @@ ECR. Their steps' scripts are run here as Actions runs them, with stand-ins for 
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
@@ -52,17 +51,22 @@ case "$1 $2" in
   *) echo "unexpected: aws $*" >&2; exit 2 ;;
 esac
 """
-#: Stands in for docker: logs each call. `load` reports FAKE_LOADED, by ID or by name.
+#: Stands in for docker: logs each call. `load` reports FAKE_LOADED, by ID or by name, or
+#: nothing when it is empty, and fails with FAKE_LOAD_ERROR when that is set.
 #: `image inspect` answers an image ID with itself, a name with FAKE_ID (the ID the
-#: runner's image store gives the build), and the labels with FAKE_LABELS.
+#: runner's image store gives the build), no name with an error, as Docker does, and the
+#: labels with FAKE_LABELS.
 FAKE_DOCKER = """#!/usr/bin/env bash
 echo "docker $*" >> "$FAKE_LOG"
 case "$*" in
   "load "*)
+    if [[ -n "${FAKE_LOAD_ERROR:-}" ]]; then echo "$FAKE_LOAD_ERROR" >&2; exit 1; fi
     case "$FAKE_LOADED" in
+      "") ;;
       sha256:*) echo "Loaded image ID: $FAKE_LOADED" ;;
       *) echo "Loaded image: $FAKE_LOADED" ;;
     esac ;;
+  "image inspect --format {{.Id}} ") echo "Error: No such image: " >&2; exit 1 ;;
   "image inspect --format {{.Id}} sha256:"*) echo "$5" ;;
   "image inspect --format {{.Id}} "*) echo "$FAKE_ID" ;;
   "image inspect --format {{json .Config.Labels}} "*) echo "$FAKE_LABELS" ;;
@@ -139,10 +143,17 @@ IDENTITY = {
 }
 
 
-def _role(tmp_path: Path, **env: str) -> tuple[subprocess.CompletedProcess[str], str, str]:
-    """Run platform-role's `arn` beside a jaws.yaml naming guitar-knowledge-base; the
+#: A project file naming guitar-knowledge-base.
+GUITAR_KNOWLEDGE_BASE = (FIXTURES / "sites" / "guitar-knowledge-base.yaml").read_text()
+
+
+def _role(
+    tmp_path: Path, jaws_yaml: str | None = GUITAR_KNOWLEDGE_BASE, /, **env: str
+) -> tuple[subprocess.CompletedProcess[str], str, str]:
+    """Run platform-role's `arn` beside a jaws.yaml holding `jaws_yaml`, or none; the
     result, GITHUB_OUTPUT and the aws calls it made."""
-    shutil.copy(FIXTURES / "sites" / "guitar-knowledge-base.yaml", tmp_path / "jaws.yaml")
+    if jaws_yaml is not None:
+        (tmp_path / "jaws.yaml").write_text(jaws_yaml)
     log = tmp_path / "aws.log"
     log.write_text("")
     result, output = run_action_step(
@@ -208,9 +219,9 @@ def test_the_role_comes_from_the_identity_and_the_project_file(tmp_path: Path) -
 def test_a_given_project_or_an_override_in_the_account_names_the_role(
     tmp_path: Path, env: dict[str, str], arn: str
 ) -> None:
-    """A given project wins over the project file, and an override in `account-id` is the
-    role as given."""
-    result, output, aws = _role(tmp_path, **env)
+    """A given project, or an override in `account-id`, names the role, and the project file
+    is never read: there is none here."""
+    result, output, aws = _role(tmp_path, None, **env)
     assert result.returncode == 0, result.stdout + result.stderr
     assert output.splitlines() == [f"arn={arn}"]
     assert aws == ""
@@ -226,6 +237,14 @@ def test_a_given_project_or_an_override_in_the_account_names_the_role(
         pytest.param("role", {"ROLE": "admin"}, id="an-unknown-role"),
         pytest.param("project", {"PROJECT": "Not_Kebab"}, id="a-project-not-kebab-case"),
         pytest.param(
+            "project",
+            {
+                "PROJECT": "Not_Kebab",
+                "ROLE_ARN": "arn:aws:iam::123456789012:role/jaws-site-ci-plan",
+            },
+            id="a-project-not-kebab-case-beside-an-override",
+        ),
+        pytest.param(
             "role-arn",
             {"ROLE_ARN": "arn:aws:iam::111122223333:role/jaws-site-ci-plan"},
             id="an-override-in-another-account",
@@ -238,6 +257,39 @@ def test_half_an_identity_stops_the_job_before_aws(
     result, output, aws = _role(tmp_path, **env)
     assert result.returncode != 0
     assert f"::error::{name} " in result.stdout, result.stdout
+    assert output == ""
+    assert aws == ""
+
+
+@needs_yq
+@pytest.mark.parametrize(
+    ("jaws_yaml", "message"),
+    [
+        pytest.param(
+            None,
+            "::error::project-file jaws.yaml does not exist, and no project is given",
+            id="no-project-file",
+        ),
+        pytest.param(
+            "version: 1\nproject: Not_Kebab\n",
+            "::error::project-file jaws.yaml names a project that is not lowercase kebab-case",
+            id="a-project-not-kebab-case",
+        ),
+        pytest.param(
+            "version: 1\ndomain: guitar.example.com\n",
+            "::error::project-file jaws.yaml names no project",
+            id="no-project-key",
+        ),
+    ],
+)
+def test_a_project_file_that_names_no_valid_project_stops_the_job_before_aws(
+    tmp_path: Path, jaws_yaml: str | None, message: str
+) -> None:
+    """The project from the workspace's jaws.yaml, which a pull request can change, becomes
+    part of the role ARN. The refusal names the file, never the value it holds."""
+    result, output, aws = _role(tmp_path, jaws_yaml)
+    assert result.returncode != 0
+    assert result.stdout.splitlines() == [message]
     assert output == ""
     assert aws == ""
 
@@ -289,6 +341,7 @@ def _load(tarball: Path) -> dict[str, str]:
         "REFERENCE": REFERENCE,
         "DIGEST": DIGEST,
         "CONFIG_DIGEST": CONFIG_DIGEST,
+        "CACHE_KEY": f"platform-image-{CONFIG_DIGEST}",
     }
 
 
@@ -351,6 +404,17 @@ def test_a_build_is_resolved_only_by_a_tag_or_a_digest(
     result, output, calls = _image_step(tmp_path, "resolve", **{**RESOLVE, **env})
     assert result.returncode != 0
     assert f"::error::{name} " in result.stdout, result.stdout
+    assert output == ""
+    assert calls == [], "nothing reaches AWS"
+
+
+@pytest.mark.parametrize("account_id", ["", "12345678901"], ids=["no-account", "eleven-digits"])
+def test_an_account_id_that_is_not_an_account_stops_the_job_before_aws(
+    tmp_path: Path, account_id: str
+) -> None:
+    result, output, calls = _image_step(tmp_path, "account", ACCOUNT_ID=account_id)
+    assert result.returncode != 0
+    assert "::error::account-id " in result.stdout, result.stdout
     assert output == ""
     assert calls == [], "nothing reaches AWS"
 
@@ -455,6 +519,7 @@ def test_a_cached_build_is_loaded_in_either_image_store(
         "REFERENCE": "${{ steps.resolve.outputs.reference }}",
         "DIGEST": "${{ steps.resolve.outputs.digest }}",
         "CONFIG_DIGEST": "${{ steps.resolve.outputs.config-digest }}",
+        "CACHE_KEY": "${{ steps.cache.outputs.cache-matched-key }}",
     }
 
     tarball = _tarball(tmp_path)
@@ -481,6 +546,40 @@ def test_a_cached_build_with_another_id_is_pulled_again(tmp_path: Path) -> None:
     assert saves == [f"docker save --output {tarball} {CONFIG_DIGEST}"]
     assert calls.index(pulls[0]) < calls.index(saves[0])
     assert output.splitlines() == ["pulled=true", f"image-id={CONFIG_DIGEST}"]
+    warnings = [line for line in result.stdout.splitlines() if line.startswith("::warning::")]
+    assert warnings == [
+        f"::warning::the cache entry platform-image-{CONFIG_DIGEST} holds {OTHER_ID}, "
+        "not this build: pulling it"
+    ]
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        {"FAKE_LOAD_ERROR": "archive/tar: invalid tar header in a saved build"},
+        {"FAKE_LOADED": ""},
+    ],
+    ids=["docker-load-fails", "it-loads-no-image"],
+)
+def test_a_cache_entry_that_won_t_load_is_pulled_again(
+    tmp_path: Path, fault: dict[str, str]
+) -> None:
+    """A bad cache entry is an entry to replace, not a run to fail: it would fail every run
+    of the build until the next release, the sweep's included. The warning names the key,
+    and nothing from the entry or from Docker's answer about it."""
+    tarball = _tarball(tmp_path)
+    result, output, calls = _image_step(tmp_path, "load", **_load(tarball), **fault)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert calls[0] == f"docker load --quiet --input {tarball}"
+    assert f"docker pull --quiet {REFERENCE}" in calls
+    assert f"docker save --output {tarball} {CONFIG_DIGEST}" in calls
+    assert output.splitlines() == ["pulled=true", f"image-id={CONFIG_DIGEST}"]
+    warnings = [line for line in result.stdout.splitlines() if line.startswith("::warning::")]
+    assert warnings == [
+        f"::warning::the cache entry platform-image-{CONFIG_DIGEST} did not load: pulling the build"
+    ]
+    printed = result.stdout + result.stderr
+    assert "a saved build" not in printed and "No such image" not in printed
 
 
 def test_a_build_the_cache_does_not_hold_is_pulled_and_saved(tmp_path: Path) -> None:
@@ -655,10 +754,11 @@ def test_the_build_is_resolved_once_and_run_by_its_id(
     for step_id in ("extract", "labels"):
         assert action_step("platform-image", step_id)["env"]["IMAGE_ID"] == IMAGE_ID
 
-    # The jaws action, given that ID, runs it and pulls nothing.
+    # The jaws action, given that ID, runs it and pulls nothing, not even implicitly.
     result, calls = run_command(tmp_path, IMAGE=CONFIG_DIGEST, REGISTRY="", REPOSITORY="")
     assert result.returncode == 0, result.stdout + result.stderr
     assert len(calls) == 1 and calls[0].startswith("docker run "), calls
+    assert " --pull never " in calls[0]
     assert calls[0].endswith(f" {CONFIG_DIGEST} plan")
 
 

@@ -18,9 +18,10 @@ inputs:
     default: ""
   image:
     description: >-
-      An image ID the job already resolved and pulled (`platform-image`'s
-      `image-id`), run in place of the versioned image. The job must already
-      have assumed its role.
+      The image ID, `sha256:` and 64 hex digits, of a build the job already
+      resolved and pulled (`platform-image`'s `image-id`), run with
+      `--pull never` in place of the versioned image. A name is refused. The job
+      must already have assumed its role.
     required: false
     default: ""
   platform-commit:
@@ -76,6 +77,13 @@ runs:
           echo "::error::the jaws action needs role-arn, or an image the job already pulled"
           exit 1
         fi
+        # A build is run by its ID, never by a name, which Docker would fetch. The classic
+        # image store's config digest and the containerd store's manifest digest both
+        # have this shape.
+        if [[ -n "$IMAGE" && ! "$IMAGE" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+          echo "::error::image must be the image ID of a build the job pulled, sha256: and 64 hex digits, not a name"
+          exit 1
+        fi
     # Without an image, today's steps: a project still on Jaws's own pin runs them.
     - uses: aws-actions/configure-aws-credentials@v6
       id: credentials
@@ -127,9 +135,12 @@ runs:
         JAWS_PLATFORM_SOURCE: ${{ inputs.platform-source }}
         GH_TOKEN: ${{ inputs.github-token }}
       run: |
+        pull_flag=""
         if [ -n "$IMAGE" ]; then
-          # The build the job resolved and pulled: run it by its ID.
+          # The build the job resolved and pulled: run it by its ID, and never fetch
+          # anything in its place.
           image="$IMAGE"
+          pull_flag="--pull never"
         else
           image="$REGISTRY/$REPOSITORY:$IMAGE_TAG"
           echo "::group::docker pull $image"
@@ -139,7 +150,7 @@ runs:
         debug_flag=""
         if [ "$DEBUG" = "true" ] || [ "${ACTIONS_STEP_DEBUG:-}" = "true" ]; then debug_flag="--debug"; fi
         # shellcheck disable=SC2086
-        docker run --rm \
+        docker run --rm $pull_flag \
           --volume "$GITHUB_WORKSPACE:/work" --workdir /work \
           --env AWS_ACCESS_KEY_ID --env AWS_SECRET_ACCESS_KEY --env AWS_SESSION_TOKEN \
           --env AWS_REGION --env AWS_DEFAULT_REGION \

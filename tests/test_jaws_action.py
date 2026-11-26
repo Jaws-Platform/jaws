@@ -31,8 +31,10 @@ from tests.workflow_steps import run_action_step
 ACTION_DIR = REPO_ROOT / ".github" / "actions" / "jaws"
 CONFIG = CONFIG_DIR
 ACCOUNT = "222222222222"
-REGISTRY = f"{ACCOUNT}.dkr.ecr.us-east-1.amazonaws.com"
-ROLE_ARN = f"arn:aws:iam::{ACCOUNT}:role/jaws-guitar-knowledge-base-ci-plan"
+#: The account the tests of the action's other steps use, the neutral one for workflow steps.
+STEP_ACCOUNT = "123456789012"
+REGISTRY = f"{STEP_ACCOUNT}.dkr.ecr.us-east-1.amazonaws.com"
+ROLE_ARN = f"arn:aws:iam::{STEP_ACCOUNT}:role/jaws-guitar-knowledge-base-ci-plan"
 #: A build of a hub's image, by the ID the runner reports.
 IMAGE_ID = "sha256:" + "c" * 64
 #: Stands in for docker: logs each call.
@@ -200,14 +202,24 @@ def test_without_an_image_the_action_runs_as_today(tmp_path: Path) -> None:
     assert len(calls) == 2, calls
     assert calls[0] == f"docker pull --quiet {image}"
     assert calls[1].startswith("docker run ") and calls[1].endswith(f" {image} plan")
+    assert "--pull" not in calls[1], "today's run is unchanged"
 
 
 @pytest.mark.parametrize(
-    ("role_arn", "image"),
-    [("", ""), (ROLE_ARN, ""), ("", IMAGE_ID)],
-    ids=["neither", "a-role", "an-image"],
+    ("role_arn", "image", "error"),
+    [
+        ("", "", "::error::the jaws action needs role-arn, or an image the job already pulled"),
+        (ROLE_ARN, "", None),
+        ("", IMAGE_ID, None),
+        ("", "some-name:latest", "::error::image "),
+    ],
+    ids=["neither", "a-role", "an-image", "an-image-by-name"],
 )
-def test_the_action_needs_a_role_or_an_image(tmp_path: Path, role_arn: str, image: str) -> None:
+def test_the_action_needs_a_role_or_an_image(
+    tmp_path: Path, role_arn: str, image: str, error: str | None
+) -> None:
+    """An image is run by its ID, never by a name: Docker would fetch whatever a name
+    names."""
     inputs = _action()["inputs"]
     assert inputs["role-arn"]["required"] is False and inputs["role-arn"]["default"] == ""
     assert _step("check")["env"] == {
@@ -217,13 +229,14 @@ def test_the_action_needs_a_role_or_an_image(tmp_path: Path, role_arn: str, imag
     result, output = run_action_step(
         "jaws", "check", cwd=tmp_path, env={"ROLE_ARN": role_arn, "IMAGE": image}
     )
-    message = "::error::the jaws action needs role-arn, or an image the job already pulled"
-    if role_arn or image:
+    if error is None:
         assert result.returncode == 0, result.stdout + result.stderr
-        assert message not in result.stdout
+        assert "::error::" not in result.stdout
     else:
         assert result.returncode != 0
-        assert message in result.stdout.splitlines()
+        assert [line for line in result.stdout.splitlines() if line.startswith(error)], (
+            result.stdout
+        )
     assert output == ""
 
 
@@ -252,5 +265,6 @@ def test_a_given_image_runs_with_the_platform_s_commit(tmp_path: Path) -> None:
     assert len(calls) == 1, f"one docker run and no pull: {calls}"
     run = calls[0]
     assert run.startswith("docker run ") and run.endswith(f" {IMAGE_ID} plan")
+    assert " --pull never " in run, "nor an implicit one"
     for name in ("JAWS_PLATFORM_COMMIT", "JAWS_PLATFORM_SOURCE", "GH_TOKEN"):
         assert f" --env {name} " in run, name

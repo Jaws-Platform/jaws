@@ -202,15 +202,21 @@ runs:
         REFERENCE: ${{ steps.resolve.outputs.reference }}
         DIGEST: ${{ steps.resolve.outputs.digest }}
         CONFIG_DIGEST: ${{ steps.resolve.outputs.config-digest }}
+        CACHE_KEY: ${{ steps.cache.outputs.cache-matched-key }}
       run: |
         # Docker's classic image store reports a build's config digest as its image ID,
-        # and the containerd store its manifest digest: either one is this build.
+        # and the containerd store its manifest digest: either one is this build. A cache
+        # entry that doesn't load, or holds another image, is replaced, never fatal, and
+        # the log names only its key: what Docker says about the entry stays out of it.
         id=""
         if [[ -f "$TARBALL" ]]; then
-          loaded=$(docker load --quiet --input "$TARBALL" | sed -nE 's/^Loaded image( ID)?: //p')
-          id=$(docker image inspect --format '{{.Id}}' "$loaded")
-          if [[ "$id" != "$CONFIG_DIGEST" && "$id" != "$DIGEST" ]]; then
-            echo "the cached build is $id, not this one: pulling it"
+          loaded=$(docker load --quiet --input "$TARBALL" 2>/dev/null | sed -nE 's/^Loaded image( ID)?: //p') || loaded=""
+          id=$(docker image inspect --format '{{.Id}}' "$loaded" 2>/dev/null) || id=""
+          if ! [[ "$id" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::warning::the cache entry $CACHE_KEY did not load: pulling the build"
+            id=""
+          elif [[ "$id" != "$CONFIG_DIGEST" && "$id" != "$DIGEST" ]]; then
+            echo "::warning::the cache entry $CACHE_KEY holds $id, not this build: pulling it"
             id=""
           fi
         fi
