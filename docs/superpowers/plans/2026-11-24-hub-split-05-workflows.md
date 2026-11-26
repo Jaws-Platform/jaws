@@ -156,12 +156,15 @@ Calls this plan makes where the spec leaves them open, and the few where it depa
    - `current` moves first, then `live`. In the seconds between, a project runs the new build with the old workflow files, never the reverse.
 
    **To confirm. This departs from spec 6.4,** whose release applies "the foundation, then monitoring" before it moves `current`, then `live`. The spec's own reason for the timing names only the foundation's roles.
-8. **`live` is moved by the hub's release App,** through the Git refs API. A release only fast-forwards it, and the first release creates it. Only that App may update it, under a ruleset (plan 06).
-   - That App is **JWall Engineering Releases** (`jwall-engineering-releases`), as `organization-conventions.md` (lines 23 and 61) names it. This departs from spec 7's `jwall-engineering-release-bot`, which predates that rule.
+8. **`live` is moved by a dedicated mover App that the hub supplies,** through the Git refs API (owner decision D6). A release only fast-forwards it, and the first release creates it. Only that App may update it, as the only bypass actor of `live`'s ruleset (plan 06). The release App no longer moves `live`, and holds no Workflows permission.
+   - Jaws is a product other organizations use, so the workflows stay generic. `platform-release.yml` and `platform-rollback.yml` each take the input `live-app-client-id` and the required secret `live-app-private-key`, and mint the move's token from them with `create-github-app-token`.
+   - For the owner's hub, the App is **JWall Engineering Deployments** (`jwall-engineering-deployments`): *Contents* and *Workflows* write and *Metadata* read, installed only on `platform`. Its key is a `platform` repository secret, and its client ID a literal in the callers. Plan 05 doesn't create it (owner hand-offs).
+   - **This settles whether a branch move needs *Workflows*:** the mover App holds *Workflows: write*, so a move can't be refused for lack of it, including a move across commits that change `.github/workflows/`.
+   - The release App stays **JWall Engineering Releases** (`jwall-engineering-releases`), as `organization-conventions.md` (lines 23 and 61) names it, for Release Please only. This departs from spec 7's `jwall-engineering-release-bot`, which predates that rule.
 9. **A rollback moves `current` and `live` together,** to a kept build and its release commit, which must be on `main`. It applies nothing.
    - Moving `live` too keeps the workflow files and the image at one Jaws release (spec 6.4: "the hub's workflow files and its image change together").
 
-   **To confirm. This departs from the spec twice:** 6.3 says rolling back is "pointing `current` at an earlier build", and 6.4 says only the release job may update `live`. The rollback job also moves `live`, by force.
+   **To confirm. This departs from the spec twice:** 6.3 says rolling back is "pointing `current` at an earlier build", and 6.4 says only the release job may update `live`. The rollback job also moves `live`, by force, with the same mover App.
 10. **The identity and the check prefix are literals in the hub's callers, checked by its CI.**
     - A project's run can read neither the hub's variables (a called workflow's `vars` are the calling repository's) nor its configuration before it has a role.
     - `jaws platform check` compares each literal with what `jaws config env` reports inside the candidate image.
@@ -178,7 +181,7 @@ Calls this plan makes where the spec leaves them open, and the few where it depa
     - It reads the newest release from ECR Public's tags, anonymously. A GitHub release whose image isn't published yet is never picked.
     - It keeps one PR, on one branch, `jaws-upgrade`.
     - Changing `.github/workflows/` needs an App token with *Workflows: write*. `GITHUB_TOKEN` can't change those files, and its PRs run no CI.
-    - Recommended: a dedicated App, **JWall Engineering Upgrades** (`jwall-engineering-upgrades`), installed only on `platform`. The alternative is adding Workflows to the release App, which is installed on every repository.
+    - Recommended: a dedicated App, **JWall Engineering Upgrades** (`jwall-engineering-upgrades`), installed only on `platform`. The alternative is adding Workflows to an App installed on every repository.
     - **To confirm. This is an addition to the spec,** which names only the release bot and the comments App (6.4, 7) and leaves the upgrade mechanism to the builder (8). The conventions ask for one App per purpose. It adds an owner hand-off spec 7 doesn't list.
     - Plan 06 schedules it hourly. ECR Public keeps ten versions, about two days of releases (plan 04, "For plan 06").
 13. **The platform's own stacks run in the image, through the CLI** (plan 04's ruling 3).
@@ -213,10 +216,12 @@ Merging this plan changes nothing in AWS. The agent does none of these.
    - **The upgrade App,** if ruling 12 is confirmed: **JWall Engineering Upgrades** (`jwall-engineering-upgrades`).
      - Its permissions are *Contents*, *Pull requests* and *Workflows*, each read and write.
      - Install it on `platform` only. Its key is an organization secret. Give plan 06 its client ID, which the hub's caller spells as a literal or a `vars.` value, since a call's `with:` can't read `secrets`.
-   - **The `live` ruleset on `platform`:** restrict updates and deletions, and block force pushes, with **JWall Engineering Releases** as the only bypass actor. A rollback force-moves `live` with that App.
+   - **The mover App,** which the hub supplies: **JWall Engineering Deployments** (`jwall-engineering-deployments`), a mover App with *Contents* and *Workflows* write and *Metadata* read, installed only on `platform`, and `live`'s only ruleset bypass actor.
+     - Its key is the `platform` repository secret `DEPLOYMENTS_APP_PRIVATE_KEY`. Give plan 06 its client ID, which the hub's callers spell as the literal `live-app-client-id`.
+   - **The `live` ruleset on `platform`:** restrict updates and deletions, and block force pushes, with the mover App as the only bypass actor. The release App is not one. A rollback force-moves `live` with the mover App.
    - **The `prod` environment on `platform`,** with deployments from `main` only. Spec 7 lists it with the `main` ruleset.
    - **Repository variables: none.** The hub's callers spell their identity, and a switched project needs no role variable (ruling 2).
-   - **Secrets the hub's callers read:** the existing `RELEASE_BOT_CLIENT_ID` and `RELEASE_BOT_PRIVATE_KEY`, the comments App's key, and the upgrade App's key.
+   - **Secrets the hub's callers read:** the existing `RELEASE_BOT_CLIENT_ID` and `RELEASE_BOT_PRIVATE_KEY` (release only), the mover App's key (`live-app-private-key`, release and rollback), the comments App's key, and the upgrade App's key.
 
 ## For plans 06 and 07
 
@@ -225,6 +230,8 @@ Merging this plan changes nothing in AWS. The agent does none of these.
   - The hub's own: `ci`, `release`, `rollback`, `bot-apply`, `databricks-apply`, `sweep` and `upgrade`.
   - Each caller that runs the image spells `platform-image`, `account-id` and `name-root`. The site callers also spell `check-prefix`. Ruling 10 covers why.
   - Each caller job grants the permissions the next level needs: `contents: read`, `id-token: write`, and `pull-requests: write` where it comments (spec 6.4). `docs/platform-workflows.md` lists each workflow's.
+  - The release and rollback callers spell `live-app-client-id` as a literal (it isn't secret) and pass `live-app-private-key` from the hub's mover App secret. The release caller also passes the release App's `RELEASE_BOT_*`, which the rollback doesn't take.
+  - The mover App is the hub's, "a mover App with *Contents* and *Workflows* write, installed only on the hub, and `live`'s only ruleset bypass actor" (owner hand-offs).
   - No caller sets a concurrency group named `platform-release`. The release's jobs hold it (Task 12), and a caller holding it too would be cancelled as a deadlock.
 - **Check names gain a level.** A project calling the hub calling Jaws reports `<project job> / <hub job> / <prefix> plan`. Each switch PR (plan 07) updates that project's required checks.
 - **The hub's required checks,** as its caller reports them: `<caller job> / Platform check`, `<caller job> / Terraform plan`, `<caller job> / Monitoring plan` and `<caller job> / Data access plan`.
@@ -1021,10 +1028,10 @@ git commit -m "feat(workflows): plan every stack and project of a hub with its c
 
 **Interfaces:**
 - Consumes: `platform apply` (Task 4); `platform-role` and `platform-image` (Task 8); `platform-base` and `platform-build` (Task 11); the tags (Task 2).
-- Produces `.github/actions/platform-move`, which both workflows use. Inputs: `move` (`current` or `live`); `repository` (the hub image's), `digest` and `commit`; `token` (the release App's, for `live`); and `force` (default `"false"`).
+- Produces `.github/actions/platform-move`, which both workflows use. Inputs: `move` (`current` or `live`); `repository` (the hub image's), `digest` and `commit`; `token` (the mover App's, for `live`; the step reads it from there, never from the release App); and `force` (default `"false"`).
   - Step `id: current`: `batch-get-image` by digest for the manifest, then `put-image --image-tag current` with it. `ImageAlreadyExistsException` means `current` already names the build, a success. Its summary: "`current` is `<repository>@<digest>` (`sha-<commit>`)".
   - Step `id: live`: a `PATCH` of `repos/$GITHUB_REPOSITORY/git/refs/heads/live` with `sha=$COMMIT` and `force=$FORCE`. When the ref doesn't exist yet (`Reference does not exist`), it POSTs `refs/heads/live`. Any other failure stops the job, naming `live` and the commit.
-- Produces `platform-release.yml`, `on: workflow_call`, with inputs `platform-image`, `account-id` and `name-root` (required), and the required secrets `RELEASE_BOT_CLIENT_ID` and `RELEASE_BOT_PRIVATE_KEY`. Its jobs, where `<tag_name>` is `${{ needs.release-please.outputs.tag_name }}`, and `<tag>`, after `image`, is `${{ needs.image.outputs.tag }}`, its copy:
+- Produces `platform-release.yml`, `on: workflow_call`, with inputs `platform-image`, `account-id` and `name-root` (required), the required input `live-app-client-id` (string), and the required secrets `RELEASE_BOT_CLIENT_ID` and `RELEASE_BOT_PRIVATE_KEY` (Release Please's) and `live-app-private-key` (the mover App's, which the hub supplies). Its jobs, where `<tag_name>` is `${{ needs.release-please.outputs.tag_name }}`, and `<tag>`, after `image`, is `${{ needs.image.outputs.tag }}`, its copy:
 
 | Job (`name`) | Needs, condition | Does |
 |---|---|---|
@@ -1033,16 +1040,19 @@ git commit -m "feat(workflows): plan every stack and project of a hub with its c
 | `apply` (`Terraform apply (<tag>)`) | `image`; `prod` | `platform-role` (`infra`, `apply`) and the credentials, `platform-image` with `digest: ${{ needs.image.outputs.digest }}`, then `platform apply foundation` |
 | `monitoring-apply` (`Monitoring apply (<tag>)`) | `image`, `apply`; `needs.image.outputs.monitoring == 'configured'`; `prod` | the same, with project `monitoring`, then `platform apply monitoring` |
 | `current` (`Move current to <tag>`) | `image`, `apply`; `needs.apply.result == 'success'`; `prod` | `platform-role` (`infra`, `apply`) and the credentials, then `platform-move` with `move: current` |
-| `live` (`Move live to <tag>`) | `image`, `current` | mints the release App's token, then `platform-move` with `move: live` |
+| `live` (`Move live to <tag>`) | `image`, `current` | step `id: live-token` mints the mover App's token with `create-github-app-token` from `inputs.live-app-client-id` and `secrets.live-app-private-key`, with no `continue-on-error`, then `platform-move` with `move: live` and `token: ${{ steps.live-token.outputs.token }}` |
 
 - The jobs that change something, `image` to `live`, each hold `concurrency: { group: platform-release, cancel-in-progress: false }`, as the rollback's job does. Neither workflow sets a group at its top: GitHub keeps one pending run per group, and each push to `main` runs the release workflow for Release Please, so it could cancel a pending release or rollback.
-- Produces `platform-rollback.yml`, `on: workflow_call`, with the identity, `commit` (required) and the release App's secrets. Job `rollback` (`Roll back to <commit>`), in `prod`, with `platform-role` (`infra`, `apply`). It applies nothing:
+- Produces `platform-rollback.yml`, `on: workflow_call`, with the identity, `commit` (required), the required input `live-app-client-id` and the required secret `live-app-private-key`. It takes no release App secret. Job `rollback` (`Roll back to <commit>`), in `prod`, with `platform-role` (`infra`, `apply`). It applies nothing:
   - step `id: check` refuses a `commit` that isn't 40 lowercase hex; one not on `main` (`gh api repos/$GITHUB_REPOSITORY/compare/$COMMIT...main --jq .status` is neither `ahead` nor `identical`): "{commit} is not on main"; and one whose build is gone (`batch-get-image imageTag=sha-$COMMIT` finds nothing): "no build of {commit} is kept: the newest ten are; roll back to one of them, or release a fix". It writes that build's `digest`;
-  - then `platform-move` with `move: current`; then, with the release App's token, `move: live` and `force: "true"`.
+  - then `platform-move` with `move: current`; then, with the mover App's token (step `id: live-token`, as the release's `live` job mints it), `move: live` and `force: "true"`.
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_platform_release.py`. `_conditions(workflow: str, name: str) -> list[str]` returns the job's `if` and the `if` of every job it needs, recursively.
 - `test_nothing_moves_without_a_release`: for `image`, `apply`, `monitoring-apply`, `current` and `live`, `_conditions` holds `needs.release-please.outputs.release_created == 'true'`.
 - `test_current_moves_only_after_the_foundation_s_apply`: `current`'s needs are `{image, apply}` and its `if` holds `needs.apply.result == 'success'`; `live`'s needs are `[image, current]`.
+- `test_both_workflows_require_the_movers_input_and_secret`: `platform-release.yml` and `platform-rollback.yml` each declare the input `live-app-client-id` (string) and the secret `live-app-private-key`, both `required: true`.
+- `test_the_live_move_mints_its_token_from_exactly_those`: the `live` job's token step in the release, and the rollback's, use `actions/create-github-app-token` at the plan's pinned version with `client-id: ${{ inputs.live-app-client-id }}` and `private-key: ${{ secrets.live-app-private-key }}`, and `platform-move`'s `token` is that step's output.
+- `test_no_step_that_moves_live_uses_the_release_app`: in both workflows, no step that runs `platform-move` with `move: live`, nor the step that mints its token, reads `RELEASE_BOT_CLIENT_ID` or `RELEASE_BOT_PRIVATE_KEY`. The rollback names neither secret.
 - `test_every_job_needs_the_jobs_whose_outputs_it_reads`: in every `.github/workflows/platform-*.yml`, each `needs.<job>` in a job's text names a job in its `needs`.
 - `test_the_build_is_tagged_with_the_release_commit`: `platform-build` pushes `…:sha-${{ steps.commit.outputs.commit }}`, with `load` and `push` both `"true"`, after the `infra` apply role, in `prod`.
 - `test_a_re_run_reuses_the_release_s_build`: `built`, run with a fake `aws` that finds `sha-<commit>`, writes its digest, and `platform-build` takes `if: steps.built.outputs.digest == ''`.
@@ -1050,7 +1060,7 @@ git commit -m "feat(workflows): plan every stack and project of a hub with its c
 - `test_release_please_writes_with_the_app_s_token_only`: the `release-please` job's `permissions` are `{contents: read}`.
 - `test_a_release_or_rollback_is_never_cancelled`: `image`, `apply`, `monitoring-apply`, `current`, `live` and `rollback` hold the group `platform-release` with `cancel-in-progress: false`, and neither workflow has a top-level `concurrency`.
 - `test_moving_current_retags_the_build`: `platform-move`'s `current`, run with `run_action_step` and a fake `aws`, calls `batch-get-image` by digest, then `put-image` with `--image-tag current` and `--image-digest`. An `ImageAlreadyExistsException` from the fake exits 0.
-- `test_live_is_fast_forwarded_by_the_release_app_and_created_once`: `platform-move`'s `live`, with a fake `gh`, PATCHes with `force=false`. When the fake answers `Reference does not exist`, it POSTs. Any other error exits nonzero.
+- `test_live_is_fast_forwarded_by_the_mover_app_and_created_once`: `platform-move`'s `live`, with a fake `gh`, PATCHes with `force=false`. When the fake answers `Reference does not exist`, it POSTs. Any other error exits nonzero.
 - On rollback:
   - `test_a_rollback_moves_current_and_live_to_a_kept_build`: `platform-move` with `move: current`, then with `move: live` and `force: "true"`;
   - `test_a_rollback_to_a_build_no_longer_kept_stops`;
@@ -1069,8 +1079,8 @@ Run: `uv run pytest tests/test_platform_release.py tests/test_tool_checkout.py t
 Expected: PASS
 
 - [ ] **Step 5: Docs.** `docs/platform-workflows.md`:
-  - "Releases, current and live": the jobs, the tags, the off-hours window, and the `live` ruleset. The caller grants `contents: read` and `id-token: write`, and holds no `platform-release` group;
-  - "Rolling back": when, what it moves and what it doesn't apply.
+  - "Releases, current and live": the jobs, the tags, the off-hours window, and the `live` ruleset, whose only bypass actor is the hub's mover App. Its inputs, secrets and grants: `platform-image`, `account-id`, `name-root` and `live-app-client-id`; `RELEASE_BOT_CLIENT_ID`, `RELEASE_BOT_PRIVATE_KEY` and `live-app-private-key`. The caller grants `contents: read` and `id-token: write`, and holds no `platform-release` group;
+  - "Rolling back": when, what it moves and what it doesn't apply. Its inputs, secrets and grants: the identity, `commit` and `live-app-client-id`; `live-app-private-key` only. The same grants.
 
 - [ ] **Step 6: Commit**
 
