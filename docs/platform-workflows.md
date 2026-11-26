@@ -579,9 +579,17 @@ file that names another project stops the run. The Databricks apply refuses an
 project, `bot-apply-<project>` and `databricks-apply-<project>`, and never
 cancels a run in progress.
 
-The sweep runs from `main` only, and its runs queue in `data-access-sweep`
-without cancelling one another. When a platform moves its sweep to its hub, it
-stops the old one first, so exactly one runs.
+The sweep runs from `main` only, in the group `data-access-sweep`. A sweep in
+progress is never cancelled, but GitHub keeps one pending run per group: a
+newer sweep cancels an older one still pending, and the applies' groups work
+the same way. When a platform moves its sweep to its hub, it stops the old one
+first, so exactly one runs.
+
+A caller of these three holds none of their groups, at its top or on its job:
+GitHub cancels a caller that holds the group of a job it calls, as a deadlock,
+on every run, so the sweep or the apply would never run. `jaws`'s own
+`data-access.yml`, `bot-apply.yml` and `databricks-apply.yml` hold those groups
+at their top, so a caller modelled on them drops that `concurrency:` block.
 
 A hub's caller, with placeholder values:
 

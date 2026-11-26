@@ -7,9 +7,11 @@ name: Platform sweep
 #
 # It runs the build the hub image's current tag names (spec 6.4), as the data-access apply
 # role, from main only: the prod environment deploys only from there, so a run from any other
-# branch is skipped here rather than refused there. Sweeps queue behind each other and are
-# never cancelled mid-apply. The caller grants contents: read and id-token: write, and passes
-# the identity.
+# branch is skipped here rather than refused there. A sweep in progress is never cancelled
+# mid-apply, but GitHub keeps one pending run per group, so a newer sweep cancels an older one
+# still pending. The caller grants contents: read and id-token: write, passes the identity,
+# and holds no data-access-sweep group: GitHub cancels a caller that holds the group of a job
+# it calls, as a deadlock.
 
 on:
   workflow_call:
