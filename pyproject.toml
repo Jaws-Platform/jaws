@@ -9,10 +9,10 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.13"
 dependencies = [
-  "boto3>=1.44.7",
+  "boto3>=1.44.9",
   "databricks-sdk>=0.169.0",
   "pydantic>=2.11",
-  "pyyaml>=6.0",
+  "pyyaml>=6.0.4",
   "typer-slim>=0.17", # typer without rich and shellingham: smaller image, plain tracebacks
 ]
 
@@ -21,12 +21,12 @@ jaws = "jaws.cli:app"
 
 [dependency-groups]
 dev = [
-  "boto3-stubs[ce,cloudfront,ec2,ecr,logs,pricing,s3,ssm,sts]>=1.44.6",
+  "boto3-stubs[ce,cloudfront,ec2,ecr,logs,pricing,s3,ssm,sts]>=1.44.9",
   "moto[ec2,ecr,logs,s3,ssm,sts]>=5.2.5",
   "mypy>=1.17",
   "pytest>=8.4",
-  "ruff>=0.17.5",
-  "types-pyyaml>=6.0.12.20261113",
+  "ruff>=0.17.6",
+  "types-pyyaml>=6.0.12.20261122",
 ]
 
 [build-system]
