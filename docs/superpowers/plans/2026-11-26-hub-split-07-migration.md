@@ -29,7 +29,7 @@
 
 Roadmap: [row 07](2026-11-23-hub-split-00-roadmap.md). It builds on plans 05 (#323) and 06 (#326).
 
-**Written before plans 05 and 06 ran.** It follows them as approved: plan 05's rulings 6, 7, 9, 10 and 12, and plan 06's D1–D4, D6 and D7. Task 1 re-checks every name it borrows against their merged code before anything else runs.
+**Written before plans 05 and 06 ran.** It follows them as approved: plan 05's rulings 6, 7, 9, 10 and 12, and plan 06's D1–D4 and D6. Ruling 3 shortens plan 06's D7, and Task 4 waits for the owner's answer. Task 1 re-checks every name it borrows against their merged code before anything else runs.
 
 **Where the work happens:**
 
@@ -57,7 +57,7 @@ Roadmap: [row 07](2026-11-23-hub-split-00-roadmap.md). It builds on plans 05 (#3
 - **The owner merges every PR in this plan,** in every repository: the project repositories' rules say so, and here every merge either releases or gates a release. The agent opens and updates PRs and comments on them, and writes nothing else on GitHub: no settings, rulesets, environments, variables, secrets or Apps.
 - **Every change to AWS is the owner's merge of a release PR, between 08:00 and 24:00 MT.** The monitoring node is stopped from 00:00 to 08:00, and a release in that window replaces it. Each owner step says what to check before and after.
 - **Money: nothing that costs money happens before G0,** the owner's go-ahead on "Costs". The first cost starts at the enabling release, whose apply lets the hub's PRs plan with real roles.
-- **Nothing stateful is rebuilt** (spec 2). Every plan here is read with the filter. The only destroy in this plan is `jaws-cli`'s (Task 16), after the owner has emptied it.
+- **Nothing stateful is rebuilt** (spec 2). Every plan here is read with the filter. The only destroys in this plan are Task 16b's: `jaws-cli`, after the owner has emptied it, and the `-2` ECR policies that pointed at it.
 - **Privacy** (plan 06's rules, which still bind the hub):
   - never print a value from `config/`;
   - never name an individual `config/` file in a command, except inside `git rev-parse <rev>:<path>`, which prints a hash;
@@ -67,8 +67,8 @@ Roadmap: [row 07](2026-11-23-hub-split-00-roadmap.md). It builds on plans 05 (#3
   - change a file that holds a value by counted substitution: `perl -pi -e`, then `grep -c` of the old and the new pattern, before and after, printing only the counts;
   - a failing check names a file, a field or a count, never a value (`pytest.fail(..., pytrace=False)`); run pytest with `-q`;
   - if the privacy hook refuses a command, stop and hand that step to the owner. Never work around it.
-- **Reviews.** A sealed commit touches `config/`, `datasets/`, `owner/`, a hub caller with a rendered account, or a file whose removed lines hold an account ID (the cleanup's deletions and replacements).
-  - Nobody runs `git diff`, `git show`, `git log -p` or `review-package` over a range that holds one.
+- **Reviews.** A sealed commit touches `config/`, `datasets/`, `owner/`, a hub caller with a rendered account, or a file whose added or removed lines hold an account ID or an email.
+  - Nobody runs `git diff`, `git show`, `git log -p` or `review-package` over a range that holds one, except `git diff --stat` and `--shortstat`, which print counts.
   - The controller writes the review package itself, as plan 06's "Reviews" says: `git log --oneline` and `git diff --stat` of the range, the diff of each commit that isn't sealed, and each sealed commit's evidence (its hashes, counts, filter output and test summary line).
   - Every implementer and reviewer prompt carries this rule and the Privacy rules verbatim.
 - **The plan filter.** A plan's text is its job's log (`gh run view <run> -R <repo> --log --job <job>`), or its `.jaws/plan.txt` artifact (`gh run download <run> -R <repo> -n <artifact> -D <scratch>/<name>`). Read it only through these, which print resource addresses, actions, attribute names and counts, never values:
@@ -90,7 +90,7 @@ plan_attributes() {  # stdin: a plan's text. How often each attribute name chang
 
 ## Review Focus
 
-1. **A required check that no job reports any more.** `jaws`'s takeover removes four required plan jobs, and its cleanup two more. The hub starts requiring three plans. Expected: the change that removes or adds a job changes the required checks with it, and a test fails otherwise. Without that, every later PR waits forever. Task 4, `test_every_required_check_is_a_ci_job` (run again in Task 12); Task 3, `test_every_ci_job_is_a_required_check`.
+1. **A required check that no job reports any more.** `jaws`'s takeover removes four required checks (three plans and the Databricks project list), and its cleanup two stack checks. The hub starts requiring three plans. Expected: the change that removes or adds a job changes the required checks with it, and a test fails otherwise. Without that, every later PR waits forever. Task 4, `test_every_required_check_is_a_ci_job` (run again in Task 12); Task 3, `test_every_ci_job_is_a_required_check`.
 2. **A switched caller that passes an input the hub's caller doesn't take, or reads an output it doesn't pass.** A remote task runs days later, and fails then. Expected: Task 7's call check refuses the call before its PR opens, naming the file, the job and the key. Task 7, Steps 2 and 4.
 3. **Two sweepers, or one left on in `jaws`.** Expected: from the takeover, no `jaws` workflow runs on a schedule, and the hub's sweep is the only one. Task 4, `test_jaws_s_own_workflows_are_its_ci_and_its_release`; Task 5, `test_the_release_runs_on_main_and_the_sweep_every_fifteen_minutes`.
 4. **A platform stack run with no configuration,** once `config/` has left `jaws`. Expected: the plan stops at once, naming `/etc/jaws/config` and `config_path`, rather than failing deep in the stack. Task 9, `stops_without_a_configuration` in both stacks.
@@ -113,17 +113,18 @@ Calls this plan makes. Those marked **To confirm** are the owner's: each gives t
 3. **At takeover, `jaws` stops pushing `jaws-cli`. To confirm.**
    - **It departs from plan 04 and shortens plan 06's D7.** Plan 04 says releases "keep pushing the configuration-baked `jaws-cli` image until cleanup". D7 has projects merge their Jaws pin bumps until each switches; they now stop at the takeover.
    - **Why:** after the takeover `jaws`'s configuration is stale, so a new `jaws-cli` would bake in a configuration nobody applies. And `jaws-cli` keeps its newest 20 release images: with no new push nothing more expires, so every image a project pins at the takeover stays until cleanup.
-   - **The cost:** a project can't take a newer Jaws release until it switches, since a bump would name a `jaws-cli` tag that doesn't exist. Projects switch soon after the hub goes live anyway (spec 6.10, step 6).
+   - **The cost:** a project can't take a newer Jaws release until it switches, since a bump would name a `jaws-cli` tag that doesn't exist. For task and bot repositories, a bump would run with `jaws`'s frozen configuration, and from the cleanup release on it would fail for want of the platform's identity. Projects switch soon after the hub goes live anyway (spec 6.10, step 6).
    - **The other answer:** keep the release's `image` job until cleanup, rewired off the removed apply. `jaws` would assume the foundation's apply role until then, and the D7 bumps would continue, each new push expiring an older pin's image.
 4. **The takeover's order: `jaws` off, then the hub on, then the hub's first release, in one sitting. To confirm.**
    - **The gap it fills.** Spec 6.10 says the same workflows in `jaws` "are switched off at the same time, so exactly one sweeper runs". Two merges can't land at once, so this order risks minutes with no sweep, and never two sweepers.
-   - Between the hub's takeover PR and its first release, the hub's sweeps stop at `platform-image`'s resolve ("current does not exist: the hub's first release tags its build current"), before any AWS call.
+   - Between the hub's takeover PR and its first release, the hub's sweeps assume the data-access apply role and stop at `platform-image`'s resolve ('jaws-platform:current does not exist: the hub's first release tags its build current'), before any change.
    - **The other answer:** the hub first. Two sweepers and two appliers would run for a few minutes, with only the state lock to order them.
 5. **What "no changes" means,** in the acceptance plans, at takeover and in the switches.
    - Every plan reads `No changes.` With D3, not even a tag changes (plan 06).
    - **Allowed:** the monitoring node's output-only `public_ip` change in hours (`Changes to Outputs:`, with `public_ip` alone), which touches no resource; and `moved:` lines after cleanup.
    - **Off-hours,** the Monitoring plan shows the node replaced, because AWS releases a stopped node's public IP. Re-run that job in hours.
    - **The plans run at the release `jaws` last applied.** A hub pinned older or newer shows that release's changes, not the migration's.
+   - **A site's plans** run the hub's release against a site last deployed at its own pin (`v0.76.0` today). A difference from that gap is the release's, not the migration's. Before O5, fix it in the site, or accept it as the site's next deploy; a plan that fails is fixed in the site's `jaws.yaml`.
 6. **The switches go sites first, then the bot, then the task projects, and none starts a run to prove itself. To confirm.**
    - **The gap it fills.** Spec 6.10 says "Each switch's PR plan shows no changes", but a task or bot repository has no plan. Its call runs only with a task or a release, which costs money or changes the bot. So its call is checked against the hub's caller before its PR opens (Task 7's call check), and its first real run, part of the owner's own work, is the proof.
    - **The order** is Task 7's table: `guitar-knowledge-base` (the smallest site), `cs-survival-guide` (no required Jaws check), `site`, `braveheart-lichess-bot`, `braveheart-selfplay`, `braveheart-trainer`, and `braveheart`, the most used, last.
@@ -136,7 +137,7 @@ Calls this plan makes. Those marked **To confirm** are the owner's: each gives t
    - **The other answers:** refuse `ecr.repository` in the cleanup release, which forces the retirement into that upgrade; or forget the repository with a `removed` block, and delete it by hand.
 8. **The guard after `config/` leaves: patterns in `jaws`, exact values in the hub. To confirm.**
    - **Why two:** today's guard builds its values from `config/`, so it can't outlive it.
-     - `jaws` (Task 13) checks every tracked file by pattern for the kinds spec 6.10 names: "account IDs, `jwall`, owner names and emails". It holds no owner value but the brand token the spec names.
+     - `jaws` (Task 13) checks every tracked file by pattern for account IDs, emails and `jwall`, which covers the owner's login. The other owner names, `LICENSE`'s holder and ruling 9's example owners, stay: the owner's call (To confirm).
      - The hub (Task 15) checks the release it pins with its own configuration's exact values: the GitHub and Databricks IDs, the zone and the owner's login, which no pattern can tell apart.
    - **Exempt:** `release-infra/` (spec 6.8); `CHANGELOG.md`, which records what releases said (the git history keeps the old tree anyway); and the lock files. `jwall` may stay in `docs/superpowers/`, whose records of the split name the hub, and in `.github/CODEOWNERS`, the maintainer's login.
    - **What the public image carries** (plan 04, Review Focus 5) is built from tracked files, `README.md` (in the package metadata) and `pyproject.toml` included, so the scan covers it.
@@ -167,15 +168,16 @@ The owner's rule is "don't spend any money in the cloud". Plan 06's D5 costs sta
 
 **C2's pulls:**
 - **New:** the hub's release and sweep, about 283 MiB per build; and each switched task or bot repository, which pulls no image today, about 283 MiB per build it runs.
+- **Per pull request too:** a repository's PR runs pull a build once per PR branch, until a run on `main` has cached it (plan 05). braveheart's SPRT runs and every site's plan and preview run on PRs: about 283 MiB per new PR branch per build.
 - **Replaced:** the sites' pulls replace their `jaws-cli` pulls, which are uncached today.
-- **At one hub release a day:** up to about 9 GB for the hub and 34 GB for the four repositories, about 43 GB a month.
-- **At three a day:** about 130 GB, which is about $2.70 a month past the free 100 GB if nothing else used it.
+- **At one hub release a day:** up to about 9 GB for the hub and 34 GB for the four repositories, about 43 GB a month, plus 283 MiB per such PR branch.
+- **At three a day:** about 130 GB, plus 283 MiB per such PR branch, which is about $2.70 a month past the free 100 GB if nothing else used it.
 - The owner checks last month's data transfer out in the Billing console before approving C2.
 
 **Free, moved or saved:**
-- **Free:** the enabling release's empty repository and IAM changes; basic scanning on push; GitHub for public repositories (Actions, caches, artifacts, rulesets, environments and Apps); and the hub's anonymous pulls of the public base (plan 06).
+- **Free:** the enabling release's empty repository and IAM changes; basic scanning on push (free while the registry's scanning is basic: the owner checks the scanning setting at G0); GitHub for public repositories (Actions, caches, artifacts, rulesets, environments and Apps); and the hub's anonymous pulls of the public base (plan 06).
 - **Moved, not added:** the sweep's and the applies' requests.
-- **No new run:** no switch starts a task, a bot release or a deploy (ruling 6).
+- **No new run:** no switch starts a task, a bot release or a production deploy (ruling 6). A site's switch PR runs its usual preview deploy.
 - **Saved:** `jaws-cli`'s storage, about $0.10 a month, at O12; and `jaws`'s PR plans' requests, at O5.
 
 ## The run order
@@ -195,7 +197,7 @@ The owner's rule is "don't spend any money in the cloud". Plan 06's D5 costs sta
 | 11 | owner | O7 | the comments App is on the three sites |
 | 12 | agent, owner | Task 7, O8, seven times | the seventh switch has merged |
 | 13 | agent, owner | Task 8, O9 | merged; it may start after the first switch |
-| 14 | agent | Tasks 9–14 | the cleanup PR is green |
+| 14 | agent | Tasks 9–14, then Task 16b's Step 1 scan | the cleanup PR is green, and the scan finds no caller |
 | 15 | owner | O10 | the hub runs the cleanup release |
 | 16 | agent | Task 15 | merged |
 | 17 | agent, owner | Task 16a, O11 | released |
@@ -231,16 +233,18 @@ The agent does none of these. Each says what to check before and after.
 - **O5. The takeover,** in one sitting between 08:00 and 24:00 MT, with an hour to spare.
   - **Before:**
     - Tasks 4 and 5's PRs are green;
+    - Task 4's reported checks pass, and the four it removes show as expected;
     - the hub pins the release `jaws` last applied, and its last PR's plans all read `No changes.`;
     - no `jaws` release PR with changes is open;
     - G0 covers C1 and C2, which start now.
   - **Do, in this order:**
+    0. mark both PRs ready;
     1. run `jaws`'s `scripts/apply-repo-settings.sh` from Task 4's branch, so the four platform plans stop being required;
     2. merge Task 4's PR: `jaws`'s sweep, applies, platform plans and `jaws-cli` pushes stop. It is a `ci` commit, so it cuts no release;
-    3. merge Task 5's PR: the hub gains its appliers, and its `release.yml` opens a release PR;
+    3. check that no `Data access apply` run is in progress in `jaws`, then merge Task 5's PR: the hub gains its appliers, and its `release.yml` opens a release PR;
     4. merge that release PR at once. Until it has run, the hub's sweeps stop at `current` (ruling 4).
   - **After:**
-    - the release's jobs pass in order: the build `sha-<commit>`, `Terraform apply` (`No changes.` through the filter), `Monitoring apply`, the move of `current`, the move of `live`;
+    - the release's jobs pass in order: the build `sha-<commit>`, then `Terraform apply` (`No changes.` through the filter), then the move of `current`, then the move of `live`. `Monitoring apply` runs beside the moves (plan 05, ruling 7) and also passes;
     - `live` exists, at the release commit;
     - the next sweep reads `Sweep: no-changes`.
   - **From now on:**
@@ -248,29 +252,29 @@ The agent does none of these. Each says what to check before and after.
     - every configuration change is a hub PR;
     - `jaws`'s `config/` is a dead copy, left alone until cleanup.
   - **If the release fails** before `current` moves, fix forward and re-run the failed job.
-  - **To go back,** revert Task 4's PR in `jaws`, which brings back its appliers and sweep, and Task 5's in the hub. The trust stays until Task 16, so `jaws` can apply again.
+  - **To go back,** revert Task 4's PR in `jaws`, which brings back its appliers and sweep, and Task 5's in the hub, then run `jaws`'s `scripts/apply-repo-settings.sh` from `main`. The trust stays until Task 16, so `jaws` can apply again.
 - **O6. D3** (Task 6). Commit `context.organization: JWall-Engineering` to the hub's `config/tool.yaml` on Task 6's branch. Merge once the filter reading is tags-only, then the release PR, between 08:00 and 24:00 MT. **After:** the release's applies change as many resources as the plan said.
 - **O7. Before the switches:** plan 06's H6. Install JWall Engineering Comments on the three site repositories, and set `COMMENTS_APP_PRIVATE_KEY` on each.
 - **O8. Each switch** (Task 7), one at a time.
-  - **A site, before merging:** its `plan / plan / jwall plan` reads `No changes.` In its `main` ruleset (Settings, Rules), replace the required checks `plan / jaws plan` and `preview / jaws preview deploy` with the names its PR reports. `cs-survival-guide` requires neither, so its ruleset doesn't change.
+  - **A site, before merging:** its `plan / plan / jwall plan` reads `No changes.` In its `main` ruleset (Settings, Rules), replace the required checks `plan / jaws plan` and `preview / jaws preview deploy` with the names its PR reports. `cs-survival-guide` has no ruleset: its classic branch protection requires `build` and `pr-title`, neither of them a Jaws check, so it doesn't change.
   - **A site, after merging:** delete its variables `AWS_PLAN_ROLE_ARN`, `AWS_PREVIEW_ROLE_ARN`, `AWS_APPLY_ROLE_ARN` and `JAWS_APP_CLIENT_ID`, and its secret `JAWS_APP_PRIVATE_KEY`. Close any open Dependabot PR that bumps a Jaws pin. Its next release deploys through the hub.
   - **A task or bot repository:** merge. Its next task or release, run as part of your own work, is its first through the hub. If that fails at the call, revert the switch PR.
 - **O9. The conventions:** merge Task 8's three PRs.
 - **O10. The cleanup in `jaws`.**
-  - **Before:** the seven switches have merged, and the agent's scan (Task 16b, Step 1) finds no caller of `Jaws-Platform/jaws`'s workflows in a project. Merge the hub's README PR (Task 12) first.
+  - **Before:** the seven switches have merged, and the agent's scan (the command in Task 16b, Step 1, run after the seventh switch) finds no caller of `Jaws-Platform/jaws`'s workflows in a project. Merge the hub's README PR (Task 12) first.
   - **Do:** run `jaws`'s `scripts/apply-repo-settings.sh` from the cleanup branch; merge Task 14's PR; then merge its release PR between 08:00 and 24:00 MT. It applies nothing, but it is the hub's next upgrade.
-  - **After:** the release publishes the public image. The hub's upgrade PR's plans read `No changes.`, apart from `moved:` lines for `module.sites_image` (Task 11). Merge it, then the hub's release.
+  - **After:** the release publishes the public image. The hub's upgrade PR's plans read `No changes.`, apart from `moved:` lines for `module.sites_image` (Task 11). Merge it. Its `chore(deps)` commit opens no release PR on its own, since Release Please hides `chore`, so the cleanup release goes live with Task 16a's release.
 - **O11. The old trust** (Task 16a). Commit the hub's `config/platform.yaml` without its first entry, `Jaws-Platform/jaws`. Merge once the filter reading is as Task 16a expects, then the release PR, between 08:00 and 24:00 MT.
 - **O12. `jaws-cli`** (Task 16b).
   - **Before:** the agent's scan finds no caller. Then empty the repository with the production account's admin profile:
 
     ```sh
     aws sso login --profile jaws-prod && export AWS_PROFILE=jaws-prod
-    aws ecr list-images --repository-name jaws-cli --query 'imageIds[*]' --output json > jaws-cli-images.json
-    aws ecr batch-delete-image --repository-name jaws-cli --image-ids file://jaws-cli-images.json --query 'length(failures)'
+    aws ecr list-images --region us-east-1 --repository-name jaws-cli --query 'imageIds[*]' --output json > jaws-cli-images.json
+    aws ecr batch-delete-image --region us-east-1 --repository-name jaws-cli --image-ids file://jaws-cli-images.json --query 'length(failures)'
     ```
 
-    Expected: `0`.
+    Expected: `0`. Otherwise run both again until `list-images` returns `[]`.
   - **Do:** commit the hub's `config/tool.yaml` without `ecr.repository` on Task 16b's branch. Merge once the filter reading is as Task 16b expects, then the release PR, between 08:00 and 24:00 MT.
   - **After:** `jaws-cli` is gone. Optionally, delete `jaws`'s `prod` environment, its `JAWS_APP_CLIENT_ID` variable and its `JAWS_APP_PRIVATE_KEY` secret: nothing has used them since the takeover.
 
@@ -278,21 +282,23 @@ The agent does none of these. Each says what to check before and after.
 
 ### Task 1: Re-check this plan against plans 05 and 06 as merged
 
-**Repository:** `jaws`, branch `hub-split/07-recheck`. **When:** O0 is done.
+**Repository:** `jaws`, on `hub-split/07-migration` (draft PR #333), which the owner merges before Task 2. Its `docs` commit rides in the next `jaws` release, which applies the platform, so that release PR is merged between 08:00 and 24:00 MT. **When:** O0 is done.
 
 **Files:**
 - Modify, only where a name differs: `docs/superpowers/plans/2026-11-26-hub-split-07-migration.md`
 
 **Interfaces:**
-- Consumes, from plan 05 in `jaws`: the `platform-*.yml` workflows' file names, inputs and secrets; the project-facing workflows' platform inputs and role overrides; `jaws platform check`, `IDENTITY_WORKFLOWS`, `CHECK_PREFIX_WORKFLOWS` and `FROM_PATTERN`; the job names `Platform check`, `Terraform plan`, `Monitoring plan` and `Data access plan`, and the plan jobs' artifact names; and the hub image's tags, `sha-<commit>` and `current`.
+- Consumes, from plan 05 in `jaws`: the `platform-*.yml` workflows' file names, inputs and secrets; the project-facing workflows' platform inputs and role overrides; `jaws platform check`, `IDENTITY_WORKFLOWS`, `CHECK_PREFIX_WORKFLOWS` and `FROM_PATTERN`; the job names `Platform check`, `Terraform plan`, `Monitoring plan` and `Data access plan`, and the plan jobs' artifact names; plan 05's release and rollback job names, the sweep's summary `Sweep: no-changes`, `platform-image`'s resolve message, `JAWS_TOOL_CONFIG`, the `platform-role` step ids, the sections of `docs/platform-workflows.md`, and the tests of today's mode that Task 10 deletes; and the hub image's tags, `sha-<commit>` and `current`.
 - Consumes, from plan 06 in the hub:
   - `tests/conftest.py`'s `PLATFORM_CONFIG_DIR`, `JAWS_SOURCE`, `WORKFLOWS`, `workflow`, `jaws_workflow`, `pinned_release`, `platform_settings`, `owner_values`, `HUB`, `BRAND`, `COMMENTS_APP_CLIENT_ID` and `UPGRADES_APP_CLIENT_ID`;
   - `tests/platform/test_callers.py`'s constants and tests, `REQUIRED_PLATFORM_CHECKS`, `REQUIRED_CHECKS`, `test_freeze.py` and `test_hub_identity.py`'s four tests;
   - the callers' job ids, the account render and the mask.
 - Produces: this plan, true to the merged code.
 
-- [ ] **Step 1: Look up each name** on both repositories' `main` with `git grep -n -- '<name>' -- .github src tests scripts docs`, never in `config/`, `datasets/` or `owner/`.
-Expected: each name is found as this plan spells it.
+- [ ] **Step 0: Branch:** `git fetch origin && git switch hub-split/07-migration`
+
+- [ ] **Step 1: Look up each name** on both repositories' `main` with `git grep -c -- '<name>' -- .github src tests scripts docs`, which prints counts per file, never in `config/`, `datasets/` or `owner/`. To read a matching line, pipe `git grep -n` through the mask.
+Expected: each name has a nonzero count where this plan says it is.
 
 - [ ] **Step 2: Amend the plan where a name differs,** and nowhere else. Open a PR listing the names that changed under Changes. The owner merges it before Task 2. If nothing changed, open no PR and tell the owner.
 
@@ -377,17 +383,11 @@ Post the filter's output on the PR as a comment, then hand it to the owner (O2).
 **Interfaces:**
 - Produces `REQUIRED_PLATFORM_CHECKS = ["platform / Platform check", "platform / Terraform plan", "platform / Monitoring plan", "platform / Data access plan"]` (plan 05, "For plans 06 and 07"). `REQUIRED_CHECKS` gains the same three plans.
 
-- [ ] **Step 1: Write the failing test.** In `tests/platform/test_ci.py`, set `REQUIRED_PLATFORM_CHECKS` to the four, and add:
+- [ ] **Step 0: Branch:** `git fetch origin && git switch -c require-plans origin/main`
 
-```python
-def test_the_platform_s_plans_are_required() -> None:
-    """Once the roles trust the hub, a plan that fails at its credentials must block a merge."""
-    assert {
-        "platform / Terraform plan",
-        "platform / Monitoring plan",
-        "platform / Data access plan",
-    } <= set(REQUIRED_PLATFORM_CHECKS)
-```
+- [ ] **Step 1: Write the failing test.** In `tests/platform/test_ci.py`, set `REQUIRED_PLATFORM_CHECKS` to the four. `test_every_ci_job_is_a_required_check` then fails, since the script doesn't require the three plans.
+
+`Monitoring plan` skips, with a notice, when its credentials fail (plan 05), and a skip satisfies a required check. O3 and every later reading must therefore find its plan's text, `No changes.`, and not the notice.
 
 - [ ] **Step 2: Run it and watch it fail**
 
@@ -416,7 +416,7 @@ Expected CI: the four `platform /` checks pass, and their plans read `No changes
 
 ### Task 4: `jaws` stops applying, sweeping and planning the platform
 
-**Repository:** `jaws`, branch `hub-split/07-takeover`. **When:** O4 is done. The owner merges it in O5, not before.
+**Repository:** `jaws`, branch `hub-split/07-takeover`. **When:** O4 is done, and the owner has confirmed ruling 3. Otherwise the release keeps its `account` and `image` jobs, with `image` rewired off the removed `apply` (ruling 3's other answer); `test_the_release_publishes_only_the_public_image` lists them; and `test_they_reach_aws_only_to_publish` allows the infra apply role in `image`. The owner merges it in O5, not before.
 
 **Files:**
 - Delete:
@@ -424,16 +424,20 @@ Expected CI: the four `platform /` checks pass, and their plans read `No changes
   - `scripts/projects.sh`, `scripts/databricks-credentials.sh`, `scripts/data-access-sweep.sh`, the scripts only those and the removed jobs use (plan 05, "For plans 06 and 07");
   - `tests/test_data_access_sweep.py`.
 - Modify:
-  - `.github/workflows/ci.yml`: the jobs `account`, `terraform-plan`, `monitoring-plan`, `bot-projects`, `bot-plan`, `databricks-projects` and `databricks-plan` go;
+  - `.github/workflows/ci.yml`: the jobs `account`, `terraform-plan`, `monitoring-plan`, `bot-projects`, `bot-plan`, `databricks-projects` and `databricks-plan` go, and so does the `data-access-stack` job's step `shellcheck the sweep`. That job's comment stops saying `data-access.yml` plans the stack;
   - `.github/workflows/release-please.yml`: the jobs `account`, `apply`, `monitoring-apply` and `image` go. Its header comment and the dispatch input's description say it publishes the public image;
   - `scripts/apply-repo-settings.sh`: `Terraform plan`, `Monitoring plan`, `Data access plan` and `Databricks projects` go.
 - Modify the tests of what went, deleting each test of a deleted job or script and keeping the rest:
   - `tests/test_foundation_workflows.py`, `tests/test_monitoring_workflows.py`, `tests/test_databricks_workflows.py`, `tests/test_bots_registry.py`, `tests/test_access_files.py`;
   - `tests/test_workflow_roles.py`, `tests/test_tool_checkout.py`, `tests/test_repository_name.py`;
   - `tests/test_cli_image.py`: the two tests of the `jaws-cli` job;
-  - `tests/conftest.py`: `fixture_root`, once nothing uses it.
+  - `tests/test_public_image.py`: `test_the_public_job_runs_only_when_the_check_says_so` keeps its assertions, with the `account` job's `if` and the `image` job's `TAG` written out as the expressions they hold today;
+  - `tests/test_config_projects.py` (plan 05): the comparison with `scripts/projects.sh` becomes one with the fixture's expected JSON, written out;
+  - `tests/test_databricks_workflows.py` keeps `needs_yq` (or it moves to `tests/workflow_steps.py`), which `tests/test_public_image.py` and `tests/test_config_projects.py` import;
+  - `tests/conftest.py`: `fixture_root`, once nothing uses it. If the privacy hook refuses an edit to `tests/conftest.py`, hand that edit to the owner.
 - Create: `tests/test_jaws_workflows.py`
 - Modify: `AGENTS.md` (the apply rule), `CONTRIBUTING.md` (the required checks table and the release paragraph), `README.md` ("CI/CD", "CI roles for this repository")
+- Modify: `docs/databricks.md`, `docs/lichess-bot.md`, `docs/research-projects.md`, `docs/remote-tasks.md` and `docs/datasets.md`, and README's rows for the deleted scripts: Bot apply, Databricks apply, the sweep and the plans are a hub's (`docs/platform-workflows.md`), not `jaws`'s
 
 **Interfaces:**
 - Produces: `jaws`'s own workflows are `ci.yml` and `release-please.yml`.
@@ -441,6 +445,8 @@ Expected CI: the four `platform /` checks pass, and their plans read `No changes
   - The one role either assumes is `vars.JAWS_PUBLISH_ROLE_ARN`'s, in `public-image`. Spec 6.8: "After the split, this role is `jaws`'s only access to AWS".
 - Produces: the release's jobs are `release-please`, `public-image-check` and `public-image` (plan 04, ruling 13).
 - The project-facing and `platform-*` workflows don't change. They are a hub's and its projects'.
+
+- [ ] **Step 0: Branch:** `git fetch origin && git switch -c hub-split/07-takeover origin/main`
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_jaws_workflows.py`
 
@@ -460,8 +466,8 @@ OWN = {"ci.yml", "release-please.yml"}
 PLATFORM_CHECKS = {"Terraform plan", "Monitoring plan", "Data access plan", "Databricks projects"}
 
 
-def _parsed(name: str) -> dict[str, Any]:
-    parsed: dict[str, Any] = yaml.safe_load((WORKFLOWS / name).read_text())
+def _parsed(name: str) -> dict[Any, Any]:
+    parsed: dict[Any, Any] = yaml.safe_load((WORKFLOWS / name).read_text())
     return parsed
 
 
@@ -495,7 +501,7 @@ def test_every_required_check_is_a_ci_job() -> None:
     assert not required_checks() & PLATFORM_CHECKS
 ```
 
-Also `test_the_release_publishes_only_the_public_image`: `set(_parsed("release-please.yml")["jobs"]) == {"release-please", "public-image-check", "public-image"}`.
+Also `test_the_release_publishes_only_the_public_image`: `set(_parsed("release-please.yml")["jobs"]) == {"release-please", "public-image-check", "public-image"}`. Read workflows with one shared reader in `tests/workflow_steps.py`.
 
 - [ ] **Step 2: Run them and watch them fail**
 
@@ -511,13 +517,13 @@ Expected: PASS.
 
 - [ ] **Step 5: Docs**
   - `AGENTS.md`: "Applies happen only through the Release Please `apply` job" becomes "`jaws` applies nothing to a platform: a hub's release does ([docs/platform-workflows.md](docs/platform-workflows.md))".
-  - `CONTRIBUTING.md`: the four rows go from the required checks table, and merging the release PR publishes the public image and applies nothing.
+  - `CONTRIBUTING.md`: the `Terraform plan` row goes from the checks table, and so does Workflow step 4. Releases says that merging the release PR tags the version and publishes the public image: items 2 and 3, and "the deliberate act that changes AWS", go.
   - `README.md`: "CI/CD" says the same. "CI roles for this repository" says that `jaws` no longer assumes them, and that their trust on `Jaws-Platform/jaws` goes at cleanup.
 
 - [ ] **Step 6: Commit and open the PR as a draft**
 
 ```bash
-git add -A .github scripts tests AGENTS.md CONTRIBUTING.md README.md
+git add -A .github scripts tests docs AGENTS.md CONTRIBUTING.md README.md
 git commit -m "ci(workflows): hand the platform's applies, sweep and plans to the hub"
 git push -u origin hub-split/07-takeover
 gh pr create --draft --title "ci(workflows): hand the platform's applies, sweep and plans to the hub" --body-file <filled template>
@@ -562,6 +568,8 @@ The body says what O5 does with it, and that a `ci` commit cuts no release.
 - `live-app-client-id` is `DEPLOYMENTS_APP_CLIENT_ID`, as a literal (plan 06, D6).
 - No caller holds the concurrency group `platform-release` (plan 05).
 
+- [ ] **Step 0: Branch:** `git fetch origin && git switch -c takeover origin/main`
+
 - [ ] **Step 1: Write the failing tests** in `tests/platform/test_callers.py`. Use `APPLYING = ("release", "rollback", "bot-apply", "databricks-apply", "sweep")`, `BY_HAND = ("rollback", "bot-apply", "databricks-apply")` and `APPLYING_INPUTS = PLATFORM_INPUTS | {"live-app-client-id"}`.
   - `test_each_applying_caller_calls_its_jaws_workflow`:
     - each caller's one job `uses` `Jaws-Platform/jaws/.github/workflows/platform-<name>.yml@<tag>`, with `<tag>` from `pinned_release()`;
@@ -570,6 +578,7 @@ The body says what O5 does with it, and that a `ci` commit cuts no release.
     - its `on` holds only `workflow_dispatch`;
     - its inputs are the Jaws workflow's inputs without `APPLYING_INPUTS`, each with the same `FIELDS` (`type`, `required`, `default`);
     - its `with`, without `APPLYING_INPUTS`, is `{key: "${{ inputs.<key> }}"}`.
+    - Put the comparison in one helper that both tests call.
   - `test_the_release_runs_on_main_and_the_sweep_every_fifteen_minutes`:
     - `release.yml`'s `on` is `{"push": {"branches": ["main"]}}`;
     - `sweep.yml`'s `on` has exactly `schedule: [{"cron": "*/15 * * * *"}]` and `workflow_dispatch`.
@@ -634,6 +643,8 @@ Expected CI: every check passes, and the plans read `No changes.`
 
 **Interfaces:**
 - Produces: the foundation's and monitoring's resources carry `Organization = JWall-Engineering`. Projects keep deriving theirs from their GitHub owner (spec 6.7).
+
+- [ ] **Step 0: Branch:** `git fetch origin && git switch -c organization origin/main`
 
 - [ ] **Step 1: Write the failing test.** `test_the_platform_keeps_its_names` becomes `test_the_platform_keeps_its_names_and_takes_its_organization`, which asserts `context.organization == "JWall-Engineering"`, with the other three assertions unchanged.
 
@@ -752,6 +763,8 @@ The body says that the project now names no Jaws version. For a site, it also li
 - JWall-Engineering's profile: `platform` holds and applies the platform's configuration.
 - Jaws-Platform's profile: `jaws` is the product (the CLI, its stacks and workflows, and the public image), and a platform's hub onboards its projects.
 
+- [ ] **Step 0: Branch,** in each of the three repositories: `git fetch origin && git switch -c hub-conventions origin/main`
+
 - [ ] **Step 1: Edit each document** per the Interfaces.
 
 - [ ] **Step 2: Run each repository's checks**
@@ -783,7 +796,7 @@ Then, in each: `git push -u origin hub-conventions && gh pr create --title "<its
   - The backend checks go with the backend files (Task 12).
 - Create: `tests/test_no_owner_configuration.py`
 - Modify:
-  - `tests/conftest.py`: `PLATFORM_CONFIG_DIR` goes;
+  - `tests/conftest.py`: `PLATFORM_CONFIG_DIR` goes. If the privacy hook refuses an edit to `tests/conftest.py`, hand that edit to the owner;
   - `tests/test_release_infra.py`;
   - `foundation/config.tf` (its `config_path` variable and `local.config_path`), and `monitoring/variables.tf` and `monitoring/config.tf` (the same two);
   - `foundation/tests/foundation.tftest.hcl`, `monitoring/tests/monitoring.tftest.hcl`;
@@ -791,11 +804,13 @@ Then, in each: `git push -u origin hub-conventions && gh pr create --title "<its
 
 **Interfaces:**
 - Produces, in both stacks, `variable "config_path"` with a validation:
-  - condition: `var.config_path != null || length(fileset("/etc/jaws/config", "*.yaml")) > 0`;
+  - condition: `var.config_path != null || local.in_image` (Terraform 1.14 lets a validation read a local);
   - error_message: "No configuration: run in a platform's image, which holds /etc/jaws/config, or pass config_path (a caller's JAWS_CONFIG, as TF_VAR_config_path).";
   - `local.config_path = var.config_path != null ? var.config_path : local.image_config_path`. The fallback to the repository's `config/` goes.
 - Produces: the foundation's tests read the datasets fixture `../tests/fixtures/datasets` (its `README.md` and `braveheart-selfplay/positions.yaml`), not the repository's `datasets/`.
 - Produces, in `tests/test_release_infra.py`, checks of `release-infra/` against itself and GitHub, never `config/` (ruling 11).
+
+- [ ] **Step 0: Branch:** `git fetch origin && git switch -c hub-split/07-cleanup origin/main`
 
 - [ ] **Step 1: Write the failing tests**
   - **Both stacks:** replace the runs that read the repository's `config/` on purpose, `reads_its_configuration_and_datasets_from_the_repository_outside_the_image` and `reads_its_configuration_from_the_repository_outside_the_image`, with:
@@ -839,26 +854,28 @@ Run: `(cd foundation && terraform init -backend=false >/dev/null && terraform te
 Expected: FAIL. Neither stack validates `config_path`, `conftest.py` and `tests/platform/` read `config/`, and the release-infra checks don't exist yet.
 
 - [ ] **Step 3: Implement** the validation and the local in both stacks, delete `tests/platform/`, and drop `PLATFORM_CONFIG_DIR`. Then regenerate the foundation's fixtures with `uv run python -m tests.test_foundation_fixtures`.
-  - If `stops_without_a_configuration` reports errors besides the validation's, from locals that read the empty configuration, wrap the first such locals in `try()` until the validation's error is the only one.
+  - Make the configuration's locals an empty document unless `var.config_path != null || local.in_image`, rather than wrapping them in `try()`.
 
-- [ ] **Step 4: Run them and watch them pass, then run the suite with no configuration at all**
+- [ ] **Step 4: Run them and watch them pass**
 
 ```bash
 (cd foundation && terraform test) && (cd monitoring && terraform test)
 uv run pytest -q -o addopts=""
-work=$(mktemp -d) && git worktree add --detach "$work" HEAD >/dev/null
-for dir in config datasets; do rm -rf "${work:?}/$dir"; done
-(cd "$work" && uv run pytest -q -o addopts="" | tail -1); git worktree remove --force "$work"
 ```
 
-Expected: both stacks' tests pass, and both pytest runs end with `N passed`.
+Expected: both stacks' tests pass, and the pytest run ends with `N passed`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Commit, then run the suite with no configuration at all**
 
 ```bash
 git add -A tests foundation monitoring AGENTS.md
 git commit -m "test(cli): run the product's tests without any of the owner's configuration"
+work=$(mktemp -d -p <scratch>) && git worktree add --detach "$work" HEAD >/dev/null
+for dir in config datasets; do rm -rf "${work:?}/$dir"; done
+(cd "$work" && uv run pytest -q -o addopts="" | tail -1); git worktree remove --force "$work"
 ```
+
+Expected: the run in the worktree ends with `N passed`.
 
 ---
 
@@ -870,7 +887,7 @@ git commit -m "test(cli): run the product's tests without any of the owner's con
   - `.github/actions/jaws/action.yml`;
   - `Dockerfile`, and `.github/workflows/ci.yml`'s `image` job;
   - `release-please-config.json`;
-  - `docs/platform-workflows.md` ("Two modes"), `README.md` ("Reusable workflows for site repositories", "Jaws's public image"), the caller sections of `docs/remote-tasks.md` and `docs/lichess-bot.md`, and `AGENTS.md` ("Version literals are Release Please's").
+  - `docs/platform-workflows.md` ("Project-facing workflows": the mode without a platform image goes), `README.md` ("Reusable workflows for site repositories", "Jaws's public image"), the caller sections of `docs/remote-tasks.md` and `docs/lichess-bot.md`, `AGENTS.md` ("Version literals are Release Please's") and `CONTRIBUTING.md` ("Releases", item 1).
 - Test: `tests/test_site_workflows.py`, `tests/test_remote_task_workflow.py`, `tests/test_container_release_workflow.py`, `tests/test_jaws_action.py`, `tests/test_cli_image.py`, `tests/test_versions.py`, `tests/test_bots_registry.py`
 
 **Interfaces:**
@@ -887,7 +904,7 @@ git commit -m "test(cli): run the product's tests without any of the owner's con
 
 - [ ] **Step 1: Write the failing tests**
   - `test_each_project_facing_workflow_needs_the_platform_s_identity`, over the five workflows: each of `platform-image`, `account-id` and `name-root` is `{"required": True, "type": "string"}`, plus its description, with no `default`.
-  - `test_the_role_always_comes_from_the_identity`, over the same five: no step's `if` names `platform-image`, `account-id`, `name-root` or `steps.role.outputs.arn`, and no step runs `config env`.
+  - `test_the_role_always_comes_from_the_identity`, over the same five: no step's `if` names `platform-image`, `account-id`, `name-root`, `steps.role.outputs.arn` or `steps.platform.outputs.arn`, and no step runs `config env`.
   - `test_the_jaws_action_runs_only_a_given_image`:
     - the action's inputs are exactly the seven above, and `image` is required;
     - no step uses `configure-aws-credentials` or `amazon-ecr-login`;
@@ -898,6 +915,7 @@ git commit -m "test(cli): run the product's tests without any of the owner's con
     - `test_without_a_platform_image_a_site_job_runs_as_today`, `test_without_a_platform_image_a_task_runs_as_today` and `test_without_a_platform_image_a_release_runs_as_today`;
     - `test_without_an_image_the_action_runs_as_today`, `test_the_action_needs_a_role_or_an_image`, and `tests/test_jaws_action.py`'s tests of the configuration it read;
     - `test_action_yml_uses_the_generic_updater`, and `tests/test_cli_image.py`'s tests of the `jaws-cli` stage.
+  - **Change the tests of plan 05 that spell today's mode:** `test_each_site_workflow_takes_the_platform_s_identity` and `test_it_takes_the_platform_s_identity` expect `required: True` and no default. `test_in_a_hub_the_role_comes_from_the_identity` and `test_in_a_hub_the_release_role_comes_from_the_platform_s_identity` expect no `if` and no `role` step in `container-release.yml`. `test_runs_the_cli_from_this_workflow_commit` expects `JAWS_TOOL_CONFIG: .jaws-platform/config`. `test_in_a_hub_the_task_role_comes_from_the_platform_s_identity` expects no `config env`.
 
 - [ ] **Step 2: Run them and watch them fail**
 
@@ -921,7 +939,7 @@ Expected: PASS, then `no configuration inside`.
 ```bash
 git add .github/workflows/site-plan.yml .github/workflows/site-preview.yml .github/workflows/site-deploy.yml \
   .github/workflows/remote-task.yml .github/workflows/container-release.yml .github/actions/jaws \
-  release-please-config.json docs README.md AGENTS.md tests/test_site_workflows.py \
+  release-please-config.json docs README.md AGENTS.md CONTRIBUTING.md tests/test_site_workflows.py \
   tests/test_remote_task_workflow.py tests/test_container_release_workflow.py tests/test_jaws_action.py \
   tests/test_versions.py tests/test_bots_registry.py
 git commit -m "refactor(workflows)!: run the project-facing workflows only from a platform's image"
@@ -938,8 +956,9 @@ git commit -m "refactor(cli)!: build only the generic image"
   - `src/jaws/settings.py`: `EcrSection.repository`, and the check that the hub's image isn't `ecr.repository`'s;
   - `src/jaws/cli.py`: `config env`;
   - `foundation/ecr.tf`, and `foundation/oidc.tf`'s preconditions;
+  - `foundation/outputs.tf`: `sites_image_repository_url` is `one(module.sites_image[*].url)`, null without `ecr.repository`;
   - `README.md`: the `ecr.tf` row, and the `tool.yaml` row of the configuration table.
-- Test: `tests/test_settings.py`, `tests/test_one_account.py`, `tests/test_platform_stacks.py`, `foundation/tests/foundation.tftest.hcl`, and `tests/test_foundation_fixtures.py` for two fixtures
+- Test: `tests/test_settings.py`, `tests/test_one_account.py` (whose existing `ecr_repository=jaws-cli` expectation goes), `tests/test_platform_stacks.py`, `foundation/tests/foundation.tftest.hcl`, and `tests/test_foundation_fixtures.py` for two fixtures
 - Regenerate: `foundation/tests/fixtures/*.yaml`
 
 **Interfaces:**
@@ -989,7 +1008,7 @@ git commit -m "feat(foundation): make the cli image's repository optional, so a 
 
 ### Task 12: The owner's platform leaves `jaws`
 
-> **Reviews:** the deletion commit is sealed, and so is the hub's README commit.
+> **Reviews:** three commits are sealed: the deletion commit; the `README.md` commit, whose removed lines spell the account ID (the intro and `Accounts`); and the hub's README commit, whose added lines do.
 
 **Files:**
 - Delete, in one sealed commit:
@@ -1004,8 +1023,10 @@ git commit -m "feat(foundation): make the cli image's repository optional, so a 
   - `scripts/apply-repo-settings.sh`: two checks go;
   - `.dockerignore`: `owner-access` goes;
   - the tests that list those roots: `tests/test_versions.py`, `tests/test_hooks.py`, `tests/test_monitoring_workflows.py`, `tests/test_cli_image.py`;
-  - `AGENTS.md`: the owner's folders, their checklist line, and the configuration paragraph;
+  - `AGENTS.md`: the owner's folders, and their names in the module-pins rule and in "Things that need the owner"; their checklist line; and the configuration paragraph;
+  - the comments that name the removed folders, scripts or docs: `src/jaws/product.yaml`, `src/jaws/access.py`, `src/jaws/settings.py` and `foundation/state.tf`;
   - `README.md`: ruling 9's moves, and the product's own intro, "Layout", "Accounts" and "Owner hand-off".
+  - the links to the deleted docs and folders in `docs/costs.md`, `docs/databricks.md`, `docs/datasets.md`, `docs/lichess-bot.md`, `docs/monitoring.md` and README's "Bot projects". Each says "the platform's runbook, in its hub", without a link: a link to the hub would add the brand Task 13 refuses.
 - Modify, in the hub (branch `from-jaws`, its own PR): `README.md`
 - Create: `tests/test_product_tree.py`, and `tests/test_ci_roles.py`, which keeps spec 2's anti-goal in the product once the two tests it names are gone: "Any CI role gaining Identity Center or management-account access"
 
@@ -1018,7 +1039,7 @@ git commit -m "feat(foundation): make the cli image's repository optional, so a 
 - Produces `jaws`'s README sections for the product:
   - the intro: what Jaws provisions, for a platform its hub configures, and what this repository ships;
   - "Accounts": the `aws` section, with the fixture's values;
-  - "Layout": no `config/`, `datasets/` or owner rows;
+  - "Layout": no `config/`, `datasets/` or owner rows. "The tool configuration" stays, as what a platform's `config/` holds, with the fixture's values;
   - "Owner hand-off": the vendor's own steps only: the release bot, `publish`, `release-infra/`, the alias, the variables, and `JAWS_PUBLIC_IMAGE_KEEP` at v1.
 
 - [ ] **Step 1: Write the failing test** in `tests/test_product_tree.py`
@@ -1061,7 +1082,7 @@ perl -ne '$n++ while /\]\((?!https?:\/\/)/g; END { print $n + 0, " relative link
 Expected: `4` sections, then `0 relative links`. Then append them to the hub's README, under a heading and one sentence, printing only counts:
 
 ```bash
-git -C "$hub" switch -c from-jaws origin/main
+git -C "$hub" fetch origin && git -C "$hub" switch -c from-jaws origin/main
 { printf "\n## The platform's setup, from jaws\n\nThese sections came from jaws's README at the split, and are the platform's to reword.\n\n"
   cat <scratch>/moved.md; } >> "$hub/README.md"
 git -C "$hub" diff --shortstat
@@ -1079,7 +1100,7 @@ The owner reads the moved prose in that PR.
 git rm -r -q config datasets owner-access billing-export foundation/backend monitoring/backend data-access/backend
 git rm -q docs/owner-access.md docs/billing-export.md docs/consumer-note.md
 git commit -m "chore(repo)!: take the owner's configuration, datasets and folders out of jaws"
-git show --shortstat --format= HEAD
+git diff --shortstat HEAD^ HEAD
 ```
 
 - [ ] **Step 5: Make the rest** per the Files and Interfaces: the scopes, the checks, the CI jobs and hooks, the tests' root lists, `AGENTS.md`, and `README.md`'s product sections. Read `README.md` through the mask.
@@ -1112,6 +1133,7 @@ git commit -m "docs(repo): describe jaws as the product, and leave the owner's s
   - `pyproject.toml`: its description, which the public image's package metadata carries;
   - `.github/workflows/release-please.yml`: a comment;
   - `tests/test_settings.py`, `tests/conftest.py`, `tests/test_stack.py`, `tests/test_repository_name.py`.
+  - `monitoring/tests/monitoring.tftest.hcl` and `tests/fixtures/errors/AWS-ASSUME-ROLE-PROPAGATION--sts-assume-role.txt`: their sample account IDs become `333333333333`;
 
 **Interfaces:**
 - Produces `def owner_value_problems(path: str, text: str) -> list[str]` in `tests/test_no_owner_values.py`. It returns one `"<rule>: <count>"` entry per rule that finds anything, never the value. The rules (ruling 8):
@@ -1127,9 +1149,9 @@ EXEMPT = ("release-infra/", "CHANGELOG.md", "uv.lock", "package-lock.json")
 BRAND_ALLOWED = ("docs/superpowers/", ".github/CODEOWNERS", "tests/test_no_owner_values.py")
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
 ACCOUNT_ID = re.compile(r"(?<![0-9A-Za-z])[0-9]{12}(?![0-9A-Za-z])")
-#: The examples the tests and docs use, and Databricks's own AWS account (its Unity Catalog role).
+#: The examples the tests and docs use, `000000000000`, the SDK for pandas layer's account (AWS's own, as the 2026-11-21 monitoring record spells it; copy it into the set from there), and Databricks's own AWS account (its Unity Catalog role).
 NEUTRAL_ACCOUNTS = frozenset(
-    {"111111111111", "222222222222", "333333333333", "123456789012", "111122223333", "414351767826"}
+    {"000000000000", "111111111111", "222222222222", "333333333333", "123456789012", "111122223333", "414351767826"}
 )
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}")
 PLACEHOLDER_EMAIL = re.compile(r"(?i).+@(example\.(com|org|net)|[\w.-]+\.test)")
@@ -1161,7 +1183,7 @@ def test_no_product_file_holds_an_owner_value(path: str) -> None:
 - [ ] **Step 2: Run them and watch them fail**
 
 Run: `uv run pytest -q -o addopts="" tests/test_no_owner_values.py`
-Expected: the first test FAILs with a `NameError`. Once `owner_value_problems` exists, the second fails on each file the Files list, naming the file and its counts.
+Expected: a collection error (`NameError`) until `owner_value_problems` and `_files` exist. Then the second test fails on each file the Files list names.
 
 - [ ] **Step 3: Replace each value** by counted substitution, and reword by hand the few sentences that no longer read:
 
@@ -1181,7 +1203,7 @@ Expected: the first test FAILs with a `NameError`. Once `owner_value_problems` e
 The account IDs' substitution, run on the files Step 2 names, leaves the neutral values, UUIDs and longer runs alone:
 
 ```bash
-perl -pi -e 's/(?<![0-9A-Za-z])(?<![0-9a-fA-F]{4}-)(?!(?:111111111111|222222222222|333333333333|123456789012|111122223333|414351767826)(?![0-9]))[0-9]{12}(?![0-9A-Za-z])/<account-id>/g' <files>
+perl -pi -e 's/(?<![0-9A-Za-z])(?<![0-9a-fA-F]{4}-)(?!(?:000000000000|111111111111|222222222222|333333333333|123456789012|111122223333|414351767826)(?![0-9]))[0-9]{12}(?![0-9A-Za-z])/<account-id>/g' <files>
 ```
 
 If the privacy hook refuses an edit to `tests/conftest.py`, hand that edit to the owner.
@@ -1194,7 +1216,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit.** The replacements' commit is sealed.
 
 ```bash
-git add README.md AGENTS.md CONTRIBUTING.md docs pyproject.toml .github/workflows/release-please.yml
+git add README.md AGENTS.md CONTRIBUTING.md docs pyproject.toml .github/workflows/release-please.yml monitoring/tests/monitoring.tftest.hcl tests/fixtures/errors
 git commit -m "docs(repo): replace the owner's account ids and names with neutral ones"
 git add tests
 git commit -m "test(cli): fail on any value of a platform's owner in the product's files"
@@ -1246,11 +1268,13 @@ Expected CI: every check passes. No platform plan runs in `jaws` any more (rulin
 - Consumes `JAWS_SOURCE`, `PLATFORM_CONFIG_DIR` and `owner_values` (plan 06, Task 3).
 - Produces the exact half of ruling 8: spec 2's goal 1, checked with the hub's own values against the release it runs. `jaws`'s guard holds only patterns (Task 13).
 
+- [ ] **Step 0: Branch:** `git fetch origin && git switch -c pinned-release-check origin/main`
+
 - [ ] **Step 1: Write the failing test.** It fails until the hub pins the cleanup release.
 
 ```python
-#: The release's history, its design records, Jaws's own release infrastructure, generated files.
-EXEMPT = ("release-infra/", "CHANGELOG.md", "docs/superpowers/", "uv.lock", "package-lock.json")
+#: The release's history, its design records, the maintainer's login (ruling 8), Jaws's own release infrastructure, generated files.
+EXEMPT = ("release-infra/", "CHANGELOG.md", "docs/superpowers/", ".github/CODEOWNERS", "uv.lock", "package-lock.json")
 
 
 def _release_files() -> list[str]:
@@ -1277,6 +1301,8 @@ def test_the_pinned_jaws_release_holds_no_owner_value() -> None:
 ```
 
 Also `test_the_pinned_jaws_release_holds_no_configuration`: `not (JAWS_SOURCE / "config").exists()`.
+
+Also `test_the_pinned_release_s_fixture_has_every_section_the_platform_uses`: every section of the hub's `config/` is in `JAWS_SOURCE / "tests/fixtures/platform"`.
 
 - [ ] **Step 2: Run it against the release before the cleanup, and watch it fail**
 
@@ -1316,6 +1342,8 @@ gh pr create --title "test(repo): check that the jaws release the hub pins holds
   - the roles of spec 6.6 trust only the hub;
   - the `Repository` tag, the zone's comment and the roles' descriptions name the hub (plan 03, ruling 2).
 
+- [ ] **Step 0: Branch:** `git fetch origin && git switch -c retire-jaws-trust origin/main`
+
 - [ ] **Step 1: Write the failing tests**
   - `test_the_hub_is_this_repository_and_trusted_second` becomes `test_the_hub_is_this_repository_and_the_only_one_trusted`: `[r.repository for r in platform.repositories] == ["JWall-Engineering/platform"]`.
   - `test_the_hub_s_ids_are_this_repository_s` reads the first entry.
@@ -1338,7 +1366,7 @@ gh pr create --title "feat(config): stop trusting jaws's workflows now that the 
 ```
 
 Expected:
-- `Terraform plan` and `Monitoring plan`: `0 to add`, `0 to destroy`, only `updated in-place`;
+- `Terraform plan` and `Monitoring plan`: `0 to add`, `0 to destroy`, only `updated in-place`, and, if the cleanup release hasn't been released yet, the `moved:` lines for `module.sites_image`;
 - `plan_attributes` lists only `assume_role_policy`, `description`, `comment`, `tags` and `tags_all`, with the node's `public_ip` output in hours;
 - every other plan reads `No changes.`
 
@@ -1382,6 +1410,6 @@ gh pr create --title "feat(config): retire the jaws-cli image repository" --body
 Expected `Terraform plan`:
 - destroyed, exactly: `module.sites_image[0].aws_ecr_lifecycle_policy.this`, `module.sites_image[0].aws_ecr_repository.this`, and the IAM policies and attachments keyed `ecr/pull-2` and `ecr/push-2`;
 - updated in place: the policies `ecr/pull` and `ecr/push`, and `plan_attributes` lists only `policy`;
-- nothing created, and nothing replaced.
+- nothing created, and nothing replaced, and `Changes to Outputs:` for `sites_image_repository_url` alone.
 
 Every other plan reads `No changes.` The owner then merges and releases (O12).
