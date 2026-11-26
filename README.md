@@ -389,7 +389,7 @@ files](#the-tool-configuration-config)).
 | `oidc.tf` | GitHub OIDC provider (data source; created outside this stack, by hand at bootstrap in a new account and in this account by prog-strength-infra: see the TODO(owner) there; destroying that stack removes the provider every CI role trusts) |
 | `dns.tf` | The hosted zone, its CAA record and the zone owner's TXT records (`hosted-zone` module) |
 | `ci-roles.tf` | This repo's own plan and apply roles (`ci-plan-role` and `ci-apply-role` modules) |
-| `ecr.tf` | The ECR repositories for the infra CLI image (`ecr` in `config/tool.yaml`) and, with a hub, for the hub image (`platform.hub.image`), and who pulls and pushes them |
+| `ecr.tf` | The ECR repositories for the infra CLI image (`ecr` in `config/tool.yaml`) and, with a hub, for the hub image (`platform.hub.image`), the hub image's builds (`sha-<commit>`, the newest ten kept) and `current`, and who pulls and pushes them |
 | `config/` (root) | Tool configuration for the infra CLI and the foundation stack: the account registry, every onboarded project with its central guardrails, state bucket, DNS zone, ECR lifecycle, the bot and task runtimes and Databricks ([its files](#the-tool-configuration-config)) |
 | `src/jaws/`, `tests/`, `pyproject.toml` | The infra CLI, its tests and its `uv` project |
 | `stacks/site/` | The site stack the CLI renders for each site, pinned to the static-site module family like any consumer |

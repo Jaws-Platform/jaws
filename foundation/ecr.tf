@@ -57,6 +57,12 @@ module "hub_image" {
 
   name = local.hub.image
 
+  # Each release build is sha-<commit>, never moved; current is the live build.
+  # It moves, and the lifecycle never expires it. Ten builds are kept for rollback.
+  mutable_tags         = ["current"]
+  release_tag_prefixes = ["sha-"]
+  keep_release_images  = 10
+
   depends_on = [module.infra_ci_apply]
 }
 

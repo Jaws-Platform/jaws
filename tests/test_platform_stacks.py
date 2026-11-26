@@ -16,6 +16,7 @@ import pytest
 
 from jaws.settings import IMAGE_CONFIG_PATH
 from tests.conftest import REPO_ROOT
+from tests.test_bots_registry import _module
 
 
 @pytest.mark.parametrize("stack", ["foundation", "monitoring"])
@@ -43,3 +44,11 @@ def test_data_access_reads_only_what_the_cli_renders() -> None:
         assert not any(word in text for word in ("yamldecode", "../config", "../datasets")), (
             path.name
         )
+
+
+def test_the_hub_image_keeps_ten_builds_and_lets_only_current_move() -> None:
+    """Each release pushes sha-<commit>; current names the live build (spec 6.3)."""
+    block = _module("hub_image", REPO_ROOT / "foundation" / "ecr.tf")
+    assert 'mutable_tags         = ["current"]' in block
+    assert 'release_tag_prefixes = ["sha-"]' in block
+    assert "keep_release_images  = 10" in block
