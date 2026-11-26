@@ -177,10 +177,9 @@ A job's check name is `<caller job> / <check-prefix> <job>`: `jaws plan`,
 `jaws preview deploy`, `jaws preview remove` and `jaws release` by default, so a
 project that requires `plan / jaws plan` is unchanged. A project that calls a
 hub's copy has one more level: its own job's name, then the hub's caller's, then
-the prefix and the job, for example `plan / plan / example plan` for the caller above.
-For plans 06 and 07:
-a project's required checks must name that longer form when it switches to the
-hub.
+the prefix and the job, for example `plan / plan / example plan` for the caller
+above. So when a project switches to calling the hub, its required checks must
+name that longer form.
 
 ## The hub's pull requests
 
@@ -581,8 +580,8 @@ project, `bot-apply-<project>` and `databricks-apply-<project>`, and never
 cancels a run in progress.
 
 The sweep runs from `main` only, and its runs queue in `data-access-sweep`
-without cancelling one another. The hub's sweep starts when `jaws`'s own
-stops (plan 07), so exactly one runs.
+without cancelling one another. When a platform moves its sweep to its hub, it
+stops the old one first, so exactly one runs.
 
 A hub's caller, with placeholder values:
 
@@ -640,7 +639,7 @@ outside ECR Public, or a registry error, stops the job.
 A newer release is committed on the branch `jaws-upgrade`, as the App's bot,
 `<app-slug>[bot]`, with the message `chore(deps): upgrade jaws to <tag>`. The
 commit holds the bumped files only. It never holds the tool's checkout,
-`.jaws-tool/`, even in a hub whose `.gitignore` leaves it out. The job then
+`.jaws-tool/`, even in a hub whose `.gitignore` doesn't list it. The job then
 opens the pull request against `main`, or updates the open one. Its title is
 the commit's, and its body names both releases and links Jaws's changes
 between them, `https://github.com/Jaws-Platform/jaws/compare/<pin>...<tag>`.
@@ -697,10 +696,8 @@ The writes are the upgrade App's, never `GITHUB_TOKEN`'s. A push that changes
 never has, and a pull request that `GITHUB_TOKEN` opens runs no CI. So the job
 mints the App's token with no fallback, and stops without it. The App has
 *Contents: read and write*, *Pull requests: read and write* and *Workflows:
-read and write*, and is installed on the hub only (ruling 12). For the owner's
-hub it is **JWall Engineering Upgrades** (`jwall-engineering-upgrades`): one
-App for this purpose, rather than *Workflows* added to an App installed on
-every repository.
+read and write*: one App for this purpose, installed on the hub only (ruling
+12), rather than *Workflows* added to an App installed on every repository.
 
 ### The caller
 

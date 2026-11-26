@@ -226,7 +226,7 @@ jobs:
           git switch -C jaws-upgrade
           # Only the files rewrite bumped, the Dockerfile and the workflows: never git add -A,
           # which would commit the tool's checkout, .jaws-tool/, in a hub whose .gitignore
-          # leaves it out.
+          # doesn't list it.
           git add --update -- Dockerfile .github/workflows
           GIT_AUTHOR_NAME="$bot" GIT_AUTHOR_EMAIL="$email" GIT_COMMITTER_NAME="$bot" GIT_COMMITTER_EMAIL="$email" \
             git commit --message "$message"

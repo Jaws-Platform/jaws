@@ -2,8 +2,8 @@ name: Platform sweep
 
 # Reusable: the data-access reconcile (platform apply data-access), run with the hub's image.
 # It binds and grants each agreed handshake on every onboarded dataset, and plans first and
-# applies exactly what its plan found. The hub's caller holds the schedule and the dispatch,
-# and the sweep starts when jaws's own stops (plan 07), so exactly one runs.
+# applies exactly what its plan found. The hub's caller holds the schedule and the dispatch.
+# When a platform moves its sweep to its hub, it stops the old one first, so exactly one runs.
 #
 # It runs the build the hub image's current tag names (spec 6.4), as the data-access apply
 # role, from main only: the prod environment deploys only from there, so a run from any other

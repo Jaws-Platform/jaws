@@ -555,7 +555,7 @@ def test_the_rewrite_fails_unless_it_bumps_the_dockerfile_and_a_workflow(
 @needs_jq
 def test_the_upgrade_commits_only_what_it_bumped(tmp_path: Path) -> None:
     """P5-R31: the tool's checkout is in the hub's workspace, at .jaws-tool/, and a hub's
-    .gitignore may leave it out. The commit holds the files `rewrite` bumped, never what
+    .gitignore may not list it. The commit holds the files `rewrite` bumped, never what
     `git add -A` would add."""
     repo = _bumped(tmp_path)
     untracked = [".jaws-tool/.github/actions/platform-base/action.yml", ".github/workflows/x.yml"]
