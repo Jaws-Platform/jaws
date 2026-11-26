@@ -16,6 +16,7 @@ job's outputs run here as Actions runs them, with stand-ins for `aws`, `gh`, `do
 
 from __future__ import annotations
 
+import itertools
 import json
 import re
 import subprocess
@@ -46,7 +47,13 @@ ECR_LOGIN = "aws-actions/amazon-ecr-login"
 APP_TOKEN = "actions/create-github-app-token"
 
 #: The jobs of a release that change something, in the order they run.
-CHANGING = ["image", "apply", "monitoring-apply", "current", "live"]
+CHANGING = ["image", "apply", "current", "live", "monitoring-apply"]
+#: monitoring-apply's condition: after the moves, whatever they did, once the foundation's
+#: apply has succeeded and the build's configuration has a monitoring section.
+AFTER_THE_MOVES = (
+    "${{ !cancelled() && needs.apply.result == 'success' && "
+    "needs.image.outputs.monitoring == 'configured' }}"
+)
 RELEASED = "needs.release-please.outputs.release_created == 'true'"
 #: The build and the release commit the later jobs of a release read from the image job.
 BUILD_DIGEST = "${{ needs.image.outputs.digest }}"
@@ -301,16 +308,49 @@ NAMES = {
 def test_nothing_moves_without_a_release() -> None:
     """Each job that changes something runs only after a release: it, or a job it needs,
     holds Release Please's `release_created`, and none of them runs once a job it needs is
-    skipped."""
+    skipped. The one exception, `!cancelled()`, comes with the foundation's successful apply,
+    which only the release's build can have."""
     for name in CHANGING:
         conditions = _conditions(RELEASE, name)
         assert RELEASED in conditions, name
         for condition in conditions:
-            assert not re.search(r"\b(always|cancelled|failure)\(", condition), (
-                f"{name}: {condition}"
-            )
+            assert not re.search(r"\b(always|failure)\(", condition), f"{name}: {condition}"
+            if re.search(r"\bcancelled\(", condition):
+                assert condition.count("cancelled(") == condition.count("!cancelled()"), (
+                    f"{name}: {condition}"
+                )
+                assert "needs.apply.result == 'success'" in condition, f"{name}: {condition}"
     assert job(RELEASE, "image")["if"] == RELEASED
     assert job(RELEASE, "release-please")["if"] == "github.event_name == 'push'"
+
+
+def _requires(workflow: str, name: str) -> set[str]:
+    """Every job `name` needs, directly or through the jobs it needs."""
+    found: set[str] = set()
+    for need in _needs(job(workflow, name)):
+        found |= {need, *_requires(workflow, need)}
+    return found
+
+
+def test_no_two_jobs_of_a_release_compete_for_the_group() -> None:
+    """GitHub runs one job of a group at a time and keeps one pending: two of one release's
+    jobs ready together would wait on each other, and a third could cancel one. So each pair
+    of the release's jobs in the group is ordered by its needs."""
+    holding = [name for name, spec in _jobs(RELEASE).items() if spec.get("concurrency") == GROUP]
+    assert holding == CHANGING
+    for first, second in itertools.combinations(holding, 2):
+        assert first in _requires(RELEASE, second), f"{second} doesn't wait for {first}"
+
+
+def test_monitoring_is_applied_after_the_moves_whatever_they_did() -> None:
+    """current and live never wait for monitoring (ruling 7). Monitoring runs after them, once
+    the foundation's apply has succeeded, even when a move failed: a failed move doesn't hold
+    it back, and a failed monitoring apply holds back nothing."""
+    monitoring = job(RELEASE, "monitoring-apply")
+    assert _needs(monitoring) == ["image", "apply", "live"]
+    assert monitoring["if"] == AFTER_THE_MOVES
+    assert "monitoring-apply" not in _requires(RELEASE, "live")
+    assert "monitoring-apply" not in _requires(RELEASE, "current")
 
 
 def test_current_moves_only_after_the_foundation_s_apply() -> None:
@@ -698,9 +738,9 @@ def test_monitoring_is_applied_once_the_build_s_configuration_has_it(
     written = dict(line.split("=", 1) for line in ran.output.splitlines())
     assert written["monitoring"] == "configured"
     assert job(RELEASE, "image")["outputs"]["monitoring"] == "${{ steps.env.outputs.monitoring }}"
-    monitoring = job(RELEASE, "monitoring-apply")
-    assert monitoring["if"] == "needs.image.outputs.monitoring == 'configured'"
-    assert _needs(monitoring) == ["image", "apply"]
+    condition = job(RELEASE, "monitoring-apply")["if"]
+    assert "needs.image.outputs.monitoring == 'configured'" in condition
+    assert "image" in _needs(job(RELEASE, "monitoring-apply"))
 
 
 # -- the applies ----------------------------------------------------------------------
@@ -1018,24 +1058,31 @@ def test_a_rollback_moves_current_and_live_to_a_kept_build(tmp_path: Path, statu
         "REPOSITORY": "${{ inputs.platform-image }}",
         "GH_TOKEN": "${{ github.token }}",
     }
-    current, live = _using(ROLLBACK, "rollback", MOVE)
-    assert current["with"] == {
-        "move": "current",
-        "repository": "${{ inputs.platform-image }}",
-        "digest": "${{ steps.check.outputs.digest }}",
-        "commit": "${{ inputs.commit }}",
-    }
-    token = _by_id(ROLLBACK, "rollback", "live-token")
+    live, current = _using(ROLLBACK, "rollback", MOVE)
     assert live["with"] == {
         "move": "live",
         "commit": "${{ inputs.commit }}",
         "token": LIVE_TOKEN,
         "force": "true",
     }
+    assert current["with"] == {
+        "move": "current",
+        "repository": "${{ inputs.platform-image }}",
+        "digest": "${{ steps.check.outputs.digest }}",
+        "commit": "${{ inputs.commit }}",
+    }
+    # live back first, then current (ruling 7's invariant, moving backward): in between, a
+    # project runs the newer build with the older workflow files, never the reverse. And the
+    # mover App's token comes before either move, so a token that can't be minted moves
+    # nothing.
+    token = _by_id(ROLLBACK, "rollback", "live-token")
+    assert _position(ROLLBACK, "rollback", token) < min(
+        _position(ROLLBACK, "rollback", move) for move in (live, current)
+    ), "the token before either move"
     order = [
-        _position(ROLLBACK, "rollback", s) for s in (role, credentials, check, current, token, live)
+        _position(ROLLBACK, "rollback", s) for s in (role, credentials, check, token, live, current)
     ]
-    assert order == sorted(order), "the check, current, then live"
+    assert order == sorted(order), "the check, the token, live, then current"
     for action in (IMAGE, BUILD, JAWS):
         assert not _using(ROLLBACK, "rollback", action), f"a rollback applies nothing: {action}"
 

@@ -335,9 +335,9 @@ where `<tag>` is the release's tag:
 | `release-please` | `Release Please` | | opens or updates the release PR with the release App's token, and releases when it merges |
 | `image` | `Build the platform image (<tag>)` | `release-please` | builds the release commit and pushes it as `sha-<commit>`, as the `infra` apply role |
 | `apply` | `Terraform apply (<tag>)` | `image` | applies the foundation with that build, as the `infra` apply role |
-| `monitoring-apply` | `Monitoring apply (<tag>)` | `image`, `apply` | applies monitoring with it, once the configuration has a monitoring section, as the `monitoring` apply role |
 | `current` | `Move current to <tag>` | `image`, `apply` | moves the hub image's `current` tag to the build, as the `infra` apply role |
 | `live` | `Move live to <tag>` | `image`, `current` | moves the `live` branch to the release commit, with the mover App's token |
+| `monitoring-apply` | `Monitoring apply (<tag>)` | `image`, `apply`, `live` | applies monitoring with the build, after the moves, once the configuration has a monitoring section, as the `monitoring` apply role |
 
 Every job but `release-please` and `live` runs in the hub's `prod`
 environment. `live` takes no AWS role, so it enters none.
@@ -368,12 +368,14 @@ its `commit` the same way.
 
 ### When `current` and `live` move
 
-`current` moves once the foundation's apply succeeds, without waiting for
+`current` moves once the foundation's apply succeeds, and never waits for
 monitoring's (ruling 7). The spec's reason for the timing is "the moment the
-foundation has created any roles the new configuration names", and a failed
-monitoring apply holds nothing else back, as it holds back nothing of `jaws`'s
-own release. A failed foundation apply moves nothing: `monitoring-apply`,
-`current` and `live` are skipped.
+foundation has created any roles the new configuration names". Monitoring is
+applied last, after `live`, once the foundation's apply has succeeded, whatever
+the moves did: a failed move doesn't hold it back, and a failed monitoring
+apply holds back nothing, as it holds back nothing of `jaws`'s own release. A
+failed foundation apply moves nothing: `current`, `live` and `monitoring-apply`
+are skipped.
 
 `current` moves first, then `live`. In the seconds between, a project runs the
 new build with the old workflow files, never the reverse. `platform-move`
@@ -423,11 +425,13 @@ skipped.
 
 The jobs that change something each hold the concurrency group
 `platform-release`, as the rollback's job does, and never cancel one in
-progress. GitHub keeps one pending job per group, though: when a release and a
-rollback, or two releases, overlap, a waiting job can be cancelled rather than
-failed. Re-run it the same way, or run the rollback again. A job holding the
-group also waits for the one in progress, so `current` can wait for
-`monitoring-apply` to finish, though never for it to succeed.
+progress. GitHub runs one job of a group at a time and keeps one pending, so
+two of one release's jobs ready together would wait on each other, and a third
+could cancel one. Their needs run them in turn instead: `image`, `apply`,
+`current`, `live`, then `monitoring-apply`. Across runs the group can still
+cancel: when a release and a rollback, or two releases, overlap, a waiting job
+can be cancelled rather than failed. Re-run it the same way, or run the
+rollback again.
 
 ### The caller
 
@@ -479,13 +483,21 @@ to go back to. Its one job, `rollback` (`Roll back to <commit>`), runs in `prod`
 as the `infra` apply role, and holds the `platform-release` group, so it never
 runs beside a release's job.
 
-It moves both, together (ruling 9):
+It moves both, together (ruling 9), so the hub's workflow files and its image
+stay at one Jaws release
+([spec 6.4](superpowers/specs/2026-11-22-hub-split-design.md#64-workflows):
+"the hub's workflow files and its image change together"):
 
-- `current`, to that commit's kept build;
-- `live`, to the commit, by force, since it moves back. The hub's workflow files
-  and its image then stay at one Jaws release
-  ([spec 6.4](superpowers/specs/2026-11-22-hub-split-design.md#64-workflows):
-  "the hub's workflow files and its image change together").
+1. `live`, to the commit, by force, since it moves back;
+2. then `current`, to that commit's kept build.
+
+That is ruling 7's order for a move backward. In the seconds between, a
+project runs the newer build with the older workflow files, never an older
+build with newer workflow files. The job mints the mover App's token before
+either move. So a key or client ID that's wrong, an App that isn't installed,
+or a ruleset that refuses the App stops the job before `current` moves.
+Whatever stops it after `live` has moved leaves that same safe pair: run the
+rollback again.
 
 It applies nothing. The foundation and monitoring stay as the release being
 rolled back applied them. The runs that take `current`, such as the sweep and

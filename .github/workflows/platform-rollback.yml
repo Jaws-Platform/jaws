@@ -6,9 +6,17 @@ name: Platform rollback
 #
 #   check    the commit is a full SHA, on main, and its build is still kept: the hub image
 #            keeps the newest ten sha- builds.
+#   live     mints the mover App's token, then moves the live branch to the commit, by
+#            force, so the hub's workflow files and its image stay at one Jaws release
+#            (ruling 9).
 #   current  moves the hub image's current tag to that build.
-#   live     moves the live branch to the commit, by force, with the mover App's token, so
-#            the hub's workflow files and its image stay at one Jaws release (ruling 9).
+#
+# live moves back first, then current: ruling 7's invariant, for a move backward. In the
+# seconds between, a project runs the newer build with the older workflow files, never an
+# older build with newer workflow files. The token comes before either move, so a token
+# that can't be minted, an App that isn't installed, or a ruleset that refuses the App stops
+# the job before current moves. Whatever stops it after live moves leaves that same safe
+# pair: run the rollback again.
 #
 # It applies nothing: the foundation and monitoring stay as the last release applied them.
 # The runs that take current, the sweep and the by-hand applies among them, run the older
@@ -136,14 +144,8 @@ jobs:
           digest=$(jq -r '.images[0].imageId.imageDigest' <<<"$found")
           echo "$COMMIT is on main, and its build is $REPOSITORY@$digest"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
-      - name: Move current to the commit's build
-        id: current
-        uses: ./.jaws-tool/.github/actions/platform-move
-        with:
-          move: current
-          repository: ${{ inputs.platform-image }}
-          digest: ${{ steps.check.outputs.digest }}
-          commit: ${{ inputs.commit }}
+      # The mover App's token first, so a token that can't be minted moves nothing. Then live,
+      # then current: moving back, that is ruling 7's order.
       - name: Mint the mover App's token
         id: live-token
         uses: actions/create-github-app-token@v3
@@ -158,3 +160,11 @@ jobs:
           commit: ${{ inputs.commit }}
           token: ${{ steps.live-token.outputs.token }}
           force: "true"
+      - name: Move current to the commit's build
+        id: current
+        uses: ./.jaws-tool/.github/actions/platform-move
+        with:
+          move: current
+          repository: ${{ inputs.platform-image }}
+          digest: ${{ steps.check.outputs.digest }}
+          commit: ${{ inputs.commit }}
