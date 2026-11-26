@@ -21,6 +21,7 @@ import yaml
 from typer.testing import CliRunner, Result
 
 from jaws import cli
+from jaws.databricks_auth import load_secret as real_load_secret  # `_no_aws` patches the module's
 from jaws.platform import PlatformTerraform, platform_backend, platform_stack
 from jaws.settings import load_settings
 from tests.conftest import CONFIG_DIR
@@ -342,6 +343,50 @@ def test_no_credential_where_databricks_is_not_used(
     assert result.exit_code == 0, result.output
     assert not _no_aws.called
     assert "DATABRICKS_CLIENT_SECRET" not in _terraform_env(env_log)
+
+
+def test_a_secret_of_several_lines_is_refused_before_any_mask(
+    work: Path, fake_terraform: Path, monkeypatch: pytest.MonkeyPatch, _no_aws: MagicMock
+) -> None:
+    """A runner masks only the first line of an `::add-mask::`, so the rest of a secret of
+    several lines would print in the job log. It is refused before anything echoes it."""
+
+    class Stored:
+        def get_parameter(self, **kwargs: Any) -> Any:
+            return {"Parameter": {"Value": "first-half\nsecond-half"}}
+
+    def read(ssm: object, parameter: str) -> str:
+        return real_load_secret(Stored(), parameter)  # the real refusal, with no AWS
+
+    _no_aws.side_effect = read
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    with _as_role("jaws-infra-ci-plan"):
+        result = _platform(work, "plan", "foundation")
+    assert result.exit_code == 3, result.output
+    assert SECRET_PARAMETER in result.output
+    texts = {"console": result.output, "jaws.log": (work / ".jaws" / "jaws.log").read_text()}
+    halves = ("first-half", "second-half")
+    assert [where for where, text in texts.items() if any(h in text for h in halves)] == []
+    assert not fake_terraform.exists(), "terraform must not run without its credential"
+
+
+def test_the_secret_is_read_in_the_product_region(work: Path, _no_aws: MagicMock) -> None:
+    """The stacks build in us-east-1 (spec 6.7), where the foundation grants the secret's
+    parameter. A state bucket elsewhere changes only the backend's region."""
+    section = work / "config" / "terraform.yaml"
+    document = yaml.safe_load(section.read_text())
+    document["state"]["region"] = "us-west-2"
+    section.write_text(yaml.safe_dump(document))
+    with _as_role("jaws-infra-ci-plan") as identity:
+        result = _platform(work, "plan", "foundation")
+    assert result.exit_code == 0, result.output
+    [(sts,)] = [call.args for call in identity.call_args_list]
+    [(ssm, parameter)] = [call.args for call in _no_aws.call_args_list]
+    assert (sts.meta.region_name, ssm.meta.region_name) == ("us-east-1", "us-east-1")
+    assert parameter == SECRET_PARAMETER
+    settings = load_settings(work / "config", environ={})
+    backend = platform_backend(settings, platform_stack("foundation"))
+    assert 'region       = "us-west-2"\n' in backend
 
 
 def test_the_working_copy_holds_the_stack_and_its_backend(

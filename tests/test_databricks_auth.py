@@ -77,6 +77,26 @@ def test_empty_secret_is_preflight_without_the_value() -> None:
         load_secret(ssm, PARAMETER)
 
 
+@pytest.mark.parametrize(
+    "value",
+    ["first-half\nsecond-half", "first-half\r\nsecond-half", "first-half\rsecond-half"],
+    ids=["lf", "crlf", "cr"],
+)
+def test_a_secret_of_several_lines_is_preflight_without_the_value(value: str) -> None:
+    """A runner's `::add-mask::` covers one line: the rest would print in the job log."""
+
+    class Stored:
+        def get_parameter(self, **kwargs: Any) -> Any:
+            return {"Parameter": {"Value": value}}
+
+    with pytest.raises(PreflightError) as caught:
+        load_secret(Stored(), PARAMETER)
+    message = str(caught.value)
+    assert PARAMETER in message and RUNBOOK in message
+    assert "first-half" not in message and "second-half" not in message
+    assert caught.value.exit_code == 3
+
+
 def test_unreadable_secret_is_preflight_without_the_value() -> None:
     class Denied:
         def get_parameter(self, **kwargs: Any) -> Any:

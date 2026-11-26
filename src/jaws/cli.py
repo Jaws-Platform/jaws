@@ -32,6 +32,7 @@ from . import (
     databricks,
     databricks_auth,
     databricks_destroy,
+    databricks_names,
     github,
     image,
     monitoring,
@@ -2385,7 +2386,9 @@ def _platform_terraform(
     """
     settings = run.settings
     target = platform.platform_stack(name)
-    session = boto3.session.Session(region_name=settings.state.region)
+    # The product's region (spec 6.7): the stacks build there, and the foundation grants the
+    # secret's parameter there. The state bucket's region is the backend's alone.
+    session = boto3.session.Session(region_name=databricks_names.REGION)
     with phase("preflight"):
         aws.check_role(
             session.client("sts"),
