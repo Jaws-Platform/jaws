@@ -554,7 +554,7 @@ def test_a_re_run_reuses_the_release_s_build(tmp_path: Path) -> None:
     steps = [_one(RELEASE, "image", action) for action in (IMAGE, BASE, BUILD)]
     assert all(_position(RELEASE, "image", built) < _position(RELEASE, "image", s) for s in steps)
     outputs = job(RELEASE, "image")["outputs"]
-    assert outputs["digest"] == "${{ steps.built.outputs.digest || steps.build.outputs.digest }}"
+    assert outputs["digest"] == "${{ steps.built.outputs.digest || steps.pushed.outputs.digest }}"
 
 
 @needs_yq
@@ -567,21 +567,24 @@ def test_a_first_attempt_builds_and_pushes(tmp_path: Path) -> None:
     assert _errors(ran) == []
 
 
+#: batch-get-image's answer when ECR has the release's tag but can't read it.
+UNREADABLE: Mapping[str, Any] = {
+    "images": [],
+    "failures": [
+        {
+            "imageId": {"imageTag": f"sha-{COMMIT}"},
+            "failureCode": "KmsError",
+            "failureReason": "the repository's key is disabled",
+        }
+    ],
+}
+
+
 @needs_yq
 def test_a_build_the_registry_can_t_read_stops_the_release(tmp_path: Path) -> None:
     """Only a build that isn't there is built: one ECR can't read is never pushed over."""
-    unreadable = {
-        "images": [],
-        "failures": [
-            {
-                "imageId": {"imageTag": f"sha-{COMMIT}"},
-                "failureCode": "KmsError",
-                "failureReason": "the repository's key is disabled",
-            }
-        ],
-    }
     ran = _step(
-        tmp_path, RELEASE, "image", "built", unreadable, REPOSITORY=REPOSITORY, COMMIT=COMMIT
+        tmp_path, RELEASE, "image", "built", UNREADABLE, REPOSITORY=REPOSITORY, COMMIT=COMMIT
     )
     assert ran.result.returncode != 0
     assert _errors(ran) == [
@@ -589,6 +592,91 @@ def test_a_build_the_registry_can_t_read_stops_the_release(tmp_path: Path) -> No
         "(the repository's key is disabled)"
     ]
     assert ran.output == ""
+
+
+#: The digest buildx may report for a build it both loads and pushes: the loaded manifest's,
+#: which need not be the pushed one's.
+LOADED_DIGEST = "sha256:" + "d" * 64
+
+
+def test_the_release_s_digest_is_ecr_s_never_buildx_s_report() -> None:
+    """The job outputs the digest ECR has for `sha-<commit>`: the kept build's, or the push's
+    read back. buildx's own report of the push only feeds a warning."""
+    outputs = job(RELEASE, "image")["outputs"]
+    assert outputs["digest"] == "${{ steps.built.outputs.digest || steps.pushed.outputs.digest }}"
+    assert "steps.build.outputs.digest" not in json.dumps(outputs)
+    pushed = _by_id(RELEASE, "image", "pushed")
+    assert pushed["if"] == "steps.built.outputs.digest == ''"
+    assert pushed["env"] == {
+        "REPOSITORY": "${{ inputs.platform-image }}",
+        "COMMIT": "${{ steps.commit.outputs.commit }}",
+        "BUILDX_DIGEST": "${{ steps.build.outputs.digest }}",
+    }
+    build = _one(RELEASE, "image", BUILD)
+    assert _position(RELEASE, "image", build) < _position(RELEASE, "image", pushed)
+    reading = [
+        s.get("id")
+        for s in _steps(RELEASE, "image")
+        if "steps.build.outputs.digest" in json.dumps(s)
+    ]
+    assert reading == ["pushed"], "buildx's report reaches the warning only"
+
+    # It asks ECR for the tag as `built` does.
+    lookup = re.compile(r"found=\$\(aws ecr batch-get-image .*?--output json\)", re.S)
+    (asked,) = lookup.findall(pushed["run"])
+    assert lookup.findall(_by_id(RELEASE, "image", "built")["run"]) == [asked]
+
+
+@needs_yq
+@pytest.mark.parametrize(
+    "reported", ["", DIGEST, LOADED_DIGEST], ids=["no-report", "the-same", "another"]
+)
+def test_the_pushed_build_s_digest_is_read_back_from_ecr(tmp_path: Path, reported: str) -> None:
+    ran = _step(
+        tmp_path,
+        RELEASE,
+        "image",
+        "pushed",
+        KEPT,
+        REPOSITORY=REPOSITORY,
+        COMMIT=COMMIT,
+        BUILDX_DIGEST=reported,
+    )
+    assert ran.result.returncode == 0, ran.result.stdout + ran.result.stderr
+    assert ran.output.splitlines() == [f"digest={DIGEST}"], "ECR's, whatever buildx reported"
+    (call,) = ran.calls
+    assert call.startswith("aws ecr batch-get-image ")
+    assert f"--repository-name {REPOSITORY} " in call
+    assert f"--image-ids imageTag=sha-{COMMIT} " in call
+    assert DIGEST in ran.result.stdout and reported in ran.result.stdout, "the log names both"
+    warnings = [line for line in ran.result.stdout.splitlines() if line.startswith("::warning::")]
+    if reported == LOADED_DIGEST:
+        (warning,) = warnings
+        assert LOADED_DIGEST in warning and DIGEST in warning, warning
+    else:
+        assert warnings == []
+    assert _errors(ran) == []
+
+
+@needs_yq
+@pytest.mark.parametrize("images", [NOT_FOUND, UNREADABLE], ids=["not-found", "unreadable"])
+def test_a_push_ecr_does_not_have_stops_the_release(
+    tmp_path: Path, images: Mapping[str, Any]
+) -> None:
+    ran = _step(
+        tmp_path,
+        RELEASE,
+        "image",
+        "pushed",
+        images,
+        REPOSITORY=REPOSITORY,
+        COMMIT=COMMIT,
+        BUILDX_DIGEST=DIGEST,
+    )
+    assert ran.result.returncode != 0
+    (error,) = _errors(ran)
+    assert error.startswith(f"::error::{REPOSITORY}:sha-{COMMIT} "), error
+    assert ran.output == "", "no digest: no later job runs"
 
 
 def test_monitoring_is_applied_once_the_build_s_configuration_has_it(

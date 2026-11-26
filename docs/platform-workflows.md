@@ -355,9 +355,13 @@ has a monitoring section (`config env --monitoring`), which `monitoring-apply`
 waits for.
 
 Every later job takes the build by the digest the `image` job outputs, never
-by a tag. `apply` and `monitoring-apply` pass it to `platform-image` as
-`digest`, so they apply the release's configuration while `current` still
-names the last release's build. `platform-image` takes `current` when it's
+by a tag. That digest is the one ECR has for `sha-<commit>`: a re-run's lookup
+finds it, and after a push the job reads it back by the tag. buildx reports a
+digest for the push too, but for a build it both loads and pushes, that may be
+the loaded manifest's. So the job uses ECR's, and warns, naming both, when
+they differ. `apply` and `monitoring-apply` pass the digest to
+`platform-image` as `digest`, so they apply the release's configuration while
+`current` still names the last release's build. `platform-image` takes `current` when it's
 given no digest, so each job that runs or moves the build first stops if the
 `image` job's `digest` came out empty, naming the output. The two moves check
 its `commit` the same way.

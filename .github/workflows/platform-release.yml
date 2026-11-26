@@ -8,7 +8,8 @@ name: Platform release
 #   release-please    Release Please, with the release App's token: opens or updates the
 #                     release PR, and releases when it merges. Every push runs it.
 #   image             builds the release commit's Dockerfile and pushes it as sha-<commit>,
-#                     a tag that never moves.
+#                     a tag that never moves, then reads the build's digest back from ECR
+#                     by that tag.
 #   apply             applies the foundation with that build, by its digest.
 #   monitoring-apply  applies monitoring with it, once the configuration has a monitoring
 #                     section.
@@ -33,9 +34,9 @@ name: Platform release
 #
 # A failed job is re-run from the run's page, with "Re-run failed jobs": a re-run of every
 # job would run Release Please again, which then releases nothing, so the rest would skip.
-# Each later job reads the build by the digest the image job output, and a re-run of the
-# image job finds the build its first attempt pushed, so every attempt runs and moves the one
-# build.
+# Each later job reads the build by the digest ECR has for sha-<commit>, which the image job
+# outputs, and a re-run of the image job finds the build its first attempt pushed, so every
+# attempt runs and moves the one build.
 #
 # The caller grants contents: read and id-token: write, holds no platform-release group, and
 # passes the identity, the mover App's client ID (live-app-client-id), Release Please's
@@ -116,9 +117,9 @@ jobs:
     outputs:
       tag: ${{ needs.release-please.outputs.tag_name }}
       commit: ${{ steps.commit.outputs.commit }}
-      # The build every later job runs or moves: the one a first attempt kept, or this
-      # attempt's push.
-      digest: ${{ steps.built.outputs.digest || steps.build.outputs.digest }}
+      # The build every later job runs or moves, as ECR names it by sha-<commit>: the one a
+      # first attempt kept, or this attempt's push, read back. Never buildx's own report.
+      digest: ${{ steps.built.outputs.digest || steps.pushed.outputs.digest }}
       # configured or absent: monitoring-apply's gate, from the build's own configuration.
       monitoring: ${{ steps.env.outputs.monitoring }}
     steps:
@@ -221,6 +222,38 @@ jobs:
           base-name: ${{ steps.base.outputs.base-name }}
           base-tag: ${{ steps.base.outputs.base-tag }}
           base-digest: ${{ steps.base.outputs.base-digest }}
+      - name: Read the pushed build's digest back from ECR
+        id: pushed
+        if: steps.built.outputs.digest == ''
+        env:
+          REPOSITORY: ${{ inputs.platform-image }}
+          COMMIT: ${{ steps.commit.outputs.commit }}
+          BUILDX_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          # The digest every later job takes is ECR's, by the tag the push gave the build, which
+          # never moves: buildx reports one digest for a build it both loads and pushes, and the
+          # loaded manifest's need not be the pushed one's. Both are logged.
+          tag="sha-$COMMIT"
+          found=$(aws ecr batch-get-image --repository-name "$REPOSITORY" --image-ids "imageTag=$tag" \
+            --accepted-media-types application/vnd.oci.image.manifest.v1+json \
+            application/vnd.docker.distribution.manifest.v2+json --output json)
+          count=$(jq '.images | length' <<<"$found")
+          if [[ "$count" == 0 ]]; then
+            code=$(jq -r '.failures[0].failureCode // "ImageNotFound"' <<<"$found")
+            if [[ "$code" != ImageNotFound ]]; then
+              reason=$(jq -r '.failures[0].failureReason // ""' <<<"$found")
+              echo "::error::$REPOSITORY:$tag could not be read after the push: $code ($reason)"
+              exit 1
+            fi
+            echo "::error::$REPOSITORY:$tag is not in ECR after the push"
+            exit 1
+          fi
+          digest=$(jq -r '.images[0].imageId.imageDigest' <<<"$found")
+          if [[ -n "$BUILDX_DIGEST" && "$BUILDX_DIGEST" != "$digest" ]]; then
+            echo "::warning::buildx reported the push as $BUILDX_DIGEST, but ECR has $REPOSITORY:$tag as $digest: the release runs ECR's"
+          fi
+          echo "$REPOSITORY:$tag is $REPOSITORY@$digest (buildx reported ${BUILDX_DIGEST:-no digest})"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - name: Read whether the configuration has monitoring (offline, inside the build)
         id: env
         env:
