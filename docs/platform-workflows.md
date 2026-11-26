@@ -645,12 +645,17 @@ opens the pull request against `main`, or updates the open one. Its title is
 the commit's, and its body names both releases and links Jaws's changes
 between them, `https://github.com/Jaws-Platform/jaws/compare/<pin>...<tag>`.
 
-There is one upgrade pull request at a time, updated in place. While the open
-one's title names the newest release, or `jaws-upgrade` already holds the same
-files, a run pushes nothing and edits nothing, with the notice "the upgrade to
-`<tag>` is open". So the hub's CI runs once for each release rather than every
-hour, and a fix pushed onto the branch stays. A newer release force-pushes
-`jaws-upgrade`, and edits the pull request's title and body.
+There is one upgrade pull request at a time, on one branch, updated in place
+(ruling 12). While one is open whose title names the newest release, or whose
+branch, `jaws-upgrade`, already holds the same files, a run pushes nothing and
+edits nothing, with the notice "the upgrade to `<tag>` is open". So the hub's
+CI runs once for each release rather than every hour, and a fix pushed onto the
+branch stays. When `jaws-upgrade` holds the same files but no pull request is
+open, as when an earlier run's push landed but its pull request wasn't opened,
+a run opens the pull request without pushing, with a notice that says so.
+Closing the upgrade's pull request therefore doesn't skip its release: the next
+run opens it again. A newer release force-pushes `jaws-upgrade`, then edits the
+pull request's title and body, or opens one.
 
 The hourly schedule keeps the pin inside what ECR Public holds. Until v1, it
 keeps only the newest ten Jaws versions, about two days of releases, and

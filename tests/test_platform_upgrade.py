@@ -585,6 +585,29 @@ def test_an_open_upgrade_to_the_same_release_is_left_alone(tmp_path: Path, left:
     assert (len(trees) == 1) is (left == "same-tree")
 
 
+@needs_jq
+def test_the_pull_request_is_opened_for_a_branch_already_pushed(tmp_path: Path) -> None:
+    """P5-R32: one pull request, on one branch (ruling 12). An earlier run's push landed, but no
+    pull request is open, as when its `gh pr create` failed: the pull request is opened now,
+    with no push."""
+    repo = _bumped(tmp_path)
+    assert _pull_request(repo, []).result.returncode == 0
+    _landed(repo)
+    assert _rewrite(repo).returncode == 0
+    again = _pull_request(repo, [])
+    assert again.result.returncode == 0, again.result.stdout + again.result.stderr
+    assert _writes(again) == [
+        f"gh pr create --base main --head jaws-upgrade --title {MESSAGE} --body-file <body>"
+    ], "no push: the branch holds the same tree already"
+    assert _notices(again) == [
+        f"::notice::opened the pull request for the upgrade to {TAG}, already pushed to "
+        "jaws-upgrade"
+    ]
+    assert f"https://github.com/Jaws-Platform/jaws/compare/{PIN}...{TAG}" in again.body
+    branches = ("jaws-upgrade", "origin/jaws-upgrade")
+    assert len({_git(repo, "rev-parse", f"{branch}^{{tree}}") for branch in branches}) == 1
+
+
 # -- the job -----------------------------------------------------------------------------
 
 
