@@ -1,0 +1,94 @@
+name: Platform sweep
+
+# Reusable: the data-access reconcile (platform apply data-access), run with the hub's image.
+# It binds and grants each agreed handshake on every onboarded dataset, and plans first and
+# applies exactly what its plan found. The hub's caller holds the schedule and the dispatch,
+# and the sweep starts when jaws's own stops (plan 07), so exactly one runs.
+#
+# It runs the build the hub image's current tag names (spec 6.4), as the data-access apply
+# role, from main only: the prod environment deploys only from there, so a run from any other
+# branch is skipped here rather than refused there. Sweeps queue behind each other and are
+# never cancelled mid-apply. The caller grants contents: read and id-token: write, and passes
+# the identity.
+
+on:
+  workflow_call:
+    inputs:
+      platform-image:
+        description: The hub image's private ECR repository, for example `jaws-platform`. The run uses the build its `current` tag names.
+        required: true
+        type: string
+      account-id:
+        description: The platform account, 12 digits, which holds the hub image and every CI role.
+        required: true
+        type: string
+      name-root:
+        description: The platform's name root (`context.name_root`), for example `jaws`.
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  sweep:
+    name: Data access apply
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: prod
+    concurrency:
+      group: data-access-sweep
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # the data-access apply role, through OIDC
+    steps:
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Build the apply role from the platform's identity
+        id: role
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ inputs.platform-image }}
+          account-id: ${{ inputs.account-id }}
+          name-root: ${{ inputs.name-root }}
+          role: apply
+          project: data-access
+      - name: Assume the role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-data-access-apply-${{ github.run_id }}
+      - name: Pull the build that current names
+        id: image
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          account-id: ${{ inputs.account-id }}
+          repository: ${{ inputs.platform-image }}
+      - name: platform apply data-access
+        uses: ./.jaws-tool/.github/actions/jaws
+        with:
+          command: platform apply data-access
+          image: ${{ steps.image.outputs.image-id }}
+          platform-commit: ${{ steps.image.outputs.platform-commit }}
+          platform-source: ${{ steps.image.outputs.platform-source }}
+          # The CLI reads each counterpart's project file from GitHub.
+          github-token: ${{ github.token }}

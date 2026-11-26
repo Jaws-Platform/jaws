@@ -547,3 +547,63 @@ jobs:
     secrets:
       live-app-private-key: ${{ secrets.DEPLOYMENTS_APP_PRIVATE_KEY }}
 ```
+
+## By-hand applies and the sweep
+
+Three more workflows run the hub's image outside a release. Each takes the
+identity (`platform-image`, `account-id` and `name-root`, all required), runs
+its one job in the hub's `prod` environment, and runs the build the hub image's
+`current` tag names: they pass `platform-image` no digest and no artifact, so a
+run resolves `current` to a digest once, at its start
+([spec 6.4](superpowers/specs/2026-11-22-hub-split-design.md#64-workflows)).
+After a rollback, they run the older build from their next start. Their caller
+grants `contents: read` and `id-token: write`.
+
+| Workflow | Who runs it | Role | What it does |
+|---|---|---|---|
+| `platform-bot-apply.yml` | the hub's by-hand caller, with `project`, `destroy` and `consumer-ref` | the project's `apply` role | applies a bot or research project's stack, or destroys it with `destroy` |
+| `platform-databricks-apply.yml` | the hub's by-hand caller, with `project` and `action` | the project's `apply` role | `apply`, `destroy` or `doctor` for a Databricks project |
+| `platform-sweep.yml` | the hub's schedule and dispatch | the `data-access` `apply` role | `platform apply data-access`: plans, then applies what the plan found |
+
+Run a bot apply after reading the bot plan comment and while the bot is idle: a
+change to the instance's AMI, type or user data replaces the instance and ends
+the game in progress.
+
+Both applies refuse, before any role is assumed, the platform's own stacks
+(`infra`, `monitoring` and `data-access`). They then look the project up in the
+build's configuration, offline, and refuse one that isn't a bot or research
+project (the bot apply) or a Databricks project (the Databricks apply). The
+project's repository comes from that line, and its `jaws.yaml` is read from
+there, from its default branch or, for the bot apply, from `consumer-ref`. A
+file that names another project stops the run. The Databricks apply refuses an
+`action` other than `apply`, `destroy` and `doctor`. Each takes a lock per
+project, `bot-apply-<project>` and `databricks-apply-<project>`, and never
+cancels a run in progress.
+
+The sweep runs from `main` only, and its runs queue in `data-access-sweep`
+without cancelling one another. The hub's sweep starts when `jaws`'s own
+stops (plan 07), so exactly one runs.
+
+A hub's caller, with placeholder values:
+
+```yaml
+name: Bot apply
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        required: true
+        type: string
+permissions: {}
+jobs:
+  apply:
+    permissions:
+      contents: read
+      id-token: write
+    uses: Jaws-Platform/jaws/.github/workflows/platform-bot-apply.yml@vX.Y.Z
+    with:
+      platform-image: jaws-platform
+      account-id: "123456789012"
+      name-root: jaws
+      project: ${{ inputs.project }}
+```
