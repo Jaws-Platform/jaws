@@ -181,3 +181,139 @@ the prefix and the job, for example `plan / plan / example plan` for the caller 
 For plans 06 and 07:
 a project's required checks must name that longer form when it switches to the
 hub.
+
+## The hub's pull requests
+
+### `platform-ci.yml`: the jobs and their checks
+
+The hub's CI caller calls `platform-ci.yml` on each pull request. Each job reports
+its check as `<caller job> / <check>`:
+
+| Job | Check | What it does |
+|---|---|---|
+| `candidate` | `Platform check` | builds the candidate and checks the hub inside it |
+| `foundation` | `Terraform plan` | plans the foundation, as the `infra` plan role |
+| `monitoring` | `Monitoring plan` | plans monitoring, once the configuration has a monitoring section |
+| `data-access` | `Data access plan` | plans data access, rendered with the base branch's registry |
+| `projects` | `Site plan (<project>)`, `Bot plan (<project>)`, `Databricks plan (<project>)` | one plan for each project the configuration onboards |
+
+The first four are the hub's required checks. For a caller job named `ci`,
+they are `ci / Platform check`, `ci / Terraform plan`, `ci / Monitoring plan`
+and `ci / Data access plan`. A job skipped by its condition passes, as the
+monitoring plan is before the configuration has a monitoring section, or for a
+fork's pull request. The project plans aren't required, since they come and go
+with the projects.
+
+Each plan posts a sticky comment, under the header `terraform-plan`,
+`monitoring-plan`, `data-access-plan` or `<site|bot|databricks>-plan-<project>`,
+and uploads its `.jaws/` run log. The monitoring plan and the project plans are
+skipped while their role doesn't exist yet: monitoring's with a notice, and a
+project's with a warning. The foundation apply of the hub release that adds the
+monitoring section, or onboards the project, creates the role. A Databricks
+project's plan is also skipped while Databricks is disabled, and so is the plan
+of a project whose file names another project, as when a project is being
+renamed. Data access plans nothing while Databricks has nothing to reconcile,
+and doesn't run for Dependabot.
+
+### The candidate
+
+The `candidate` job builds the pull request's `Dockerfile` as the hub's image:
+the candidate.
+
+1. `platform-base` reads the `Dockerfile`'s one `FROM`, which must pin the Jaws
+   image by tag and digest. It reads it with `jaws platform check`'s own
+   pattern, so the check and the build read one `FROM` alike.
+2. `platform-base` also asks ECR Public, anonymously, whether the pinned digest
+   is still published. ECR Public keeps only the newest Jaws versions until v1,
+   so a pin can be pruned while the hub still names it. The job then fails with
+   what to do: merge the open upgrade PR, or move the `FROM` line to a recent Jaws
+   release.
+3. `platform-build` builds it and loads it on the runner. Its labels name the
+   pull request's head commit and the Jaws base, and its image ID is the one the
+   runner reports.
+
+The candidate is never pushed (ruling 5). An ECR push grant can't be limited by
+tag, so a pull request role that could push a candidate could also move
+`current`. The job saves the candidate (`docker save`) as this run's artifact
+`platform-image`, kept a day. Each plan job loads it with `platform-image`,
+given `artifact` and the candidate's `image-id`, which checks the loaded ID and
+reaches no registry. So every plan runs with the pull request's configuration
+and Jaws pin
+([spec 6.3](superpowers/specs/2026-11-22-hub-split-design.md#63-the-images),
+[6.5](superpowers/specs/2026-11-22-hub-split-design.md#65-upgrades-and-rollout)):
+an upgrade's plans show what it changes everywhere before it merges.
+
+Inside the candidate, offline (`docker run --network none`), the job:
+
+- validates the configuration with `config show`, and discards what it prints,
+  since a hub's logs are public;
+- runs `jaws platform check`, with the checkout mounted read-only at `/hub`;
+- reads the platform's identity and gates with
+  `config env --monitoring --databricks --brand --platform`, and the projects
+  with `config projects site bot research databricks`. Each plan job builds its
+  role from that identity with `platform-role`, and the `projects` job's matrix
+  is that list.
+
+### What the check holds
+
+`jaws platform check` fails the pull request, naming the file and both values,
+when the hub's pins or identity disagree:
+
+- **One version, two pins** (ruling 11,
+  [spec 6.4](superpowers/specs/2026-11-22-hub-split-design.md#64-workflows)).
+  Every caller's `Jaws-Platform/jaws/.github/workflows/<name>.yml@<ref>`, the
+  `Dockerfile`'s tag and the candidate's own Jaws version are one release. The
+  `Dockerfile`'s one `FROM` pins the Jaws image by tag and digest.
+- **The identity is literal** (ruling 10). Each caller of a workflow that runs
+  the image spells `platform-image`, `account-id` and `name-root`, and a site
+  workflow's caller spells `check-prefix` too. Each is a quoted literal equal to
+  the configuration's `platform.hub.image`, `aws.account_id`, `context.name_root`
+  and `brand.check_prefix`. A project's run can read neither the hub's variables
+  nor its configuration before it has a role, so the hub's CI holds each literal
+  to the configuration instead.
+- **The hub is this repository.** `platform.hub` is set, and its `repository` is
+  the repository the check runs in.
+
+### The site plans
+
+The hub plans every site with its candidate too, as the site's plan role. The
+site plan roles trust the hub's pull requests for this
+([spec 6.5](superpowers/specs/2026-11-22-hub-split-design.md#65-upgrades-and-rollout),
+[6.6](superpowers/specs/2026-11-22-hub-split-design.md#66-role-trust)), so a
+change to the configuration, or a Jaws upgrade, shows its effect on each site
+before it merges. A site still applies on its own next release, through
+`site-deploy` at `@live`. The bot, research and Databricks projects are planned
+the same way, each as its plan role, and applied by hand.
+
+### The caller
+
+`platform-ci.yml` takes the input `app-client-id` and the secret
+`app-private-key`, both optional: the platform's comments App, which posts the
+plan comments. Without them, `github-actions` posts. The caller grants
+`contents: read`, `id-token: write` (the plan roles) and `pull-requests: write`
+(the comments). It passes no identity: the jobs read it from the candidate. A
+hub's caller, with placeholder values:
+
+```yaml
+name: CI
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+permissions: {}
+jobs:
+  ci:
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: Jaws-Platform/jaws/.github/workflows/platform-ci.yml@vX.Y.Z
+    with:
+      app-client-id: Iv23liEXAMPLE0000000
+    secrets:
+      app-private-key: ${{ secrets.COMMENTS_APP_PRIVATE_KEY }}
+```
+
+Its `@vX.Y.Z` is one of the pins the check holds to the `Dockerfile`'s tag.

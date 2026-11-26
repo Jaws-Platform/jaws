@@ -1,0 +1,568 @@
+name: Platform CI
+
+# Reusable: a hub's pull requests. Call it from the hub's pull request workflow, and skip
+# it on `edited` events. A pull request runs:
+#
+#   candidate    Platform check: builds the pull request's Dockerfile, the hub's image on
+#                the Jaws release its FROM line pins by tag and digest, as the candidate.
+#                Offline, inside the candidate, it validates the configuration and runs
+#                `jaws platform check`: the workflow pins, the Dockerfile's tag and the
+#                candidate's own Jaws are one version, and each caller's identity
+#                literals are the configuration's. It reads the identity, the gates and
+#                the projects from the candidate's configuration.
+#   foundation   Terraform plan, with the infra plan role.
+#   monitoring   Monitoring plan, once the configuration has a monitoring section: the
+#                plan is skipped with a notice until the release that creates its role.
+#   data-access  Data access plan, rendered with the base branch's registry.
+#   projects     one plan for each site, bot, research and Databricks project the
+#                configuration onboards, as the project's plan role.
+#
+# The candidate is passed between jobs as this run's artifact `platform-image`, and never
+# pushed (ruling 5): an ECR push grant can't be limited by tag, so a pull request role that
+# could push a candidate could also move `current`. Every plan runs with it (spec 6.3,
+# 6.5), so a reviewer sees what the pull request changes everywhere before merging.
+#
+# The caller grants contents: read, id-token: write and pull-requests: write, and passes
+# `app-client-id` and the `app-private-key` secret to post the plan comments as the
+# platform's comments App instead of github-actions. It passes no identity: the jobs read
+# it from the candidate's configuration.
+
+on:
+  workflow_call:
+    inputs:
+      app-client-id:
+        description: ID of the platform's comments App that authors the plan comments. Empty posts as github-actions.
+        required: false
+        type: string
+        default: ""
+    secrets:
+      app-private-key:
+        description: Private key of the platform's comments App. Needed with app-client-id.
+        required: false
+
+permissions: {}
+
+jobs:
+  candidate:
+    name: Platform check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      # The candidate's image ID as this runner reports it: each plan job checks the
+      # build it loads from the artifact against it.
+      image-id: ${{ steps.build.outputs.image-id }}
+      account_id: ${{ steps.env.outputs.account_id }}
+      name_root: ${{ steps.env.outputs.name_root }}
+      # configured or absent: the monitoring plan's gate.
+      monitoring: ${{ steps.env.outputs.monitoring }}
+      # ready, awaiting-host or disabled: a Databricks project's plan waits while disabled.
+      databricks: ${{ steps.env.outputs.databricks }}
+      platform_image: ${{ steps.env.outputs.platform_image }}
+      # The projects job's matrix: [{project, repository, type}].
+      projects: ${{ steps.projects.outputs.projects }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Read the Dockerfile's Jaws base
+        id: base
+        uses: ./.jaws-tool/.github/actions/platform-base
+      - name: Build the candidate (loaded on this runner only)
+        id: build
+        uses: ./.jaws-tool/.github/actions/platform-build
+        with:
+          load: "true"
+          push: "false"
+          revision: ${{ github.event.pull_request.head.sha }}
+          base-name: ${{ steps.base.outputs.base-name }}
+          base-tag: ${{ steps.base.outputs.base-tag }}
+          base-digest: ${{ steps.base.outputs.base-digest }}
+      - name: Validate the configuration (offline, inside the candidate)
+        id: validate
+        env:
+          IMAGE_ID: ${{ steps.build.outputs.image-id }}
+        run: |
+          # A validation only: the hub's logs are public, so what it prints is discarded.
+          docker run --rm --network none --pull never "$IMAGE_ID" config show > /dev/null
+      - name: Check the hub's pins and identity (offline, inside the candidate)
+        id: check
+        env:
+          IMAGE_ID: ${{ steps.build.outputs.image-id }}
+        run: |
+          # The checkout is mounted read-only at /hub. The image's working directory, /work,
+          # stays the container's own: the CLI writes its .jaws/ there.
+          docker run --rm --network none --pull never \
+            --volume "$GITHUB_WORKSPACE:/hub:ro" \
+            --env GITHUB_ACTIONS --env GITHUB_REPOSITORY \
+            "$IMAGE_ID" platform check --root /hub
+      - name: Read the platform's identity and gates (offline, inside the candidate)
+        id: env
+        env:
+          IMAGE_ID: ${{ steps.build.outputs.image-id }}
+        run: |
+          # Assigned first, so a failing command fails the step (bash -e).
+          env=$(docker run --rm --network none --pull never "$IMAGE_ID" config env --monitoring --databricks --brand --platform)
+          echo "$env" >> "$GITHUB_OUTPUT"
+      - name: List the projects to plan (offline, inside the candidate)
+        id: projects
+        env:
+          IMAGE_ID: ${{ steps.build.outputs.image-id }}
+        run: |
+          # Assigned first, so a failing command fails the step (bash -e).
+          projects=$(docker run --rm --network none --pull never "$IMAGE_ID" config projects site bot research databricks)
+          echo "projects=$projects" >> "$GITHUB_OUTPUT"
+      - name: Save the candidate for the plans
+        id: save
+        env:
+          IMAGE_ID: ${{ steps.build.outputs.image-id }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/platform-image"
+          docker save --output "$RUNNER_TEMP/platform-image/platform-image.tar" "$IMAGE_ID"
+      - name: Pass the candidate to the plans (this run's artifact, never a registry)
+        uses: actions/upload-artifact@v7
+        with:
+          name: platform-image
+          path: ${{ runner.temp }}/platform-image/platform-image.tar
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true # a re-run's candidate replaces its first attempt's
+
+  foundation:
+    name: Terraform plan
+    runs-on: ubuntu-latest
+    needs: candidate
+    permissions:
+      contents: read
+      id-token: write # the plan role, through OIDC
+      pull-requests: write # the sticky plan comment
+    steps:
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Build the plan role from the platform's identity
+        id: role
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ needs.candidate.outputs.platform_image }}
+          account-id: ${{ needs.candidate.outputs.account_id }}
+          name-root: ${{ needs.candidate.outputs.name_root }}
+          role: plan
+          project: infra
+      - name: Assume the role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-plan-pr-${{ github.event.pull_request.number }}
+      - name: Load the candidate
+        id: image
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          artifact: platform-image
+          image-id: ${{ needs.candidate.outputs.image-id }}
+      - name: platform plan foundation
+        id: plan
+        uses: ./.jaws-tool/.github/actions/jaws
+        with:
+          command: platform plan foundation
+          image: ${{ steps.image.outputs.image-id }}
+          platform-commit: ${{ steps.image.outputs.platform-commit }}
+          platform-source: ${{ steps.image.outputs.platform-source }}
+      - name: Mint a comment token for the comments App
+        id: app-token
+        if: always() && inputs.app-client-id != '' && hashFiles('.jaws/plan-comment.md') != ''
+        continue-on-error: true # a misconfigured app falls back to github-actions
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ inputs.app-client-id }}
+          private-key: ${{ secrets.app-private-key }}
+      - name: Post the plan comment (updated on each push)
+        if: always() && hashFiles('.jaws/plan-comment.md') != ''
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          header: terraform-plan
+          path: .jaws/plan-comment.md
+      - name: Upload the run log and artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jaws-foundation-${{ github.run_attempt }}
+          path: .jaws/
+          include-hidden-files: true # .jaws/ is a dot directory, which upload-artifact skips otherwise
+          retention-days: 14
+          if-no-files-found: ignore
+
+  monitoring:
+    name: Monitoring plan
+    runs-on: ubuntu-latest
+    # The monitoring stack's plan role is created by the foundation once the configuration
+    # has a monitoring section: the hub's first release that has it creates the role, then
+    # applies the stack. Until the role exists the plan is skipped with a notice instead of
+    # failing. Never for forks.
+    needs: candidate
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      needs.candidate.outputs.monitoring == 'configured'
+    permissions:
+      contents: read
+      id-token: write # the stack's plan role, through OIDC
+      pull-requests: write # the sticky plan comment
+    steps:
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Build the plan role from the platform's identity
+        id: role
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ needs.candidate.outputs.platform_image }}
+          account-id: ${{ needs.candidate.outputs.account_id }}
+          name-root: ${{ needs.candidate.outputs.name_root }}
+          role: plan
+          project: monitoring
+      - name: Assume the role
+        id: assume
+        continue-on-error: true # the role does not exist until the release that creates it
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-monitoring-plan-pr-${{ github.event.pull_request.number }}
+      - name: Skip the plan until the stack's roles exist
+        id: skip
+        if: steps.assume.outcome != 'success'
+        env:
+          ROLE: ${{ steps.role.outputs.arn }}
+        run: |
+          echo "::notice::could not assume $ROLE; the monitoring plan runs after the release that creates the stack's roles"
+          {
+            echo "## Monitoring plan skipped"
+            echo
+            echo "$ROLE cannot be assumed yet. The foundation apply of the hub's release creates it, and the same release then applies the monitoring stack."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Load the candidate
+        id: image
+        if: steps.assume.outcome == 'success'
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          artifact: platform-image
+          image-id: ${{ needs.candidate.outputs.image-id }}
+      - name: platform plan monitoring
+        id: plan
+        if: steps.assume.outcome == 'success'
+        uses: ./.jaws-tool/.github/actions/jaws
+        with:
+          command: platform plan monitoring
+          image: ${{ steps.image.outputs.image-id }}
+          platform-commit: ${{ steps.image.outputs.platform-commit }}
+          platform-source: ${{ steps.image.outputs.platform-source }}
+      - name: Mint a comment token for the comments App
+        id: app-token
+        if: always() && inputs.app-client-id != '' && hashFiles('.jaws/plan-comment.md') != ''
+        continue-on-error: true # a misconfigured app falls back to github-actions
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ inputs.app-client-id }}
+          private-key: ${{ secrets.app-private-key }}
+      - name: Post the plan comment (updated on each push)
+        if: always() && hashFiles('.jaws/plan-comment.md') != ''
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          header: monitoring-plan
+          path: .jaws/plan-comment.md
+      - name: Upload the run log and artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jaws-monitoring-${{ github.run_attempt }}
+          path: .jaws/
+          include-hidden-files: true # .jaws/ is a dot directory, which upload-artifact skips otherwise
+          retention-days: 14
+          if-no-files-found: ignore
+
+  data-access:
+    name: Data access plan
+    runs-on: ubuntu-latest
+    # Rendered with the base branch's registry, so dropping a dataset that a handshake still
+    # names fails. While Databricks has nothing to reconcile (disabled, or its shared host
+    # not recorded), the CLI says so and plans nothing. Not for Dependabot.
+    needs: candidate
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    permissions:
+      contents: read
+      id-token: write # the plan role, through OIDC
+      pull-requests: write # the sticky plan comment
+    steps:
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Check out the base branch's registry (the offboarding check)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .base
+          sparse-checkout: datasets
+      - name: Build the plan role from the platform's identity
+        id: role
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ needs.candidate.outputs.platform_image }}
+          account-id: ${{ needs.candidate.outputs.account_id }}
+          name-root: ${{ needs.candidate.outputs.name_root }}
+          role: plan
+          project: data-access
+      - name: Assume the role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-data-access-plan-pr-${{ github.event.pull_request.number }}
+      - name: Load the candidate
+        id: image
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          artifact: platform-image
+          image-id: ${{ needs.candidate.outputs.image-id }}
+      - name: platform plan data-access
+        id: plan
+        uses: ./.jaws-tool/.github/actions/jaws
+        with:
+          command: platform plan data-access --base-registry .base/datasets
+          image: ${{ steps.image.outputs.image-id }}
+          platform-commit: ${{ steps.image.outputs.platform-commit }}
+          platform-source: ${{ steps.image.outputs.platform-source }}
+          # The render reads every project's file from GitHub, for its handshakes.
+          github-token: ${{ github.token }}
+      - name: Mint a comment token for the comments App
+        id: app-token
+        if: always() && inputs.app-client-id != '' && hashFiles('.jaws/plan-comment.md') != ''
+        continue-on-error: true # a misconfigured app falls back to github-actions
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ inputs.app-client-id }}
+          private-key: ${{ secrets.app-private-key }}
+      - name: Post the plan comment (updated on each push)
+        if: always() && hashFiles('.jaws/plan-comment.md') != ''
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          header: data-access-plan
+          path: .jaws/plan-comment.md
+      - name: Upload the run log and artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jaws-data-access-${{ github.run_attempt }}
+          path: .jaws/
+          include-hidden-files: true # .jaws/ is a dot directory, which upload-artifact skips otherwise
+          retention-days: 14
+          if-no-files-found: ignore
+
+  projects:
+    name: ${{ matrix.type == 'databricks' && 'Databricks' || matrix.type == 'site' && 'Site' || 'Bot' }} plan (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    # One plan per project the configuration onboards, sites included: the site plan roles
+    # trust the hub's pull requests (spec 6.5, 6.6). A project's roles are created by the
+    # foundation apply of the release that onboards it; until they exist, its plan is
+    # skipped with a warning instead of failing. So is a Databricks project's while
+    # Databricks is disabled, and the plan of a registry entry whose project file names
+    # another project, as while a project is being renamed.
+    needs: candidate
+    if: needs.candidate.outputs.projects != '[]'
+    permissions:
+      contents: read
+      id-token: write # the project's plan role, through OIDC
+      pull-requests: write # the sticky plan comment
+    strategy:
+      fail-fast: false
+      matrix:
+        # One entry per project: {project, repository, type}.
+        include: ${{ fromJSON(needs.candidate.outputs.projects) }}
+    steps:
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Skip a Databricks project while Databricks is disabled
+        id: gate
+        env:
+          TYPE: ${{ matrix.type }}
+          DATABRICKS: ${{ needs.candidate.outputs.databricks }}
+          PROJECT: ${{ matrix.project }}
+        run: |
+          if [[ "$TYPE" == databricks && "$DATABRICKS" == disabled ]]; then
+            echo "::notice::Databricks is disabled (databricks.enabled): the plan for $PROJECT is skipped"
+            echo "plan=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "plan=true" >> "$GITHUB_OUTPUT"
+      - name: Check out the project's file (its default branch)
+        id: file
+        if: steps.gate.outputs.plan == 'true'
+        uses: ./.jaws-tool/.github/actions/platform-project-file
+        with:
+          project: ${{ matrix.project }}
+          repository: ${{ matrix.repository }}
+          on-mismatch: skip
+      - name: Build the plan role from the platform's identity
+        id: role
+        if: steps.file.outputs.matches == 'true'
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ needs.candidate.outputs.platform_image }}
+          account-id: ${{ needs.candidate.outputs.account_id }}
+          name-root: ${{ needs.candidate.outputs.name_root }}
+          role: plan
+          project: ${{ matrix.project }}
+      - name: Assume the role
+        id: assume
+        if: steps.file.outputs.matches == 'true'
+        continue-on-error: true # the role does not exist until the foundation apply
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-plan-${{ matrix.project }}-pr-${{ github.event.pull_request.number }}
+      - name: Skip the plan until the project's roles exist
+        id: skip
+        if: steps.file.outputs.matches == 'true' && steps.assume.outcome != 'success'
+        env:
+          ROLE: ${{ steps.role.outputs.arn }}
+        run: |
+          echo "::warning::could not assume $ROLE; the plan runs after the release that creates the project's roles"
+          {
+            echo "## Plan skipped"
+            echo
+            echo "$ROLE cannot be assumed yet. It is created by the foundation apply of the release that onboards the project."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Load the candidate
+        id: image
+        if: steps.assume.outcome == 'success'
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          artifact: platform-image
+          image-id: ${{ needs.candidate.outputs.image-id }}
+      - name: jaws plan
+        id: plan
+        if: steps.assume.outcome == 'success'
+        uses: ./.jaws-tool/.github/actions/jaws
+        with:
+          command: --file .consumer/jaws.yaml plan
+          image: ${{ steps.image.outputs.image-id }}
+          platform-commit: ${{ steps.image.outputs.platform-commit }}
+          platform-source: ${{ steps.image.outputs.platform-source }}
+          # The CLI reads each counterpart's project file from GitHub (the consumers of a
+          # project's datasets, or the producers a workspace reads).
+          github-token: ${{ github.token }}
+      - name: Mint a comment token for the comments App
+        id: app-token
+        if: always() && inputs.app-client-id != '' && hashFiles('.jaws/plan-comment.md') != ''
+        continue-on-error: true # a misconfigured app falls back to github-actions
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ inputs.app-client-id }}
+          private-key: ${{ secrets.app-private-key }}
+      - name: Post the plan comment (updated on each push)
+        if: always() && hashFiles('.jaws/plan-comment.md') != ''
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          header: ${{ matrix.type == 'databricks' && 'databricks' || matrix.type == 'site' && 'site' || 'bot' }}-plan-${{ matrix.project }}
+          path: .jaws/plan-comment.md
+      - name: Upload the run log and artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jaws-projects-${{ matrix.project }}-${{ github.run_attempt }}
+          path: .jaws/
+          include-hidden-files: true # .jaws/ is a dot directory, which upload-artifact skips otherwise
+          retention-days: 14
+          if-no-files-found: ignore
