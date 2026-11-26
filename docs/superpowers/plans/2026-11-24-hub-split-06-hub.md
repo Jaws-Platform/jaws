@@ -24,7 +24,7 @@
 **Spec:** [2026-11-22-hub-split-design.md](../specs/2026-11-22-hub-split-design.md), sections 6.1, 6.9, 6.12 and 7, with 6.3–6.5 for what the hub consumes. Roadmap: [row 06](2026-11-23-hub-split-00-roadmap.md). It builds on three plans, which must be released first:
 - plan 02, the `brand` section;
 - plan 04, the public image (PR #317);
-- plan 05, the workflows (draft PR #323, at abf3fa9, which holds the amendment for D6).
+- plan 05, the workflows (PR #323, with its amendment for D6).
 
 **Where the work happens:**
 - Tasks 1–5 are in `JWall-Engineering/platform`, cloned to `~/Projects/JWall-Engineering/platform`. Each task's PR has its own branch, from an up-to-date `main`, named in the task.
@@ -105,7 +105,7 @@ Calls this plan makes. The owner's decisions they rest on are in the next sectio
 
 1. **The base image's retention: the hourly upgrade PR, keep-10 and no mirror, with the owner's by-hand bump during development. Decided (D1).**
    - **The risk.** ECR Public keeps the newest ten Jaws releases until v1 (`JAWS_PUBLIC_IMAGE_KEEP`). At the average pace, about six releases a day, a pin lasts about two days, but a busy day can prune it within a day: `jaws` shipped 12 to 13 releases on each of 11-16, 11-17 and 11-21. A hub whose base is gone can't build: every candidate and every release fails to pull it. The running build keeps working, since the hub's own ECR repository holds its layers.
-   - **The error says what to do.** Plan 05's `platform-base` checks the pinned digest before a build, in its step `present` (9e58ffe). A pruned base fails the job with "the Dockerfile's Jaws base <base-name>:<base-tag>@<base-digest> is no longer in ECR Public, which keeps only the newest versions until v1: merge the open upgrade PR, or move the FROM line to a recent Jaws release".
+   - **The error says what to do.** Plan 05's `platform-base` checks the pinned digest before a build, in its step `present` (#323). A pruned base fails the job with "the Dockerfile's Jaws base <base-name>:<base-tag>@<base-digest> is no longer in ECR Public, which keeps only the newest versions until v1: merge the open upgrade PR, or move the FROM line to a recent Jaws release".
    - **Remedy 1, chosen: an upgrade PR on every Jaws release.** `upgrade.yml` runs plan 05's `platform-upgrade.yml` hourly (plan 05 ruling 12), so the hub trails only by the upgrades it hasn't merged.
      - Cost: no money (a public repository and anonymous reads), and the owner's attention: an upgrade merged within about two days at the average pace, and within a day on a busy one, with the hub's pace tied to Jaws's until v1.
      - **The owner's by-hand bump, during development.** When needed, the owner bumps the pin by hand, in its own PR. A by-hand bump moves the `FROM` tag and digest and every `Jaws-Platform/jaws/.github/workflows/<file>@` pin together, in one commit; before Task 5 the `FROM` line is the only pin. "Never bump one pin by hand" becomes "never bump one pin alone": once the callers exist, moving the `FROM` line alone fails `platform check` rule 3. The `tests` job then re-runs the freeze check at the new tag (ruling 4). A task branch still open rebases onto the bump, clones `.jaws-tool` again at the new tag, and pins anything it adds to it. Automating the bump comes later.
