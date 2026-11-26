@@ -1,9 +1,12 @@
-"""Every workflow builds its roles from the tool's reading of its configuration (config/).
+"""Every workflow builds its roles from the tool's reading of its configuration (config/), or,
+in a hub's run, from the platform's identity through `platform-role`.
 
 No workflow reads the account or the organization itself: each role step runs
-`jaws config env`, so a role ARN can never name an account the tool does not. The one
-exception is the public image job's `vars.JAWS_PUBLISH_ROLE_ARN` (spec 6.8): the publishing
-role is in an account no configuration names.
+`jaws config env`, or `platform-role` builds the ARN from the identity the hub's caller
+spells, and `jaws platform check` holds that identity to the configuration, so a role ARN can
+never name an account the tool does not. The one exception is the public image job's
+`vars.JAWS_PUBLISH_ROLE_ARN` (spec 6.8): the publishing role is in an account no
+configuration names.
 """
 
 from __future__ import annotations
@@ -68,7 +71,10 @@ def test_a_role_step_fails_when_the_tool_names_no_account(name: str) -> None:
 
 @pytest.mark.parametrize("name", sorted(p.name for p in WORKFLOWS_DIR.glob("*.yml")))
 def test_no_workflow_addresses_an_account_of_its_own(name: str) -> None:
-    """One account: no workflow takes an account input or passes `--account`."""
+    """One account: no workflow takes an account input or passes `--account`.
+
+    A hub's `account-id` input of the site workflows is the platform's identity, which `jaws
+    platform check` holds to the configuration; it is not a choice of account."""
     workflow = _workflow(name)
     inputs = (workflow[True] or {}).get("workflow_dispatch", {}) or {}
     assert "account" not in (inputs.get("inputs") or {}), name

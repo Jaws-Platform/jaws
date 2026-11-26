@@ -108,3 +108,57 @@ vX.Y.Z": `Platform` and the commit's short SHA, linked to the commit on the
 hub. It is the commit of the build the run resolved, not the hub's `main`, so
 a reader sees which configuration planned or applied. Without the labels, the
 footer is as it is outside a hub.
+
+## Project-facing workflows
+
+### `site-plan.yml`, `site-preview.yml` and `site-deploy.yml`
+
+Each takes the identity above as inputs, all optional with default `""`:
+`platform-image`, `account-id` and `name-root`. Each also takes `check-prefix`,
+default `jaws`, the first word of the job's check name. Its role input
+(`plan-role-arn`, `preview-role-arn` or `apply-role-arn`) is optional too: it is
+needed without `platform-image`, and with it is an override that must be a role
+in `account-id`. `site-preview.yml` also takes `artifact`, and `site-deploy.yml`
+`artifact` and `tag`. The comments' App is the platform's: `app-client-id` and
+the `app-private-key` secret.
+
+With an identity, a job builds its role with `platform-role`, assumes it,
+resolves the image once with `platform-image`, and runs every `jaws` step by
+that image's ID. Without one, it runs as it does at a pin from before hubs: the
+same `jaws-cli` image, the role input, and `config/` from the tool checkout.
+Half an identity stops the job before any AWS call.
+
+A hub's caller for `site-plan`, with placeholder values:
+
+```yaml
+name: plan
+on:
+  workflow_call:
+    secrets:
+      app-private-key: { required: false }
+jobs:
+  plan:
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: Jaws-Platform/jaws/.github/workflows/site-plan.yml@vX.Y.Z
+    with:
+      platform-image: jaws-platform
+      account-id: "123456789012"
+      name-root: jaws
+      check-prefix: example
+      app-client-id: ${{ vars.EXAMPLE_APP_CLIENT_ID }}
+    secrets:
+      app-private-key: ${{ secrets.app-private-key }}
+```
+
+### The check names
+
+A job's check name is `<caller job> / <check-prefix> <job>`: `jaws plan`,
+`jaws preview deploy`, `jaws preview remove` and `jaws release` by default, so a
+project that requires `plan / jaws plan` is unchanged. A project that calls a
+hub's copy has one more level: its own job's name, then the hub's caller's, then
+the prefix and the job, for example `plan / example plan`. For plans 06 and 07:
+a project's required checks must name that longer form when it switches to the
+hub.

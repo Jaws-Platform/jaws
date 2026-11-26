@@ -105,10 +105,18 @@ image tag, whatever it pinned.)
 
 | Workflow | Calls | Caller needs |
 | --- | --- | --- |
-| `site-plan.yml` | `validate`, then `plan`, and posts the sticky plan comment | `plan-role-arn`; `id-token: write`, `pull-requests: write`; optionally `app-client-id` and the `app-private-key` secret |
-| `site-preview.yml` | `preview deploy` on open/synchronize/reopen, `preview remove` on close, and the sticky preview comment | `artifact`, `preview-role-arn`; the same permissions and optional app inputs |
+| `site-plan.yml` | `validate`, then `plan`, and posts the sticky plan comment | `plan-role-arn` (or, in a hub, `platform-image`, `account-id`, `name-root` and `check-prefix`); `id-token: write`, `pull-requests: write`; optionally `app-client-id` and the `app-private-key` secret |
+| `site-preview.yml` | `preview deploy` on open/synchronize/reopen, `preview remove` on close, and the sticky preview comment | `artifact`, `preview-role-arn` (or, in a hub, `platform-image`, `account-id`, `name-root` and `check-prefix`); the same permissions and optional app inputs |
 | `site-release-please.yml` | Release Please with the release bot; outputs `release_created` and `tag` | the `RELEASE_BOT_CLIENT_ID` and `RELEASE_BOT_PRIVATE_KEY` secrets, passed by name (`secrets: inherit` only reaches callers in the Jaws-Platform organization) |
-| `site-deploy.yml` | `release` in the caller's `prod` environment at the tag | `artifact`, `tag`, `apply-role-arn`; `id-token: write` |
+| `site-deploy.yml` | `release` in the caller's `prod` environment at the tag | `artifact`, `tag`, `apply-role-arn` (or, in a hub, `platform-image`, `account-id`, `name-root` and `check-prefix`); `id-token: write` |
+
+**In a hub.** A project calls the hub's copy of each workflow at `@live` and
+names no version. The hub's caller spells the platform's identity
+(`platform-image`, `account-id`, `name-root`) and a `check-prefix`, and the run
+then derives every role ARN from the identity, resolves `current` once, and
+names the hub commit in the comment's footer. Without those inputs a job runs as
+above, so a project on a pinned release keeps working. See
+[docs/platform-workflows.md](docs/platform-workflows.md).
 
 Every job uploads `.jaws/` (the debug log, plan text and
 comment files) as an artifact. A site's preview workflow is a build job plus
@@ -263,6 +271,8 @@ App and post as it, with the app's name and avatar. The app needs only
 that posts. If the token cannot be minted the step warns and the comment
 falls back to `github-actions[bot]`. A comment that already exists on a pull
 request keeps its original author; the app shows up on new pull requests.
+A platform passes its own comments App the same way, with `app-client-id` and
+the `app-private-key` secret, and the comments carry that App's name.
 
 The release workflow (`workflow_dispatch` with a `tag`) can re-publish the
 image for an existing tag without cutting a release.

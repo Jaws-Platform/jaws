@@ -3,8 +3,9 @@ name: Site preview
 # Reusable: publishes a built site to previews/pr-<n>/ as the preview role on
 # open, synchronize and reopen, and removes it on close. The caller builds the
 # site and uploads it as an artifact first. Pass `app-client-id` and the
-# `app-private-key` secret to post the comment as the Jaws
-# GitHub App instead of github-actions.
+# `app-private-key` secret to post the comment as the platform's
+# comments App instead of github-actions. A hub's caller also passes the platform's
+# identity (`platform-image`, `account-id`, `name-root`) and a `check-prefix`.
 
 on:
   workflow_call:
@@ -14,14 +15,35 @@ on:
         required: true
         type: string
       preview-role-arn:
-        description: ARN of the site's ci-preview role (usually vars.AWS_PREVIEW_ROLE_ARN).
-        required: true
-        type: string
-      app-client-id:
-        description: ID of the Jaws GitHub App that authors the comment (usually vars.JAWS_APP_CLIENT_ID). Empty posts as github-actions.
+        description: ARN of the site's ci-preview role (usually vars.AWS_PREVIEW_ROLE_ARN). Needed without platform-image; with it, an override that must be a role in account-id.
         required: false
         type: string
         default: ""
+      app-client-id:
+        description: ID of the platform's comments App that authors the comment (usually vars.JAWS_APP_CLIENT_ID). Empty posts as github-actions.
+        required: false
+        type: string
+        default: ""
+      platform-image:
+        description: A hub's image repository in ECR (for example jaws-platform). With it, account-id and name-root, the run builds its role from the platform's identity and runs the hub's image. Empty runs as a project on Jaws's own pin does.
+        required: false
+        type: string
+        default: ""
+      account-id:
+        description: The platform account, 12 digits. Needed with platform-image.
+        required: false
+        type: string
+        default: ""
+      name-root:
+        description: The platform's name root (context.name_root). Needed with platform-image.
+        required: false
+        type: string
+        default: ""
+      check-prefix:
+        description: The first word of the job's check name. The default, jaws, keeps today's names.
+        required: false
+        type: string
+        default: jaws
       debug:
         description: Console log at debug level.
         required: false
@@ -29,14 +51,14 @@ on:
         default: false
     secrets:
       app-private-key:
-        description: Private key of the Jaws GitHub App (usually secrets.JAWS_APP_PRIVATE_KEY). Needed with app-client-id.
+        description: Private key of the platform's comments App (usually secrets.JAWS_APP_PRIVATE_KEY). Needed with app-client-id.
         required: false
 
 permissions: {}
 
 jobs:
   deploy:
-    name: jaws preview deploy
+    name: ${{ inputs.check-prefix }} preview deploy
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     permissions:
@@ -65,6 +87,30 @@ jobs:
             exit 1
           fi
           echo "jaws at $actual, this workflow's own commit"
+      - name: Build the role from the platform's identity
+        id: role
+        if: inputs.platform-image != '' || inputs.account-id != '' || inputs.name-root != ''
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ inputs.platform-image }}
+          account-id: ${{ inputs.account-id }}
+          name-root: ${{ inputs.name-root }}
+          role: preview
+          role-arn: ${{ inputs.preview-role-arn }}
+      - name: Assume the role
+        if: steps.role.outputs.arn != ''
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-site-preview-deploy-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Resolve the platform image
+        id: image
+        if: steps.role.outputs.arn != ''
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          account-id: ${{ inputs.account-id }}
+          repository: ${{ inputs.platform-image }}
       - uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.artifact }}
@@ -74,9 +120,12 @@ jobs:
         uses: ./.jaws-tool/.github/actions/jaws
         with:
           command: preview deploy --pr ${{ github.event.pull_request.number }} --dist .jaws-dist
-          role-arn: ${{ inputs.preview-role-arn }}
+          role-arn: ${{ steps.role.outputs.arn == '' && inputs.preview-role-arn || '' }}
+          image: ${{ steps.image.outputs.image-id }}
+          platform-commit: ${{ steps.image.outputs.platform-commit }}
+          platform-source: ${{ steps.image.outputs.platform-source }}
           debug: ${{ inputs.debug }}
-      - name: Mint a comment token for the Jaws app
+      - name: Mint a comment token for the comments App
         id: app-token
         if: always() && steps.deploy.outcome == 'success' && inputs.app-client-id != ''
         continue-on-error: true # a misconfigured app falls back to github-actions
@@ -102,7 +151,7 @@ jobs:
           if-no-files-found: ignore
 
   remove:
-    name: jaws preview remove
+    name: ${{ inputs.check-prefix }} preview remove
     if: github.event.action == 'closed'
     runs-on: ubuntu-latest
     permissions:
@@ -131,13 +180,40 @@ jobs:
             exit 1
           fi
           echo "jaws at $actual, this workflow's own commit"
+      - name: Build the role from the platform's identity
+        id: role
+        if: inputs.platform-image != '' || inputs.account-id != '' || inputs.name-root != ''
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ inputs.platform-image }}
+          account-id: ${{ inputs.account-id }}
+          name-root: ${{ inputs.name-root }}
+          role: preview
+          role-arn: ${{ inputs.preview-role-arn }}
+      - name: Assume the role
+        if: steps.role.outputs.arn != ''
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-site-preview-remove-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Resolve the platform image
+        id: image
+        if: steps.role.outputs.arn != ''
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          account-id: ${{ inputs.account-id }}
+          repository: ${{ inputs.platform-image }}
       - name: preview remove
         uses: ./.jaws-tool/.github/actions/jaws
         with:
           command: preview remove --pr ${{ github.event.pull_request.number }}
-          role-arn: ${{ inputs.preview-role-arn }}
+          role-arn: ${{ steps.role.outputs.arn == '' && inputs.preview-role-arn || '' }}
+          image: ${{ steps.image.outputs.image-id }}
+          platform-commit: ${{ steps.image.outputs.platform-commit }}
+          platform-source: ${{ steps.image.outputs.platform-source }}
           debug: ${{ inputs.debug }}
-      - name: Mint a comment token for the Jaws app
+      - name: Mint a comment token for the comments App
         id: app-token
         if: inputs.app-client-id != ''
         continue-on-error: true # a misconfigured app falls back to github-actions

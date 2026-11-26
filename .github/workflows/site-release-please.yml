@@ -4,7 +4,9 @@ name: Site release please
 # app token, and reports whether a release was created and its tag. Pass it
 # RELEASE_BOT_CLIENT_ID and RELEASE_BOT_PRIVATE_KEY by name under `secrets:`.
 # `secrets: inherit` reaches only a caller in the same account or organization
-# as this repository (Jaws-Platform), so a site elsewhere must name them.
+# as this repository (Jaws-Platform), so a site elsewhere must name them. A project
+# calling a hub's copy names its secrets at each level too, because `secrets: inherit`
+# stops at an organization. It reaches no AWS, so it takes no platform identity.
 
 on:
   workflow_call:
