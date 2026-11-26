@@ -995,6 +995,14 @@ def config_env(
             "workflows' job names. Plan 05's workflows will read it; nothing does yet.",
         ),
     ] = False,
+    platform: Annotated[
+        bool,
+        typer.Option(
+            "--platform",
+            help="Also print `platform_image=<the hub's image repository>` and "
+            "`platform_repository=<the hub's repository>`, for the hub's workflows.",
+        ),
+    ] = False,
 ) -> None:
     """Print the account's values as `key=value` lines, for a workflow to append
     to GITHUB_OUTPUT: every workflow builds its role ARNs, state bucket and image
@@ -1016,8 +1024,49 @@ def config_env(
         lines.append(("monitoring", "absent" if settings.monitoring is None else "configured"))
     if brand:
         lines.append(("check_prefix", settings.brand.check_prefix))
+    if platform:
+        hub = settings.platform.hub
+        if hub is None:
+            print(
+                "platform.hub is not set (config/platform.yaml): "
+                "a hub's workflows push and run its image",
+                file=sys.stderr,
+            )
+            raise typer.Exit(2)
+        lines.append(("platform_image", hub.image))
+        lines.append(("platform_repository", hub.repository))
     for key, value in lines:
         print(f"{key}={value}")
+
+
+PROJECT_TYPES = ("site", "bot", "research", "databricks")
+
+
+@config_app.command("projects")
+def config_projects(
+    ctx: typer.Context,
+    types: Annotated[
+        list[str],
+        typer.Argument(help="Project types to list: site, bot, research or databricks."),
+    ],
+) -> None:
+    """Print the onboarded projects of the given types as one line of compact JSON,
+    `[{"project", "repository", "type"}]` in the registry's order: the matrices
+    and lookups of the workflows."""
+    settings = ctx.obj.settings
+    for project_type in types:
+        if project_type not in PROJECT_TYPES:
+            print(
+                f"unknown project type: {project_type} (site, bot, research or databricks)",
+                file=sys.stderr,
+            )
+            raise typer.Exit(2)
+    listed = [
+        {"project": key, "repository": settings.repository(key), "type": project.type}
+        for key, project in settings.projects.items()
+        if project.type in types
+    ]
+    print(json.dumps(listed, separators=(",", ":")))
 
 
 @config_app.command("show")
