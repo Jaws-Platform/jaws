@@ -43,12 +43,12 @@
 - 6.6, the trust these workflows rely on;
 - 6.7: the check names and the footer.
 
-Roadmap: [row 05](2026-11-23-hub-split-00-roadmap.md). This plan builds on plans 02 (white-label), 03 (platform stacks) and 04 (images), which merge first.
+Roadmap: [row 05](2026-11-23-hub-split-00-roadmap.md). This plan builds on plans 02 (white-label), 03 (platform stacks) and 04 (images), merged as #324 and #317.
 
 **Where the work happens:**
 - **Task 1** is in `Jaws-Platform/terraform-aws-jaws-lichess-bot` (`~/Projects/Jaws-Platform/terraform-aws-jaws-lichess-bot`), on a branch from its `main`, with its own PR. Task 2 waits for its release, 0.2.0.
 - **Tasks 2–16** are in `jaws`, on `hub-split/05-workflows`, the branch of the draft PR that holds this plan. The work lands on that PR.
-  - Rebase the branch onto `main` once plans 02 and 04 have merged. Plan 03 merged as #316.
+  - The branch is rebased onto `main` at f191af8 (v0.81.0), after plans 02 and 04 merged. Plan 03 merged as #316.
   - Tasks 3–8 and 15 need nothing from Tasks 1–2, and can run while Task 1 is in review.
 
 ## Global Constraints
@@ -80,7 +80,7 @@ Roadmap: [row 05](2026-11-23-hub-split-00-roadmap.md). This plan builds on plans
   - `ci.yml`, `release-please.yml`, `data-access.yml`, `bot-apply.yml` and `databricks-apply.yml` keep planning and applying from `jaws` until takeover. Plan 07 switches them off as the hub's start, so exactly one sweeper runs.
   - The one change to them is Task 15's: the steps that source `scripts/databricks-credentials.sh` pass it the name root (plan 02's pre-flight item G12).
   - No `jaws` workflow calls a `platform-*.yml`.
-- **The owner's folders.** No workflow, action or CLI command names `owner-access`, `billing-export` or `release-infra`. `tests/test_owner_access.py`, `tests/test_billing_export.py` and `tests/test_release_infra.py` check the workflows.
+- **The owner's folders.** No `platform-*` workflow or action, and no CLI command, names `owner-access`, `billing-export` or `release-infra`. Of `jaws`'s workflows, only `ci.yml` does, in the jobs that validate and test them, as `tests/test_owner_access.py`, `tests/test_billing_export.py` and `tests/test_release_infra.py` require.
 - **The region** stays `us-east-1`, a product constant (spec 6.7). The ECR registry is `<account-id>.dkr.ecr.us-east-1.amazonaws.com`.
 - **Owner values in files.**
   - Never write one outside `config/` and `tests/platform/`.
@@ -203,7 +203,7 @@ Calls this plan makes where the spec leaves them open, and the few where it depa
 Merging this plan changes nothing in AWS. The agent does none of these.
 
 1. **Now, before this plan's releases: the old pins' image.** Every project's pin, `@v0.76.0`, pulls `jaws-cli:v0.76.0` in `site-plan`, `site-preview` and `site-deploy`.
-   - Seven releases have followed it (v0.77.0 to v0.80.1, CHANGELOG.md), and `jaws-cli` keeps only the newest `ecr.keep_release_images` release images.
+   - Eight releases have followed it (v0.77.0 to v0.81.0, CHANGELOG.md), and `jaws-cli` keeps only the newest `ecr.keep_release_images` release images.
    - At about four releases a day, it expires before plan 07's switches, and those workflows then fail to pull.
    - Before then, do one of these: raise `ecr.keep_release_images` in `config/tool.yaml`, a config change still allowed before the freeze; or merge the projects' Dependabot bumps to a recent tag.
 2. **Before Task 2:** merge Task 1's PR, then its Release Please PR, so that jaws-lichess-bot 0.2.0 is on the Registry. If Dependabot then opens its own bump for `foundation/`, close it: it misses `stacks/bot/` and `src/jaws/product.yaml`, which Task 2 bumps too.
@@ -264,7 +264,7 @@ In `Jaws-Platform/terraform-aws-jaws-lichess-bot`, branch `mutable-tags`.
   - `image_tag_mutability = "IMMUTABLE_WITH_EXCLUSION"`, with one `image_tag_mutability_exclusion_filter { filter = <tag>, filter_type = "WILDCARD" }` per tag;
   - the lifecycle starts with one rule per mutable tag, at priorities 1 to k: `description = "Keep the image tagged <tag>"`, `selection = { tagStatus = "tagged", tagPatternList = [<tag>], countType = "imageCountMoreThan", countNumber = 1 }`, `action = { type = "expire" }`. A tag sits on one image, so that rule expires nothing, and no lower rule may expire an image it matches;
   - today's two rules follow, at k + 1 and k + 2.
-- `versions.tf`: aws `>= 6.8, < 7.0`. 6.8.0 added the exclusion filter and `IMMUTABLE_WITH_EXCLUSION`, and every `jaws` lock file resolves 6.73.0.
+- `versions.tf`: aws `>= 6.8, < 7.0`. 6.8.0 added the exclusion filter and `IMMUTABLE_WITH_EXCLUSION`, and every `jaws` lock file resolves 6.73.0 or later (`release-infra/`, which calls no jaws-lichess-bot module, 6.74.0).
 
 - [ ] **Step 1: Write the failing tests,** each a `command = plan` run:
   - `a_mutable_tag_moves_and_its_image_is_kept`, with `mutable_tags = ["current"]`, `release_tag_prefixes = ["sha-"]` and `keep_release_images = 10`:
@@ -286,13 +286,13 @@ Expected: FAIL. The runs fail, since the module has no `mutable_tags`.
 Run: `scripts/check.sh`
 Expected: PASS. Every existing run passes unchanged, which shows that a repository without mutable tags keeps its policy.
 
-- [ ] **Step 5: Commit, push and open the PR,** its body `.github/PULL_REQUEST_TEMPLATE/feat.md` with every section filled in
+- [ ] **Step 5: Commit, push and open the PR,** its body `.github/pull_request_template.md`'s sections, every one filled in
 
 ```bash
 git add modules/ecr-repository
 git commit -m "feat(ecr-repository): let named tags move, and keep the image each one names"
 git push -u origin mutable-tags
-gh pr create --title "feat(ecr-repository): let named tags move, and keep the image each one names" --body-file <the filled feat.md>
+gh pr create --title "feat(ecr-repository): let named tags move, and keep the image each one names" --body-file <the filled template>
 ```
 
 The owner then merges it and the Release Please PR, which gives 0.2.0: the repository bumps the minor for a `feat` before 1.0.
@@ -319,13 +319,13 @@ Wait until `curl -s https://registry.terraform.io/v1/modules/Jaws-Platform/jaws-
 ```python
 def test_the_hub_image_keeps_ten_builds_and_lets_only_current_move() -> None:
     """Each release pushes sha-<commit>; current names the live build (spec 6.3)."""
-    block = _module_block(REPO_ROOT / "foundation" / "ecr.tf", "hub_image")
+    block = _module("hub_image", REPO_ROOT / "foundation" / "ecr.tf")
     assert 'mutable_tags         = ["current"]' in block
     assert 'release_tag_prefixes = ["sha-"]' in block
     assert "keep_release_images  = 10" in block
 ```
 
-`_module_block(path: Path, name: str) -> str` returns the text from `module "<name>" {` to its closing brace at column 0.
+Use `tests/test_bots_registry.py`'s `_module("hub_image", REPO_ROOT / "foundation" / "ecr.tf")`, which returns the block's body, rather than a new `_module_block`.
 
 - [ ] **Step 2: Run it and watch it fail**
 
@@ -365,7 +365,7 @@ git commit -m "feat(foundation): keep ten hub image builds and let only current 
 **Files:**
 - Modify: `src/jaws/cli.py`: `config_env`, and a new `config_projects` beside it
 - Create: `tests/test_config_projects.py`
-- Modify: `tests/test_one_account.py`, `tests/workflow_steps.py` (`HUB`, `HUB_REPOSITORY`)
+- Modify: `tests/test_one_account.py`
 
 **Interfaces:**
 - Produces `jaws config projects TYPE...`.
@@ -377,7 +377,7 @@ git commit -m "feat(foundation): keep ten hub image builds and let only current 
   - Without `platform.hub` it exits 2 with "platform.hub is not set (config/platform.yaml): a hub's workflows push and run its image".
 
 - [ ] **Step 1: Write the failing tests**
-  - In `tests/workflow_steps.py`, define the hub once, in neutral values no other file holds: `HUB = {"repository": "Example-Hub/platform", "image": "jaws-platform"}`, and `HUB_REPOSITORY = {"repository": "Example-Hub/platform", "owner_id": "10000099", "repository_id": "20000099"}`. `tests/test_one_account.py` and Task 7's tests import them.
+  - `HUB` and `HUB_REPOSITORY` already exist, with these values, in `tests/test_foundation_fixtures.py` (plan 03). `tests/test_one_account.py` and Task 7's tests import them from there.
   - In `tests/test_config_projects.py`:
     - `test_config_projects_lists_what_scripts_projects_sh_lists`, `@needs_yq` (from `tests/test_databricks_workflows.py`), parametrized over `["bot", "research"]`, `["databricks"]` and `["site"]`: the command's JSON equals that of `scripts/projects.sh --config <the fixture> <types>`;
     - `test_config_projects_refuses_an_unknown_type`: `app` exits 2 with "unknown project type: app".
@@ -400,7 +400,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/jaws/cli.py tests/test_config_projects.py tests/test_one_account.py tests/workflow_steps.py
+git add src/jaws/cli.py tests/test_config_projects.py tests/test_one_account.py
 git commit -m "feat(cli): list the projects and name the hub's image for the hub's workflows"
 ```
 
@@ -447,7 +447,7 @@ git commit -m "feat(cli): list the projects and name the hub's image for the hub
   - exits 0 for no changes or for changes, and 1 for a failed plan, after writing the comment.
 
   `apply` plans as `plan` does, with the apply role. Then it applies the saved plan only when the plan has changes: the sweep's rule, now every platform stack's. It writes `result=no-changes|applied` and a step summary, and exits 1 for a failed plan or apply.
-- Implementation hint: subclass `stack.Terraform` for its working copy, init, plan and apply. Take a `PlatformStack` instead of a `Target`, and override `backend()`. The tfvars are `{}`, and Task 5 renders data access's.
+- Implementation hint: subclass `stack.Terraform` for its working copy, init, plan and apply. Take a `PlatformStack` instead of a `Target`, and override `backend()` and `_environment()` (it reads `self.site.region`). Set what `Terraform.__init__` sets (`stack_name`, `stack_dir`, `plugin_dir`, `binary`, `workdir`, `_extra_env`, `tfvars_override={}`) without calling it: it reads `site.state_key` and picks `stacks/site` for a non-`Project`. The tfvars are `{}`, and Task 5 renders data access's.
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_platform_cli.py`
 
@@ -600,7 +600,7 @@ git commit -m "feat(cli): name the platform's commit in the comment footer"
 ### Task 7: `jaws platform check`: one version, one identity
 
 **Files:**
-- Modify: `src/jaws/platform.py` (the check), `src/jaws/cli.py` (`platform check`)
+- Modify: `src/jaws/platform.py` (the check), `src/jaws/cli.py` (`platform check`, and `config env --brand`'s help), `src/jaws/settings.py` (`BrandSection.check_prefix`'s comment)
 - Create: `tests/test_platform_check.py`
 
 **Interfaces:**
@@ -612,7 +612,7 @@ git commit -m "feat(cli): name the platform's commit in the comment footer"
   - `FROM_PATTERN = r"^FROM ([^ @]+):(v[0-9]+\.[0-9]+\.[0-9]+)@(sha256:[0-9a-f]{64})$"`, rule 1's. `platform-base` holds it verbatim (Task 11), so the check and the build read one `FROM` alike.
   - `def check_hub(root: Path, settings: Settings, version: str, repository: str | None) -> list[HubProblem]`: nothing when the hub agrees.
 - Produces `jaws platform check [--root PATH]`. `--root` defaults to `.`, and the repository is `GITHUB_REPOSITORY`.
-  - It writes each problem as an error annotation, `{path}: {message}`.
+  - It writes each problem with `annotate_error(f"{path}: {message}", title=settings.brand.name)`.
   - It exits 1 if there are any, and otherwise prints "the hub's pins and identity agree: Jaws v{version}".
 - The rules and their messages, verbatim. `{expected}` is the configuration's value:
   1. The `Dockerfile`'s one `FROM` matches `FROM_PATTERN`, `<image>:v<X.Y.Z>@sha256:<64 hex>`, else: "FROM must pin the Jaws image by tag and digest (FROM public.ecr.aws/<alias>/jaws:vX.Y.Z@sha256:…), not {line!r}".
@@ -644,7 +644,7 @@ jobs:
 """
 ```
 
-- `_hub(tmp_path: Path, ref: str = "v0.81.0", **values: str) -> Path` writes a hub checkout: a `Dockerfile` with `FROM public.ecr.aws/example-alias/jaws:v0.81.0@<DIGEST>`, and `.github/workflows/site-plan.yml` from `CALLER`, whose `image` and `account` default to `jaws-platform` and `222222222222`. `_settings() -> Settings` is the fixture's configuration with `HUB_REPOSITORY` and `HUB` (Task 3).
+- `_hub(tmp_path: Path, ref: str = "v0.81.0", **values: str) -> Path` writes a hub checkout: a `Dockerfile` with `FROM public.ecr.aws/example-alias/jaws:v0.81.0@<DIGEST>`, and `.github/workflows/site-plan.yml` from `CALLER`, whose `image` and `account` default to `jaws-platform` and `222222222222`. `_settings() -> Settings` is the fixture's configuration with `HUB_REPOSITORY` and `HUB` (`tests/test_foundation_fixtures.py`).
 - `test_a_hub_whose_pins_and_identity_agree_passes`: `check_hub(_hub(tmp_path), _settings(), "0.81.0", "Example-Hub/platform") == []`.
 - `test_a_pin_that_disagrees_fails_the_check`: `ref="v0.80.1"` gives exactly one problem, at `.github/workflows/site-plan.yml`, naming `v0.80.1` and `v0.81.0`.
 - `test_an_identity_that_disagrees_fails_the_check`, parametrized: `image="jaws-cli"` gives a message holding `platform-image: 'jaws-cli'`, `account="333333333333"` one holding `account-id: '333333333333'`, and `image="${{ vars.PLATFORM_IMAGE }}"` one holding `platform-image as an expression`.
@@ -661,6 +661,7 @@ Run: `uv run pytest tests/test_platform_check.py -v`
 Expected: FAIL with `ImportError: cannot import name 'check_hub'`.
 
 - [ ] **Step 3: Implement it** per the Interfaces. Read the workflows with `yaml.safe_load`, and list each problem once, in file order.
+  - Both `BrandSection.check_prefix`'s comment and `config env --brand`'s help say nothing reads the prefix yet. Now `jaws platform check` holds each hub caller's `check-prefix` to it, and the site workflows take it as their `check-prefix` input; say that instead.
 
 - [ ] **Step 4: Run them and watch them pass**
 
@@ -670,7 +671,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/jaws/platform.py src/jaws/cli.py tests/test_platform_check.py
+git add src/jaws/platform.py src/jaws/cli.py src/jaws/settings.py tests/test_platform_check.py
 git commit -m "feat(cli): check that a hub's pins and identity agree with its configuration"
 ```
 
@@ -691,7 +692,7 @@ git commit -m "feat(cli): check that a hub's pins and identity agree with its co
 - Produces, in `tests/workflow_steps.py`:
   - `ACTIONS = REPO_ROOT / ".github" / "actions"`;
   - `def action_step(action: str, step_id: str) -> dict[str, Any]`;
-  - `def run_action_step(action: str, step_id: str, *, cwd: Path, env: Mapping[str, str], fakes: Mapping[str, str] | None = None) -> tuple[subprocess.CompletedProcess[str], str]`. It is `run_step`'s mechanism for a composite action's step.
+  - `def run_action_step(action: str, step_id: str, *, cwd: Path, env: Mapping[str, str], fakes: Mapping[str, str] | None = None) -> tuple[subprocess.CompletedProcess[str], str]`. It is `run_step`'s mechanism for a composite action's step. It runs the step as Actions runs a composite `shell: bash` step, `bash --noprofile --norc -eo pipefail -c`, not `run_step`'s `bash -e -c`.
 - Produces `.github/actions/platform-role`, which makes no AWS call.
   - Inputs: `platform-image`, `account-id`, `name-root` and `role` (one of `plan`, `preview`, `apply`, `release` and `task`), all required; `project` (default `""`, read from `project-file` then); `project-file` (default `jaws.yaml`); `role-arn` (default `""`, an override).
   - Its one step, `id: arn`, takes the inputs as `PLATFORM_IMAGE`, `ACCOUNT_ID`, `NAME_ROOT`, `ROLE`, `PROJECT`, `PROJECT_FILE` and `ROLE_ARN`.
@@ -794,6 +795,7 @@ git commit -m "feat(workflows): resolve a hub's image once per run and run it by
   - `role-arn: ${{ steps.role.outputs.arn == '' && inputs.<role input> || '' }}`;
   - `image`, `platform-commit` and `platform-source`, from `steps.image.outputs`.
 - The descriptions of `app-client-id` and `app-private-key` say "the platform's comments App" in place of "the Jaws GitHub App".
+- The step `Mint a comment token for the Jaws app`, in all three jobs that post, becomes `Mint a comment token for the comments App`, and site-plan.yml's header comment says the platform's comments App.
 - `site-release-please.yml` takes no new input, since it reaches no AWS. Its comment adds that a project calling a hub names its secrets at each level, because `secrets: inherit` stops at an organization.
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_site_workflows.py`
@@ -822,7 +824,7 @@ Each test is parametrized over `JOBS`:
   - each `jaws` step's `role-arn` falls back to the job's role input;
   - the tool checkout and its verify step come first, unchanged (`tests/test_tool_checkout.py` already checks them).
 
-In `tests/test_workflow_roles.py`, the module docstring becomes: every workflow builds its roles from the tool's reading of its configuration (`config/`), or, in a hub's run, from the platform's identity through `platform-role`. `jaws platform check` holds that identity to the configuration (Task 7).
+In `tests/test_workflow_roles.py`, the module docstring becomes: every workflow builds its roles from the tool's reading of its configuration (`config/`), or, in a hub's run, from the platform's identity through `platform-role`. `jaws platform check` holds that identity to the configuration (Task 7). It keeps plan 04's last sentence: the one exception is the public image job's `vars.JAWS_PUBLISH_ROLE_ARN` (spec 6.8).
 
 - [ ] **Step 2: Run them and watch them fail**
 
@@ -862,6 +864,7 @@ git commit -m "feat(sites): run the site workflows from a hub's image, with its 
 **Files:**
 - Modify: `.github/workflows/remote-task.yml`, `.github/workflows/container-release.yml`
 - Modify: `tests/test_remote_task_workflow.py`
+- Modify: `tests/test_bots_registry.py` (`test_container_release_runs_this_commit_and_pins_nothing`: assert `'--config "$JAWS_TOOL_CONFIG"'` in place of `"--config .jaws-tool/config "`, and its input set gains `platform-image`, `account-id` and `name-root`)
 - Create: `tests/test_container_release_workflow.py`
 - Modify: `docs/remote-tasks.md`, `docs/lichess-bot.md` (each one's caller section), `docs/platform-workflows.md`
 
@@ -896,13 +899,13 @@ In `tests/test_remote_task_workflow.py`:
   - `role`'s script uses `$PLATFORM_ARN` when set, and calls `config env` only otherwise;
   - the credentials keep `role-duration-seconds`.
 - Add `test_in_a_hub_the_cli_reads_the_platform_image_s_configuration`. `platform-image` comes between the credentials and `jaws task run`, with `extract: .jaws-platform`. The task step's `JAWS_INFRA_ROOT` is `${{ steps.image.outputs.infra-root }}`.
-- Add `test_without_a_platform_image_a_task_runs_as_today`. Run the `role` step with `PLATFORM_ARN=""` and a fake `jaws` whose `config env` prints the fixture's lines. The result is `arn=arn:aws:iam::222222222222:role/jaws-braveheart-ci-task`, with a duration.
+- Add `test_without_a_platform_image_a_task_runs_as_today`. Run the `role` step with `PLATFORM_ARN=""` and a fake `uv` whose `run --no-dev --project .jaws-tool jaws --config … config env` prints the fixture's lines, with `MAX_HOURS=1`, or a `jaws.yaml` and `@needs_yq`. The result is `arn=arn:aws:iam::222222222222:role/jaws-braveheart-ci-task`, with a duration.
 
 `tests/test_container_release_workflow.py` tests `container-release.yml`'s own design:
 - `test_it_takes_the_platform_s_identity`: the three inputs, each defaulting to `""`.
 - `test_in_a_hub_the_release_role_comes_from_the_platform_s_identity`: `platform-role`'s `with` is the identity, `role: release`, `project: ${{ inputs.project }}` and `role-arn: ${{ inputs.release-role-arn }}`. `role` takes `if: steps.platform.outputs.arn == ''`, and the credentials assume `${{ steps.platform.outputs.arn || steps.role.outputs.arn }}`.
 - `test_in_a_hub_the_cli_reads_the_platform_image_s_configuration`: `platform-image` comes between the credentials and `jaws bot reconcile`, with `extract: .jaws-platform`. The reconcile step spells `--config "$JAWS_TOOL_CONFIG"`, and its `JAWS_INFRA_ROOT` is `${{ steps.image.outputs.infra-root }}`.
-- `test_without_a_platform_image_a_release_runs_as_today`: `role`, run with a fake `jaws` whose `config env` prints the fixture's lines, gives `arn=arn:aws:iam::222222222222:role/jaws-braveheart-ci-release`, and the override when `OVERRIDE` is set.
+- `test_without_a_platform_image_a_release_runs_as_today`: `role`, run with a fake `uv` whose `run --no-dev --project .jaws-tool jaws --config … config env` prints the fixture's lines, gives `arn=arn:aws:iam::222222222222:role/jaws-braveheart-ci-release`, and the override when `OVERRIDE` is set.
 
 - [ ] **Step 2: Run them and watch them fail**
 
@@ -913,7 +916,7 @@ Expected: FAIL
 
 - [ ] **Step 4: Run them and watch them pass**
 
-Run: `uv run pytest tests/test_remote_task_workflow.py tests/test_container_release_workflow.py tests/test_tool_checkout.py tests/test_workflow_roles.py -q`
+Run: `uv run pytest tests/test_remote_task_workflow.py tests/test_container_release_workflow.py tests/test_bots_registry.py tests/test_tool_checkout.py tests/test_workflow_roles.py -q`
 Expected: PASS
 
 - [ ] **Step 5: Docs.** Each caller section in `docs/remote-tasks.md` and `docs/lichess-bot.md` gains: in a hub, call the hub's copy at `@live`, which spells the identity. In `docs/platform-workflows.md`, "Project-facing workflows" adds both workflows and why they run from source (ruling 14).
@@ -921,7 +924,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add .github/workflows/remote-task.yml .github/workflows/container-release.yml tests/test_remote_task_workflow.py tests/test_container_release_workflow.py docs
+git add .github/workflows/remote-task.yml .github/workflows/container-release.yml tests/test_remote_task_workflow.py tests/test_container_release_workflow.py tests/test_bots_registry.py docs
 git commit -m "feat(bots): run remote tasks and bot releases with a hub's configuration"
 ```
 
@@ -965,7 +968,7 @@ git commit -m "feat(bots): run remote tasks and bot releases with a hub's config
 
 | Job (`name`) | Does |
 |---|---|
-| `candidate` (`Platform check`) | builds the PR head (`platform-base`, then `platform-build` with `load: "true"`, `push: "false"` and `revision: ${{ github.event.pull_request.head.sha }}`). Offline (`docker run --rm --network none`), it runs `config show > /dev/null`, a validation only, since the hub's logs are public; `platform check` (the checkout mounted read-only, with `GITHUB_REPOSITORY`); `config env --monitoring --databricks --brand --platform` into `GITHUB_OUTPUT`; and `config projects site bot research databricks` as `projects`. It saves the image as the artifact `platform-image`, the file `platform-image.tar` (`retention-days: 1`), and outputs `image-id`, `account_id`, `name_root`, `monitoring`, `databricks`, `platform_image` and `projects` |
+| `candidate` (`Platform check`) | builds the PR head (`platform-base`, then `platform-build` with `load: "true"`, `push: "false"` and `revision: ${{ github.event.pull_request.head.sha }}`). Offline (`docker run --rm --network none`), it runs `config show > /dev/null`, a validation only, since the hub's logs are public; `platform check --root /hub` (the checkout mounted read-only at `/hub`, never at the image's working directory `/work`, which the CLI writes `.jaws/` into; with `GITHUB_REPOSITORY`); `config env --monitoring --databricks --brand --platform` into `GITHUB_OUTPUT`; and `config projects site bot research databricks` as `projects`. It saves the image as the artifact `platform-image`, the file `platform-image.tar` (`retention-days: 1`), and outputs `image-id`, `account_id`, `name_root`, `monitoring`, `databricks`, `platform_image` and `projects` |
 | `foundation` (`Terraform plan`) | `platform-role` (project `infra`, role `plan`), the credentials, `platform-image` with `artifact` and `image-id`, then `jaws` with `command: platform plan foundation`. Comment header `terraform-plan` |
 | `monitoring` (`Monitoring plan`) | with `monitoring == 'configured'` and the PR from this repository: the same, with project `monitoring`. Until its role exists, the credentials step (`continue-on-error`) leads to a notice and a skip, as `ci.yml` does today. Header `monitoring-plan` |
 | `data-access` (`Data access plan`) | not for Dependabot: checks out the base's `datasets` into `.base`, then runs `platform plan data-access --base-registry .base/datasets`, with `github-token: ${{ github.token }}`. Header `data-access-plan` |
@@ -978,7 +981,7 @@ git commit -m "feat(bots): run remote tasks and bot releases with a hub's config
 - [ ] **Step 1: Write the failing tests** in `tests/test_platform_ci.py`, where the plan jobs are `foundation`, `monitoring`, `data-access` and `projects`:
 - `test_the_candidate_is_built_once_and_passed_to_every_plan`: `candidate` uploads the artifact `platform-image` with `retention-days: 1`. Each plan job needs `candidate`, and runs `platform-image` with `artifact: platform-image` and `image-id: ${{ needs.candidate.outputs.image-id }}`.
 - `test_no_pull_request_job_can_push_or_move_current`: the workflow's text holds none of `amazon-ecr-login`, `put-image`, `docker push`, `push: true`, `push: "true"` and `ci-apply`.
-- `test_the_hub_is_checked_inside_its_candidate`. The `candidate` job's run steps hold the four offline commands, each with `--network none`. `config show` writes to `/dev/null`, and `platform check` runs with the checkout mounted read-only.
+- `test_the_hub_is_checked_inside_its_candidate`. The `candidate` job's run steps hold the four offline commands, each with `--network none`. `config show` writes to `/dev/null`, and `platform check` runs with the checkout mounted `:ro` at a path other than `/work`, which its `--root` names.
 - `test_every_platform_stack_and_project_is_planned`:
   - the names and commands of the table;
   - the `projects` job's matrix is `fromJSON(needs.candidate.outputs.projects)`, under `if: needs.candidate.outputs.projects != '[]'`.
@@ -1000,7 +1003,7 @@ Expected: FAIL with `FileNotFoundError` for `platform-ci.yml`.
 
 - [ ] **Step 4: Run them and watch them pass**
 
-Run: `uv run pytest tests/test_platform_ci.py tests/test_tool_checkout.py tests/test_repository_name.py tests/test_workflow_artifacts.py tests/test_owner_access.py tests/test_billing_export.py -q`
+Run: `uv run pytest tests/test_platform_ci.py tests/test_tool_checkout.py tests/test_repository_name.py tests/test_workflow_artifacts.py tests/test_owner_access.py tests/test_billing_export.py tests/test_release_infra.py -q`
 Expected: PASS
 
 - [ ] **Step 5: Docs.** `docs/platform-workflows.md`, "The hub's pull requests":
@@ -1051,7 +1054,7 @@ git commit -m "feat(workflows): plan every stack and project of a hub with its c
 - `test_nothing_moves_without_a_release`: for `image`, `apply`, `monitoring-apply`, `current` and `live`, `_conditions` holds `needs.release-please.outputs.release_created == 'true'`.
 - `test_current_moves_only_after_the_foundation_s_apply`: `current`'s needs are `{image, apply}` and its `if` holds `needs.apply.result == 'success'`; `live`'s needs are `[image, current]`.
 - `test_both_workflows_require_the_movers_input_and_secret`: `platform-release.yml` and `platform-rollback.yml` each declare the input `live-app-client-id` (string) and the secret `live-app-private-key`, both `required: true`.
-- `test_the_live_move_mints_its_token_from_exactly_those`: the `live` job's token step in the release, and the rollback's, use `actions/create-github-app-token` at the plan's pinned version with `client-id: ${{ inputs.live-app-client-id }}` and `private-key: ${{ secrets.live-app-private-key }}`, and `platform-move`'s `token` is that step's output.
+- `test_the_live_move_mints_its_token_from_exactly_those`: the `live` job's token step in the release, and the rollback's, use `actions/create-github-app-token@v3`, the version every workflow pins, with `client-id: ${{ inputs.live-app-client-id }}` and `private-key: ${{ secrets.live-app-private-key }}`, and `platform-move`'s `token` is that step's output.
 - `test_no_step_that_moves_live_uses_the_release_app`: in both workflows, no step that runs `platform-move` with `move: live`, nor the step that mints its token, reads `RELEASE_BOT_CLIENT_ID` or `RELEASE_BOT_PRIVATE_KEY`. The rollback names neither secret.
 - `test_every_job_needs_the_jobs_whose_outputs_it_reads`: in every `.github/workflows/platform-*.yml`, each `needs.<job>` in a job's text names a job in its `needs`.
 - `test_the_build_is_tagged_with_the_release_commit`: `platform-build` pushes `…:sha-${{ steps.commit.outputs.commit }}`, with `load` and `push` both `"true"`, after the `infra` apply role, in `prod`.
@@ -1075,7 +1078,7 @@ Expected: FAIL with `FileNotFoundError`.
 
 - [ ] **Step 4: Run them and watch them pass**
 
-Run: `uv run pytest tests/test_platform_release.py tests/test_tool_checkout.py tests/test_owner_access.py tests/test_billing_export.py -q`
+Run: `uv run pytest tests/test_platform_release.py tests/test_tool_checkout.py tests/test_owner_access.py tests/test_billing_export.py tests/test_release_infra.py -q`
 Expected: PASS
 
 - [ ] **Step 5: Docs.** `docs/platform-workflows.md`:
@@ -1142,7 +1145,7 @@ Expected: FAIL
 
 - [ ] **Step 4: Run them and watch them pass**
 
-Run: `uv run pytest tests/test_platform_applies.py tests/test_tool_checkout.py tests/test_workflow_artifacts.py tests/test_owner_access.py tests/test_billing_export.py -q`
+Run: `uv run pytest tests/test_platform_applies.py tests/test_tool_checkout.py tests/test_workflow_artifacts.py tests/test_owner_access.py tests/test_billing_export.py tests/test_release_infra.py -q`
 Expected: PASS
 
 - [ ] **Step 5: Docs.** `docs/platform-workflows.md`, "By-hand applies and the sweep":
@@ -1274,12 +1277,12 @@ git commit -m "refactor(workflows): pass the name root to the credential script 
 - [ ] **Step 1: Bring the repository's own docs up to date**
   - **`AGENTS.md`:**
     - the CLI paragraph names `jaws platform` and `jaws config projects`;
-    - a rule: the `platform-*.yml` workflows and the `platform-*` actions are a hub's. No workflow of `jaws` calls them, and no workflow, action or CLI command names `owner-access`, `billing-export` or `release-infra`.
+    - a rule: the `platform-*.yml` workflows and the `platform-*` actions are a hub's. No workflow of `jaws` calls them, and no `platform-*` workflow or action, and no CLI command, names `owner-access`, `billing-export` or `release-infra`. Of `jaws`'s workflows, only `ci.yml` does, in the jobs that validate and test them, as `tests/test_owner_access.py`, `tests/test_billing_export.py` and `tests/test_release_infra.py` require.
   - **`README.md`, the Layout table:**
     - `.github/workflows/platform-*.yml`: "A hub's workflows: its pull requests, its release, rollback, by-hand applies, the data access sweep and the upgrade PR ([docs/platform-workflows.md](docs/platform-workflows.md))";
     - `.github/actions/platform-*`: "Shared steps of a hub's runs: the role, one build per run, the base and the build, the project file, and the moves of `current` and `live`".
   - **The roadmap,** `docs/superpowers/plans/2026-11-23-hub-split-00-roadmap.md`:
-    - row 05's status becomes "in its pull request";
+    - row 05's status becomes "in its pull request", and row 04's "merged in #317";
     - rows 06 and 07 gain "For plans 06 and 07" above, in a few words each;
     - "Owner steps along the way" gains this plan's hand-offs 1 and 3.
 
