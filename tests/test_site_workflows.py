@@ -72,6 +72,10 @@ def test_a_site_job_resolves_the_platform_image_once(workflow: str, name: str) -
 @pytest.mark.parametrize("workflow", WORKFLOW_FILES)
 def test_each_site_workflow_takes_the_platform_s_identity(workflow: str) -> None:
     inputs = _inputs(workflow)
+    prefix = inputs["check-prefix"]
+    assert prefix["type"] == "string"
+    assert prefix.get("required", False) is False
+    assert prefix["default"] == "jaws"
     for key in IDENTITY:
         assert inputs[key]["default"] == ""
         assert inputs[key]["type"] == "string"
@@ -110,8 +114,9 @@ def test_without_a_platform_image_a_site_job_runs_as_today(workflow: str, name: 
     steps: list[dict[str, Any]] = job(workflow, name)["steps"]
     (role_step,) = _steps(workflow, name, ROLE_ACTION)
     condition = role_step["if"]
-    for key in IDENTITY:
-        assert f"inputs.{key} != ''" in condition
+    assert condition == (
+        "inputs.platform-image != '' || inputs.account-id != '' || inputs.name-root != ''"
+    )
     fallback = "${{ steps.role.outputs.arn == '' && inputs." + role_input + " || '' }}"
     for step in _steps(workflow, name, JAWS_ACTION):
         assert step["with"]["role-arn"] == fallback

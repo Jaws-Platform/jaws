@@ -128,7 +128,9 @@ that image's ID. Without one, it runs as it does at a pin from before hubs: the
 same `jaws-cli` image, the role input, and `config/` from the tool checkout.
 Half an identity stops the job before any AWS call.
 
-A hub's caller for `site-plan`, with placeholder values:
+A hub's caller for `site-plan`, with placeholder values. `app-client-id` is
+the App's client ID, a literal because it isn't secret and a project's run can't
+read the hub's variables:
 
 ```yaml
 name: plan
@@ -148,7 +150,7 @@ jobs:
       account-id: "123456789012"
       name-root: jaws
       check-prefix: example
-      app-client-id: ${{ vars.EXAMPLE_APP_CLIENT_ID }}
+      app-client-id: Iv23liEXAMPLE0000000
     secrets:
       app-private-key: ${{ secrets.app-private-key }}
 ```
@@ -159,6 +161,7 @@ A job's check name is `<caller job> / <check-prefix> <job>`: `jaws plan`,
 `jaws preview deploy`, `jaws preview remove` and `jaws release` by default, so a
 project that requires `plan / jaws plan` is unchanged. A project that calls a
 hub's copy has one more level: its own job's name, then the hub's caller's, then
-the prefix and the job, for example `plan / example plan`. For plans 06 and 07:
+the prefix and the job, for example `plan / plan / example plan` for the caller above.
+For plans 06 and 07:
 a project's required checks must name that longer form when it switches to the
 hub.
