@@ -49,20 +49,18 @@ The owner's hand-off for the first apply is in the release plan,
    terraform apply tfplan
    ```
 
-3. Request the registry alias `jaws` in the ECR Public console (Public
-   registry, Settings).
-4. Once it is approved and primary, refresh and read the outputs:
+3. Read the outputs:
 
    ```sh
-   terraform apply -refresh-only
    terraform output -raw repository_uri   # public.ecr.aws/<alias>/jaws: JAWS_PUBLIC_IMAGE
    terraform output -raw role_arn         # JAWS_PUBLISH_ROLE_ARN
    ```
 
    and set them as the repository variables `JAWS_PUBLIC_IMAGE` and
-   `JAWS_PUBLISH_ROLE_ARN`. Check that the address names the approved alias
-   before setting the first.
-5. From the repository root, run `scripts/apply-repo-settings.sh` again, so that
+   `JAWS_PUBLISH_ROLE_ARN`. The address names the registry's default alias:
+   no custom alias is requested for now (the owner's decision of 2026-11-27).
+   If one is added later, both aliases keep working.
+4. From the repository root, run `scripts/apply-repo-settings.sh` again, so that
    this folder's check, `Release infrastructure validate, tflint, test`, is
    required.
 

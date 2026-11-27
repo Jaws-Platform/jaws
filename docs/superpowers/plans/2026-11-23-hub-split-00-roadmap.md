@@ -26,11 +26,11 @@ Plans 01–04 are written so far.
 
 ## Owner steps along the way
 
-- **During plan 04:** the owner hand-off, steps 1–5, in
+- **During plan 04:** the owner hand-off, steps 1–4, in
   [the plan](2026-11-23-hub-split-04-images.md#owner-hand-off-after-the-pr-merges)
-  (the `publish` environment, applying `release-infra/`, the registry alias,
-  the repository variables, the required check). AWS reviews the alias within
-  a few days, so request it as soon as the repository exists.
+  (the `publish` environment, applying `release-infra/`, the repository
+  variables, the required check). The image is published under the registry's
+  default alias: no custom alias for now (the owner's decision of 2026-11-27).
 - **Before plan 06:**
   - create the GitHub organization `JWall-Engineering`;
   - create its release bot `jwall-engineering-release-bot` and its

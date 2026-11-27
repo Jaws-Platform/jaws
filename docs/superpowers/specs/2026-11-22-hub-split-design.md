@@ -522,8 +522,10 @@ The owner's hub:
   in code outside this folder.
 - After the split, this role is `jaws`'s only access to AWS. Its plans and
   stack tests already run against mock providers.
-- The custom registry alias (for example `jaws`) is requested in the
-  console. AWS reviews requests within a few days.
+- A custom registry alias (for example `jaws`) is optional. The owner
+  decided on 2026-11-27 not to request one for now, so the image is published
+  under the registry's default alias. If one is requested later, AWS reviews
+  it within a few days, and the default alias keeps working beside it.
 
 ### 6.9 The owner's folders in the hub
 

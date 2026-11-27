@@ -44,4 +44,4 @@ scripts/test-stack-plans.sh   # plans stacks/bot and the databricks stacks again
 
 ## Things that need the owner
 
-Anything in the "Owner hand-off" section of README.md: AWS admin credentials (the owner's `jwall-admin` Identity Center session), applying `owner-access/` and `release-infra/`, the ECR Public registry alias, GitHub secrets, the `prod` and `publish` environments, the `v*` tag ruleset, repository variables, repository settings, and Billing tags. Setting `JAWS_PUBLIC_IMAGE_KEEP` to `all` at v1 is the owner's too. List them in the PR instead of attempting them.
+Anything in the "Owner hand-off" section of README.md: AWS admin credentials (the owner's `jwall-admin` Identity Center session), applying `owner-access/` and `release-infra/`, GitHub secrets, the `prod` and `publish` environments, the `v*` tag ruleset, repository variables, repository settings, and Billing tags. Setting `JAWS_PUBLIC_IMAGE_KEEP` to `all` at v1 is the owner's too. List them in the PR instead of attempting them.
