@@ -25,7 +25,8 @@ name: Platform rollback
 # The job holds the concurrency group platform-release, as the release's jobs do, and never
 # cancels one in progress. The caller grants contents: read and id-token: write, holds no
 # platform-release group, and passes the identity, the commit, the mover App's client ID
-# (live-app-client-id) and its secret live-app-private-key: no release App secret.
+# (live-app-client-id) and its key LIVE_APP_PRIVATE_KEY, a secret of prod passed under that
+# same name: no release App secret.
 
 on:
   workflow_call:
@@ -51,8 +52,8 @@ on:
         required: true
         type: string
     secrets:
-      live-app-private-key:
-        description: Private key of the hub's mover App, which the hub supplies.
+      LIVE_APP_PRIVATE_KEY:
+        description: Private key of the hub's mover App, a secret of the hub's prod environment only, never a repository secret. Pass it under this same name; only a job that runs in prod receives it.
         required: true
 
 permissions: {}
@@ -144,14 +145,24 @@ jobs:
           digest=$(jq -r '.images[0].imageId.imageDigest' <<<"$found")
           echo "$COMMIT is on main, and its build is $REPOSITORY@$digest"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
-      # The mover App's token first, so a token that can't be minted moves nothing. Then live,
-      # then current: moving back, that is ruling 7's order.
+      # The mover App's key and token first, so a missing key or a token that can't be minted
+      # moves nothing. Then live, then current: moving back, that is ruling 7's order.
+      - name: Check the mover App's key is there
+        id: live-key
+        env:
+          # Whether the job received the key, never the key itself.
+          KEY_SET: ${{ secrets.LIVE_APP_PRIVATE_KEY != '' }}
+        run: |
+          if [[ "$KEY_SET" != true ]]; then
+            echo "::error::LIVE_APP_PRIVATE_KEY is empty, so the mover App's token can't be minted. Store the App's key as a secret of the hub's prod environment, never a repository secret, and pass it in the caller's secrets under the same name"
+            exit 1
+          fi
       - name: Mint the mover App's token
         id: live-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ inputs.live-app-client-id }}
-          private-key: ${{ secrets.live-app-private-key }}
+          private-key: ${{ secrets.LIVE_APP_PRIVATE_KEY }}
       - name: Move live to the commit (by force, since it moves back)
         id: live
         uses: ./.jaws-tool/.github/actions/platform-move

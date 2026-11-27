@@ -340,8 +340,9 @@ where `<tag>` is the release's tag:
 | `live` | `Move live to <tag>` | `image`, `current` | moves the `live` branch to the release commit, with the mover App's token |
 | `monitoring-apply` | `Monitoring apply (<tag>)` | `image`, `apply`, `live` | applies monitoring with the build, after the moves, once the configuration has a monitoring section, as the `monitoring` apply role |
 
-Every job but `release-please` and `live` runs in the hub's `prod`
-environment. `live` takes no AWS role, so it enters none.
+Every job but `release-please` runs in the hub's `prod` environment. `live`
+takes no AWS role, but the mover App's key is a secret of `prod` alone, so it
+runs there too.
 
 ### The build and its tags
 
@@ -403,8 +404,15 @@ across commits that change `.github/workflows/`.
 
 The release App is no bypass actor. It opens the release PR and releases, and
 never moves `live`. The `live` job mints the mover App's token from
-`live-app-client-id` and the secret `live-app-private-key`, and from nothing
+`live-app-client-id` and the secret `LIVE_APP_PRIVATE_KEY`, and from nothing
 else, and `platform-move` reads the token from its `token` input only.
+
+The mover App's key is a secret of the hub's `prod` environment, named
+`LIVE_APP_PRIVATE_KEY`, and never a repository or organization secret. `prod`
+deploys only from `main`, so only the release and the rollback, run from
+`main`, can read it. A workflow pushed to any other branch can't read it, so it
+can't move `live`. A job outside `prod` receives the key empty, and the `live`
+job and the rollback stop on an empty key, naming where it belongs.
 
 ### When to release
 
@@ -452,9 +460,15 @@ rollback again.
 `name-root`) and `live-app-client-id`, the mover App's client ID, all required.
 Its secrets, all required, are `RELEASE_BOT_CLIENT_ID` and
 `RELEASE_BOT_PRIVATE_KEY`, the release App's, for Release Please, and
-`live-app-private-key`, the mover App's. The caller grants `contents: read` and
-`id-token: write`. The release App's token does Release Please's writes, and a
-called job can't ask for more than its caller grants.
+`LIVE_APP_PRIVATE_KEY`, the mover App's. The caller passes
+`LIVE_APP_PRIVATE_KEY` under that same name, though only `prod` holds it: a job
+that calls a workflow can't name an environment, but it can pass a secret that
+only an environment holds, and the called job that runs in that environment
+receives it
+([GitHub's docs](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows)).
+The caller grants `contents: read` and `id-token: write`. The release App's
+token does Release Please's writes, and a called job can't ask for more than
+its caller grants.
 
 The caller holds no `platform-release` group: a caller holding the group of a
 job it calls would be cancelled as a deadlock. Neither workflow sets a group
@@ -483,7 +497,7 @@ jobs:
     secrets:
       RELEASE_BOT_CLIENT_ID: ${{ secrets.RELEASE_BOT_CLIENT_ID }}
       RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
-      live-app-private-key: ${{ secrets.DEPLOYMENTS_APP_PRIVATE_KEY }}
+      LIVE_APP_PRIVATE_KEY: ${{ secrets.LIVE_APP_PRIVATE_KEY }} # prod's, under the same name
 ```
 
 ## Rolling back
@@ -507,8 +521,9 @@ stay at one Jaws release
 That is ruling 7's order for a move backward. In the seconds between, a
 project runs the newer build with the older workflow files, never an older
 build with newer workflow files. The job mints the mover App's token before
-either move. So a key or client ID that's wrong, an App that isn't installed,
-or a ruleset that refuses the App stops the job before `current` moves.
+either move. So a key that's missing or wrong, a client ID that's wrong, an
+App that isn't installed, or a ruleset that refuses the App stops the job
+before `current` moves.
 Whatever stops it after `live` has moved leaves that same safe pair: run the
 rollback again.
 
@@ -532,7 +547,8 @@ Before it moves anything, the job stops on:
 ### The caller
 
 `platform-rollback.yml` takes the identity, `commit` and `live-app-client-id`,
-all required, and the secret `live-app-private-key` only: no release App
+all required, and the secret `LIVE_APP_PRIVATE_KEY` only, passed from `prod`
+under that same name as the release's caller passes it: no release App
 secret. Its caller grants the same as the release's, `contents: read` and
 `id-token: write`, and holds no `platform-release` group either. A hub's
 caller, with placeholder values:
@@ -560,7 +576,7 @@ jobs:
       commit: ${{ inputs.commit }}
       live-app-client-id: Iv23liEXAMPLE0000001
     secrets:
-      live-app-private-key: ${{ secrets.DEPLOYMENTS_APP_PRIVATE_KEY }}
+      LIVE_APP_PRIVATE_KEY: ${{ secrets.LIVE_APP_PRIVATE_KEY }} # prod's, under the same name
 ```
 
 ## By-hand applies and the sweep

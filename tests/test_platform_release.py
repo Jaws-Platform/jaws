@@ -65,11 +65,17 @@ IDENTITY = {
     "account-id": "${{ inputs.account-id }}",
     "name-root": "${{ inputs.name-root }}",
 }
+#: The mover App's key: a secret of the hub's prod environment alone, which deploys only from
+#: main, so no workflow on another branch can read it. The caller passes it under this same
+#: name, and only a job that runs in prod receives it.
+LIVE_KEY = "LIVE_APP_PRIVATE_KEY"
 #: The mover App's token is minted from exactly its client ID and its key.
 MINTED = {
     "client-id": "${{ inputs.live-app-client-id }}",
-    "private-key": "${{ secrets.live-app-private-key }}",
+    "private-key": "${{ secrets.LIVE_APP_PRIVATE_KEY }}",
 }
+#: What the key's check reads: whether the job received the key, never the key itself.
+KEY_SET = "${{ secrets.LIVE_APP_PRIVATE_KEY != '' }}"
 LIVE_TOKEN = "${{ steps.live-token.outputs.token }}"
 GROUP = {"group": "platform-release", "cancel-in-progress": False}
 
@@ -391,7 +397,7 @@ def test_the_release_s_jobs_are_named_for_its_tag_and_hold_only_their_grants() -
         assert jobs[name]["permissions"] == {"contents": "read", "id-token": "write"}, name
         assert _environment(jobs[name]) == "prod", name
     assert jobs["live"]["permissions"] == {"contents": "read"}, "live takes no AWS role"
-    assert _environment(jobs["live"]) is None
+    assert _environment(jobs["live"]) == "prod", "the mover App's key is prod's alone"
     assert _environment(jobs["release-please"]) is None
 
 
@@ -401,7 +407,7 @@ def test_both_workflows_require_the_movers_input_and_secret(workflow: str) -> No
     client_id = call["inputs"]["live-app-client-id"]
     assert client_id["type"] == "string"
     assert client_id["required"] is True
-    assert call["secrets"]["live-app-private-key"]["required"] is True
+    assert call["secrets"][LIVE_KEY]["required"] is True
 
 
 def test_each_workflow_takes_the_identity_and_only_the_secrets_it_uses() -> None:
@@ -417,13 +423,13 @@ def test_each_workflow_takes_the_identity_and_only_the_secrets_it_uses() -> None
     assert {name: spec["required"] for name, spec in release["secrets"].items()} == {
         "RELEASE_BOT_CLIENT_ID": True,
         "RELEASE_BOT_PRIVATE_KEY": True,
-        "live-app-private-key": True,
+        LIVE_KEY: True,
     }
     rollback = _workflow(ROLLBACK)[True]["workflow_call"]
     assert set(rollback["inputs"]) == {*IDENTITY, "commit", "live-app-client-id"}
     assert rollback["inputs"]["commit"]["required"] is True
     assert rollback["inputs"]["commit"]["type"] == "string"
-    assert set(rollback["secrets"]) == {"live-app-private-key"}, "no release App secret"
+    assert set(rollback["secrets"]) == {LIVE_KEY}, "no release App secret"
 
 
 #: The job of each workflow that moves live.
@@ -451,6 +457,41 @@ def test_the_live_move_mints_its_token_from_exactly_those(workflow: str, name: s
     (move,) = [s for s in _using(workflow, name, MOVE) if s["with"]["move"] == "live"]
     assert move["with"]["token"] == LIVE_TOKEN
     assert _position(workflow, name, token) < _position(workflow, name, move)
+
+
+def test_only_a_job_in_prod_reads_the_mover_app_s_key() -> None:
+    """A job outside prod receives the key empty, and a repository secret of that name would
+    reach every branch's workflows, which could then move live. So only the two jobs that move
+    live read it, both in prod, and no other workflow names it."""
+    readers = [
+        (path.name, name)
+        for path in sorted(WORKFLOWS.glob("*.yml"))
+        for name, spec in yaml.safe_load(path.read_text())["jobs"].items()
+        if LIVE_KEY in json.dumps(spec)
+    ]
+    assert sorted(readers) == sorted(LIVE_MOVERS)
+    for workflow, name in readers:
+        assert _environment(job(workflow, name)) == "prod", f"{workflow}: {name}"
+
+
+@pytest.mark.parametrize(("workflow", "name"), LIVE_MOVERS)
+def test_a_missing_mover_key_stops_the_job_and_says_where_it_goes(
+    tmp_path: Path, workflow: str, name: str
+) -> None:
+    """Without the key, the token can't be minted. The check says where the key belongs: a
+    secret of the prod environment, passed by the caller under the same name."""
+    check = _by_id(workflow, name, "live-key")
+    assert check["env"] == {"KEY_SET": KEY_SET}, "it reads whether the key came, never the key"
+    token = _by_id(workflow, name, "live-token")
+    assert _position(workflow, name, check) < _position(workflow, name, token)
+    ran = _step(tmp_path, workflow, name, "live-key", KEY_SET="true")
+    assert ran.result.returncode == 0, ran.result.stdout + ran.result.stderr
+    assert _errors(ran) == []
+    ran = _step(tmp_path, workflow, name, "live-key", KEY_SET="false")
+    assert ran.result.returncode != 0
+    (error,) = _errors(ran)
+    assert error.startswith(f"::error::{LIVE_KEY} is empty"), error
+    assert "prod environment" in error and "same name" in error, error
 
 
 def test_no_step_that_moves_live_uses_the_release_app() -> None:

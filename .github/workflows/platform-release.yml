@@ -3,7 +3,7 @@ name: Platform release
 # Reusable: a hub's release. Call it on each push to the hub's main. The release is gated, as
 # jaws's own is: merges collect in a Release Please PR, and merging that PR is the deliberate,
 # reviewed act that releases. Nothing changes in AWS without that merge, and each job that
-# changes AWS runs in the hub's prod environment. A release runs:
+# changes AWS or moves live runs in the hub's prod environment. A release runs:
 #
 #   release-please    Release Please, with the release App's token: opens or updates the
 #                     release PR, and releases when it merges. Every push runs it.
@@ -27,7 +27,10 @@ name: Platform release
 #
 # live is moved by the hub's mover App (ruling 8), live's only ruleset bypass actor, through
 # the Git refs API: a release only fast-forwards it, and the first release creates it. The
-# release App opens the release PR and releases, and never moves live.
+# release App opens the release PR and releases, and never moves live. The mover App's key,
+# LIVE_APP_PRIVATE_KEY, is a secret of the prod environment alone, which deploys only from
+# main: a workflow pushed to any other branch can't read it, so it can't move live, and a job
+# outside prod receives it empty.
 #
 # Each job that changes something holds the concurrency group platform-release, as the
 # rollback's job does, and never cancels one in progress. GitHub runs one job of a group at
@@ -48,8 +51,8 @@ name: Platform release
 #
 # The caller grants contents: read and id-token: write, holds no platform-release group, and
 # passes the identity, the mover App's client ID (live-app-client-id), Release Please's
-# secrets RELEASE_BOT_CLIENT_ID and RELEASE_BOT_PRIVATE_KEY, and the mover App's secret
-# live-app-private-key.
+# secrets RELEASE_BOT_CLIENT_ID and RELEASE_BOT_PRIVATE_KEY, and the mover App's key
+# LIVE_APP_PRIVATE_KEY under that same name, which is how a prod secret reaches the live job.
 
 on:
   workflow_call:
@@ -77,8 +80,8 @@ on:
       RELEASE_BOT_PRIVATE_KEY:
         description: Private key of the release App.
         required: true
-      live-app-private-key:
-        description: Private key of the hub's mover App, which the hub supplies.
+      LIVE_APP_PRIVATE_KEY:
+        description: Private key of the hub's mover App, a secret of the hub's prod environment only, never a repository secret. Pass it under this same name; only a job that runs in prod receives it.
         required: true
 
 permissions: {}
@@ -498,6 +501,9 @@ jobs:
     name: Move live to ${{ needs.image.outputs.tag }}
     runs-on: ubuntu-latest
     needs: [image, current]
+    # In prod for the mover App's key, which is prod's alone. The job changes nothing in AWS
+    # and takes no role.
+    environment: prod
     concurrency:
       group: platform-release
       cancel-in-progress: false
@@ -540,12 +546,22 @@ jobs:
             exit 1
           fi
           echo "jaws at $actual, this workflow's own commit"
+      - name: Check the mover App's key is there
+        id: live-key
+        env:
+          # Whether the job received the key, never the key itself.
+          KEY_SET: ${{ secrets.LIVE_APP_PRIVATE_KEY != '' }}
+        run: |
+          if [[ "$KEY_SET" != true ]]; then
+            echo "::error::LIVE_APP_PRIVATE_KEY is empty, so the mover App's token can't be minted. Store the App's key as a secret of the hub's prod environment, never a repository secret, and pass it in the caller's secrets under the same name"
+            exit 1
+          fi
       - name: Mint the mover App's token
         id: live-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ inputs.live-app-client-id }}
-          private-key: ${{ secrets.live-app-private-key }}
+          private-key: ${{ secrets.LIVE_APP_PRIVATE_KEY }}
       - name: Move live to the release commit (a fast-forward)
         id: move
         uses: ./.jaws-tool/.github/actions/platform-move
