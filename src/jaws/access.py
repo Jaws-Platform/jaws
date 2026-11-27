@@ -21,6 +21,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from logging import Logger
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -125,8 +126,9 @@ class OnboardedDataset:
 
 
 def infra_root() -> Path:
-    """The infra checkout: JAWS_INFRA_ROOT, else the directory holding the tool configuration."""
-    if ENV_INFRA_ROOT in os.environ:
+    """The infra checkout: JAWS_INFRA_ROOT, else the directory holding the tool configuration.
+    An empty JAWS_INFRA_ROOT is unset (a workflow outside a hub passes it empty)."""
+    if os.environ.get(ENV_INFRA_ROOT):
         return Path(os.environ[ENV_INFRA_ROOT])
     return default_config_path().parent
 
@@ -625,3 +627,47 @@ def access_summary(handshakes: Access) -> str:
 def _cell(text: str) -> str:
     """Text for one Markdown table cell: on one line, pipes escaped."""
     return " ".join(text.split()).replace("|", "\\|")
+
+
+def render_access(
+    settings: Settings, root: Path, base_registry: Path | None, logger: Logger
+) -> tuple[dict[str, Any], str]:
+    """data-access/'s variables and the summary, from `root`'s datasets/ and every
+    project's file.
+
+    Reads every Databricks workspace project's file and every onboarded dataset's
+    owner's. One that cannot be read, or an offboarding that leaves a half of a
+    handshake, raises. So does a `root` whose datasets/ has no README: rendered
+    without the registry, every dataset's access would be revoked.
+    """
+    if not (root / "datasets" / REGISTRY_README).is_file():
+        raise ConfigError(
+            f"no onboarded-dataset registry at {root}/datasets (no {REGISTRY_README} there): "
+            "rendered without it, every dataset's access would be revoked. "
+            "In an image it is /etc/jaws/datasets, beside the configuration"
+        )
+    registry = load_registry(root / "datasets")
+    base = load_registry(base_registry) if base_registry is not None else ()
+    workspaces = {name for name, g in settings.projects.items() if g.databricks is not None}
+    files, unregistered = platform_files(
+        registry,
+        workspaces | {d.owner for d in base},
+        project_files_from_env(settings),
+    )
+    check_offboarding(base, registry, files)
+    handshakes = compute_access(registry, files, unregistered)
+    tfvars = data_access_tfvars(handshakes, registry, settings)
+    summary = access_summary(handshakes)
+    for edge in handshakes.edges:
+        logger.info("handshake: %s reads %s (%s)", edge.consumer, edge.dataset.id, edge.purpose)
+    for pending in handshakes.pending:
+        logger.info(
+            "handshake pending: %s for %s: %s", pending.dataset, pending.consumer, pending.reason
+        )
+    logger.info(
+        "rendered %d onboarded datasets and %d edges (fingerprint %s)",
+        len(registry),
+        len(handshakes.edges),
+        tfvars["fingerprint"],
+    )
+    return tfvars, summary

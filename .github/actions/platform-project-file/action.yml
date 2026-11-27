@@ -1,0 +1,78 @@
+name: platform-project-file
+description: >-
+  Checks out a project's file, its jaws.yaml (with lichess/, a bot's engine
+  settings), from the project's repository into .consumer, at its default branch
+  or a given ref, as bot-apply.yml does, and checks that it names the project. Two
+  registry entries can share one repository while a project is being renamed, and
+  its file names only one of them. The other entry's run is skipped, loudly
+  (on-mismatch skip, for a pull request's plan), or stopped (on-mismatch refuse,
+  for an apply, which must never apply one project's file as another's). From the
+  job it needs a token that can read the repository: the job's own reads a public
+  one.
+
+inputs:
+  project:
+    description: The project the platform's configuration names, which the file must name too.
+    required: true
+  repository:
+    description: The project's repository, `<owner>/<name>`.
+    required: true
+  ref:
+    description: A branch, tag or commit to read the file at. Empty reads the default branch.
+    required: false
+    default: ""
+  on-mismatch:
+    description: >-
+      What a file that names another project does: `skip` warns and outputs
+      `matches` false, and `refuse` stops the job.
+    required: true
+
+outputs:
+  matches:
+    description: '"true" when the file names the project; "false" when it names another and on-mismatch is skip.'
+    value: ${{ steps.names.outputs.matches }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check out the project's file (its default branch, or ref)
+      id: checkout
+      uses: actions/checkout@v7
+      with:
+        repository: ${{ inputs.repository }}
+        ref: ${{ inputs.ref }}
+        path: .consumer
+        sparse-checkout: |
+          jaws.yaml
+          lichess
+        sparse-checkout-cone-mode: false
+    - name: Check the project file names the project
+      id: names
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        ON_MISMATCH: ${{ inputs.on-mismatch }}
+      run: |
+        case "$ON_MISMATCH" in
+          skip | refuse) ;;
+          *)
+            echo "::error::on-mismatch must be skip or refuse, got '$ON_MISMATCH'"
+            exit 1
+            ;;
+        esac
+        named=$(yq -r .project .consumer/jaws.yaml)
+        if [[ "$named" == "$PROJECT" ]]; then
+          echo "matches=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        if [[ "$ON_MISMATCH" == refuse ]]; then
+          echo "::error::the project file names '$named', not '$PROJECT'; pass consumer-ref for a ref whose file names $PROJECT"
+          exit 1
+        fi
+        echo "matches=false" >> "$GITHUB_OUTPUT"
+        echo "::warning::the project file names '$named', not '$PROJECT'; the plan for $PROJECT is skipped"
+        {
+          echo "## The plan for $PROJECT is skipped"
+          echo
+          echo "The project file names \`$named\`, not \`$PROJECT\`."
+        } >> "$GITHUB_STEP_SUMMARY"

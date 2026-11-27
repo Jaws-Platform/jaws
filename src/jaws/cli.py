@@ -32,9 +32,11 @@ from . import (
     databricks,
     databricks_auth,
     databricks_destroy,
+    databricks_names,
     github,
     image,
     monitoring,
+    platform,
     releases,
     report,
     rollout,
@@ -117,6 +119,11 @@ monitoring_secrets_app = typer.Typer(
     "(values are never printed).",
     no_args_is_help=True,
 )
+platform_app = typer.Typer(
+    help="The platform's own stacks (foundation, monitoring and data-access), run from the "
+    "image as a hub's workflows run them.",
+    no_args_is_help=True,
+)
 bot_app.add_typer(secrets_app, name="secrets")
 app.add_typer(task_app, name="task")
 app.add_typer(bot_app, name="bot")
@@ -129,6 +136,7 @@ app.add_typer(access_app, name="access")
 databricks_app.add_typer(credentials_app, name="credentials")
 app.add_typer(monitoring_app, name="monitoring")
 monitoring_app.add_typer(monitoring_secrets_app, name="secrets")
+app.add_typer(platform_app, name="platform")
 
 LOG_FILE = "jaws.log"
 
@@ -968,6 +976,14 @@ def outputs(ctx: typer.Context) -> None:
     _command(body)(ctx)
 
 
+def _databricks_state(settings: Settings) -> str:
+    """`ready`, `awaiting-host` or `disabled`: whether Databricks has anything to reconcile."""
+    dbx = settings.databricks
+    if dbx is None or not dbx.enabled:
+        return "disabled"
+    return "ready" if dbx.shared_host_url else "awaiting-host"
+
+
 @config_app.command("env")
 def config_env(
     ctx: typer.Context,
@@ -992,7 +1008,16 @@ def config_env(
         typer.Option(
             "--brand",
             help="Also print `check_prefix=<brand.check_prefix>`, the first word of the "
-            "workflows' job names. Plan 05's workflows will read it; nothing does yet.",
+            "workflows' job names. The site workflows take it as their `check-prefix` input, "
+            "and `jaws platform check` holds each hub caller's to it.",
+        ),
+    ] = False,
+    platform: Annotated[
+        bool,
+        typer.Option(
+            "--platform",
+            help="Also print `platform_image=<the hub's image repository>` and "
+            "`platform_repository=<the hub's repository>`, for the hub's workflows.",
         ),
     ] = False,
 ) -> None:
@@ -1007,17 +1032,54 @@ def config_env(
         ("ecr_repository", settings.ecr.repository),
     ]
     if databricks:
-        dbx = settings.databricks
-        if dbx is None or not dbx.enabled:
-            lines.append(("databricks", "disabled"))
-        else:
-            lines.append(("databricks", "ready" if dbx.shared_host_url else "awaiting-host"))
+        lines.append(("databricks", _databricks_state(settings)))
     if monitoring:
         lines.append(("monitoring", "absent" if settings.monitoring is None else "configured"))
     if brand:
         lines.append(("check_prefix", settings.brand.check_prefix))
+    if platform:
+        hub = settings.platform.hub
+        if hub is None:
+            print(
+                "platform.hub is not set (config/platform.yaml): "
+                "a hub's workflows push and run its image",
+                file=sys.stderr,
+            )
+            raise typer.Exit(2)
+        lines.append(("platform_image", hub.image))
+        lines.append(("platform_repository", hub.repository))
     for key, value in lines:
         print(f"{key}={value}")
+
+
+PROJECT_TYPES = ("site", "bot", "research", "databricks")
+
+
+@config_app.command("projects")
+def config_projects(
+    ctx: typer.Context,
+    types: Annotated[
+        list[str],
+        typer.Argument(help="Project types to list: site, bot, research or databricks."),
+    ],
+) -> None:
+    """Print the onboarded projects of the given types as one line of compact JSON,
+    `[{"project", "repository", "type"}]` in the registry's order: the matrices
+    and lookups of the workflows."""
+    settings = ctx.obj.settings
+    for project_type in types:
+        if project_type not in PROJECT_TYPES:
+            print(
+                f"unknown project type: {project_type} (site, bot, research or databricks)",
+                file=sys.stderr,
+            )
+            raise typer.Exit(2)
+    listed = [
+        {"project": key, "repository": settings.repository(key), "type": project.type}
+        for key, project in settings.projects.items()
+        if project.type in types
+    ]
+    print(json.dumps(listed, separators=(",", ":")))
 
 
 @config_app.command("show")
@@ -1054,42 +1116,15 @@ def access_render(
     """
 
     def body(run: Run) -> None:
-        root = access.infra_root()
-        registry = access.load_registry(root / "datasets")
-        base = access.load_registry(base_registry) if base_registry is not None else ()
-        workspaces = {name for name, g in run.settings.projects.items() if g.databricks is not None}
-        files, unregistered = access.platform_files(
-            registry,
-            workspaces | {d.owner for d in base},
-            access.project_files_from_env(run.settings),
+        tfvars, summary = access.render_access(
+            run.settings, access.infra_root(), base_registry, run.logger
         )
-        access.check_offboarding(base, registry, files)
-        handshakes = access.compute_access(registry, files, unregistered)
-        tfvars = access.data_access_tfvars(handshakes, registry, run.settings)
-        summary = access.access_summary(handshakes)
-        for edge in handshakes.edges:
-            run.logger.info(
-                "handshake: %s reads %s (%s)", edge.consumer, edge.dataset.id, edge.purpose
-            )
-        for pending in handshakes.pending:
-            run.logger.info(
-                "handshake pending: %s for %s: %s",
-                pending.dataset,
-                pending.consumer,
-                pending.reason,
-            )
         out.mkdir(parents=True, exist_ok=True)
         (out / "terraform.tfvars.json").write_text(
             json.dumps(tfvars, indent=2, sort_keys=True) + "\n"
         )
         (out / "access-summary.md").write_text(summary)
-        run.logger.info(
-            "rendered %d onboarded datasets and %d edges into %s (fingerprint %s)",
-            len(registry),
-            len(handshakes.edges),
-            out,
-            tfvars["fingerprint"],
-        )
+        run.logger.info("wrote the variables and the summary into %s", out)
 
     _command(body)(ctx)
 
@@ -2308,3 +2343,148 @@ def monitoring_secrets_check(ctx: typer.Context) -> None:
         run.logger.info("all %d monitoring secrets are set", len(secrets))
 
     _command(body)(ctx)
+
+
+# -- the platform's own stacks ----------------------------------------------------
+
+PlatformStackName = Annotated[
+    str, typer.Argument(metavar="STACK", help="foundation, monitoring or data-access.")
+]
+
+
+def _platform_terraform(
+    run: Run, name: str, role: Literal["plan", "apply"], secrets: list[str]
+) -> platform.PlatformTerraform:
+    """Terraform for the platform's stack `name`, once the credentials are its `role` role.
+
+    Its environment holds the stack's variables, with the configuration's path and the
+    datasets beside it made absolute, since Terraform runs in a working copy elsewhere.
+    A stack that needs Databricks gets its credential too while `databricks.enabled`: the
+    secret is read from `databricks.secret_parameter` and added to `secrets`.
+    """
+    settings = run.settings
+    target = platform.platform_stack(name)
+    # The product's region (spec 6.7): the stacks build there, and the foundation grants the
+    # secret's parameter there. The state bucket's region is the backend's alone.
+    session = boto3.session.Session(region_name=databricks_names.REGION)
+    with phase("preflight"):
+        aws.check_role(
+            session.client("sts"),
+            platform.platform_role(settings, target, role),
+            run.logger,
+            account_id=settings.aws.account_id,
+        )
+    env = platform.stack_variables(
+        target,
+        (run.config_path or default_config_path()).resolve(),
+        (access.infra_root() / "datasets").resolve(),
+    )
+    section = settings.databricks
+    if target.databricks and section is not None and section.enabled:
+        secret = _load_databricks_secret(session.client("ssm"), section.secret_parameter)
+        secrets.append(secret)
+        env.update(databricks_auth.terraform_env(settings, secret))
+    return platform.PlatformTerraform(target, settings, run.logger, extra_env=env)
+
+
+def _data_access_waits(run: Run) -> bool:
+    """Whether data access has nothing to reconcile yet: Databricks is not `ready`. Then
+    it logs why and writes `result=skipped`, before any role is taken on or AWS called."""
+    state = _databricks_state(run.settings)
+    if state == "ready":
+        return False
+    run.logger.info("Databricks is %s: nothing to reconcile", state)
+    github.write_output("result", "skipped")
+    return True
+
+
+def _render_data_access(
+    run: Run, terraform: platform.PlatformTerraform, base_registry: Path | None
+) -> str:
+    """Render data access's variables into `terraform`'s working copy, with the access
+    summary beside them. Returns the summary."""
+    tfvars, summary = access.render_access(
+        run.settings, access.infra_root(), base_registry, run.logger
+    )
+    terraform.tfvars_override = tfvars
+    terraform.files = {"access-summary.md": summary}
+    return summary
+
+
+@platform_app.command("plan")
+def platform_plan(
+    ctx: typer.Context,
+    name: PlatformStackName,
+    base_registry: Annotated[
+        Path | None,
+        typer.Option(
+            "--base-registry",
+            help="data-access only: the base branch's datasets/, so that a dataset it onboards "
+            "that this branch drops must have no half of a handshake left.",
+        ),
+    ] = None,
+) -> None:
+    """Plan one of the platform's stacks as its plan role and write the plan comment."""
+    # Filled once the secret is loaded: everything the logger writes from then on
+    # (Terraform's output, the final error) is masked, as in `databricks doctor`.
+    secrets: list[str] = []
+
+    def body(run: Run) -> None:
+        data_access = name == "data-access"
+        if data_access and _data_access_waits(run):
+            return
+        terraform = _platform_terraform(run, name, "plan", secrets)
+        summary = _render_data_access(run, terraform, base_registry) if data_access else ""
+        platform.plan(terraform, run.artifacts, tool_version(), secrets, comment_suffix=summary)
+
+    run: Run = ctx.obj
+    with databricks.redacting(run.logger, secrets):
+        _command(body)(ctx)
+
+
+@platform_app.command("apply")
+def platform_apply(ctx: typer.Context, name: PlatformStackName) -> None:
+    """Plan one of the platform's stacks as its apply role, and apply the plan if it has changes.
+
+    data-access is the sweep: it renders first, and its step summary says what it applied."""
+    secrets: list[str] = []  # masked as in `platform plan`
+
+    def body(run: Run) -> None:
+        data_access = name == "data-access"
+        if data_access and _data_access_waits(run):
+            return
+        terraform = _platform_terraform(run, name, "apply", secrets)
+        if not data_access:
+            platform.apply(terraform, tool_version())
+            return
+        summary: str | None = None  # not rendered yet: a failed render has none to show
+        try:
+            summary = _render_data_access(run, terraform, None)
+            platform.apply(terraform, tool_version(), sweep_summary=summary)
+        except Exception:
+            platform.sweep_failed(summary)  # as data-access.yml's always() summary did
+            raise
+
+    run: Run = ctx.obj
+    with databricks.redacting(run.logger, secrets):
+        _command(body)(ctx)
+
+
+@platform_app.command("check")
+def platform_check(
+    ctx: typer.Context,
+    root: Annotated[
+        Path, typer.Option("--root", help="The hub's checkout: its Dockerfile and workflows.")
+    ] = Path("."),
+) -> None:
+    """Check that the hub's pins and identity agree with its configuration and this image."""
+    run: Run = ctx.obj
+    version = tool_version()
+    problems = platform.check_hub(root, run.settings, version, os.environ.get("GITHUB_REPOSITORY"))
+    for problem in problems:
+        message = f"{problem.path}: {problem.message}"
+        run.logger.error("%s", message)
+        annotate_error(message, title=run.settings.brand.name)
+    if problems:
+        raise typer.Exit(1)
+    typer.echo(f"the hub's pins and identity agree: Jaws v{version}")

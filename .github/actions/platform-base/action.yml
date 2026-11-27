@@ -1,0 +1,100 @@
+name: platform-base
+description: >-
+  Reads the Jaws base a hub's Dockerfile builds on: its one FROM, which must pin
+  the Jaws image by tag and digest. It reads it with jaws platform check's
+  FROM_PATTERN, verbatim, so the check and the build read one FROM alike, and
+  refuses anything else with the check's message. It then asks ECR Public,
+  anonymously, whether that digest is still published: ECR Public keeps only the
+  newest Jaws versions until v1, so a pin can be pruned while the hub still names
+  it, and the job then stops saying what to do. From the job it needs the hub's
+  checkout in the workspace, and no credentials. A job that builds the hub's image
+  runs it first. The upgrade runs it with require-published "false", since it
+  replaces the pin.
+
+inputs:
+  require-published:
+    description: >-
+      Whether the pinned digest must still be in ECR Public (step `present`).
+      "false" skips the question, as the upgrade does: it replaces the pin, pruned
+      or not.
+    required: false
+    default: "true"
+
+outputs:
+  base-name:
+    description: The base's image, for example `public.ecr.aws/example-alias/jaws`.
+    value: ${{ steps.base.outputs.base-name }}
+  base-tag:
+    description: The Jaws release the FROM line pins, for example `v0.81.0`.
+    value: ${{ steps.base.outputs.base-tag }}
+  base-digest:
+    description: The digest the FROM line pins, `sha256:` and 64 hex digits.
+    value: ${{ steps.base.outputs.base-digest }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read the Dockerfile's Jaws base
+      id: base
+      shell: bash
+      run: |
+        # FROM_PATTERN, verbatim from src/jaws/platform.py: `jaws platform check` reads the
+        # Dockerfile's FROM lines with it too, so the check and the build read one FROM alike.
+        pattern='^FROM ([^ @]+):(v[0-9]+\.[0-9]+\.[0-9]+)@(sha256:[0-9a-f]{64})$'
+        froms=()
+        if [[ -f Dockerfile ]]; then
+          while IFS= read -r line || [[ -n "$line" ]]; do
+            line=${line%$'\r'}
+            if [[ "$line" == "FROM "* ]]; then
+              froms+=("$line")
+            fi
+          done < Dockerfile
+        fi
+        if [[ ${#froms[@]} -eq 1 && "${froms[0]}" =~ $pattern ]]; then
+          echo "the Jaws base: ${BASH_REMATCH[1]}:${BASH_REMATCH[2]}@${BASH_REMATCH[3]}"
+          {
+            echo "base-name=${BASH_REMATCH[1]}"
+            echo "base-tag=${BASH_REMATCH[2]}"
+            echo "base-digest=${BASH_REMATCH[3]}"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        # Rule 1's message, quoting the FROM lines as the check does: joined by \n, in quotes.
+        quoted=""
+        for from in "${froms[@]}"; do
+          quoted+="${quoted:+\\n}$from"
+        done
+        echo "::error::FROM must pin the Jaws image by tag and digest (FROM public.ecr.aws/<alias>/jaws:vX.Y.Z@sha256:…), not '$quoted'"
+        exit 1
+    - name: Check ECR Public still has the base
+      id: present
+      if: inputs.require-published != 'false'
+      shell: bash
+      env:
+        NAME: ${{ steps.base.outputs.base-name }}
+        TAG: ${{ steps.base.outputs.base-tag }}
+        DIGEST: ${{ steps.base.outputs.base-digest }}
+        # The public image check's Accept types (release-please.yml): an index or a manifest.
+        MANIFEST_TYPES: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json
+      run: |
+        # Asked before the build, which would otherwise fail to pull the base, saying only
+        # that the manifest is unknown.
+        if [[ "$NAME" != public.ecr.aws/* ]]; then
+          echo "::notice::the Jaws base $NAME is not in ECR Public: whether its digest is still published is not asked"
+          exit 0
+        fi
+        repository=${NAME#public.ecr.aws/}
+        token=$(curl -fsS "https://public.ecr.aws/token/?service=public.ecr.aws&scope=repository:$repository:pull" | jq -r .token)
+        # curl prints 000 when it gets no answer at all: that is a status too.
+        code=$(curl -s -o /dev/null -w '%{http_code}' -I -H "Authorization: Bearer $token" -H "Accept: $MANIFEST_TYPES" "https://public.ecr.aws/v2/$repository/manifests/$DIGEST") || true
+        case "$code" in
+          200) echo "the Jaws base $NAME:$TAG@$DIGEST is published" ;;
+          404)
+            echo "::error::the Dockerfile's Jaws base $NAME:$TAG@$DIGEST is no longer in ECR Public, which keeps only the newest versions until v1: merge the open upgrade PR, or move the FROM line to a recent Jaws release"
+            exit 1
+            ;;
+          *)
+            echo "::error::could not tell whether the Jaws base is still published (HTTP $code from public.ecr.aws)"
+            exit 1
+            ;;
+        esac

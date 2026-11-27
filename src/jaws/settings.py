@@ -284,7 +284,8 @@ class BrandSection(_Section):
     mark: str | None = "🦈"
     #: The first word of the project-facing workflows' job names (`<prefix> plan`,
     #: `<prefix> release`, `<prefix> preview deploy`, `<prefix> preview remove`).
-    #: Nothing reads it yet: plan 05's workflows will.
+    #: The site workflows take it as their `check-prefix` input, and `jaws platform check`
+    #: holds each hub caller's `check-prefix` to it.
     check_prefix: str = Field(
         default="jaws", max_length=30, pattern=r"^[A-Za-z0-9]+(?:[ ._-][A-Za-z0-9]+)*$"
     )

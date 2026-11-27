@@ -1,0 +1,281 @@
+name: Platform upgrade
+
+# Reusable: a hub's Jaws upgrade, one pull request that bumps every pin. A hub schedules it
+# hourly (ruling 12), and can dispatch it too.
+#
+# One version, two pins (spec 6.4, ruling 11): the hub's workflow files call Jaws's at a
+# release, Jaws-Platform/jaws/.github/workflows/<name>.yml@vX.Y.Z, and its Dockerfile builds
+# FROM that release's image, by tag and digest. jaws platform check fails a pull request where
+# they disagree, so one pull request bumps them all. Dependabot would split the image and
+# workflow bumps into separate pull requests, and each would fail the check. The pull
+# request's plans run with the candidate for every stack and project (spec 6.5), so a reviewer
+# sees what the upgrade changes everywhere before it merges.
+#
+# Its one job, upgrade, runs:
+#
+#   app-token     mints the upgrade App's token.
+#   base          platform-base reads the Dockerfile's Jaws base, with require-published
+#                 "false": the upgrade replaces the pin, and is the fix when ECR Public has
+#                 pruned it.
+#   newest        reads the newest release from ECR Public's tags, anonymously, by semver, so
+#                 a GitHub release whose image isn't published yet is never picked. The job
+#                 ends there, with a notice, when it is no newer than the pin.
+#   rewrite       bumps the FROM line to that release's tag and digest, and every call of a
+#                 Jaws workflow to the release.
+#   pull-request  commits only the files rewrite bumped, on jaws-upgrade, as the App's bot,
+#                 and opens the pull request against main, or updates the open one: one pull
+#                 request, on one branch (ruling 12). Only the hub's own pull request from
+#                 jaws-upgrade counts, never a fork's from a branch of the same name. While
+#                 it is open with a title that names the release, or with a branch that holds
+#                 the same tree, it pushes nothing and edits nothing: the hub's CI runs once
+#                 per release, not hourly, and a fix pushed onto the branch stays. A branch
+#                 that holds the same tree with no pull request open gets its pull request,
+#                 with no push.
+#
+# The App's token does every write. GITHUB_TOKEN can't: a push that changes
+# .github/workflows/ needs the Workflows permission, which GITHUB_TOKEN never has, and a pull
+# request it opens runs no CI. So the token is minted with no fallback. The hub supplies the
+# App, installed on the hub only, with Contents: read and write, Pull requests: read and write
+# and Workflows: read and write.
+#
+# The caller grants contents: read. It passes the App's client ID as app-client-id, a literal
+# or a vars. value, since a call's with: can't read secrets and the client ID isn't secret,
+# and the App's key as the secret app-private-key.
+
+on:
+  workflow_call:
+    inputs:
+      app-client-id:
+        description: Client ID of the hub's upgrade App, which commits the upgrade and opens its pull request. A literal or a vars. value in the caller, as it isn't secret.
+        required: true
+        type: string
+    secrets:
+      app-private-key:
+        description: Private key of the hub's upgrade App.
+        required: true
+
+permissions: {}
+
+jobs:
+  upgrade:
+    name: Upgrade Jaws
+    runs-on: ubuntu-latest
+    # The App's token does the writes, and a called job can't ask for more than its caller
+    # grants.
+    permissions:
+      contents: read
+    steps:
+      # No continue-on-error: GITHUB_TOKEN can't do this job, so there is no fallback.
+      - name: Mint the upgrade App's token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ inputs.app-client-id }}
+          private-key: ${{ secrets.app-private-key }}
+      # The hub's own checkout comes first, and the tool's goes inside it, at .jaws-tool/. It is
+      # of main, which the pull request is against, with every branch, so origin/jaws-upgrade is
+      # there to compare with, and with the App's token, which the push uses.
+      - name: Check out the hub's main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Read the Dockerfile's Jaws base
+        id: base
+        uses: ./.jaws-tool/.github/actions/platform-base
+        with:
+          require-published: "false" # the upgrade replaces the pin, pruned or not
+      - name: Find the newest Jaws release in ECR Public
+        id: newest
+        env:
+          NAME: ${{ steps.base.outputs.base-name }}
+          PIN: ${{ steps.base.outputs.base-tag }}
+          # The public image check's Accept types (release-please.yml): an index or a manifest.
+          MANIFEST_TYPES: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json
+        run: |
+          # ECR Public's tags are the published releases: a GitHub release whose image isn't
+          # published yet is never picked.
+          if [[ "$NAME" != public.ecr.aws/* ]]; then
+            echo "::error::the upgrade reads ECR Public; this Dockerfile builds FROM $NAME"
+            exit 1
+          fi
+          repository=${NAME#public.ecr.aws/}
+          registry="https://public.ecr.aws/v2/$repository"
+          # Each request on its own, so a registry error (curl -f) stops the job, naming what
+          # it asked for.
+          if ! answer=$(curl -fsS "https://public.ecr.aws/token/?service=public.ecr.aws&scope=repository:$repository:pull"); then
+            echo "::error::could not get an anonymous token for $NAME from public.ecr.aws"
+            exit 1
+          fi
+          token=$(jq -r .token <<<"$answer")
+          if ! listed=$(curl -fsS -H "Authorization: Bearer $token" "$registry/tags/list?n=1000"); then
+            echo "::error::could not list the tags of $NAME from public.ecr.aws"
+            exit 1
+          fi
+          # The newest release by semver, not as text: v0.10.0 is newer than v0.9.0. Only
+          # vX.Y.Z tags are releases, never latest or a pre-release. Nothing, unless it is
+          # newer than the pin.
+          tag=$(jq -r --arg pin "$PIN" '
+            def version: ltrimstr("v") | split(".") | map(tonumber);
+            [.tags // [] | .[] | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))]
+            | max_by(version) // empty
+            | select(version > ($pin | version))
+          ' <<<"$listed")
+          if [[ -z "$tag" ]]; then
+            echo "::notice::Jaws $PIN is the newest release"
+            echo "newer=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The digest the FROM line pins: the one ECR Public names for the tag.
+          if ! headers=$(curl -fsS -I -H "Authorization: Bearer $token" -H "Accept: $MANIFEST_TYPES" "$registry/manifests/$tag"); then
+            echo "::error::could not read the manifest of $NAME:$tag from public.ecr.aws"
+            exit 1
+          fi
+          digest=$(tr -d '\r' <<<"$headers" | awk 'tolower($1) == "docker-content-digest:" { print $2 }')
+          if ! [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::public.ecr.aws named no digest for $NAME:$tag (docker-content-digest: '$digest')"
+            exit 1
+          fi
+          echo "Jaws $tag is newer than $PIN: $NAME:$tag@$digest"
+          {
+            echo "newer=true"
+            echo "tag=$tag"
+            echo "pin=$PIN"
+            echo "digest=$digest"
+          } >> "$GITHUB_OUTPUT"
+      - name: Bump the Dockerfile and every Jaws pin
+        id: rewrite
+        if: steps.newest.outputs.newer == 'true'
+        env:
+          PIN: ${{ steps.newest.outputs.pin }}
+          TAG: ${{ steps.newest.outputs.tag }}
+          DIGEST: ${{ steps.newest.outputs.digest }}
+        run: |
+          # Each file is edited through a temporary file, never with sed -i: BSD's sed, on
+          # macOS, where these steps' tests run too, reads -i otherwise than GNU's.
+          edit() {
+            local file=$1 expression=$2 edited
+            edited=$(mktemp)
+            sed -E "$expression" "$file" > "$edited"
+            cat "$edited" > "$file"
+            rm -f "$edited"
+          }
+          # The FROM line's :<pin>@sha256:<64 hex> becomes the release's tag and digest.
+          edit Dockerfile "/^FROM /s#:${PIN//./\\.}@sha256:[0-9a-f]{64}#:$TAG@$DIGEST#"
+          # Every call of a Jaws workflow, at any release, becomes a call at the release.
+          # Another repository's workflows are left as they are.
+          shopt -s nullglob
+          for workflow in .github/workflows/*.yml .github/workflows/*.yaml; do
+            edit "$workflow" "s#(uses: Jaws-Platform/jaws/\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml)@v[0-9]+\.[0-9]+\.[0-9]+#\1@$TAG#g"
+          done
+          # One version, two pins: a bump changes both, or it is no upgrade.
+          changed=$(git diff --name-only)
+          if ! grep -qx Dockerfile <<<"$changed"; then
+            echo "::error::the Dockerfile was not bumped to $TAG: its FROM line doesn't pin $PIN by digest"
+            exit 1
+          fi
+          if ! grep -q '^\.github/workflows/' <<<"$changed"; then
+            echo "::error::no workflow was bumped to $TAG: none calls a Jaws-Platform/jaws workflow at a release"
+            exit 1
+          fi
+          echo "bumped from $PIN to $TAG:"
+          echo "$changed"
+      - name: Open or update the upgrade's pull request
+        id: pull-request
+        if: steps.newest.outputs.newer == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          PIN: ${{ steps.newest.outputs.pin }}
+          TAG: ${{ steps.newest.outputs.tag }}
+        run: |
+          # The commit is the App's bot's, <app-slug>[bot], at the noreply address of its
+          # user, so GitHub links the commit to the App. Assigned first, so a failing command
+          # fails the step (bash -e).
+          bot="${APP_SLUG}[bot]"
+          user=$(gh api "users/$bot")
+          id=$(jq -r .id <<<"$user")
+          if ! [[ "$id" =~ ^[0-9]+$ ]]; then
+            echo "::error::GitHub names no user ID for the upgrade App's bot, $bot"
+            exit 1
+          fi
+          email="$id+$bot@users.noreply.github.com"
+          message="chore(deps): upgrade jaws to $TAG"
+          git switch -C jaws-upgrade
+          # Only the files rewrite bumped, the Dockerfile and the workflows: never git add -A,
+          # which would commit the tool's checkout, .jaws-tool/, in a hub whose .gitignore
+          # doesn't list it.
+          git add --update -- Dockerfile .github/workflows
+          GIT_AUTHOR_NAME="$bot" GIT_AUTHOR_EMAIL="$email" GIT_COMMITTER_NAME="$bot" GIT_COMMITTER_EMAIL="$email" \
+            git commit --message "$message"
+          # One pull request, from the hub's own jaws-upgrade. gh lists every open pull request
+          # whose branch is named jaws-upgrade, a fork's too, and anyone can open one from a
+          # fork: only the hub's own counts, so a fork's never holds the upgrade back, nor is
+          # retitled as it. While the hub's is open with a title that names this release, or
+          # with a branch that holds this tree already, nothing is pushed or edited: a push
+          # would run the hub's whole CI again every hour, and drop a fix pushed onto the
+          # branch.
+          prs=$(gh pr list --head jaws-upgrade --state open --json number,title,isCrossRepository \
+            --jq 'map(select(.isCrossRepository == false))')
+          number=$(jq -r '.[0].number // empty' <<<"$prs")
+          title=$(jq -r '.[0].title // empty' <<<"$prs")
+          tree=$(git rev-parse 'HEAD^{tree}')
+          pushed=$(git rev-parse --verify --quiet 'refs/remotes/origin/jaws-upgrade^{tree}' || true)
+          # The title names the release when it holds the tag as a whole version: with no
+          # letter, digit or dot just before it, and no digit, nor a dot and a digit, just
+          # after. So "v0.10.0, fix sites" and "(v0.10.0)" name v0.10.0, and v0.10.01 and
+          # v0.10.0.1 don't.
+          named=false
+          if [[ " $title " =~ [^0-9A-Za-z.]"$TAG"([^0-9.]|\.[^0-9]) ]]; then
+            named=true
+          fi
+          if [[ -n "$number" && ( "$pushed" == "$tree" || "$named" == true ) ]]; then
+            echo "::notice::the upgrade to $TAG is open"
+            exit 0
+          fi
+          # A branch that holds this tree already, with no pull request open, as when an
+          # earlier run's push landed but its pull request wasn't opened, is not pushed again:
+          # its pull request is opened.
+          if [[ "$pushed" != "$tree" ]]; then
+            git push --force origin jaws-upgrade
+          fi
+          body=$(mktemp)
+          cat > "$body" <<EOF
+          Upgrades Jaws from $PIN to $TAG.
+
+          This one pull request bumps the image and every workflow pin: the \`Dockerfile\`'s \`FROM\` line, to $TAG by its digest, and each call of a Jaws workflow, to \`@$TAG\`. So the hub's workflow files and its image stay one Jaws release.
+
+          Its plans run with the candidate for every stack and project, so they show what the upgrade changes everywhere before it merges. If a plan fails, read the release notes, then fix the configuration in this pull request.
+
+          The changes in Jaws: https://github.com/Jaws-Platform/jaws/compare/$PIN...$TAG
+          EOF
+          if [[ -n "$number" ]]; then
+            gh pr edit "$number" --title "$message" --body-file "$body"
+          else
+            gh pr create --base main --head jaws-upgrade --title "$message" --body-file "$body"
+            if [[ "$pushed" == "$tree" ]]; then
+              echo "::notice::opened the pull request for the upgrade to $TAG, already pushed to jaws-upgrade"
+            fi
+          fi

@@ -28,3 +28,25 @@ def test_provenance_reads_the_environment(monkeypatch: pytest.MonkeyPatch) -> No
     assert provenance.sha == "abc"
     assert provenance.commit_url == "https://github.com/o/r/commit/abc"
     assert provenance.run_url == "https://github.com/o/r/actions/runs/7"
+
+
+HUB_COMMIT = "0123456789abcdef0123456789abcdef01234567"
+HUB_SOURCE = "https://github.com/Example-Hub/platform"
+
+
+@pytest.mark.parametrize(
+    ("commit", "source", "sha", "url"),
+    [
+        (HUB_COMMIT, HUB_SOURCE, HUB_COMMIT, f"{HUB_SOURCE}/commit/{HUB_COMMIT}"),
+        ("abc123", HUB_SOURCE, None, None),
+        (HUB_COMMIT, "http://example.com/x", HUB_COMMIT, None),
+    ],
+)
+def test_provenance_reads_the_platform_s_commit(
+    monkeypatch: pytest.MonkeyPatch, commit: str, source: str, sha: str | None, url: str | None
+) -> None:
+    monkeypatch.setenv(github.ENV_PLATFORM_COMMIT, commit)
+    monkeypatch.setenv(github.ENV_PLATFORM_SOURCE, source)
+    provenance = github.provenance("1.2.3")
+    assert provenance.platform_sha == sha
+    assert provenance.platform_url == url

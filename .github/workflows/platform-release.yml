@@ -1,0 +1,685 @@
+name: Platform release
+
+# Reusable: a hub's release. Call it on each push to the hub's main. The release is gated, as
+# jaws's own is: merges collect in a Release Please PR, and merging that PR is the deliberate,
+# reviewed act that releases. Nothing changes in AWS without that merge, and each job that
+# changes AWS or moves live runs in the hub's prod environment. A release runs:
+#
+#   release-please    Release Please, with the release App's token: opens or updates the
+#                     release PR, and releases when it merges. Every push runs it.
+#   image             builds the release commit's Dockerfile and pushes it as sha-<commit>,
+#                     a tag that never moves, then reads the build's digest back from ECR
+#                     by that tag.
+#   apply             applies the foundation with that build, by its digest.
+#   current           moves the hub image's current tag to the build.
+#   live              moves the live branch, which projects call the hub at, to the release
+#                     commit.
+#   monitoring-apply  applies monitoring with the build, once the configuration has a
+#                     monitoring section.
+#
+# current and live move right after the foundation's apply, and never wait for monitoring's
+# (ruling 7): projects run the new build at the moment the foundation has created any roles
+# its configuration names. current moves first, then live: in the seconds between, a project
+# runs the new build with the old workflow files, never the reverse. Monitoring is applied
+# last, once the foundation's apply has succeeded, whatever the moves did: a failed move
+# doesn't hold it back, and a failed monitoring apply holds back nothing, as it holds back
+# nothing of jaws's own release.
+#
+# live is moved by the hub's mover App (ruling 8), live's only ruleset bypass actor, through
+# the Git refs API: a release only fast-forwards it, and the first release creates it. The
+# release App opens the release PR and releases, and never moves live. The mover App's key,
+# LIVE_APP_PRIVATE_KEY, is a secret of the prod environment alone, which deploys only from
+# main: a workflow pushed to any other branch can't read it, so it can't move live, and a job
+# outside prod receives it empty.
+#
+# Each job that changes something holds the concurrency group platform-release, as the
+# rollback's job does, and never cancels one in progress. GitHub runs one job of a group at
+# a time and keeps one pending, so two of the release's jobs ready together would wait on each
+# other, and a third could cancel one. So their needs run them in turn: image, apply,
+# current, live, then monitoring-apply. The workflow sets no group of its own: every push to
+# main runs this workflow for Release Please, so a push could cancel a pending release or
+# rollback.
+#
+# A failed job is re-run from the run's page, with "Re-run failed jobs": a re-run of every
+# job would run Release Please again, which then releases nothing, so the rest would skip.
+# Each later job reads the build by the digest ECR has for sha-<commit>, which the image job
+# outputs, and a re-run of the image job finds the build its first attempt pushed, so every
+# attempt runs and moves the one build. A stale re-run stops: apply, current and
+# monitoring-apply each first compare the release commit with live, and stop before they
+# change anything when live is ahead of it, as it is once a newer release is live. The way
+# back to an older release is the rollback.
+#
+# The caller grants contents: read and id-token: write, holds no platform-release group, and
+# passes the identity, the mover App's client ID (live-app-client-id), Release Please's
+# secrets RELEASE_BOT_CLIENT_ID and RELEASE_BOT_PRIVATE_KEY, and the mover App's key
+# LIVE_APP_PRIVATE_KEY under that same name, which is how a prod secret reaches the live job.
+
+on:
+  workflow_call:
+    inputs:
+      platform-image:
+        description: The hub image's private ECR repository, for example `jaws-platform`. The release pushes its build there.
+        required: true
+        type: string
+      account-id:
+        description: The platform account, 12 digits, which holds the hub image and every CI role.
+        required: true
+        type: string
+      name-root:
+        description: The platform's name root (`context.name_root`), for example `jaws`.
+        required: true
+        type: string
+      live-app-client-id:
+        description: Client ID of the hub's mover App, live's only ruleset bypass actor, which moves live. A literal in the caller, as it isn't secret.
+        required: true
+        type: string
+    secrets:
+      RELEASE_BOT_CLIENT_ID:
+        description: Client ID of the release App, whose token Release Please opens the release PR and releases with.
+        required: true
+      RELEASE_BOT_PRIVATE_KEY:
+        description: Private key of the release App.
+        required: true
+      LIVE_APP_PRIVATE_KEY:
+        description: Private key of the hub's mover App, a secret of the hub's prod environment only, never a repository secret. Pass it under this same name; only a job that runs in prod receives it.
+        required: true
+
+permissions: {}
+
+jobs:
+  release-please:
+    name: Release Please
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    # The App's token does the writes, and a called job can't ask for more than its caller
+    # grants.
+    permissions:
+      contents: read
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+    steps:
+      # A GitHub App token (not GITHUB_TOKEN) so that release PRs are authored by the release
+      # App and CI runs on them.
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          client-id: ${{ secrets.RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+      - uses: googleapis/release-please-action@v5
+        id: rp
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  image:
+    name: Build the platform image (${{ needs.release-please.outputs.tag_name }})
+    runs-on: ubuntu-latest
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    environment: prod
+    concurrency:
+      group: platform-release
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # the infra apply role, which holds ecr/push
+    outputs:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+      commit: ${{ steps.commit.outputs.commit }}
+      # The build every later job runs or moves, as ECR names it by sha-<commit>: the one a
+      # first attempt kept, or this attempt's push, read back. Never buildx's own report.
+      digest: ${{ steps.built.outputs.digest || steps.pushed.outputs.digest }}
+      # configured or absent: monitoring-apply's gate, from the build's own configuration.
+      monitoring: ${{ steps.env.outputs.monitoring }}
+    steps:
+      - name: Check out the release
+        uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ needs.release-please.outputs.tag_name }}
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Read the release commit
+        id: commit
+        run: |
+          # Assigned first, so a failing command fails the step (bash -e).
+          commit=$(git rev-parse HEAD)
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+      - name: Build the apply role from the platform's identity
+        id: role
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ inputs.platform-image }}
+          account-id: ${{ inputs.account-id }}
+          name-root: ${{ inputs.name-root }}
+          role: apply
+          project: infra
+      - name: Assume the role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-image-${{ needs.release-please.outputs.tag_name }}
+      - name: Log in to the platform's registry
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Look for the release's build (a re-run finds its first attempt's)
+        id: built
+        env:
+          REPOSITORY: ${{ inputs.platform-image }}
+          COMMIT: ${{ steps.commit.outputs.commit }}
+        run: |
+          # sha-<commit> never moves, so a second push of it would fail: a re-run reuses the
+          # build its first attempt pushed. An image ECR can't find is a failure in its
+          # answer, not an error.
+          tag="sha-$COMMIT"
+          found=$(aws ecr batch-get-image --repository-name "$REPOSITORY" --image-ids "imageTag=$tag" \
+            --accepted-media-types application/vnd.oci.image.manifest.v1+json \
+            application/vnd.docker.distribution.manifest.v2+json --output json)
+          count=$(jq '.images | length' <<<"$found")
+          if [[ "$count" == 0 ]]; then
+            code=$(jq -r '.failures[0].failureCode // "ImageNotFound"' <<<"$found")
+            if [[ "$code" != ImageNotFound ]]; then
+              reason=$(jq -r '.failures[0].failureReason // ""' <<<"$found")
+              echo "::error::$REPOSITORY:$tag could not be read: $code ($reason)"
+              exit 1
+            fi
+            echo "no build of $COMMIT yet: building it as $REPOSITORY:$tag"
+            exit 0
+          fi
+          digest=$(jq -r '.images[0].imageId.imageDigest' <<<"$found")
+          echo "$REPOSITORY:$tag is $REPOSITORY@$digest, pushed by an earlier attempt: reusing it"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Pull the kept build
+        id: image
+        if: steps.built.outputs.digest != ''
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          account-id: ${{ inputs.account-id }}
+          repository: ${{ inputs.platform-image }}
+          digest: ${{ steps.built.outputs.digest }}
+      - name: Read the Dockerfile's Jaws base
+        id: base
+        if: steps.built.outputs.digest == ''
+        uses: ./.jaws-tool/.github/actions/platform-base
+      - name: Build the release and push it as sha-<commit>
+        id: build
+        if: steps.built.outputs.digest == ''
+        uses: ./.jaws-tool/.github/actions/platform-build
+        with:
+          load: "true"
+          push: "true"
+          tags: ${{ steps.ecr.outputs.registry }}/${{ inputs.platform-image }}:sha-${{ steps.commit.outputs.commit }}
+          revision: ${{ steps.commit.outputs.commit }}
+          base-name: ${{ steps.base.outputs.base-name }}
+          base-tag: ${{ steps.base.outputs.base-tag }}
+          base-digest: ${{ steps.base.outputs.base-digest }}
+      - name: Read the pushed build's digest back from ECR
+        id: pushed
+        if: steps.built.outputs.digest == ''
+        env:
+          REPOSITORY: ${{ inputs.platform-image }}
+          COMMIT: ${{ steps.commit.outputs.commit }}
+          BUILDX_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          # The digest every later job takes is ECR's, by the tag the push gave the build, which
+          # never moves: buildx reports one digest for a build it both loads and pushes, and the
+          # loaded manifest's need not be the pushed one's. Both are logged.
+          tag="sha-$COMMIT"
+          found=$(aws ecr batch-get-image --repository-name "$REPOSITORY" --image-ids "imageTag=$tag" \
+            --accepted-media-types application/vnd.oci.image.manifest.v1+json \
+            application/vnd.docker.distribution.manifest.v2+json --output json)
+          count=$(jq '.images | length' <<<"$found")
+          if [[ "$count" == 0 ]]; then
+            code=$(jq -r '.failures[0].failureCode // "ImageNotFound"' <<<"$found")
+            if [[ "$code" != ImageNotFound ]]; then
+              reason=$(jq -r '.failures[0].failureReason // ""' <<<"$found")
+              echo "::error::$REPOSITORY:$tag could not be read after the push: $code ($reason)"
+              exit 1
+            fi
+            echo "::error::$REPOSITORY:$tag is not in ECR after the push"
+            exit 1
+          fi
+          digest=$(jq -r '.images[0].imageId.imageDigest' <<<"$found")
+          if [[ -n "$BUILDX_DIGEST" && "$BUILDX_DIGEST" != "$digest" ]]; then
+            echo "::warning::buildx reported the push as $BUILDX_DIGEST, but ECR has $REPOSITORY:$tag as $digest: the release runs ECR's"
+          fi
+          echo "$REPOSITORY:$tag is $REPOSITORY@$digest (buildx reported ${BUILDX_DIGEST:-no digest})"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Read whether the configuration has monitoring (offline, inside the build)
+        id: env
+        env:
+          IMAGE_ID: ${{ steps.image.outputs.image-id || steps.build.outputs.image-id }}
+        run: |
+          # Assigned first, so a failing command fails the step (bash -e).
+          env=$(docker run --rm --network none --pull never "$IMAGE_ID" config env --monitoring)
+          echo "$env" >> "$GITHUB_OUTPUT"
+
+  apply:
+    name: Terraform apply (${{ needs.image.outputs.tag }})
+    runs-on: ubuntu-latest
+    needs: image
+    environment: prod
+    concurrency:
+      group: platform-release
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # the infra apply role, through OIDC
+    steps:
+      - name: Check the image job named the release's build
+        id: release-build
+        env:
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          # platform-image takes current when it is given no digest: an empty one would run
+          # whatever current names now, not this release's build.
+          if [[ -z "$DIGEST" ]]; then
+            echo "::error::needs.image.outputs.digest is empty: the image job named no build, and this job runs the release's own only"
+            exit 1
+          fi
+      - name: Check no newer release is live (a stale re-run stops here)
+        id: newest
+        env:
+          COMMIT: ${{ needs.image.outputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Once a newer release is live, a re-run of this release's job would apply the older
+          # configuration, or move current back to the older build while live keeps the newer
+          # workflow files: the pair ruling 7 rules out. So the job goes on only while live,
+          # the release commit projects run, is this release's or an older one's.
+          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::needs.image.outputs.commit must be the release commit, 40 lowercase hex digits, got '$COMMIT'"
+            exit 1
+          fi
+          # gh prints the status, or on a failure GitHub's answer and its message: both kept.
+          if status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$COMMIT...live" --jq .status 2>&1); then
+            case "$status" in
+              behind) echo "live is behind $COMMIT: this release is newer" ;;
+              identical) echo "live is at $COMMIT, this release" ;;
+              ahead)
+                echo "::error::a newer release is live: live is ahead of this release's commit $COMMIT, and this job would take the hub back; to go back to this release, run the rollback"
+                exit 1
+                ;;
+              *)
+                echo "::error::GitHub compares live with this release's commit $COMMIT as '$status': this job goes on only while live is behind it or at it"
+                exit 1
+                ;;
+            esac
+          elif [[ "$status" == *"HTTP 404"* ]]; then
+            # live doesn't exist yet: this is the hub's first release, whose live job creates it.
+            echo "live doesn't exist yet: this is the hub's first release"
+          else
+            echo "$status" >&2
+            echo "::error::could not compare this release's commit $COMMIT with live: $(tail -n 1 <<<"$status")"
+            exit 1
+          fi
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Build the apply role from the platform's identity
+        id: role
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ inputs.platform-image }}
+          account-id: ${{ inputs.account-id }}
+          name-root: ${{ inputs.name-root }}
+          role: apply
+          project: infra
+      - name: Assume the role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-apply-${{ needs.image.outputs.tag }}
+      - name: Pull the release's build
+        id: image
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          account-id: ${{ inputs.account-id }}
+          repository: ${{ inputs.platform-image }}
+          digest: ${{ needs.image.outputs.digest }}
+      - name: platform apply foundation
+        id: apply
+        uses: ./.jaws-tool/.github/actions/jaws
+        with:
+          command: platform apply foundation
+          image: ${{ steps.image.outputs.image-id }}
+          platform-commit: ${{ steps.image.outputs.platform-commit }}
+          platform-source: ${{ steps.image.outputs.platform-source }}
+
+  # Once the foundation has created any roles the release's configuration names: monitoring's
+  # apply comes after the moves (ruling 7).
+  current:
+    name: Move current to ${{ needs.image.outputs.tag }}
+    runs-on: ubuntu-latest
+    needs: [image, apply]
+    if: needs.apply.result == 'success'
+    environment: prod
+    concurrency:
+      group: platform-release
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # the infra apply role, whose ecr/push moves the tag
+    steps:
+      - name: Check the image job named the release's build
+        id: release-build
+        env:
+          DIGEST: ${{ needs.image.outputs.digest }}
+          COMMIT: ${{ needs.image.outputs.commit }}
+        run: |
+          # current and live move to this release's build and commit only: never to whatever
+          # an empty output would leave them at.
+          if [[ -z "$DIGEST" ]]; then
+            echo "::error::needs.image.outputs.digest is empty: the image job named no build, and current and live move to the release's own only"
+            exit 1
+          fi
+          if [[ -z "$COMMIT" ]]; then
+            echo "::error::needs.image.outputs.commit is empty: the image job named no release commit, and current and live move to the release's own only"
+            exit 1
+          fi
+      - name: Check no newer release is live (a stale re-run stops here)
+        id: newest
+        env:
+          COMMIT: ${{ needs.image.outputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Once a newer release is live, a re-run of this release's job would apply the older
+          # configuration, or move current back to the older build while live keeps the newer
+          # workflow files: the pair ruling 7 rules out. So the job goes on only while live,
+          # the release commit projects run, is this release's or an older one's.
+          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::needs.image.outputs.commit must be the release commit, 40 lowercase hex digits, got '$COMMIT'"
+            exit 1
+          fi
+          # gh prints the status, or on a failure GitHub's answer and its message: both kept.
+          if status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$COMMIT...live" --jq .status 2>&1); then
+            case "$status" in
+              behind) echo "live is behind $COMMIT: this release is newer" ;;
+              identical) echo "live is at $COMMIT, this release" ;;
+              ahead)
+                echo "::error::a newer release is live: live is ahead of this release's commit $COMMIT, and this job would take the hub back; to go back to this release, run the rollback"
+                exit 1
+                ;;
+              *)
+                echo "::error::GitHub compares live with this release's commit $COMMIT as '$status': this job goes on only while live is behind it or at it"
+                exit 1
+                ;;
+            esac
+          elif [[ "$status" == *"HTTP 404"* ]]; then
+            # live doesn't exist yet: this is the hub's first release, whose live job creates it.
+            echo "live doesn't exist yet: this is the hub's first release"
+          else
+            echo "$status" >&2
+            echo "::error::could not compare this release's commit $COMMIT with live: $(tail -n 1 <<<"$status")"
+            exit 1
+          fi
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Build the apply role from the platform's identity
+        id: role
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ inputs.platform-image }}
+          account-id: ${{ inputs.account-id }}
+          name-root: ${{ inputs.name-root }}
+          role: apply
+          project: infra
+      - name: Assume the role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-current-${{ needs.image.outputs.tag }}
+      - name: Move current to the release's build
+        id: move
+        uses: ./.jaws-tool/.github/actions/platform-move
+        with:
+          move: current
+          repository: ${{ inputs.platform-image }}
+          digest: ${{ needs.image.outputs.digest }}
+          commit: ${{ needs.image.outputs.commit }}
+
+  # current first, then live (ruling 7). The mover App moves live (ruling 8). This job takes
+  # no AWS role, but runs in prod: the App's key is a secret of prod alone.
+  live:
+    name: Move live to ${{ needs.image.outputs.tag }}
+    runs-on: ubuntu-latest
+    needs: [image, current]
+    environment: prod
+    concurrency:
+      group: platform-release
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - name: Check the image job named the release's build
+        id: release-build
+        env:
+          DIGEST: ${{ needs.image.outputs.digest }}
+          COMMIT: ${{ needs.image.outputs.commit }}
+        run: |
+          # current and live move to this release's build and commit only: never to whatever
+          # an empty output would leave them at.
+          if [[ -z "$DIGEST" ]]; then
+            echo "::error::needs.image.outputs.digest is empty: the image job named no build, and current and live move to the release's own only"
+            exit 1
+          fi
+          if [[ -z "$COMMIT" ]]; then
+            echo "::error::needs.image.outputs.commit is empty: the image job named no release commit, and current and live move to the release's own only"
+            exit 1
+          fi
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Check the mover App's key is there
+        id: live-key
+        env:
+          # Whether the job received the key, never the key itself.
+          KEY_SET: ${{ secrets.LIVE_APP_PRIVATE_KEY != '' }}
+        run: |
+          if [[ "$KEY_SET" != true ]]; then
+            echo "::error::LIVE_APP_PRIVATE_KEY is empty, so the mover App's token can't be minted. Store the App's key as a secret of the hub's prod environment, never a repository secret, and pass it in the caller's secrets under the same name"
+            exit 1
+          fi
+      - name: Mint the mover App's token
+        id: live-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ inputs.live-app-client-id }}
+          private-key: ${{ secrets.LIVE_APP_PRIVATE_KEY }}
+      - name: Move live to the release commit (a fast-forward)
+        id: move
+        uses: ./.jaws-tool/.github/actions/platform-move
+        with:
+          move: live
+          commit: ${{ needs.image.outputs.commit }}
+          token: ${{ steps.live-token.outputs.token }}
+
+  # Last, after the moves, whatever they did (!cancelled()), once the foundation's apply has
+  # succeeded: that apply has just created the stack's roles, and a failed foundation apply
+  # skips this job. current and live never wait for it (ruling 7), a failed monitoring apply
+  # holds back nothing, and no two of the release's jobs are ready for the group together.
+  # Without the configuration's monitoring section there is no stack, and no role.
+  monitoring-apply:
+    name: Monitoring apply (${{ needs.image.outputs.tag }})
+    runs-on: ubuntu-latest
+    needs: [image, apply, live]
+    if: ${{ !cancelled() && needs.apply.result == 'success' && needs.image.outputs.monitoring == 'configured' }}
+    environment: prod
+    concurrency:
+      group: platform-release
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # the monitoring apply role, through OIDC
+    steps:
+      - name: Check the image job named the release's build
+        id: release-build
+        env:
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          # platform-image takes current when it is given no digest: an empty one would run
+          # whatever current names now, not this release's build.
+          if [[ -z "$DIGEST" ]]; then
+            echo "::error::needs.image.outputs.digest is empty: the image job named no build, and this job runs the release's own only"
+            exit 1
+          fi
+      - name: Check no newer release is live (a stale re-run stops here)
+        id: newest
+        env:
+          COMMIT: ${{ needs.image.outputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Once a newer release is live, a re-run of this release's job would apply the older
+          # configuration, or move current back to the older build while live keeps the newer
+          # workflow files: the pair ruling 7 rules out. So the job goes on only while live,
+          # the release commit projects run, is this release's or an older one's.
+          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::needs.image.outputs.commit must be the release commit, 40 lowercase hex digits, got '$COMMIT'"
+            exit 1
+          fi
+          # gh prints the status, or on a failure GitHub's answer and its message: both kept.
+          if status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$COMMIT...live" --jq .status 2>&1); then
+            case "$status" in
+              behind) echo "live is behind $COMMIT: this release is newer" ;;
+              identical) echo "live is at $COMMIT, this release" ;;
+              ahead)
+                echo "::error::a newer release is live: live is ahead of this release's commit $COMMIT, and this job would take the hub back; to go back to this release, run the rollback"
+                exit 1
+                ;;
+              *)
+                echo "::error::GitHub compares live with this release's commit $COMMIT as '$status': this job goes on only while live is behind it or at it"
+                exit 1
+                ;;
+            esac
+          elif [[ "$status" == *"HTTP 404"* ]]; then
+            # live doesn't exist yet: this is the hub's first release, whose live job creates it.
+            echo "live doesn't exist yet: this is the hub's first release"
+          else
+            echo "$status" >&2
+            echo "::error::could not compare this release's commit $COMMIT with live: $(tail -n 1 <<<"$status")"
+            exit 1
+          fi
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Build the apply role from the platform's identity
+        id: role
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ inputs.platform-image }}
+          account-id: ${{ inputs.account-id }}
+          name-root: ${{ inputs.name-root }}
+          role: apply
+          project: monitoring
+      - name: Assume the role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-monitoring-apply-${{ needs.image.outputs.tag }}
+      - name: Pull the release's build
+        id: image
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          account-id: ${{ inputs.account-id }}
+          repository: ${{ inputs.platform-image }}
+          digest: ${{ needs.image.outputs.digest }}
+      - name: platform apply monitoring
+        id: apply
+        uses: ./.jaws-tool/.github/actions/jaws
+        with:
+          command: platform apply monitoring
+          image: ${{ steps.image.outputs.image-id }}
+          platform-commit: ${{ steps.image.outputs.platform-commit }}
+          platform-source: ${{ steps.image.outputs.platform-source }}

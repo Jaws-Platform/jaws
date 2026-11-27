@@ -1,8 +1,11 @@
 name: jaws
 description: >-
-  Runs one jaws command from the versioned image in the
-  private ECR repository: assumes the given CI role through OIDC, logs in to
-  ECR, pulls the image and runs it with the workspace mounted. The reusable
+  Runs one jaws command with the workspace mounted. Given `image`, a build of a
+  hub's image the job already resolved and pulled with `platform-image`, it
+  runs that build by its ID with the job's own credentials: it assumes no
+  role, logs in nowhere, reads no config/ and pulls nothing. Otherwise it runs
+  the versioned image in the private ECR repository: assumes the given CI role
+  through OIDC, logs in to ECR, pulls the image and runs it. The reusable
   site-*.yml workflows in this repository are built on this action.
 
 inputs:
@@ -10,8 +13,29 @@ inputs:
     description: The command and its arguments, for example `plan` or `preview deploy --pr 7 --dist dist`.
     required: true
   role-arn:
-    description: ARN of the CI role to assume. The tool checks it is the role the command expects.
-    required: true
+    description: ARN of the CI role to assume, when no `image` is given. The tool checks it is the role the command expects.
+    required: false
+    default: ""
+  image:
+    description: >-
+      The image ID, `sha256:` and 64 hex digits, of a build the job already
+      resolved and pulled (`platform-image`'s `image-id`), run with
+      `--pull never` in place of the versioned image. A name is refused. The job
+      must already have assumed its role.
+    required: false
+    default: ""
+  platform-commit:
+    description: The hub commit that built `image` (`platform-image`'s `platform-commit`), which the comments' footer names.
+    required: false
+    default: ""
+  platform-source:
+    description: The hub repository's URL (`platform-image`'s `platform-source`), for the footer's link to that commit.
+    required: false
+    default: ""
+  github-token:
+    description: A token the CLI reads GitHub with, as `GH_TOKEN`, for example a project's file. Empty passes none.
+    required: false
+    default: ""
   debug:
     description: Console log at debug level. The debug log file is always written.
     required: false
@@ -42,18 +66,41 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Check the action has a role or an image
+      id: check
+      shell: bash
+      env:
+        ROLE_ARN: ${{ inputs.role-arn }}
+        IMAGE: ${{ inputs.image }}
+      run: |
+        if [[ -z "$ROLE_ARN" && -z "$IMAGE" ]]; then
+          echo "::error::the jaws action needs role-arn, or an image the job already pulled"
+          exit 1
+        fi
+        # A build is run by its ID, never by a name, which Docker would fetch. The classic
+        # image store's config digest and the containerd store's manifest digest both
+        # have this shape.
+        if [[ -n "$IMAGE" && ! "$IMAGE" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+          echo "::error::image must be the image ID of a build the job pulled, sha256: and 64 hex digits, not a name"
+          exit 1
+        fi
+    # Without an image, today's steps: a project still on Jaws's own pin runs them.
     - uses: aws-actions/configure-aws-credentials@v6
+      id: credentials
+      if: inputs.image == ''
       with:
         role-to-assume: ${{ inputs.role-arn }}
         aws-region: ${{ inputs.aws-region }}
         role-session-name: jaws-${{ github.run_id }}-${{ github.run_attempt }}
     - uses: aws-actions/amazon-ecr-login@v2
       id: ecr
+      if: inputs.image == ''
     # ECR login reaches only the role's own registry: take the image
     # repository and the primary account from the tool configuration (config/)
     # at this action's own commit, and refuse a role in any other account.
     - name: Resolve the account's image repository
       id: image
+      if: inputs.image == ''
       shell: bash
       env:
         CONFIG: ${{ github.action_path }}/../../../config
@@ -80,23 +127,35 @@ runs:
         IMAGE_TAG: v0.81.0 # x-release-please-version
         REGISTRY: ${{ steps.ecr.outputs.registry }}
         REPOSITORY: ${{ steps.image.outputs.repository }}
+        IMAGE: ${{ inputs.image }}
         COMMAND: ${{ inputs.command }}
         DEBUG: ${{ inputs.debug }}
         JAWS_HEAD_SHA: ${{ inputs.head-sha || github.event.pull_request.head.sha || github.sha }}
+        JAWS_PLATFORM_COMMIT: ${{ inputs.platform-commit }}
+        JAWS_PLATFORM_SOURCE: ${{ inputs.platform-source }}
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
-        image="$REGISTRY/$REPOSITORY:$IMAGE_TAG"
-        echo "::group::docker pull $image"
-        docker pull --quiet "$image"
-        echo "::endgroup::"
+        pull_flag=""
+        if [ -n "$IMAGE" ]; then
+          # The build the job resolved and pulled: run it by its ID, and never fetch
+          # anything in its place.
+          image="$IMAGE"
+          pull_flag="--pull never"
+        else
+          image="$REGISTRY/$REPOSITORY:$IMAGE_TAG"
+          echo "::group::docker pull $image"
+          docker pull --quiet "$image"
+          echo "::endgroup::"
+        fi
         debug_flag=""
         if [ "$DEBUG" = "true" ] || [ "${ACTIONS_STEP_DEBUG:-}" = "true" ]; then debug_flag="--debug"; fi
         # shellcheck disable=SC2086
-        docker run --rm \
+        docker run --rm $pull_flag \
           --volume "$GITHUB_WORKSPACE:/work" --workdir /work \
           --env AWS_ACCESS_KEY_ID --env AWS_SECRET_ACCESS_KEY --env AWS_SESSION_TOKEN \
           --env AWS_REGION --env AWS_DEFAULT_REGION \
           --env GITHUB_ACTIONS --env GITHUB_SHA --env GITHUB_SERVER_URL --env GITHUB_REPOSITORY --env GITHUB_RUN_ID \
-          --env JAWS_HEAD_SHA \
+          --env JAWS_HEAD_SHA --env JAWS_PLATFORM_COMMIT --env JAWS_PLATFORM_SOURCE --env GH_TOKEN \
           --env GITHUB_OUTPUT=/github/output --volume "$GITHUB_OUTPUT:/github/output" \
           --env GITHUB_STEP_SUMMARY=/github/summary --volume "$GITHUB_STEP_SUMMARY:/github/summary" \
           "$image" $debug_flag $COMMAND

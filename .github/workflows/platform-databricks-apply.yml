@@ -1,0 +1,151 @@
+name: Platform Databricks apply
+
+# Reusable: applies a Databricks workspace project's two stacks (stacks/databricks-account,
+# then stacks/databricks-workspace) with the hub's image, by hand. Call it from a
+# workflow_dispatch of the hub's, after reading the Databricks plan comment. Re-running after
+# a partial apply is safe. The CLI reads the Databricks client secret from SSM with the
+# project's apply role. The doctor action runs the read-only checks with the same role.
+#
+# It runs the build the hub image's current tag names (spec 6.4), in the hub's prod
+# environment. The caller grants contents: read and id-token: write, and passes the identity.
+
+on:
+  workflow_call:
+    inputs:
+      platform-image:
+        description: The hub image's private ECR repository, for example `jaws-platform`. The run uses the build its `current` tag names.
+        required: true
+        type: string
+      account-id:
+        description: The platform account, 12 digits, which holds the hub image and every CI role.
+        required: true
+        type: string
+      name-root:
+        description: The platform's name root (`context.name_root`), for example `jaws`.
+        required: true
+        type: string
+      project:
+        description: The Databricks project to apply (the platform's configuration). The first step refuses the platform's own stacks.
+        required: true
+        type: string
+      action:
+        description: >-
+          apply both stacks; destroy them (the catalog bucket is emptied first); or
+          doctor: run the read-only checks and print the table (changes nothing).
+        required: false
+        type: string
+        default: apply
+
+permissions: {}
+
+jobs:
+  apply:
+    name: ${{ inputs.action }} ${{ inputs.project }}
+    runs-on: ubuntu-latest
+    environment: prod
+    concurrency:
+      group: databricks-apply-${{ inputs.project }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # the project's apply role, through OIDC
+    steps:
+      - name: Refuse the platform's own stacks
+        id: project
+        env:
+          PROJECT: ${{ inputs.project }}
+        run: |
+          case "$PROJECT" in
+            infra | monitoring | data-access)
+              echo "::error::$PROJECT is one of the platform's own stacks, not a Databricks project"
+              exit 1
+              ;;
+          esac
+      - name: Check the action
+        id: action
+        env:
+          ACTION: ${{ inputs.action }}
+        run: |
+          case "$ACTION" in
+            apply | destroy | doctor) ;;
+            *)
+              echo "::error::action must be apply, destroy or doctor, got '$ACTION'"
+              exit 1
+              ;;
+          esac
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Build the apply role from the platform's identity
+        id: role
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ inputs.platform-image }}
+          account-id: ${{ inputs.account-id }}
+          name-root: ${{ inputs.name-root }}
+          role: apply
+          project: ${{ inputs.project }}
+      - name: Assume the role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-databricks-apply-${{ inputs.project }}-${{ github.run_id }}
+      - name: Pull the build that current names
+        id: image
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          account-id: ${{ inputs.account-id }}
+          repository: ${{ inputs.platform-image }}
+      - name: Look up the project's repository (offline, inside the build)
+        id: lookup
+        env:
+          IMAGE_ID: ${{ steps.image.outputs.image-id }}
+          PROJECT: ${{ inputs.project }}
+        run: |
+          # Assigned first, so a failing command fails the step (bash -e).
+          projects=$(docker run --rm --network none --pull never "$IMAGE_ID" config projects databricks)
+          repository=$(jq -r --arg p "$PROJECT" '.[] | select(.project == $p) | .repository' <<<"$projects")
+          test -n "$repository" || { echo "::error::$PROJECT is not a Databricks project in the platform's configuration"; exit 1; }
+          echo "repository=$repository" >> "$GITHUB_OUTPUT"
+      - name: Check out the project's file
+        uses: ./.jaws-tool/.github/actions/platform-project-file
+        with:
+          project: ${{ inputs.project }}
+          repository: ${{ steps.lookup.outputs.repository }}
+          on-mismatch: refuse
+      - name: jaws ${{ inputs.action }}
+        uses: ./.jaws-tool/.github/actions/jaws
+        with:
+          command: --file .consumer/jaws.yaml ${{ inputs.action == 'destroy' && 'destroy --yes' || inputs.action == 'doctor' && 'databricks doctor' || 'apply' }}
+          image: ${{ steps.image.outputs.image-id }}
+          platform-commit: ${{ steps.image.outputs.platform-commit }}
+          platform-source: ${{ steps.image.outputs.platform-source }}
+          # The CLI reads each counterpart's project file from GitHub.
+          github-token: ${{ github.token }}
+      - name: Upload the run log and artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: databricks-apply-${{ inputs.project }}-${{ github.run_attempt }}
+          path: .jaws/
+          include-hidden-files: true # .jaws/ is a dot directory, which upload-artifact skips otherwise
+          retention-days: 14
+          if-no-files-found: ignore

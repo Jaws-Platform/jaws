@@ -34,7 +34,7 @@ locals {
 
 module "sites_image" {
   source  = "Jaws-Platform/jaws-lichess-bot/aws//modules/ecr-repository"
-  version = "0.1.4"
+  version = "0.2.0"
 
   name                       = local.account.ecr.repository
   keep_release_images        = local.account.ecr.keep_release_images
@@ -53,9 +53,15 @@ check "sites_image_repository_arn_matches" {
 module "hub_image" {
   count   = local.hub == null ? 0 : 1
   source  = "Jaws-Platform/jaws-lichess-bot/aws//modules/ecr-repository"
-  version = "0.1.4"
+  version = "0.2.0"
 
   name = local.hub.image
+
+  # Each release build is sha-<commit>, never moved; current is the live build.
+  # It moves, and the lifecycle never expires it. Ten builds are kept for rollback.
+  mutable_tags         = ["current"]
+  release_tag_prefixes = ["sha-"]
+  keep_release_images  = 10
 
   depends_on = [module.infra_ci_apply]
 }

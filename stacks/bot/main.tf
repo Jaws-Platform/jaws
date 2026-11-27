@@ -72,7 +72,7 @@ data "aws_ami" "task_profile" {
 
 module "image" {
   source  = "Jaws-Platform/jaws-lichess-bot/aws//modules/ecr-repository"
-  version = "0.1.4"
+  version = "0.2.0"
   count   = var.bot_enabled ? 1 : 0
 
   name                       = local.name
@@ -108,7 +108,7 @@ module "records" {
 
 module "bot" {
   source  = "Jaws-Platform/jaws-lichess-bot/aws//modules/container-instance"
-  version = "0.1.4"
+  version = "0.2.0"
   count   = var.bot_enabled ? 1 : 0
 
   name                 = "${local.name}-bot"

@@ -105,10 +105,18 @@ image tag, whatever it pinned.)
 
 | Workflow | Calls | Caller needs |
 | --- | --- | --- |
-| `site-plan.yml` | `validate`, then `plan`, and posts the sticky plan comment | `plan-role-arn`; `id-token: write`, `pull-requests: write`; optionally `app-client-id` and the `app-private-key` secret |
-| `site-preview.yml` | `preview deploy` on open/synchronize/reopen, `preview remove` on close, and the sticky preview comment | `artifact`, `preview-role-arn`; the same permissions and optional app inputs |
+| `site-plan.yml` | `validate`, then `plan`, and posts the sticky plan comment | `plan-role-arn` (or, in a hub, `platform-image`, `account-id`, `name-root` and `check-prefix`); `id-token: write`, `pull-requests: write`; optionally `app-client-id` and the `app-private-key` secret |
+| `site-preview.yml` | `preview deploy` on open/synchronize/reopen, `preview remove` on close, and the sticky preview comment | `artifact`, `preview-role-arn` (or, in a hub, `platform-image`, `account-id`, `name-root` and `check-prefix`); the same permissions and optional app inputs |
 | `site-release-please.yml` | Release Please with the release bot; outputs `release_created` and `tag` | the `RELEASE_BOT_CLIENT_ID` and `RELEASE_BOT_PRIVATE_KEY` secrets, passed by name (`secrets: inherit` only reaches callers in the Jaws-Platform organization) |
-| `site-deploy.yml` | `release` in the caller's `prod` environment at the tag | `artifact`, `tag`, `apply-role-arn`; `id-token: write` |
+| `site-deploy.yml` | `release` in the caller's `prod` environment at the tag | `artifact`, `tag`, `apply-role-arn` (or, in a hub, `platform-image`, `account-id`, `name-root` and `check-prefix`); `id-token: write` |
+
+**In a hub.** A project calls the hub's copy of each workflow at `@live` and
+names no version. The hub's caller spells the platform's identity
+(`platform-image`, `account-id`, `name-root`) and a `check-prefix`, and the run
+then derives every role ARN from the identity, resolves `current` once, and
+names the hub commit in the comment's footer. Without those inputs a job runs as
+above, so a project on a pinned release keeps working. See
+[docs/platform-workflows.md](docs/platform-workflows.md).
 
 Every job uploads `.jaws/` (the debug log, plan text and
 comment files) as an artifact. A site's preview workflow is a build job plus
@@ -263,6 +271,8 @@ App and post as it, with the app's name and avatar. The app needs only
 that posts. If the token cannot be minted the step warns and the comment
 falls back to `github-actions[bot]`. A comment that already exists on a pull
 request keeps its original author; the app shows up on new pull requests.
+A platform passes its own comments App the same way, with `app-client-id` and
+the `app-private-key` secret, and the comments carry that App's name.
 
 The release workflow (`workflow_dispatch` with a `tag`) can re-publish the
 image for an existing tag without cutting a release.
@@ -379,7 +389,7 @@ files](#the-tool-configuration-config)).
 | `oidc.tf` | GitHub OIDC provider (data source; created outside this stack, by hand at bootstrap in a new account and in this account by prog-strength-infra: see the TODO(owner) there; destroying that stack removes the provider every CI role trusts) |
 | `dns.tf` | The hosted zone, its CAA record and the zone owner's TXT records (`hosted-zone` module) |
 | `ci-roles.tf` | This repo's own plan and apply roles (`ci-plan-role` and `ci-apply-role` modules) |
-| `ecr.tf` | The ECR repositories for the infra CLI image (`ecr` in `config/tool.yaml`) and, with a hub, for the hub image (`platform.hub.image`), and who pulls and pushes them |
+| `ecr.tf` | The ECR repositories for the infra CLI image (`ecr` in `config/tool.yaml`) and, with a hub, for the hub image (`platform.hub.image`), the hub image's builds (`sha-<commit>`, the newest ten kept) and `current`, and who pulls and pushes them |
 | `config/` (root) | Tool configuration for the infra CLI and the foundation stack: the account registry, every onboarded project with its central guardrails, state bucket, DNS zone, ECR lifecycle, the bot and task runtimes and Databricks ([its files](#the-tool-configuration-config)) |
 | `src/jaws/`, `tests/`, `pyproject.toml` | The infra CLI, its tests and its `uv` project |
 | `stacks/site/` | The site stack the CLI renders for each site, pinned to the static-site module family like any consumer |
@@ -394,6 +404,8 @@ files](#the-tool-configuration-config)).
 | `stacks/databricks-account/`, `stacks/databricks-workspace/`, `foundation/databricks.tf` | The two stacks of a Databricks project; the metastore, audit log delivery and each Databricks project's roles (type `databricks` in `config/projects.yaml`) |
 | `Dockerfile` | The CLI images: `generic`, the default target (the CLI, a pinned Terraform, every stack with modules and providers vendored: `stacks/*` and the platform's own, without backends; no configuration), and `jaws-cli`: `generic` plus `config/` at `/etc/jaws/config` and `datasets/` at `/etc/jaws/datasets` |
 | `.github/actions/terraform-init` | `terraform init` with a retry for the registry's lag after a library release |
+| `.github/workflows/platform-*.yml` | A hub's workflows: its pull requests, its release, rollback, by-hand applies, the data access sweep and the upgrade PR ([docs/platform-workflows.md](docs/platform-workflows.md)) |
+| `.github/actions/platform-*` | Shared steps of a hub's runs: the role, one build per run, the base and the build, the project file, and the moves of `current` and `live` |
 | `projects.tf` | The sites (type `site` in `config/projects.yaml`), each fed to the registry `site-bucket`, `ci-plan-role`, `ci-preview-role` and `ci-apply-role` modules |
 | `outputs.tf` | Values the project repos and this repo's CI consume |
 | `registry/` | Derives the onboarded datasets from `datasets/` (each platform name, bucket and URL), tested against the CLI's derivation |

@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 from .report import Provenance
+
+ENV_PLATFORM_COMMIT = "JAWS_PLATFORM_COMMIT"
+ENV_PLATFORM_SOURCE = "JAWS_PLATFORM_SOURCE"
+_PLATFORM_COMMIT = re.compile(r"[0-9a-f]{40}")
+_PLATFORM_SOURCE = re.compile(r"https://github\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+")
 
 
 def write_output(name: str, value: str) -> None:
@@ -49,7 +55,24 @@ def commit_url(sha: str | None) -> str | None:
     return None
 
 
+def platform_commit() -> tuple[str | None, str | None]:
+    """The hub commit that built this image and its URL; each is None unless valid."""
+    sha = os.environ.get(ENV_PLATFORM_COMMIT, "")
+    if not _PLATFORM_COMMIT.fullmatch(sha):
+        return None, None
+    source = os.environ.get(ENV_PLATFORM_SOURCE, "")
+    return sha, f"{source}/commit/{sha}" if _PLATFORM_SOURCE.fullmatch(source) else None
+
+
 def provenance(version: str) -> Provenance:
     """What the comments' footer says about this run."""
     sha = head_sha()
-    return Provenance(version=version, sha=sha, commit_url=commit_url(sha), run_url=run_url())
+    platform_sha, platform_url = platform_commit()
+    return Provenance(
+        version=version,
+        sha=sha,
+        commit_url=commit_url(sha),
+        run_url=run_url(),
+        platform_sha=platform_sha,
+        platform_url=platform_url,
+    )

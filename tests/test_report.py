@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from jaws.report import (
@@ -24,6 +26,9 @@ JAWS = BrandSection()
 ACME = BrandSection(name="Acme Platform", mark="🔧")
 IMAGE = "https://raw.githubusercontent.com/Example-Org/example-branding/main/mark.png"
 KINDS = ["plan", "stacks", "preview", "removed"]
+
+HUB_COMMIT = "0123456789abcdef0123456789abcdef01234567"
+HUB_URL = f"https://github.com/Example-Hub/platform/commit/{HUB_COMMIT}"
 
 PROVENANCE = Provenance(
     version="0.9.1",
@@ -408,6 +413,19 @@ def test_the_plan_comment_s_footer_is_today_s_to_the_byte() -> None:
         '<a href="https://github.com/o/r/actions/runs/1">Workflow run</a> &nbsp;·&nbsp; '
         "Updated on every push</sub></p>"
     )
+
+
+def test_the_footer_names_the_platform_s_commit() -> None:
+    provenance = dataclasses.replace(PROVENANCE, platform_sha=HUB_COMMIT, platform_url=HUB_URL)
+    comment = preview_removed_comment(3, "a.example", provenance, brand=ACME)
+    parts = _footer(comment).removeprefix('<p align="center"><sub>').split(" &nbsp;·&nbsp; ")
+    assert parts[1] == f'Platform <a href="{HUB_URL}"><code>0123456</code></a>'
+
+
+def test_the_platform_s_commit_without_a_url_is_plain_code() -> None:
+    provenance = dataclasses.replace(PROVENANCE, platform_sha=HUB_COMMIT)
+    comment = preview_removed_comment(3, "a.example", provenance, brand=ACME)
+    assert " &nbsp;·&nbsp; Platform <code>0123456</code> &nbsp;·&nbsp; " in _footer(comment)
 
 
 @pytest.mark.parametrize("kind", KINDS)

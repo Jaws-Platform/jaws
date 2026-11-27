@@ -49,6 +49,21 @@ on:
         required: false
         type: string
         default: ""
+      platform-image:
+        description: A hub's image repository in ECR (for example jaws-platform). With it, account-id and name-root, the run builds its role from the platform's identity and reads its configuration from the hub's image. Empty runs as a project on Jaws's own pin does.
+        required: false
+        type: string
+        default: ""
+      account-id:
+        description: The platform account, 12 digits. Needed with platform-image.
+        required: false
+        type: string
+        default: ""
+      name-root:
+        description: The platform's name root (context.name_root). Needed with platform-image.
+        required: false
+        type: string
+        default: ""
       debug:
         description: Console log at debug level.
         required: false
@@ -72,6 +87,7 @@ jobs:
     env:
       VERSION: ${{ inputs.version || github.event.release.tag_name }}
       VERSION_INPUT: ${{ inputs.version }}
+      JAWS_TOOL_CONFIG: ${{ inputs.platform-image != '' && '.jaws-platform/config' || '.jaws-tool/config' }}
     steps:
       - name: Check out the release
         uses: actions/checkout@v7
@@ -99,17 +115,28 @@ jobs:
           echo "jaws at $actual, this workflow's own commit"
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked --no-dev --project .jaws-tool
+      - name: Build the release role from the platform's identity
+        id: platform
+        if: inputs.platform-image != '' || inputs.account-id != '' || inputs.name-root != ''
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ inputs.platform-image }}
+          account-id: ${{ inputs.account-id }}
+          name-root: ${{ inputs.name-root }}
+          role: release
+          project: ${{ inputs.project }}
+          role-arn: ${{ inputs.release-role-arn }}
       - name: Resolve the release role
         id: role
+        if: steps.platform.outputs.arn == ''
         env:
           OVERRIDE: ${{ inputs.release-role-arn }}
           PROJECT: ${{ inputs.project }}
-          CONFIG: .jaws-tool/config
         run: |
           if [ -n "$OVERRIDE" ]; then
             arn="$OVERRIDE"
           else
-            resolved=$(uv run --no-dev --project .jaws-tool jaws --config "$CONFIG" config env)
+            resolved=$(uv run --no-dev --project .jaws-tool jaws --config "$JAWS_TOOL_CONFIG" config env)
             account=$(sed -n 's/^account_id=//p' <<<"$resolved")
             name_root=$(sed -n 's/^name_root=//p' <<<"$resolved")
             [[ "$account" =~ ^[0-9]{12}$ && -n "$name_root" ]] || { echo "::error::jaws config env named no account or name root for $PROJECT"; exit 1; }
@@ -118,14 +145,25 @@ jobs:
           echo "arn=$arn" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ steps.role.outputs.arn }}
+          role-to-assume: ${{ steps.platform.outputs.arn || steps.role.outputs.arn }}
           aws-region: us-east-1
           role-session-name: container-release-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Resolve the platform image
+        id: image
+        if: steps.platform.outputs.arn != ''
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          account-id: ${{ inputs.account-id }}
+          repository: ${{ inputs.platform-image }}
+          extract: .jaws-platform
       - name: jaws bot reconcile
         env:
           GITHUB_TOKEN: ${{ github.token }} # release listing (rate limits)
           JAWS_HEAD_SHA: ${{ github.sha }}
           DEBUG: ${{ inputs.debug }}
+          JAWS_INFRA_ROOT: ${{ steps.image.outputs.infra-root }}
+          JAWS_PLATFORM_COMMIT: ${{ steps.image.outputs.platform-commit }}
+          JAWS_PLATFORM_SOURCE: ${{ steps.image.outputs.platform-source }}
         run: |
           debug_flag=""
           if [ "$DEBUG" = "true" ]; then debug_flag="--debug"; fi
@@ -137,7 +175,7 @@ jobs:
           if [ "$track" = "pinned" ] && [ -z "$VERSION_INPUT" ]; then version_args=(); fi
           # shellcheck disable=SC2086
           uv run --no-dev --project .jaws-tool jaws \
-            --config .jaws-tool/config $debug_flag \
+            --config "$JAWS_TOOL_CONFIG" $debug_flag \
             bot reconcile "${version_args[@]}"
       - name: Upload the run log and artifacts
         if: always()

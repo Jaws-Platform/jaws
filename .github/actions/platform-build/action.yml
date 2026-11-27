@@ -1,0 +1,100 @@
+name: platform-build
+description: >-
+  Builds a hub's image from its Dockerfile, with labels that name what it was
+  built from: the hub commit (org.opencontainers.image.revision), the hub
+  repository (org.opencontainers.image.source), and the Jaws base platform-base
+  read (org.opencontainers.image.base.name and .base.digest). platform-image reads
+  the first two back for the comments' footer. Buildx loads the build on the
+  runner, pushes it, or both, as one build. From the job it needs the hub's
+  checkout in the workspace and platform-base's outputs, and, to push, a registry
+  it has logged in to. Without a push it reaches no registry but ECR Public, for
+  the base, so a pull request's candidate is built with no credentials and never
+  leaves the run (ruling 5).
+
+inputs:
+  load:
+    description: >-
+      "true" loads the build into the runner's Docker, which then runs it, or
+      saves it, by its `image-id`. Independent of `push`.
+    required: true
+  push:
+    description: >-
+      "true" pushes the build to `tags`. Independent of `load`: buildx loads and
+      pushes one build.
+    required: true
+  tags:
+    description: The tags to push, one per line, for example `<registry>/<repository>:sha-<commit>`. Needed with `push`.
+    required: false
+    default: ""
+  revision:
+    description: The hub commit the build is made from, for its `org.opencontainers.image.revision` label.
+    required: true
+  base-name:
+    description: platform-base's `base-name`, the Jaws image the Dockerfile builds on.
+    required: true
+  base-tag:
+    description: platform-base's `base-tag`, the Jaws release it pins.
+    required: true
+  base-digest:
+    description: platform-base's `base-digest`, the digest it pins.
+    required: true
+
+outputs:
+  image-id:
+    description: >-
+      With `load`, the loaded build's image ID as the runner reports it (`docker
+      image inspect`): its config digest with Docker's classic image store, its
+      manifest digest with the containerd store. platform-image checks a candidate
+      loaded from an artifact against it. Empty without `load`.
+    value: ${{ steps.loaded.outputs.image-id }}
+  digest:
+    description: With `push`, the pushed manifest's digest, for a later job's platform-image `digest`. Empty without a push.
+    value: ${{ inputs.push == 'true' && steps.build.outputs.digest || '' }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Docker Buildx
+      id: setup-buildx
+      uses: docker/setup-buildx-action@v4
+    - name: Build the hub's image
+      id: build
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        platforms: linux/amd64
+        # One manifest, no attestation index: the build's digest and image ID name the image itself.
+        provenance: false
+        load: ${{ inputs.load }}
+        push: ${{ inputs.push }}
+        tags: ${{ inputs.tags }}
+        labels: |
+          org.opencontainers.image.revision=${{ inputs.revision }}
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.base.name=${{ inputs.base-name }}:${{ inputs.base-tag }}
+          org.opencontainers.image.base.digest=${{ inputs.base-digest }}
+    - name: Read the loaded build's image ID
+      id: loaded
+      if: inputs.load == 'true'
+      shell: bash
+      env:
+        CONFIG_DIGEST: ${{ steps.build.outputs.imageid }}
+        DIGEST: ${{ steps.build.outputs.digest }}
+      run: |
+        # The ID every later step runs the build by, and platform-image checks a candidate
+        # against: the one the runner reports. Docker's classic image store names a build by
+        # its config digest (buildx's imageid), and the containerd store by its manifest
+        # digest; each store knows the build by its own one only.
+        id=""
+        for ref in "$CONFIG_DIGEST" "$DIGEST"; do
+          if [[ "$ref" =~ ^sha256:[0-9a-f]{64}$ ]] && id=$(docker image inspect --format '{{.Id}}' "$ref" 2>/dev/null); then
+            break
+          fi
+          id=""
+        done
+        if ! [[ "$id" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+          echo "::error::the runner holds no loaded build with the config digest '$CONFIG_DIGEST' or the manifest digest '$DIGEST'"
+          exit 1
+        fi
+        echo "the loaded build: image ID $id (config digest $CONFIG_DIGEST, manifest digest $DIGEST)"
+        echo "image-id=$id" >> "$GITHUB_OUTPUT"

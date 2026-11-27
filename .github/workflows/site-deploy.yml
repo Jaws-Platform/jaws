@@ -3,7 +3,8 @@ name: Site deploy
 # Reusable: in the caller's `prod` environment, applies a site's infrastructure
 # and publishes the built site for a release tag (`release`: apply, sync to
 # prod/, invalidate CloudFront). The caller builds the site at the tag and
-# uploads it as an artifact first.
+# uploads it as an artifact first. A hub's caller also passes the platform's
+# identity (`platform-image`, `account-id`, `name-root`) and a `check-prefix`.
 
 on:
   workflow_call:
@@ -17,14 +18,35 @@ on:
         required: true
         type: string
       apply-role-arn:
-        description: ARN of the site's ci-apply role (usually vars.AWS_APPLY_ROLE_ARN).
-        required: true
+        description: ARN of the site's ci-apply role (usually vars.AWS_APPLY_ROLE_ARN). Needed without platform-image; with it, an override that must be a role in account-id.
+        required: false
         type: string
+        default: ""
       site-url:
         description: The production URL, shown on the environment.
         required: false
         type: string
         default: ""
+      platform-image:
+        description: A hub's image repository in ECR (for example jaws-platform). With it, account-id and name-root, the run builds its role from the platform's identity and runs the hub's image. Empty runs as a project on Jaws's own pin does.
+        required: false
+        type: string
+        default: ""
+      account-id:
+        description: The platform account, 12 digits. Needed with platform-image.
+        required: false
+        type: string
+        default: ""
+      name-root:
+        description: The platform's name root (context.name_root). Needed with platform-image.
+        required: false
+        type: string
+        default: ""
+      check-prefix:
+        description: The first word of the job's check name. The default, jaws, keeps today's names.
+        required: false
+        type: string
+        default: jaws
       debug:
         description: Console log at debug level.
         required: false
@@ -35,7 +57,7 @@ permissions: {}
 
 jobs:
   deploy:
-    name: jaws release
+    name: ${{ inputs.check-prefix }} release
     runs-on: ubuntu-latest
     environment:
       name: prod
@@ -67,6 +89,30 @@ jobs:
             exit 1
           fi
           echo "jaws at $actual, this workflow's own commit"
+      - name: Build the role from the platform's identity
+        id: role
+        if: inputs.platform-image != '' || inputs.account-id != '' || inputs.name-root != ''
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ inputs.platform-image }}
+          account-id: ${{ inputs.account-id }}
+          name-root: ${{ inputs.name-root }}
+          role: apply
+          role-arn: ${{ inputs.apply-role-arn }}
+      - name: Assume the role
+        if: steps.role.outputs.arn != ''
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-site-release-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Resolve the platform image
+        id: image
+        if: steps.role.outputs.arn != ''
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          account-id: ${{ inputs.account-id }}
+          repository: ${{ inputs.platform-image }}
       - uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.artifact }}
@@ -75,7 +121,10 @@ jobs:
         uses: ./.jaws-tool/.github/actions/jaws
         with:
           command: release --dist .jaws-dist
-          role-arn: ${{ inputs.apply-role-arn }}
+          role-arn: ${{ steps.role.outputs.arn == '' && inputs.apply-role-arn || '' }}
+          image: ${{ steps.image.outputs.image-id }}
+          platform-commit: ${{ steps.image.outputs.platform-commit }}
+          platform-source: ${{ steps.image.outputs.platform-source }}
           head-sha: ${{ github.sha }}
           debug: ${{ inputs.debug }}
       - name: Upload the run log and artifacts

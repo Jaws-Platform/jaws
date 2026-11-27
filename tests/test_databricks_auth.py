@@ -77,6 +77,46 @@ def test_empty_secret_is_preflight_without_the_value() -> None:
         load_secret(ssm, PARAMETER)
 
 
+@pytest.mark.parametrize("ending", ["\n", "\r\n"], ids=["lf", "crlf"])
+def test_one_line_break_at_the_end_is_no_part_of_the_secret(ending: str) -> None:
+    """A value stored with the line break a file or `echo` ends on reads as the secret, as the
+    script `load_secret` replaced read it, through `$(...)`."""
+
+    class Stored:
+        def get_parameter(self, **kwargs: Any) -> Any:
+            return {"Parameter": {"Value": f"abc{ending}"}}
+
+    assert load_secret(Stored(), PARAMETER) == "abc"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "first-half\nsecond-half",
+        "first-half\r\nsecond-half",
+        "first-half\rsecond-half",
+        "first-half\n\n",
+        "first-half\nsecond-half\n",
+        "first-half\r",
+    ],
+    ids=["lf", "crlf", "cr", "two-at-the-end", "inside-and-at-the-end", "cr-at-the-end"],
+)
+def test_a_secret_of_several_lines_is_preflight_without_the_value(value: str) -> None:
+    """A runner's `::add-mask::` covers one line: the rest would print in the job log. Only one
+    line break at the end, `\\n` or `\\r\\n`, is dropped first, so every other one is refused."""
+
+    class Stored:
+        def get_parameter(self, **kwargs: Any) -> Any:
+            return {"Parameter": {"Value": value}}
+
+    with pytest.raises(PreflightError) as caught:
+        load_secret(Stored(), PARAMETER)
+    message = str(caught.value)
+    assert PARAMETER in message and RUNBOOK in message
+    assert "first-half" not in message and "second-half" not in message
+    assert caught.value.exit_code == 3
+
+
 def test_unreadable_secret_is_preflight_without_the_value() -> None:
     class Denied:
         def get_parameter(self, **kwargs: Any) -> Any:

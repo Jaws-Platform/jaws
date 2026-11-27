@@ -1,0 +1,181 @@
+name: Platform rollback
+
+# Reusable: rolls a hub back to an earlier release, by hand. Call it from the hub's
+# workflow_dispatch with the release commit to go back to. Its one job, rollback, runs in
+# the hub's prod environment as the infra apply role:
+#
+#   check    the commit is a full SHA, on main, and its build is still kept: the hub image
+#            keeps the newest ten sha- builds.
+#   live     mints the mover App's token, then moves the live branch to the commit, by
+#            force, so the hub's workflow files and its image stay at one Jaws release
+#            (ruling 9).
+#   current  moves the hub image's current tag to that build.
+#
+# live moves back first, then current: ruling 7's invariant, for a move backward. In the
+# seconds between, a project runs the newer build with the older workflow files, never an
+# older build with newer workflow files. The token comes before either move, so a token
+# that can't be minted, an App that isn't installed, or a ruleset that refuses the App stops
+# the job before current moves. Whatever stops it after live moves leaves that same safe
+# pair: run the rollback again.
+#
+# It applies nothing: the foundation and monitoring stay as the last release applied them.
+# The runs that take current, the sweep and the by-hand applies among them, run the older
+# build from their next start. To undo what a release applied, release a fix.
+#
+# The job holds the concurrency group platform-release, as the release's jobs do, and never
+# cancels one in progress. The caller grants contents: read and id-token: write, holds no
+# platform-release group, and passes the identity, the commit, the mover App's client ID
+# (live-app-client-id) and its key LIVE_APP_PRIVATE_KEY, a secret of prod passed under that
+# same name: no release App secret.
+
+on:
+  workflow_call:
+    inputs:
+      platform-image:
+        description: The hub image's private ECR repository, for example `jaws-platform`, which holds the kept builds.
+        required: true
+        type: string
+      account-id:
+        description: The platform account, 12 digits, which holds the hub image and every CI role.
+        required: true
+        type: string
+      name-root:
+        description: The platform's name root (`context.name_root`), for example `jaws`.
+        required: true
+        type: string
+      commit:
+        description: The release commit to roll back to, its full SHA. It must be on main, with its build still kept (the newest ten are).
+        required: true
+        type: string
+      live-app-client-id:
+        description: Client ID of the hub's mover App, live's only ruleset bypass actor, which moves live. A literal in the caller, as it isn't secret.
+        required: true
+        type: string
+    secrets:
+      LIVE_APP_PRIVATE_KEY:
+        description: Private key of the hub's mover App, a secret of the hub's prod environment only, never a repository secret. Pass it under this same name; only a job that runs in prod receives it.
+        required: true
+
+permissions: {}
+
+jobs:
+  rollback:
+    name: Roll back to ${{ inputs.commit }}
+    runs-on: ubuntu-latest
+    environment: prod
+    concurrency:
+      group: platform-release
+      cancel-in-progress: false
+    permissions:
+      contents: read # main's history, for the check
+      id-token: write # the infra apply role, whose ecr/push moves the tag
+    steps:
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Build the apply role from the platform's identity
+        id: role
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ inputs.platform-image }}
+          account-id: ${{ inputs.account-id }}
+          name-root: ${{ inputs.name-root }}
+          role: apply
+          project: infra
+      - name: Assume the role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-rollback-${{ github.run_id }}
+      - name: Check the commit is a release on main whose build is kept
+        id: check
+        env:
+          COMMIT: ${{ inputs.commit }}
+          REPOSITORY: ${{ inputs.platform-image }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::commit must be a release commit's full SHA, 40 lowercase hex digits, got '$COMMIT'"
+            exit 1
+          fi
+          # On main: main is ahead of the commit, or is the commit.
+          status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$COMMIT...main" --jq .status) || {
+            echo "::error::could not compare $COMMIT with main"
+            exit 1
+          }
+          if [[ "$status" != ahead && "$status" != identical ]]; then
+            echo "::error::$COMMIT is not on main"
+            exit 1
+          fi
+          # Each release's build is tagged sha-<commit>, and the newest ten are kept. An image
+          # ECR can't find is a failure in its answer, not an error.
+          tag="sha-$COMMIT"
+          found=$(aws ecr batch-get-image --repository-name "$REPOSITORY" --image-ids "imageTag=$tag" \
+            --accepted-media-types application/vnd.oci.image.manifest.v1+json \
+            application/vnd.docker.distribution.manifest.v2+json --output json)
+          count=$(jq '.images | length' <<<"$found")
+          if [[ "$count" == 0 ]]; then
+            code=$(jq -r '.failures[0].failureCode // "ImageNotFound"' <<<"$found")
+            if [[ "$code" != ImageNotFound ]]; then
+              reason=$(jq -r '.failures[0].failureReason // ""' <<<"$found")
+              echo "::error::$REPOSITORY:$tag could not be read: $code ($reason)"
+              exit 1
+            fi
+            echo "::error::no build of $COMMIT is kept: the newest ten are; roll back to one of them, or release a fix"
+            exit 1
+          fi
+          digest=$(jq -r '.images[0].imageId.imageDigest' <<<"$found")
+          echo "$COMMIT is on main, and its build is $REPOSITORY@$digest"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      # The mover App's key and token first, so a missing key or a token that can't be minted
+      # moves nothing. Then live, then current: moving back, that is ruling 7's order.
+      - name: Check the mover App's key is there
+        id: live-key
+        env:
+          # Whether the job received the key, never the key itself.
+          KEY_SET: ${{ secrets.LIVE_APP_PRIVATE_KEY != '' }}
+        run: |
+          if [[ "$KEY_SET" != true ]]; then
+            echo "::error::LIVE_APP_PRIVATE_KEY is empty, so the mover App's token can't be minted. Store the App's key as a secret of the hub's prod environment, never a repository secret, and pass it in the caller's secrets under the same name"
+            exit 1
+          fi
+      - name: Mint the mover App's token
+        id: live-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ inputs.live-app-client-id }}
+          private-key: ${{ secrets.LIVE_APP_PRIVATE_KEY }}
+      - name: Move live to the commit (by force, since it moves back)
+        id: live
+        uses: ./.jaws-tool/.github/actions/platform-move
+        with:
+          move: live
+          commit: ${{ inputs.commit }}
+          token: ${{ steps.live-token.outputs.token }}
+          force: "true"
+      - name: Move current to the commit's build
+        id: current
+        uses: ./.jaws-tool/.github/actions/platform-move
+        with:
+          move: current
+          repository: ${{ inputs.platform-image }}
+          digest: ${{ steps.check.outputs.digest }}
+          commit: ${{ inputs.commit }}

@@ -18,6 +18,7 @@ from jaws import cli
 from jaws.errors import ConfigError
 from jaws.settings import load_settings
 from tests.conftest import CONFIG_DIR, fixture_config, repo_config
+from tests.test_foundation_fixtures import HUB, HUB_REPOSITORY
 
 runner = CliRunner()
 
@@ -145,3 +146,27 @@ def test_config_env_prints_the_check_prefix_of_the_job_names(
     )
     assert result.exit_code == 0, result.output
     assert result.stdout.splitlines()[-1] == f"check_prefix={prefix}"
+
+
+def test_config_env_prints_the_hub_s_image_and_repository(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw["platform"]["repositories"].append(dict(HUB_REPOSITORY))
+    raw["platform"]["hub"] = dict(HUB)
+    result = runner.invoke(
+        cli.app, ["--config", str(_write(tmp_path, raw)), "config", "env", "--platform"]
+    )
+    assert result.exit_code == 0, result.output
+    assert result.stdout.splitlines()[-2:] == [
+        "platform_image=jaws-platform",
+        "platform_repository=Example-Hub/platform",
+    ]
+
+
+def test_config_env_platform_needs_a_hub(tmp_path: Path) -> None:
+    raw = fixture_config()
+    raw["platform"].pop("hub", None)
+    result = runner.invoke(
+        cli.app, ["--config", str(_write(tmp_path, raw)), "config", "env", "--platform"]
+    )
+    assert result.exit_code == 2
+    assert "platform.hub" in result.output

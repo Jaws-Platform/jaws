@@ -1,0 +1,147 @@
+name: Platform bot apply
+
+# Reusable: applies a bot or research project's stack (stacks/bot) with the hub's image, by
+# hand. Call it from a workflow_dispatch of the hub's, after reading the bot plan comment,
+# while the bot is idle: a change to the instance's AMI, type or user data replaces the
+# instance and ends the game in progress. That is why it is not chained to a release.
+#
+# It runs the build the hub image's current tag names (spec 6.4), as the project's own apply
+# role, in the hub's prod environment. The project's repository comes from the build's
+# configuration, and its project file is read from there: its default branch, or
+# consumer-ref. The caller grants contents: read and id-token: write, and passes the identity.
+
+on:
+  workflow_call:
+    inputs:
+      platform-image:
+        description: The hub image's private ECR repository, for example `jaws-platform`. The run uses the build its `current` tag names.
+        required: true
+        type: string
+      account-id:
+        description: The platform account, 12 digits, which holds the hub image and every CI role.
+        required: true
+        type: string
+      name-root:
+        description: The platform's name root (`context.name_root`), for example `jaws`.
+        required: true
+        type: string
+      project:
+        description: The bot or research project to apply (the platform's configuration). The first step refuses the platform's own stacks.
+        required: true
+        type: string
+      destroy:
+        description: Destroy the stack instead (the records, dataset and task results buckets and the secret are kept).
+        required: false
+        type: boolean
+        default: false
+      consumer-ref:
+        description: >-
+          A branch, tag or commit of the bot's repository to read its project file
+          from. Empty reads its default branch. For a file that is not on the
+          default branch (yet, or any more): a project being renamed.
+        required: false
+        type: string
+        default: ""
+
+permissions: {}
+
+jobs:
+  apply:
+    name: ${{ inputs.destroy && 'Destroy' || 'Apply' }} ${{ inputs.project }}
+    runs-on: ubuntu-latest
+    environment: prod
+    concurrency:
+      group: bot-apply-${{ inputs.project }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # the project's apply role, through OIDC
+    steps:
+      - name: Refuse the platform's own stacks
+        id: project
+        env:
+          PROJECT: ${{ inputs.project }}
+        run: |
+          case "$PROJECT" in
+            infra | monitoring | data-access)
+              echo "::error::$PROJECT is one of the platform's own stacks, not a bot or research project"
+              exit 1
+              ;;
+          esac
+      - name: Check out jaws at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: Jaws-Platform/jaws
+          ref: ${{ job.workflow_sha }}
+          path: .jaws-tool
+      - name: Check jaws is at this workflow's own commit
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          actual=$(git -C .jaws-tool rev-parse HEAD)
+          if [[ -z "$WORKFLOW_SHA" ]]; then
+            echo "::error::job.workflow_sha is empty, so the checkout fell back to main ($actual) instead of the version this workflow was called at"
+            exit 1
+          fi
+          if [[ "$actual" != "$WORKFLOW_SHA" ]]; then
+            echo "::error::jaws is checked out at $actual, not at this workflow's own commit $WORKFLOW_SHA"
+            exit 1
+          fi
+          echo "jaws at $actual, this workflow's own commit"
+      - name: Build the apply role from the platform's identity
+        id: role
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ inputs.platform-image }}
+          account-id: ${{ inputs.account-id }}
+          name-root: ${{ inputs.name-root }}
+          role: apply
+          project: ${{ inputs.project }}
+      - name: Assume the role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: us-east-1
+          role-session-name: gha-bot-apply-${{ inputs.project }}-${{ github.run_id }}
+      - name: Pull the build that current names
+        id: image
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          account-id: ${{ inputs.account-id }}
+          repository: ${{ inputs.platform-image }}
+      - name: Look up the project's repository (offline, inside the build)
+        id: lookup
+        env:
+          IMAGE_ID: ${{ steps.image.outputs.image-id }}
+          PROJECT: ${{ inputs.project }}
+        run: |
+          # Assigned first, so a failing command fails the step (bash -e).
+          projects=$(docker run --rm --network none --pull never "$IMAGE_ID" config projects bot research)
+          repository=$(jq -r --arg p "$PROJECT" '.[] | select(.project == $p) | .repository' <<<"$projects")
+          test -n "$repository" || { echo "::error::$PROJECT is not a bot or research project in the platform's configuration"; exit 1; }
+          echo "repository=$repository" >> "$GITHUB_OUTPUT"
+      - name: Check out the project's file
+        uses: ./.jaws-tool/.github/actions/platform-project-file
+        with:
+          project: ${{ inputs.project }}
+          repository: ${{ steps.lookup.outputs.repository }}
+          ref: ${{ inputs.consumer-ref }}
+          on-mismatch: refuse
+      - name: jaws ${{ inputs.destroy && 'destroy' || 'apply' }}
+        uses: ./.jaws-tool/.github/actions/jaws
+        with:
+          command: --file .consumer/jaws.yaml ${{ inputs.destroy && 'destroy --yes' || 'apply' }}
+          image: ${{ steps.image.outputs.image-id }}
+          platform-commit: ${{ steps.image.outputs.platform-commit }}
+          platform-source: ${{ steps.image.outputs.platform-source }}
+          # The CLI reads each counterpart's project file from GitHub.
+          github-token: ${{ github.token }}
+      - name: Upload the run log and artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bot-apply-${{ inputs.project }}-${{ github.run_attempt }}
+          path: .jaws/
+          include-hidden-files: true # .jaws/ is a dot directory, which upload-artifact skips otherwise
+          retention-days: 14
+          if-no-files-found: ignore

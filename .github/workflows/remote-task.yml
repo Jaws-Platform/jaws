@@ -99,6 +99,21 @@ on:
         required: false
         type: string
         default: ""
+      platform-image:
+        description: A hub's image repository in ECR (for example jaws-platform). With it, account-id and name-root, the run builds its role from the platform's identity and reads its configuration from the hub's image. Empty runs as a project on Jaws's own pin does.
+        required: false
+        type: string
+        default: ""
+      account-id:
+        description: The platform account, 12 digits. Needed with platform-image.
+        required: false
+        type: string
+        default: ""
+      name-root:
+        description: The platform's name root (context.name_root). Needed with platform-image.
+        required: false
+        type: string
+        default: ""
     outputs:
       outcome:
         description: passed, failed, interrupted (spot reclaimed the instance; no result, re-run), no-capacity (neither spot nor on-demand had room) or no-price (the cost ceiling could not be checked).
@@ -123,7 +138,7 @@ jobs:
     env:
       RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
       TASK_ID: ${{ inputs.task-id || inputs.artifact }}
-      CLI: uv run --no-dev --project .jaws-tool jaws --config .jaws-tool/config
+      JAWS_TOOL_CONFIG: ${{ inputs.platform-image != '' && '.jaws-platform/config' || '.jaws-tool/config' }}
     steps:
       - name: Refuse fork pull requests and other events
         env:
@@ -174,18 +189,33 @@ jobs:
           echo "jaws at $actual, this workflow's own commit"
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked --no-dev --project .jaws-tool
+      - name: Build the task role from the platform's identity
+        id: platform
+        if: inputs.platform-image != '' || inputs.account-id != '' || inputs.name-root != ''
+        uses: ./.jaws-tool/.github/actions/platform-role
+        with:
+          platform-image: ${{ inputs.platform-image }}
+          account-id: ${{ inputs.account-id }}
+          name-root: ${{ inputs.name-root }}
+          role: task
+          project: ${{ inputs.project }}
       - name: Resolve the task role and its session length
         id: role
         env:
+          PLATFORM_ARN: ${{ steps.platform.outputs.arn }}
           PROJECT: ${{ inputs.project }}
           PROFILE: ${{ inputs.profile }}
           MAX_HOURS: ${{ inputs.max-hours }}
-          CONFIG: .jaws-tool/config
         run: |
-          resolved=$(uv run --no-dev --project .jaws-tool jaws --config "$CONFIG" config env)
-          account=$(sed -n 's/^account_id=//p' <<<"$resolved")
-          name_root=$(sed -n 's/^name_root=//p' <<<"$resolved")
-          [[ "$account" =~ ^[0-9]{12}$ && -n "$name_root" ]] || { echo "::error::jaws config env named no account or name root for $PROJECT"; exit 1; }
+          if [ -n "$PLATFORM_ARN" ]; then
+            arn="$PLATFORM_ARN"
+          else
+            resolved=$(uv run --no-dev --project .jaws-tool jaws --config "$JAWS_TOOL_CONFIG" config env)
+            account=$(sed -n 's/^account_id=//p' <<<"$resolved")
+            name_root=$(sed -n 's/^name_root=//p' <<<"$resolved")
+            [[ "$account" =~ ^[0-9]{12}$ && -n "$name_root" ]] || { echo "::error::jaws config env named no account or name root for $PROJECT"; exit 1; }
+            arn="arn:aws:iam::${account}:role/${name_root}-${PROJECT}-ci-task"
+          fi
           [[ "$PROFILE" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "::error::profile must be kebab-case, got $PROFILE"; exit 2; }
           file=jaws.yaml
           hours="$MAX_HOURS"
@@ -199,7 +229,7 @@ jobs:
           duration=$(( (hours + 1) * 3600 ))
           if [ "$duration" -gt 43200 ]; then duration=43200; fi
           {
-            echo "arn=arn:aws:iam::${account}:role/${name_root}-${PROJECT}-ci-task"
+            echo "arn=$arn"
             echo "duration=$duration"
           } >> "$GITHUB_OUTPUT"
       - name: Assume the task role
@@ -210,6 +240,14 @@ jobs:
           role-duration-seconds: ${{ steps.role.outputs.duration }}
           aws-region: us-east-1
           role-session-name: remote-task-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Resolve the platform image
+        id: image
+        if: steps.platform.outputs.arn != ''
+        uses: ./.jaws-tool/.github/actions/platform-image
+        with:
+          account-id: ${{ inputs.account-id }}
+          repository: ${{ inputs.platform-image }}
+          extract: .jaws-platform
       - name: jaws task run
         id: task
         env:
@@ -224,6 +262,9 @@ jobs:
           DEBUG: ${{ inputs.debug }}
           CAMPAIGN: ${{ inputs.campaign }}
           REF: ${{ github.event.pull_request.head.sha || github.sha }}
+          JAWS_INFRA_ROOT: ${{ steps.image.outputs.infra-root }}
+          JAWS_PLATFORM_COMMIT: ${{ steps.image.outputs.platform-commit }}
+          JAWS_PLATFORM_SOURCE: ${{ steps.image.outputs.platform-source }}
         run: |
           if ! jq -e 'type == "array" and all(.[]; type == "string" and (contains("\n") | not))' <<<"$ARGS" >/dev/null; then
             echo "::error::args must be a JSON array of single-line strings, got: $ARGS"
@@ -241,7 +282,7 @@ jobs:
           # exec: on cancel GitHub signals this step's process, which must be the
           # CLI itself (not bash or uv) so its handlers terminate the instance.
           exec .jaws-tool/.venv/bin/jaws \
-            --config .jaws-tool/config "${options[@]}" \
+            --config "$JAWS_TOOL_CONFIG" "${options[@]}" \
             task run --script "$SCRIPT" --ref "$REF" --out "$OUT" \
             --run-id "$RUN_ID" --task-id "$TASK_ID" "${flags[@]}" -- "${argv[@]}"
       - name: Upload the task's outputs
@@ -261,7 +302,11 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
       - name: Terminate anything this task left running
+        id: terminate
         if: always() && steps.credentials.outcome == 'success'
+        env:
+          JAWS_INFRA_ROOT: ${{ steps.image.outputs.infra-root }}
+          JAWS_PLATFORM_COMMIT: ${{ steps.image.outputs.platform-commit }}
+          JAWS_PLATFORM_SOURCE: ${{ steps.image.outputs.platform-source }}
         run: |
-          # shellcheck disable=SC2086
-          $CLI task terminate --run-id "$RUN_ID" --task-id "$TASK_ID"
+          .jaws-tool/.venv/bin/jaws --config "$JAWS_TOOL_CONFIG" task terminate --run-id "$RUN_ID" --task-id "$TASK_ID"
