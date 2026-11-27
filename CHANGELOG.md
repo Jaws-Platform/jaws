@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.0](https://github.com/Jaws-Platform/jaws/compare/v0.81.0...v0.82.0) (2026-11-27)
+
+
+### Features
+
+* **workflows:** run project workflows from a hub's image, and add the hub's workflows ([#323](https://github.com/Jaws-Platform/jaws/issues/323)) ([206f84d](https://github.com/Jaws-Platform/jaws/commit/206f84d97c123169d8567f811ef345fc9cc3eed1))
+
 ## [0.81.0](https://github.com/Jaws-Platform/jaws/compare/v0.80.1...v0.81.0) (2026-11-25)
 
 
