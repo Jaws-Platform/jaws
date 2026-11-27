@@ -558,8 +558,8 @@ The body says what O5 does with it, and that a `ci` commit cuts no release.
 
 | Caller | `on` | Job | Calls | Also passes | Secrets |
 |---|---|---|---|---|---|
-| `release.yml` | `push` to `main` | `release` | `platform-release.yml` | `live-app-client-id` | `RELEASE_BOT_CLIENT_ID`, `RELEASE_BOT_PRIVATE_KEY`, and `live-app-private-key: ${{ secrets.DEPLOYMENTS_APP_PRIVATE_KEY }}` |
-| `rollback.yml` | `workflow_dispatch` | `rollback` | `platform-rollback.yml` | `live-app-client-id`, `commit` | `live-app-private-key`, the same |
+| `release.yml` | `push` to `main` | `release` | `platform-release.yml` | `live-app-client-id` | `RELEASE_BOT_CLIENT_ID`, `RELEASE_BOT_PRIVATE_KEY`, and `LIVE_APP_PRIVATE_KEY: ${{ secrets.LIVE_APP_PRIVATE_KEY }}`, `prod`'s, under the same name |
+| `rollback.yml` | `workflow_dispatch` | `rollback` | `platform-rollback.yml` | `live-app-client-id`, `commit` | `LIVE_APP_PRIVATE_KEY`, the same |
 | `bot-apply.yml` | `workflow_dispatch` | `apply` | `platform-bot-apply.yml` | `project`, `destroy`, `consumer-ref` | none |
 | `databricks-apply.yml` | `workflow_dispatch` | `apply` | `platform-databricks-apply.yml` | `project`, `action` | none |
 | `sweep.yml` | `schedule` (`*/15 * * * *`) and `workflow_dispatch` | `sweep` | `platform-sweep.yml` | nothing | none |
@@ -584,8 +584,8 @@ The body says what O5 does with it, and that a `ci` commit cuts no release.
     - `sweep.yml`'s `on` has exactly `schedule: [{"cron": "*/15 * * * *"}]` and `workflow_dispatch`.
   - `test_live_moves_with_the_deployments_app_only`, for `release.yml` and `rollback.yml`:
     - `with["live-app-client-id"] == DEPLOYMENTS_APP_CLIENT_ID`;
-    - `secrets["live-app-private-key"] == "${{ secrets.DEPLOYMENTS_APP_PRIVATE_KEY }}"`;
-    - the release's secrets are exactly its three, and the rollback's exactly `live-app-private-key`.
+    - `secrets["LIVE_APP_PRIVATE_KEY"] == "${{ secrets.LIVE_APP_PRIVATE_KEY }}"`;
+    - the release's secrets are exactly its three, and the rollback's exactly `LIVE_APP_PRIVATE_KEY`.
   - **Extend** `test_each_caller_grants_exactly_what_its_jaws_jobs_ask` to the five.
   - **Extend** `test_the_platform_s_apps_are_spelled_once`: every `live-app-client-id` is `DEPLOYMENTS_APP_CLIENT_ID`, which differs from the other two client IDs and matches `^Iv[0-9A-Za-z.]+$`.
   - `test_every_identity_literal_is_the_configuration_s` already covers the five, since `IDENTITY_WORKFLOWS` names their Jaws workflows.
