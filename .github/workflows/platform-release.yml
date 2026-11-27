@@ -495,14 +495,12 @@ jobs:
           digest: ${{ needs.image.outputs.digest }}
           commit: ${{ needs.image.outputs.commit }}
 
-  # current first, then live (ruling 7). The mover App moves live (ruling 8): this job takes
-  # no AWS role, so it enters no environment.
+  # current first, then live (ruling 7). The mover App moves live (ruling 8). This job takes
+  # no AWS role, but runs in prod: the App's key is a secret of prod alone.
   live:
     name: Move live to ${{ needs.image.outputs.tag }}
     runs-on: ubuntu-latest
     needs: [image, current]
-    # In prod for the mover App's key, which is prod's alone. The job changes nothing in AWS
-    # and takes no role.
     environment: prod
     concurrency:
       group: platform-release
