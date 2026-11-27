@@ -87,7 +87,7 @@
 
 ## Rulings
 
-Calls this plan makes where the spec is silent, with the later plan that takes each up. Ruling 14 is the owner's decision of 2026-11-23. Rulings 5 (the 300 MiB budget), 9 (the `publish` environment), 11 (`JAWS_PUBLIC_IMAGE` set only once the alias is approved) and 15 (`Owner = Jaws-Platform`) stand as written.
+Calls this plan makes where the spec is silent, with the later plan that takes each up. Ruling 14 is the owner's decision of 2026-11-23. Rulings 5 (the 300 MiB budget), 9 (the `publish` environment), 11 (`JAWS_PUBLIC_IMAGE`, set under the registry's default alias since the owner's decision of 2026-11-27 not to request a custom one) and 15 (`Owner = Jaws-Platform`) stand as written.
 
 1. **One `Dockerfile`, two targets.**
    - `generic` is the default; `jaws-cli` is `generic` plus `config/` and `datasets/`.
@@ -123,7 +123,7 @@ Calls this plan makes where the spec is silent, with the later plan that takes e
     - `prevent_destroy`, because every customer pins it.
 11. **Two repository variables.**
     - `JAWS_PUBLISH_ROLE_ARN`, the role.
-    - `JAWS_PUBLIC_IMAGE`, the address `public.ecr.aws/<alias>/jaws`. The alias is known only once AWS approves it. With the address in a variable, the role never reads it: its one read, `DescribeImages`, is for pruning.
+    - `JAWS_PUBLIC_IMAGE`, the address `public.ecr.aws/<alias>/jaws`, under the registry's default alias. The owner decided on 2026-11-27 not to request a custom alias for now; if one is added later, both aliases keep working. With the address in a variable, the role never reads it: its one read, `DescribeImages`, is for pruning.
     - With both unset, the public job skips with a notice. With only one set, or a malformed one, the check fails.
     - A third, `JAWS_PUBLIC_IMAGE_KEEP`, is optional (ruling 14). The check fails on a malformed one too, before the push.
 12. **A published tag is never replaced,** because ECR Public has no tag immutability. An anonymous registry check runs before each push, so a re-publish only fills in a tag that is missing. A pruned tag counts as missing.
@@ -157,7 +157,7 @@ Merging changes nothing in AWS. The next release pushes `jaws-cli` and skips the
 
 1. **Create the GitHub environment `publish`** in `Jaws-Platform/jaws`, with its deployment branches set to `main` only.
    - Create it first. A job that names a missing environment creates it unprotected, and the publishing role trusts this environment.
-   - Nothing enters `publish` before step 4.
+   - Nothing enters `publish` before step 3.
 2. **Apply `release-infra/`** with the production account's admin profile, `jaws-prod` (docs/owner-access.md):
 
    ```sh
@@ -169,25 +169,21 @@ Merging changes nothing in AWS. The next release pushes `jaws-cli` and skips the
    terraform apply tfplan
    ```
 
-3. **Request the registry alias `jaws`** in the ECR Public console (Public registry, Settings, Edit). AWS reviews it within a few days. If `jaws` is taken, pick another.
-4. **Once the alias is approved and primary, set the two repository variables.** Setting them only then means the first public address is the one that lasts.
-   - Refresh the state first. Step 2 recorded `repository_uri` under the registry's default alias.
-   - Check that the address names the approved alias. If it still names the default one, stop: the alias isn't primary yet.
+3. **Set the two repository variables** from step 2's outputs. The address names the registry's default alias. The owner decided on 2026-11-27 not to request a custom alias for now, which this step used to wait for. If one is added later, both aliases keep working, so a published address never breaks.
 
    ```sh
-   terraform apply -refresh-only        # reads the repository's address under the primary alias
-   terraform output -raw repository_uri # public.ecr.aws/<alias>/jaws, with the approved alias
+   terraform output -raw repository_uri # public.ecr.aws/<alias>/jaws, under the default alias
    gh variable set JAWS_PUBLIC_IMAGE --body "$(terraform output -raw repository_uri)"
    gh variable set JAWS_PUBLISH_ROLE_ARN --body "$(terraform output -raw role_arn)"
    ```
 
    - Leave `JAWS_PUBLIC_IMAGE_KEEP` unset: each publish then keeps the newest ten release versions (ruling 14).
 
-5. **Make the new check required:** run `scripts/apply-repo-settings.sh`.
-6. **Watch the next release.** It publishes `public.ecr.aws/<alias>/jaws:<tag>`, its summary prints the address with the digest, and its prune step keeps the newest ten. Check the image anonymously with `docker pull`.
+4. **Make the new check required:** run `scripts/apply-repo-settings.sh`.
+5. **Watch the next release.** It publishes `public.ecr.aws/<alias>/jaws:<tag>`, its summary prints the address with the digest, and its prune step keeps the newest ten. Check the image anonymously with `docker pull`.
    - To publish the current release sooner, run the Release workflow with its tag. Its public job publishes the image.
    - Its `jaws-cli` job then fails on the tag that repository already holds, as re-publishing an existing tag always has (its tags are immutable).
-7. **Later, at v1,** once Jaws has consumers and maintenance contracts with them, keep every version: `gh variable set JAWS_PUBLIC_IMAGE_KEEP --body all`. The prune step is then skipped, and storage grows by about 265 MB a release (Global Constraints, "Spending").
+6. **Later, at v1,** once Jaws has consumers and maintenance contracts with them, keep every version: `gh variable set JAWS_PUBLIC_IMAGE_KEEP --body all`. The prune step is then skipped, and storage grows by about 265 MB a release (Global Constraints, "Spending").
 
 ---
 
@@ -751,7 +747,7 @@ Expected: PASS. `tests/test_owner_access.py` and `tests/test_billing_export.py` 
     - the bump list in the rule "Shared modules come from the Terraform Registry", and `src/jaws/product.yaml`'s header list, gain `release-infra/`;
     - the "Before opening a PR" checklist gains `(cd release-infra && terraform init -backend=false && terraform validate && terraform test)`, after `billing-export`'s line;
     - the `owner-access/` paragraph ("**`owner-access/` is the owner's stack.**") gains: "**`release-infra/` is the owner's too:** Jaws's release infrastructure, the ECR Public repository `jaws` and the role that pushes the image to it and prunes it, in the production account. The same rules hold: no CI role, workflow or state prefix names it, and its role's name stays outside `jaws-*` (`tests/test_release_infra.py` checks). IAM keeps the CI roles out of its state; the bucket policy exempts the foundation's apply role, so only a reviewed foundation change could open it. Its repository is a plain `aws_ecrpublic_repository`, since no module family has one";
-    - "Things that need the owner" gains applying `release-infra/`, the ECR Public registry alias, and the `publish` environment.
+    - "Things that need the owner" gains applying `release-infra/` and the `publish` environment (and the ECR Public registry alias, until the owner's decision of 2026-11-27 not to request one).
   - **`README.md`:**
     - in "Shared modules from the Terraform Registry", the rows for `jaws-ci` (add `github-oidc-role`, the publishing role) and `jaws-foundation` gain `release-infra/`, and so does the pin sentence ("Every pin of a family (in `foundation/` …");
     - a Layout row: `release-infra/` (root), "Jaws's release infrastructure: the ECR Public repository `jaws` and the role that publishes the image to it, applied only by the owner, never by CI ([release-infra/README.md](release-infra/README.md))".
