@@ -157,7 +157,7 @@ Calls this plan makes where the spec leaves them open, and the few where it depa
 
    **To confirm. This departs from spec 6.4,** whose release applies "the foundation, then monitoring" before it moves `current`, then `live`. The spec's own reason for the timing names only the foundation's roles.
 8. **`live` is moved by a dedicated mover App that the hub supplies,** through the Git refs API (owner decision D6). A release only fast-forwards it, and the first release creates it. Only that App may update it, as the only bypass actor of `live`'s ruleset (plan 06). The release App no longer moves `live`, and holds no Workflows permission.
-   - Jaws is a product other organizations use, so the workflows stay generic. `platform-release.yml` and `platform-rollback.yml` each take the input `live-app-client-id` and the required secret `live-app-private-key`, and mint the move's token from them with `create-github-app-token`.
+   - Jaws is a product other organizations use, so the workflows stay generic. `platform-release.yml` and `platform-rollback.yml` each take the input `live-app-client-id` and the required secret `LIVE_APP_PRIVATE_KEY`, a secret of the hub's `prod` environment passed under that same name (the owner's decision of 2026-11-27, ruling P5-R36), and mint the move's token from them with `create-github-app-token`.
    - For the owner's hub, the App is **JWall Engineering Deployments** (`jwall-engineering-deployments`): *Contents* and *Workflows* write and *Metadata* read, installed only on `platform`. Its key is a `platform` repository secret, and its client ID a literal in the callers. Plan 05 doesn't create it (owner hand-offs).
    - **This settles whether a branch move needs *Workflows*:** the mover App holds *Workflows: write*, so a move can't be refused for lack of it, including a move across commits that change `.github/workflows/`.
    - The release App stays **JWall Engineering Releases** (`jwall-engineering-releases`), as `organization-conventions.md` (lines 23 and 61) names it, for Release Please only. This departs from spec 7's `jwall-engineering-release-bot`, which predates that rule.
@@ -217,11 +217,11 @@ Merging this plan changes nothing in AWS. The agent does none of these.
      - Its permissions are *Contents*, *Pull requests* and *Workflows*, each read and write.
      - Install it on `platform` only. Its key is an organization secret. Give plan 06 its client ID, which the hub's caller spells as a literal or a `vars.` value, since a call's `with:` can't read `secrets`.
    - **The mover App,** which the hub supplies: **JWall Engineering Deployments** (`jwall-engineering-deployments`), a mover App with *Contents* and *Workflows* write and *Metadata* read, installed only on `platform`, and `live`'s only ruleset bypass actor.
-     - Its key is the `platform` repository secret `DEPLOYMENTS_APP_PRIVATE_KEY`. Give plan 06 its client ID, which the hub's callers spell as the literal `live-app-client-id`.
+     - Its key is `LIVE_APP_PRIVATE_KEY`, a secret of `platform`'s `prod` environment, never a repository secret, so only `main`'s release and rollback can read it (the owner's decision of 2026-11-27). Give plan 06 its client ID, which the hub's callers spell as the literal `live-app-client-id`.
    - **The `live` ruleset on `platform`:** restrict updates and deletions, and block force pushes, with the mover App as the only bypass actor. The release App is not one. A rollback force-moves `live` with the mover App.
-   - **The `prod` environment on `platform`,** with deployments from `main` only. Spec 7 lists it with the `main` ruleset.
+   - **The `prod` environment on `platform`,** with deployments from `main` only, holding the mover App's key. Spec 7 lists it with the `main` ruleset.
    - **Repository variables: none.** The hub's callers spell their identity, and a switched project needs no role variable (ruling 2).
-   - **Secrets the hub's callers read:** the existing `RELEASE_BOT_CLIENT_ID` and `RELEASE_BOT_PRIVATE_KEY` (release only), the mover App's key (`live-app-private-key`, release and rollback), the comments App's key, and the upgrade App's key.
+   - **Secrets the hub's callers read:** the existing `RELEASE_BOT_CLIENT_ID` and `RELEASE_BOT_PRIVATE_KEY` (release only), the mover App's key (`LIVE_APP_PRIVATE_KEY`, from `prod`, release and rollback), the comments App's key, and the upgrade App's key.
 
 ## For plans 06 and 07
 
@@ -230,7 +230,7 @@ Merging this plan changes nothing in AWS. The agent does none of these.
   - The hub's own: `ci`, `release`, `rollback`, `bot-apply`, `databricks-apply`, `sweep` and `upgrade`.
   - Each caller that runs the image spells `platform-image`, `account-id` and `name-root`. The site callers also spell `check-prefix`. Ruling 10 covers why.
   - Each caller job grants the permissions the next level needs: `contents: read`, `id-token: write`, and `pull-requests: write` where it comments (spec 6.4). `docs/platform-workflows.md` lists each workflow's.
-  - The release and rollback callers spell `live-app-client-id` as a literal (it isn't secret) and pass `live-app-private-key` from the hub's mover App secret. The release caller also passes the release App's `RELEASE_BOT_*`, which the rollback doesn't take.
+  - The release and rollback callers spell `live-app-client-id` as a literal (it isn't secret) and pass `LIVE_APP_PRIVATE_KEY` under that same name, from `prod`. The release caller also passes the release App's `RELEASE_BOT_*`, which the rollback doesn't take.
   - The mover App is the hub's, "a mover App with *Contents* and *Workflows* write, installed only on the hub, and `live`'s only ruleset bypass actor" (owner hand-offs).
   - No caller sets a concurrency group named `platform-release`. The release's jobs hold it (Task 12), and a caller holding it too would be cancelled as a deadlock.
 - **Check names gain a level.** A project calling the hub calling Jaws reports `<project job> / <hub job> / <prefix> plan`. Each switch PR (plan 07) updates that project's required checks.

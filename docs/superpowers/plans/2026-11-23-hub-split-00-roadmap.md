@@ -47,8 +47,8 @@ Plans 01–05 are written so far.
   [the plan](2026-11-24-hub-split-05-workflows.md): the comments App
   `jwall-engineering-comments`, the upgrade App `jwall-engineering-upgrades` if
   ruling 12 is confirmed, the mover App `jwall-engineering-deployments`, the
-  `live` ruleset and the `prod` environment on `platform`, and the secrets the
-  hub's callers read.
+  `live` ruleset and the `prod` environment on `platform`, which holds the mover
+  App's key, and the secrets the hub's callers read.
 - **During plan 07:**
   - keep the configuration freeze, from creating the hub until takeover;
   - merge each project repository's switch PR in its own organization.
