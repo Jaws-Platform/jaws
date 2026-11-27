@@ -177,13 +177,13 @@ Calls this plan makes. The owner's decisions they rest on are in the next sectio
       - a move of `live` across an upgrade changes the workflow files `live` names, and *Workflows* write covers it, whether a release fast-forwards `live` or a rollback force-moves it.
     - **JWall Engineering Releases** (`jwall-engineering-releases`) stays as it is, and keeps Release Please's job only. It no longer bypasses `live` (D6).
     - **The new Apps' keys** are repository secrets, in each repository that reads them, never organization secrets ("a token only one repository uses is a repository secret"):
-      - `COMMENTS_APP_PRIVATE_KEY`, `UPGRADES_APP_PRIVATE_KEY` and `DEPLOYMENTS_APP_PRIVATE_KEY` on `platform`;
+      - `COMMENTS_APP_PRIVATE_KEY` and `UPGRADES_APP_PRIVATE_KEY` on `platform`, and the mover App's `LIVE_APP_PRIVATE_KEY`, a secret of `platform`'s `prod` environment only, so only `main`'s release and rollback can read it (the owner's decision of 2026-11-27);
       - `COMMENTS_APP_PRIVATE_KEY` on each site repository.
     - The client IDs are literals in the callers (plan 05 ruling 16).
 11. **Rulesets, the environment and Actions' defaults.** All of them are in `scripts/apply-repo-settings.sh`, which the owner runs (H5).
     - `main`: the conventions' ruleset, with no bypass actors. It requires every check `ci.yml` reports, but the platform's plans until plan 07.
     - `live` restricts creation, updates and deletion, and blocks force pushes. JWall Engineering Deployments is its only bypass actor (D6), so only a release creates or moves it (plan 05 ruling 8), and a rollback may force-move it (plan 05 ruling 9).
-    - `prod` takes deployments from `main` only, with no secrets and no reviewers. Nothing names it before plan 07.
+    - `prod` takes deployments from `main` only, with no reviewers, and holds one secret, the mover App's `LIVE_APP_PRIVATE_KEY` (H3). Nothing names it before plan 07.
     - Actions: `GITHUB_TOKEN` is read-only by default, and Actions may not approve pull requests. Fork pull requests' workflows need approval for every external contributor (`fork-pr-contributor-approval`).
     - No repository variables: the callers spell what they need (plan 05).
     - No roles: plan 06 adds none. After plan 07's enabling release, the hub's pull requests assume only the plan roles, and its `prod` jobs the apply roles (plan 03). No job that names the owner's folders assumes any.
@@ -210,7 +210,7 @@ The PR lists these. Each comes with the recommendation the plan is written to. D
    - To change it now, H4 also sets `context.organization`, and Task 3's `test_the_platform_keeps_its_names` changes with it. `test_the_configuration_is_jaws_s_but_the_hub_s_own_sections` then fails too, since `context` differs from `jaws`'s. Either that freeze test exempts `context.organization`, or plan 07's enabling release makes the same edit in `jaws`, which retags every foundation and monitoring resource from `jaws`.
 4. **D4, where the comments App is installed:** `platform` and the three site repositories, not every onboarded owner. Plan 05's hand-off 3 and spec 7 say every owner, but only `site-plan`, `site-preview` and the hub's CI post comments. `remote-task` and `container-release` post none.
 5. **D5, the costs from plan 07's enabling release:**
-   - **the hub image's private ECR storage:** at most ten builds, about 2.8 GB, about $0.28 a month (plan 05 ruling 6, itself open);
+   - **the hub image's private ECR storage:** at most eleven builds (the newest ten, plus `current`'s when it is older), about 3.1 GB, about $0.31 a month (plan 05 ruling 6, as built);
    - **its pulls to GitHub's runners:**
      - each build is pulled once per repository that runs it (plan 05 ruling 4);
      - the projects' pulls replace the `jaws-cli` pulls they make today;
@@ -218,8 +218,8 @@ The PR lists these. Each comes with the recommendation the plan is written to. D
      - that is inside the account's free 100 GB a month of data transfer out, and $0.09 a GB beyond it.
 6. **D6, `live`'s mover: decided** (2026-11-24). A dedicated App, JWall Engineering Deployments (`jwall-engineering-deployments`, ruling 10).
    - Why: the release App is installed on every repository, and its key is an organization secret visible to all of them. As `live`'s bypass actor, a workflow in any JWall-Engineering repository could mint a token for `platform` and move `live` to any commit, past plan 05's `platform-move` checks, and every switched project runs what `live` names. It also holds no *Workflows*, under which GitHub lists the refs API's updates.
-   - So Deployments holds *Contents* and *Workflows* write and *Metadata* read, is installed on `platform` only, keeps its key in the `platform` repository secret `DEPLOYMENTS_APP_PRIVATE_KEY`, and is `live`'s only bypass actor. The release App keeps Release Please's job only.
-   - Plan 05 is amended to match, before it executes: `platform-release.yml` and `platform-rollback.yml` take a new input, `live-app-client-id`, and a new secret, `live-app-private-key`, and mint the `live`-moving token from them. Plan 07's callers pass Deployments' client ID as a literal, as plan 05 ruling 16 does for the comments App, and `DEPLOYMENTS_APP_PRIVATE_KEY`.
+   - So Deployments holds *Contents* and *Workflows* write and *Metadata* read, is installed on `platform` only, keeps its key in `LIVE_APP_PRIVATE_KEY`, a secret of `platform`'s `prod` environment, never a repository secret (the owner's decision of 2026-11-27), and is `live`'s only bypass actor. The release App keeps Release Please's job only.
+   - Plan 05 is amended to match, before it executes: `platform-release.yml` and `platform-rollback.yml` take a new input, `live-app-client-id`, and a new secret, `LIVE_APP_PRIVATE_KEY`, and mint the `live`-moving token from them, in `prod`. Plan 07's callers pass Deployments' client ID as a literal, as plan 05 ruling 16 does for the comments App, and `LIVE_APP_PRIVATE_KEY` under that same name.
    - Cost: one more App and one more key, both the owner's (H2, H3), and no money.
 7. **D7, the old pins' image during the freeze** (plan 05's hand-off 1). Decide before Task 3 merges.
    - Every project's pin, `@v0.76.0`, pulls `jaws-cli:v0.76.0` in `site-plan`, `site-preview` and `site-deploy`, and `jaws-cli` keeps only the newest `ecr.keep_release_images` release images. At today's pace that image goes within days. Then every site's plan, preview and deploy fails to pull: the spec's anti-goal, "a window where a project's CI is broken".
@@ -250,7 +250,7 @@ The agent does none of these. Each needs the owner's credentials, an App's key, 
   - For each: no webhook; the avatar from `jwall-engineering-branding` as its logo, with the badge background Green, `#367456`; and a private key.
   - Install Comments on `platform` only for now (H6 adds the sites), and Upgrades and Deployments on `platform` only.
   - Give the agent Comments' and Upgrades' client IDs, for Task 5. Deployments' is for plan 07's callers. None is secret.
-- **H3, before Task 5's PR: the keys.** Set `COMMENTS_APP_PRIVATE_KEY`, `UPGRADES_APP_PRIVATE_KEY` and `DEPLOYMENTS_APP_PRIVATE_KEY` on `platform`, each with `gh secret set <NAME> --repo JWall-Engineering/platform < <its key>.pem`. Each is a repository secret, never an organization secret.
+- **H3, before Task 5's PR: the keys.** Set `COMMENTS_APP_PRIVATE_KEY` and `UPGRADES_APP_PRIVATE_KEY` on `platform`, each with `gh secret set <NAME> --repo JWall-Engineering/platform < <its key>.pem`: repository secrets, never organization secrets. Once H5's first run has created `prod`, set the mover App's key there only, with `gh secret set LIVE_APP_PRIVATE_KEY --env prod --repo JWall-Engineering/platform < <its key>.pem`. Then check that `gh secret list --repo JWall-Engineering/platform` doesn't list it: as a repository secret, any branch's workflow could read it and move `live`.
 - **H4, during Task 3: the hub's own configuration.** One commit on Task 3's branch, `feat(config): add the hub's brand and identity`, with three edits.
   - In `config/tool.yaml`, after `context`:
 
@@ -293,7 +293,7 @@ The agent does none of these. Each needs the owner's credentials, an App's key, 
 - The enabling release's configuration edit is H4's `platform` lines, verbatim.
 - Once the roles trust the hub, require `platform / Terraform plan`, `platform / Monitoring plan` and `platform / Data access plan`. They go in `REQUIRED_PLATFORM_CHECKS` and `scripts/apply-repo-settings.sh`, and the PR template's line that two of them are expected red goes.
 - At takeover:
-  - add the applying callers of ruling 2, each with the account rendered as Task 5 renders it. `release.yml` and `rollback.yml` pass `live-app-client-id`, Deployments' client ID as a literal, and `live-app-private-key: ${{ secrets.DEPLOYMENTS_APP_PRIVATE_KEY }}` (D6), and `test_the_platform_s_apps_are_spelled_once` gains that client ID;
+  - add the applying callers of ruling 2, each with the account rendered as Task 5 renders it. `release.yml` and `rollback.yml` pass `live-app-client-id`, Deployments' client ID as a literal, and `LIVE_APP_PRIVATE_KEY: ${{ secrets.LIVE_APP_PRIVATE_KEY }}`, `prod`'s, under the same name (D6), and `test_the_platform_s_apps_are_spelled_once` gains that client ID;
   - delete `tests/platform/test_freeze.py`, since the freeze ends;
   - open D3's `Organization` PR.
 - The switches:
