@@ -19,7 +19,7 @@ These are the steps a customer takes for a hub, in order. Steps that only the ve
 | 1 | Create a GitHub organization for the platform | owner | GitHub UI | a GitHub account |
 | 2 | Create the organization's release App, `<org>-releases`; install it on every repository; store its key as an organization secret | owner | GitHub UI, `gh` | org admin |
 | 3 | Create the hub repository: the scaffold, the conventions PR and the Release Please PR (plan 06, Task 1) | agent or owner | `gh`, git | org admin |
-| 4 | Create three more Apps: Comments, Upgrades and Deployments. About 12 clicks each, plus a logo and a key (plan 06, H2) | owner | GitHub UI | org admin |
+| 4 | Create three more Apps: Comments, Upgrades and Deployments. About 12 clicks each, plus a logo and a key. Then install each one on the hub (plan 06, H2) | owner | GitHub UI | org admin |
 | 5 | Apply the hub's settings: rulesets, the `prod` environment and the Actions defaults (H5) | owner | `scripts/apply-repo-settings.sh` | org admin; step 4's Deployments App |
 | 6 | Store the Apps' keys: two repository secrets, and one `prod` environment secret (H3) | owner | `gh secret set` | the `.pem` files; step 5's `prod` |
 | 7 | Add the hub's brand and identity: one commit editing three configuration files, with the organization's and repository's IDs (H4) | owner | editor, `gh api` | the IDs |
@@ -53,6 +53,27 @@ The owner's own hub skips the AWS foundation, which `jaws` already applies. A br
 - **2026-11-27: a registry alias needs an AWS review.**
   - Requesting the ECR Public alias meant waiting days for AWS to review it. It was dropped for the registry's default alias (#334).
   - This is a vendor-side step, but the lesson carries over: avoid any step that waits on a third party's review.
+- **2026-11-27: creating an App doesn't install it.**
+  - Once the three Apps existed, each still had to be installed, and it wasn't clear where: on every repository in the organization, or only on the hub?
+  - The answer differs by App. The release App goes on every repository. Comments, Upgrades and Deployments go on the hub only, and Comments joins each project when it switches (H6).
+  - Idea: bootstrap installs each App on exactly the repositories its job needs, and says why.
+- **2026-11-27: the owner handed the scripted steps to the agent.**
+  - At the owner's request, the agent:
+    - ran H5's settings script;
+    - made H4's identity commit, with a script that read the IDs from the GitHub API and printed only yes-or-no checks.
+  - The keys stayed with the owner (H3). The agent gave the commands, and the owner ran them and deleted the `.pem` files.
+  - Idea: these steps are already scripts, so bootstrap can run them in order, asking before each one.
+- **2026-11-27: a hub PR's image build hit ECR Public's limit.**
+  - The release PR's `platform / Platform check` failed while building the candidate. ECR Public refused the anonymous pull of the Jaws base with 429, "Data limit exceeded", although the image was still published. Re-running the job on a fresh runner passed.
+  - Anonymous pulls are rate-limited, and GitHub's hosted runners share their addresses with other users. So any hub's PR can hit the limit at random, a new customer's first PR included.
+  - Idea: pull the base with credentials, which is on the roadmap for plan 07. Until then, re-run the failed job.
+- **2026-11-27: the first real release PR missed three features.**
+  - Release Please ran five seconds after the callers' PR merged. Its release PR listed four of the seven features since v0.1.0. Re-running the same workflow run listed all seven.
+  - Merged as it was, v0.2.0 would have shipped with an incomplete changelog.
+  - Idea: before a release PR merges, check its changelog against the commits since the last tag.
+- **2026-11-27: an agent restarted Docker Desktop.**
+  - While running the hub's checks locally, an implementing agent restarted Docker Desktop. That restarted the owner's other containers too, and the owner's local Prometheus crash-looped until the owner quit Docker.
+  - Idea: bootstrap and the hub's local checks never restart Docker. A check that needs Docker says so, and CI runs it.
 
 ## Ideas for `jaws bootstrap`
 
