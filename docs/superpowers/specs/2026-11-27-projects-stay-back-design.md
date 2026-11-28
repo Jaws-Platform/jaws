@@ -2,7 +2,7 @@
 
 **Status.**
 - The owner picked this approach on 2026-11-27.
-- It is built after step 1, the hub split, as its own step. Nothing in plans 06 and 07 changes for it.
+- It is built as its own step before Jaws v1, or before the first hub whose projects have more than one owning team, whichever comes first (the owner's decision of 2026-11-27). Until then, one owner's projects follow `@live` together, which costs little. Nothing in plans 06 and 07 changes for it.
 - It amends the hub split's spec ([2026-11-22-hub-split-design.md](2026-11-22-hub-split-design.md)) at goal 3, "upgrading Jaws is one pull request in the hub", and at section 6.4's `@live`.
 
 ## Intent
