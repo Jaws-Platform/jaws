@@ -45,7 +45,10 @@ only where it has to.
 **Later steps**, not designed here, in no fixed order: `jaws bootstrap` (a
 from-scratch setup for a brand-new customer, which also replaces the owner's
 manual management-account roots); a private hub; single-organization and
-single-project customers; Jaws's own AWS account.
+single-project customers; Jaws's own AWS account. Projects that stay back on
+an older hub release come before v1, or before a hub's second owning team, as
+designed in
+[2026-11-27-projects-stay-back-design.md](2026-11-27-projects-stay-back-design.md).
 
 ## 2. Goals, non-goals, anti-goals
 
