@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.82.1](https://github.com/Jaws-Platform/jaws/compare/v0.82.0...v0.82.1) (2026-11-28)
+
+
+### Documentation
+
+* **repo:** add plan 06 of the hub split, the hub ([#326](https://github.com/Jaws-Platform/jaws/issues/326)) ([7e0851d](https://github.com/Jaws-Platform/jaws/commit/7e0851d33c6caa61d48dd575656fbc8a5247583e))
+* **repo:** add plan 06's final review to the roadmap ([#340](https://github.com/Jaws-Platform/jaws/issues/340)) ([aa8f578](https://github.com/Jaws-Platform/jaws/commit/aa8f578094f04267b043ef9a336ceaccf3ff6457))
+* **repo:** add the hub's trip-ups to the onboarding log ([#341](https://github.com/Jaws-Platform/jaws/issues/341)) ([cfee88f](https://github.com/Jaws-Platform/jaws/commit/cfee88f3692c2d9dad38c44c2fcfe8b563c1955c))
+* **repo:** publish the public image under the registry's default alias ([#334](https://github.com/Jaws-Platform/jaws/issues/334)) ([913a361](https://github.com/Jaws-Platform/jaws/commit/913a361221cfbb8641414840985d62157a08848a))
+* **repo:** start an onboarding log of every manual step a new platform takes ([#339](https://github.com/Jaws-Platform/jaws/issues/339)) ([b45c19f](https://github.com/Jaws-Platform/jaws/commit/b45c19f0d47f65a60ed741fe972a2d70459dda19))
+
 ## [0.82.0](https://github.com/Jaws-Platform/jaws/compare/v0.81.0...v0.82.0) (2026-11-27)
 
 
